@@ -22,3 +22,6 @@
 [submodule "third_party/simplecss"]
 	path = third_party/simplecss
 	url = https://github.com/kevquirk/simple.css.git
+[submodule "third_party/lcui"]
+	path = third_party/lcui
+	url = https://github.com/lc-soft/LCUI.git
