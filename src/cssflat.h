@@ -1,0 +1,54 @@
+/* cssflat.h - narrows CSS down to what LCUI's engine actually implements.
+ *
+ * LCUI parses type, #id, .class and :status selectors joined by descendant
+ * combinators, and 85 properties. It does not implement custom properties -
+ * css_computed_style_t declares a custom_props field, but nothing in lib/css
+ * ever reads it - and it has no @media at all.
+ *
+ * That matters here because the palette *is* custom properties: Open-Color
+ * ships 264 of them and app.css is written entirely in terms of them, which is
+ * how the project avoids transcribing colour values out of the submodule. So
+ * the substitution happens here, before the engine sees the text, rather than
+ * by rewriting the stylesheets.
+ *
+ * What this pass does:
+ *   - strips comments;
+ *   - collects --name declarations from :root and from the [data-theme="..."]
+ *     block for the active theme, resolving var() chains among them;
+ *   - substitutes var(--name[, fallback]) everywhere else, dropping any
+ *     declaration whose value cannot be resolved;
+ *   - drops @media blocks, and selectors carrying [attr] or ::pseudo, which
+ *     LCUI's parser cannot represent.
+ *
+ * The resolved map is handed back too: a few tokens describe things CSS can
+ * express but this engine cannot paint - the backdrop gradient - so the
+ * application reads those directly rather than duplicating the values. */
+#ifndef CURIE_CSSFLAT_H
+#define CURIE_CSSFLAT_H
+
+#include <stddef.h>
+
+typedef struct curie_cssvars curie_cssvars;
+
+/* Reads and flattens `count` stylesheets in order. `theme` selects which
+ * [data-theme="..."] block contributes its custom properties ("light" or
+ * "dark"). Returns malloc'd CSS text the caller frees, or NULL on failure.
+ * When `out_vars` is non-NULL it receives the resolved custom properties. */
+char *curie_css_flatten(const char *const *paths, int count,
+                        const char *theme, curie_cssvars **out_vars);
+
+/* Same, but from text already in memory. `names` is used only in messages. */
+char *curie_css_flatten_text(const char *const *texts, int count,
+                             const char *theme, curie_cssvars **out_vars);
+
+/* Resolved value of a custom property, e.g. "--app-backdrop-from", or NULL. */
+const char *curie_cssvars_get(const curie_cssvars *vars, const char *name);
+
+/* Resolved custom property parsed as #rgb/#rrggbb. Returns 0 if absent or
+ * not a hex colour. */
+int curie_cssvars_color(const curie_cssvars *vars, const char *name,
+                        unsigned char rgba[4]);
+
+void curie_cssvars_free(curie_cssvars *vars);
+
+#endif /* CURIE_CSSFLAT_H */

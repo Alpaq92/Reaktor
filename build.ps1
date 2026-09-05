@@ -6,6 +6,10 @@
 #
 # On macOS, Linux and the BSDs skip this entirely:
 #     cmake -S . -B build && cmake --build build --parallel
+# -Target builds one CMake target instead of everything, which is what you
+# want while a single library is being brought up.
+param([string]$Target = "")
+
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $outDir = Join-Path $root "build"
@@ -35,7 +39,8 @@ $bat = Join-Path $env:TEMP "curie_build.bat"
   ('"' + $cmake + '" -S "' + $root + '" -B "' + $outDir + '" -G Ninja ' +
    '-DCMAKE_MAKE_PROGRAM="' + $ninja + '" -DCMAKE_BUILD_TYPE=Release'),
   'if errorlevel 1 exit /b 1',
-  ('"' + $cmake + '" --build "' + $outDir + '" --parallel'),
+  ('"' + $cmake + '" --build "' + $outDir + '" --parallel' +
+   $(if ($Target) { ' --target ' + $Target } else { '' })),
   'exit /b %ERRORLEVEL%'
 ) | Set-Content -Path $bat -Encoding ascii
 
@@ -49,4 +54,5 @@ $ErrorActionPreference = $prev
 
 if ($rc -ne 0) { throw "build failed ($rc)" }
 Write-Host ""
-Write-Host "built: $outDir\curie.exe"
+if ($Target) { Write-Host "built target: $Target" }
+else { Write-Host "built: $outDir\curie.exe" }
