@@ -1,0 +1,24 @@
+[submodule "third_party/nuklear"]
+	path = third_party/nuklear
+	url = https://github.com/Immediate-Mode-UI/Nuklear.git
+[submodule "third_party/plutosvg"]
+	path = third_party/plutosvg
+	url = https://github.com/sammycage/plutosvg.git
+[submodule "third_party/ionicons"]
+	path = third_party/ionicons
+	url = https://github.com/ionic-team/ionicons.git
+[submodule "third_party/litehtml"]
+	path = third_party/litehtml
+	url = https://github.com/litehtml/litehtml.git
+[submodule "third_party/open-color"]
+	path = third_party/open-color
+	url = https://github.com/yeun/open-color.git
+[submodule "third_party/pico"]
+	path = third_party/pico
+	url = https://github.com/picocss/pico.git
+[submodule "third_party/SDL"]
+	path = third_party/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "third_party/simplecss"]
+	path = third_party/simplecss
+	url = https://github.com/kevquirk/simple.css.git

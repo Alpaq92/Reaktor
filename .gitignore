@@ -1,0 +1,7 @@
+build/
+node_modules/
+gen/
+*.obj
+*.exe
+*.pdb
+*.ilk

@@ -1,0 +1,59 @@
+<!-- Sign-in screen, rendered by litehtml and styled by
+     open-color.css + pico.css + app.css, all read from disk at runtime.
+
+     pico.css is semantic rather than class-driven, so <article> is the card,
+     <hgroup> the heading pair, and <input>/<button> come styled. app.css only
+     supplies the backdrop, the brand row, and the token mapping.
+
+     This is also the harder test of the engine: pico carries 501 custom
+     properties, 63 calc() and 69 pseudo-elements (FINDINGS 5). -->
+<html data-theme="__THEME__" data-mode="__MODE__">
+<body>
+  <main class="stage">
+    <article class="card">
+
+      <div class="brand">
+        <img class="mark" src="third_party/ionicons/src/svg/browsers-outline.svg?stroke=violet-7" width="26" height="26">
+        <span class="wordmark">Proceed with login</span>
+      </div>
+
+      <!-- The span is deliberately empty: litehtml lays it out, and the
+           application draws the edited text and caret into its box. That
+           avoids re-parsing the page on every keystroke, which is what a
+           real <input> would otherwise require here. -->
+      <div class="field">
+        <img src="third_party/ionicons/src/svg/mail-outline.svg?stroke=__ICON__" width="17" height="17">
+        <span class="value" id="emailvalue"></span>
+      </div>
+
+      <button>Continue with email</button>
+
+      <div class="sep">or</div>
+
+      <button class="secondary">
+        <img src="third_party/ionicons/src/svg/key-outline.svg?stroke=__ICON__" width="17" height="17">
+        Use a passkey
+      </button>
+      <button class="secondary">
+        <img src="third_party/ionicons/src/svg/finger-print-outline.svg?stroke=__ICON__" width="17" height="17">
+        Use biometrics
+      </button>
+
+      <small class="new">New here? <a href="#">Create an account</a></small>
+
+      <!--THEMESW-->
+      <small class="legal">
+        <a href="#">Help</a>
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+      </small>
+
+    </article>
+
+    <!-- Replaced at load time with either the hint link or the expanded
+         panel. litehtml has no scripting, so the application rebuilds the
+         page when the link is clicked. -->
+    <!--DIAG-->
+  </main>
+</body>
+</html>
