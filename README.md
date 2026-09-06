@@ -88,7 +88,7 @@ A `file://` page cannot fetch the `.wasm`, so serve the output directory:
 | `src/theme.c` | Which colour scheme the desktop is using |
 | `src/util.c` | Paths, whole-file reads, the resident set |
 | `tools/mkicon.c` | Bakes the window icon during the build |
-| `assets/fonts/` | The UI typeface, vendored with its licence — the one exception to the submodule rule |
+| `assets/fonts/` | Aileron, the CC0 typeface the UI is set in — vendored rather than submoduled, the one exception to the rule |
 
 ## Documentation
 

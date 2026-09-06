@@ -527,10 +527,10 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
  * It is an OTF: stb_truetype, which Nuklear bakes through, reads CFF outlines
  * as well as TrueType ones.
  *
- * assets/fonts/ also holds two faces that are not loaded - Public Sans (OFL),
- * which was the runner-up, and Zerove (CC0), which is unicase (measured: 'a'
- * and 'A' are the same outline at 1434 units) and so a wordmark face rather
- * than a UI one. Only FONT_FILE would change. See docs/NOTICE.md. */
+ * assets/fonts/ also holds Zerove, CC0, which is not loaded: it is unicase
+ * (measured: 'a' and 'A' are the same outline at 1434 units), so a wordmark
+ * face rather than a UI one. Only FONT_FILE would change. See
+ * docs/NOTICE.md. */
 #define FONT_FILE "assets/fonts/Aileron-Regular.otf"
 
 /* Nearest baked size. `bold` is accepted and ignored, but no longer for want

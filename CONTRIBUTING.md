@@ -60,6 +60,14 @@ case for changing one.
   is the default. Record the licence in [docs/NOTICE.md](docs/NOTICE.md) in
   the same change, read from the project's own licence file rather than from
   its README.
+- **A vendored asset carries its terms in the tree.** Fonts are the exception
+  to the submodule rule, and the reason the UI face changed: the old one came
+  from inside a submodule that ships it with no licence anywhere near it, so
+  its terms could only be read off a third party. If an upstream ships none,
+  trace them to something the author actually published — the file's own
+  metadata counts, and is better evidence than a text file beside it — then
+  write down what you found, where it came from, and that you assembled the
+  record. `assets/fonts/Aileron-Notice.txt` is the shape to copy.
 - **Nothing is drawn when nothing has changed.** SDL waits on events and a
   frame is built only when a widget's state, the pointer's hot region or the
   window itself has moved. Do not add a timer, a polling loop or an

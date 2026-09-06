@@ -34,7 +34,6 @@ to build a distributable on.
 | Font | Role | Licence | Where the terms are |
 | --- | --- | --- | --- |
 | **Aileron** | **The UI face.** Regular is baked; Bold is vendored but not baked. | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
-| Public Sans | Not loaded. The runner-up: a neutral grotesque, close in feel. | SIL Open Font License 1.1 | `assets/fonts/PublicSans-License.md` |
 | Zerove | Not loaded. Unicase — `a` and `A` are the same outline at 1434 units — so a wordmark face, not a UI one. | CC0 1.0 | `assets/fonts/Zerove-License.txt` |
 
 Aileron is by Sora Sagano of DOT COLON. Its download ships no licence file either,
@@ -49,9 +48,9 @@ Aileron is an OTF. Nuklear bakes through stb_truetype, which reads CFF outlines 
 well as TrueType ones, so the format costs nothing. Switching face is one line —
 `FONT_FILE` in `src/main.c`.
 
-Six other faces were built and looked at before this one: Jupiteroid, Liber Struct,
-Vegur, Tenderness, Seshat and Medio (all CC0), plus Karla and IBM Plex Sans (OFL).
-None is in the tree.
+Seven other faces were built and looked at before this one: Jupiteroid, Liber
+Struct, Vegur, Tenderness, Seshat and Medio (all CC0), plus Karla, Public Sans and
+IBM Plex Sans (all OFL). None is in the tree — everything shipped here is CC0.
 
 ## What is redistributed
 

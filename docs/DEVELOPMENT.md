@@ -84,8 +84,7 @@ The face is Aileron, CC0, vendored under `assets/fonts/`. It replaced Karla,
 which came from inside the Nuklear submodule with no licence file anywhere near
 it — see [NOTICE.md](NOTICE.md#fonts) for where Aileron's terms were traced to.
 It is an OTF, which costs nothing: stb_truetype reads CFF outlines too. Changing
-face is one `#define FONT_FILE` in `src/main.c`, and two other vendored faces
-are there to switch to.
+face is one `#define FONT_FILE` in `src/main.c`.
 
 The atlas is 1024x128 RGBA32, half a megabyte, and is the largest single
 allocation the application makes. Two things got it there: oversampling is 2x1
