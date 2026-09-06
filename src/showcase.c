@@ -29,6 +29,11 @@
 #define ROW_TALL  34.0f    /* one control with a label inside it */
 #define ROW_SMALL 22.0f
 
+const char *const curie_rss_names[RSS_STEPS] = {
+    "before any of it", "SDL_Init(VIDEO)", "window and renderer",
+    "window icon", "Nuklear context", "font atlas", "stylesheets"
+};
+
 const char *const curie_tab_names[TAB_COUNT] = {
     "Login", "Buttons", "Inputs", "Display", "Layout", "Popups", "Diagnostics"
 };
@@ -59,7 +64,7 @@ heading(App *app, struct nk_context *ctx, const char *text)
 static void
 caption(App *app, struct nk_context *ctx, const char *text)
 {
-    const struct nk_user_font *f = curie_font(app, 13, 0);
+    const struct nk_user_font *f = curie_font(app, 16, 0);
     struct nk_color c = curie_token("--text-muted", ctx->style.text.color);
     float avail = content_w(ctx) - 4.0f;
     float tw    = f->width(f->userdata, f->height, text, (int)strlen(text));
@@ -114,8 +119,9 @@ compact_pop(struct nk_context *ctx)
     nk_style_pop_vec2(ctx);
 }
 
-/* A caption-sized line that names the call being demonstrated, so the page
- * reads as documentation rather than as decoration. */
+/* A small line naming the call being demonstrated, so the page reads as
+ * documentation rather than as decoration. Deliberately below the caption:
+ * it is a reference, not part of the prose. */
 static void
 api(App *app, struct nk_context *ctx, const char *text)
 {
@@ -352,6 +358,66 @@ hot(App *app, struct nk_context *ctx, int cursor)
     curie_hot(app, nk_widget_bounds(ctx), cursor, 1);
 }
 
+/* Checkboxes and radios sit the way the Edit menu sits them: label at the
+ * left of its cell, box at the right. nk_checkbox_label_align puts the box
+ * flush against the edge of the widget it is given, with no padding of its
+ * own, so the clear space between one cell and the next label has to come
+ * from the row - hence a static gap column after every cell, which the three
+ * cell helpers below fill so no call site has to remember it. */
+#define CHECK_CELL 190.0f
+#define CHECK_GAP   12.0f
+#define CHECK_ALIGN NK_WIDGET_RIGHT, NK_TEXT_LEFT
+
+static void
+check_row(struct nk_context *ctx, int cells)
+{
+    int i;
+
+    nk_layout_row_template_begin(ctx, ROW);
+    for (i = 0; i < cells; i++) {
+        nk_layout_row_template_push_static(ctx, CHECK_CELL);
+        nk_layout_row_template_push_static(ctx, CHECK_GAP);
+    }
+    /* Soaks up the rest of the width so the cells stay the size they were
+     * asked for rather than sharing the window between them. */
+    nk_layout_row_template_push_dynamic(ctx);
+    nk_layout_row_template_end(ctx);
+}
+
+static void
+check_cell(App *app, struct nk_context *ctx, const char *label, nk_bool *on)
+{
+    hot(app, ctx, 1);
+    nk_checkbox_label_align(ctx, label, on, CHECK_ALIGN);
+    nk_spacer(ctx);
+}
+
+/* Nuklear has nk_checkbox_flags_label but no aligned form of it, so this is
+ * that wrapper's own few lines with the aligned call in the middle. */
+static void
+flags_cell(App *app, struct nk_context *ctx, const char *label,
+           unsigned *flags, unsigned value)
+{
+    nk_bool on = (*flags & value) != 0;
+
+    hot(app, ctx, 1);
+    if (nk_checkbox_label_align(ctx, label, &on, CHECK_ALIGN)) {
+        if (on) *flags |= value;
+        else    *flags &= ~value;
+    }
+    nk_spacer(ctx);
+}
+
+static void
+radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
+           int value)
+{
+    hot(app, ctx, 1);
+    if (nk_option_label_align(ctx, label, *sel == value, CHECK_ALIGN))
+        *sel = value;
+    nk_spacer(ctx);
+}
+
 /* A button that exists only to be looked at. Same as nk_button_label, plus
  * the hover registration every interactive widget owes the shell now that the
  * page-wide backstop no longer forces a frame. */
@@ -527,27 +593,22 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
             "options is held in a single value. Radios are a group only "
             "because the code makes them one: nk_option_label takes the "
             "answer to \"am I the active one\" and returns whether it was "
-            "clicked.");
-    api(app, ctx, "nk_checkbox_label  /  nk_checkbox_flags_label  /  "
-                  "nk_option_label");
+            "clicked. Both sit their box at the right of the cell, the way "
+            "the Edit menu does; the flags form has no aligned variant, so "
+            "this page wraps the aligned call in its own four lines.");
+    api(app, ctx, "nk_checkbox_label_align  /  nk_option_label_align");
 
-    /* A static grid, not dynamic columns: two dynamic columns put the
-     * second checkbox at the halfway mark of a 960px window, which reads as
-     * two unrelated controls rather than a pair. */
-    nk_layout_row_static(ctx, ROW, 190, 3);
-    hot(app, ctx, 1);
-    nk_checkbox_label(ctx, "Wrap long lines", &s->check_wrap);
-    hot(app, ctx, 1);
-    nk_checkbox_label(ctx, "Check spelling", &s->check_spell);
-    nk_spacer(ctx);
+    /* A fixed grid, not dynamic columns: two dynamic columns put the second
+     * checkbox at the halfway mark of a 960px window, which reads as two
+     * unrelated controls rather than a pair. */
+    check_row(ctx, 2);
+    check_cell(app, ctx, "Wrap long lines", &s->check_wrap);
+    check_cell(app, ctx, "Check spelling", &s->check_spell);
 
-    nk_layout_row_static(ctx, ROW, 190, 3);
-    hot(app, ctx, 1);
-    nk_checkbox_flags_label(ctx, "read", &s->flags, 1u);
-    hot(app, ctx, 1);
-    nk_checkbox_flags_label(ctx, "write", &s->flags, 2u);
-    hot(app, ctx, 1);
-    nk_checkbox_flags_label(ctx, "execute", &s->flags, 4u);
+    check_row(ctx, 3);
+    flags_cell(app, ctx, "read", &s->flags, 1u);
+    flags_cell(app, ctx, "write", &s->flags, 2u);
+    flags_cell(app, ctx, "execute", &s->flags, 4u);
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "flags = 0x%02x", s->flags);
@@ -556,11 +617,10 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
                      curie_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
 
-    nk_layout_row_static(ctx, ROW, 190, 3);
+    check_row(ctx, 3);
     for (i = 0; i < 3; i++) {
         static const char *const names[3] = { "Never", "On Wi-Fi", "Always" };
-        hot(app, ctx, 1);
-        if (nk_option_label(ctx, names[i], s->radio == i)) s->radio = i;
+        radio_cell(app, ctx, names[i], &s->radio, i);
     }
 
     section(app, ctx, "Selectables",
@@ -867,7 +927,7 @@ section_grid(App *app, struct nk_context *ctx)
         { "tiny.css",  "MIT",    "the stylesheet itself" },
         { "plutosvg",  "MIT",    "rasterises the icons" },
         { "Ionicons",  "MIT",    "the icons" },
-        { "Karla",     "OFL",    "the typeface" }
+        { "Aileron",   "CC0",    "the typeface" }
     };
     static const float weights[3] = { 0.24f, 0.16f, 0.60f };
 
@@ -1534,9 +1594,6 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
 
     diag_row(app, ctx, "at rest", d.frame_rate);
     diag_row(app, ctx, "while dragging", d.drag_rate);
-    /* From the gap to the previous frame, not from a count over a second:
-     * that second only advances when a frame is drawn, so it reads stale for
-     * as long as the app is quiet - which here is most of the time. */
     /* Milliseconds are the natural unit for a frame, but a quiet app can sit
      * for minutes: past a second the number stops reading as a duration. */
     if (d.frame_gap_ms >= 1000.0f)
@@ -1602,19 +1659,16 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
             "driver and the loader wanted before main ran.");
 
     {
-        static const char *const step[5] = {
-            "SDL_Init(VIDEO)", "window and renderer", "Nuklear context",
-            "font atlas", "stylesheets"
-        };
         int i;
 
-        SDL_snprintf(v, sizeof(v), "%.1f MB", d.rss_at[0] / 1048576.0);
-        diag_row(app, ctx, "before any of it", v);
-        for (i = 0; i < 5; i++) {
-            double delta = (d.rss_at[i + 1] - (double)d.rss_at[i]) / 1048576.0;
+        SDL_snprintf(v, sizeof(v), "%.1f MB",
+                     d.rss_at[RSS_ENTRY] / 1048576.0);
+        diag_row(app, ctx, curie_rss_names[RSS_ENTRY], v);
+        for (i = RSS_ENTRY + 1; i < RSS_STEPS; i++) {
+            double delta = (d.rss_at[i] - (double)d.rss_at[i - 1]) / 1048576.0;
             SDL_snprintf(v, sizeof(v), "%+.1f MB   (%.1f MB total)", delta,
-                         d.rss_at[i + 1] / 1048576.0);
-            diag_row(app, ctx, step[i], v);
+                         d.rss_at[i] / 1048576.0);
+            diag_row(app, ctx, curie_rss_names[i], v);
         }
     }
 

@@ -36,11 +36,13 @@ foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER GPU TRAY OFFSCREEN)
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
 endforeach()
 
-# And the render backends this app can never end up on. SDL probes its list
-# in order and stops at the first that works - on Windows that is Direct3D 11
-# - so Direct3D 9, Direct3D 12 and Vulkan are compiled in, and their loaders
-# probed at startup, only to be passed over. Metal and the GL drivers stay:
-# they are the first choice on macOS, on Linux and under Emscripten.
+# And the render backends this app can never end up on. SDL tries its list in
+# order and stops at the first that constructs - on Windows that is Direct3D
+# 11, which comes first - so Direct3D 9, Direct3D 12 and Vulkan are never
+# reached at runtime and cost nothing at startup. What they cost is build time
+# and space in the binary, which is the whole of the saving here. Metal and
+# the GL drivers stay: they are the first choice on macOS, on Linux and under
+# Emscripten.
 foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
@@ -208,15 +210,15 @@ if(EMSCRIPTEN)
     target_compile_options(curie_core PRIVATE -Oz)
 
     # Every asset the app opens is named by a string literal in src/*.c, so
-    # the package is built from those rather than from a directory: the font
-    # directory alone is 1 MB of typefaces against the one that is loaded, and
-    # a hand-written list would go stale the first time a path changed.
+    # the package is built from those rather than from a directory: assets/fonts
+    # holds several faces against the one that is loaded, and a hand-written
+    # list would go stale the first time a path changed.
     set(WASM_ASSETS "")
     file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
     foreach(_s IN LISTS _curie_srcs)
-        file(STRINGS "${_s}" _lines REGEX "third_party/[^\"]*\.(css|ttf)")
+        file(STRINGS "${_s}" _lines REGEX "(third_party|assets)/[^\"]*\.(css|ttf|otf)")
         foreach(_l IN LISTS _lines)
-            string(REGEX MATCHALL "third_party/[A-Za-z0-9_/.-]*\.(css|ttf)"
+            string(REGEX MATCHALL "(third_party|assets)/[A-Za-z0-9_/.-]*\.(css|ttf|otf)"
                    _paths "${_l}")
             list(APPEND WASM_ASSETS ${_paths})
         endforeach()

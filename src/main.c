@@ -77,27 +77,25 @@ static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19 };
 #define TITLE_GAP      6   /* between the app mark and the name */
 #define MARK_SIZE     18   /* the app mark, drawn size */
 
-/* The resident set at each step of the startup, so the diagnostics can say
- * what each piece costs rather than leaving it to be guessed at. Sampled into
- * a file static because the first two land before App exists. */
-enum {
-    RSS_ENTRY, RSS_SDL, RSS_WINDOW, RSS_NUKLEAR, RSS_FONT, RSS_STYLE,
-    RSS_STEPS
-};
+/* The resident set at each startup milestone (the list is in ui.h, next to
+ * the page that prints it). A file static because the first two samples land
+ * before App exists. */
 static size_t g_rss[RSS_STEPS];
 
 /* Ionicons draw a 32-unit stroke on a 512 viewBox - 6.25% of the glyph - so
  * below 16px the line falls under one pixel and anti-aliases to grey. That,
  * not the artwork, is why a glyph looked "greyed out": at 12px the minimise
- * faded, and dropping the maximise to 14px faded that one instead. Every
- * glyph therefore stays at or above 16, and the remaining differences are
- * optical - a cross and a dash read smaller than a square of equal size. */
+ * faded, and dropping the maximise to 14px faded that one too - until the
+ * stroke widths in the SVG were scaled up on the way through, which is what
+ * puts the line back over a pixel and lets the maximise sit a size below the
+ * other two. The remaining differences are optical: a cross and a dash read
+ * smaller than a square of equal size. */
 /* Even sizes, so that (CTL_SIZE - glyph) / 2 is a whole number of pixels.
  * At 17 the padding was 5.5 and the minimise dash - a single horizontal line
  * through the middle of the box - straddled a pixel boundary and came out as
  * one bright row between two dim ones however heavy the stroke was. */
 #define GLYPH_MINIMISE 18
-#define GLYPH_MAXIMISE 16
+#define GLYPH_MAXIMISE 14
 #define GLYPH_CLOSE    18
 
 /* Size alone only got them off the grey floor; at this scale the artwork's
@@ -515,15 +513,32 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
 /* --- fonts --------------------------------------------------------------- */
 /* Nuklear's built-in default is ProggyClean, a 13px *bitmap* font: blocky at
  * any real size and unable to scale. Baking a TTF through stb_truetype is what
- * makes text look like text - and this is the path the CC0 Zerove font will
- * use once per-widget font selection is wanted for display type; only
- * FONT_FILE changes. Zerove is unicase (measured: 'a' and 'A' are the same
- * outline at 1434 units), so it is a wordmark face, not a UI face. */
-#define FONT_FILE "third_party/nuklear/extra_font/Karla-Regular.ttf"
+ * makes text look like text.
+ *
+ * The face is Aileron, CC0, vendored under assets/fonts/. It replaced Karla,
+ * which ships inside the Nuklear submodule with no licence anywhere near it:
+ * a dependency whose terms can only be read off somewhere else is not one to
+ * build a distributable on. Aileron's download has no licence file either, so
+ * Aileron-Notice.txt records where its terms come from - the declaration is in
+ * the font's own name table, which is better provenance than a file would be.
+ * Vendoring rather than submoduling is the one exception to this project's
+ * submodule rule.
+ *
+ * It is an OTF: stb_truetype, which Nuklear bakes through, reads CFF outlines
+ * as well as TrueType ones.
+ *
+ * assets/fonts/ also holds two faces that are not loaded - Public Sans (OFL),
+ * which was the runner-up, and Zerove (CC0), which is unicase (measured: 'a'
+ * and 'A' are the same outline at 1434 units) and so a wordmark face rather
+ * than a UI one. Only FONT_FILE would change. See docs/NOTICE.md. */
+#define FONT_FILE "assets/fonts/Aileron-Regular.otf"
 
-/* Nearest baked size. `bold` is accepted and ignored: Karla ships regular
- * only, and synthesising a bold by double-striking looks worse than not having
- * one - so font-weight still has no face to select. */
+/* Nearest baked size. `bold` is accepted and ignored, but no longer for want
+ * of a face: Aileron-Bold.otf sits beside the regular. Baking it would put
+ * a second set of FONT_STEPS faces in the atlas and roughly double the largest
+ * allocation this app makes, which is not a trade to take silently - so
+ * font-weight still has no face to select, and the file is there for the day
+ * that changes. */
 static const struct nk_user_font *
 pick_font(App *app, int px, int bold)
 {
@@ -587,7 +602,7 @@ rebuild_font(App *app)
         font = nk_font_atlas_add_default(atlas, (float)curie_px(FONT_SIZE), NULL);
     } else {
         SDL_snprintf(app->font_status, sizeof(app->font_status),
-                     "Karla, %d sizes %d-%dpx", FONT_STEPS,
+                     "Aileron, %d sizes %d-%dpx", FONT_STEPS,
                      curie_px(g_font_px[0]), curie_px(g_font_px[FONT_STEPS - 1]));
     }
 
@@ -1841,14 +1856,21 @@ apply_widget_style(App *app)
     curie_style_get("summary", &sum);
     st->tab.background   = nk_style_item_color(
         det.matched ? curie_visible(col_of(det.bg), body, base) : base);
-    st->tab.border_color = det.matched ? col_of(det.border_col) : edge;
+    /* Nuklear fills a tab header twice: the border rect at a literal 0
+     * rounding, then the background inset by tab.border at tab.rounding. The
+     * first is square whatever the style asks for, so with any other colour
+     * its corners show through and the header reads as a square box however
+     * round the fill is. Painting it in the surface behind the header, and
+     * taking the border to nothing, leaves the rounded fill on its own -
+     * details' own 1px border is not worth a set of square corners. */
+    st->tab.border_color = body;
     /* The main text colour for both kinds of tree row. `summary` resolves to
      * something dimmer, and it only reaches the plain nodes - the element
      * rows draw their label through nk_style_selectable - so honouring it
      * made one row in the tree a different colour from its siblings. */
     st->tab.text         = text;
+    st->tab.border = 0.0f;
     if (det.matched) {
-        st->tab.border   = det.border;
         st->tab.rounding = det.rounding;
         st->tab.padding  = nk_vec2(det.pad_x, det.pad_y);
     }
@@ -1937,7 +1959,7 @@ apply_widget_style(App *app)
 static void
 tab_strip(App *app, struct nk_context *ctx, int win_w)
 {
-    const struct nk_user_font *font = pick_font(app, 14, 0);
+    const struct nk_user_font *font = pick_font(app, 16, 0);
     unsigned char c[4];
     struct nk_color accent = curie_style_token("--links", c)
                            ? col_of(c) : app->text;
@@ -2394,7 +2416,6 @@ curie_diagnostics(App *app, curie_diag *out)
     out->tab        = app->tab;
     out->scale      = curie_scale();
     out->style_ms   = app->style_ms_x100 / 100.0f;
-    out->fps        = app->fps;
     out->frame_gap_ms = app->frame_gap_ms;
 
     /* Nuklear grows this to fit the busiest frame it has been asked to draw
@@ -2603,10 +2624,14 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     if (app->borderless) SDL_SetWindowHitTest(app->win, window_hit_test, app);
     /* Either way it can be changed from the card at runtime. */
 
+    g_rss[RSS_WINDOW] = curie_process_rss();
+
+    /* Its own milestone: this is the first thing to touch plutosvg, and
+     * folding that into the renderer's figure was exactly the sort of
+     * misattribution the table exists to prevent. */
     set_window_icon(app->win);
     curie_set_scale(curie_dpi_query_scale(app->win));   /* needs the window */
-
-    g_rss[RSS_WINDOW] = curie_process_rss();
+    g_rss[RSS_ICON] = curie_process_rss();
 
     app->ctx = nk_sdl_init(app->win, app->ren, nk_sdl_allocator());
     if (!app->ctx) return SDL_APP_FAILURE;
