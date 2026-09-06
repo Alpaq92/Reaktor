@@ -15,6 +15,18 @@
 #define NK_INCLUDE_FONT_BAKING
 #define NK_INCLUDE_DEFAULT_FONT
 
+/* Fire a button when it is released, not when it is pressed.
+ *
+ * Nuklear's default ends in nk_input_is_mouse_pressed - (down && clicked) -
+ * so it needs a frame drawn while the button is still held. On a desktop it
+ * always gets one. A browser delivers mousedown and mouseup in the same task,
+ * so the single frame drawn for a click sees down=0 and nothing fires: every
+ * button, tab and link on the wasm build was inert.
+ *
+ * It is also what a button should do. Press, change your mind, drag off the
+ * button, let go - and nothing happens. */
+#define NK_BUTTON_TRIGGER_ON_RELEASE
+
 #include "../third_party/nuklear/nuklear.h"
 
 #endif /* CURIE_NK_COMMON_H */

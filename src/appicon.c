@@ -1,4 +1,4 @@
-/* appicon.c - Ionicons SVG + Open-Color palette -> raster, entirely at runtime.
+/* appicon.c - an Ionicons SVG recoloured and rasterised, entirely at runtime.
  *
  * Ionicons "-outline" glyphs share one idiom: shapes carry
  * style="fill:none;stroke:#000;..." and any solid shape is a <path> with no
@@ -107,8 +107,8 @@ void curie_unpremultiply(unsigned char *px, int w, int h, int stride)
 
 /* Convenience wrapper: turns an Ionicons glyph name into a path. */
 plutovg_surface_t *curie_svg_surface(const char *name, int size,
-                                     const char *outline_family, int outline_idx,
-                                     const char *inside_family, int inside_idx)
+                                     const char *outline_colour,
+                                     const char *inside_colour)
 {
     char rel[CURIE_PATH_MAX];
 
@@ -116,22 +116,21 @@ plutovg_surface_t *curie_svg_surface(const char *name, int size,
                  "third_party/ionicons/src/svg/%s.svg", name) < 0)
         return NULL;
     rel[sizeof(rel) - 1] = '\0';
-    return curie_svg_surface_path(rel, size, outline_family, outline_idx,
-                                  inside_family, inside_idx, 0.0f);
+    return curie_svg_surface_path(rel, size, outline_colour, inside_colour,
+                                  0.0f);
 }
 
 /* Loads any SVG under the repo root, optionally recolours it from
  * Open-Color, and rasterises to a surface the caller owns. A NULL family
  * leaves that channel as the artwork has it. */
 plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
-                                          const char *outline_family, int outline_idx,
-                                          const char *inside_family, int inside_idx,
+                                          const char *outline_colour,
+                                          const char *inside_colour,
                                           float stroke_scale)
 {
     char path[CURIE_PATH_MAX];
     char outline_hex[16] = "#000000", inside_hex[16] = "none";
     char fill_decl[32], stroke_decl[32], path_open[48];
-    unsigned char r, g, b;
     char *svg;
     const char *src;
     char *stage0 = NULL, *stage1 = NULL, *stage2 = NULL, *stage3 = NULL;
@@ -147,30 +146,17 @@ plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
     svg = curie_read_file(path, NULL);
     if (!svg) { fprintf(stderr, "svg: cannot read %s\n", path); return NULL; }
 
-    /* A channel is either an Open-Color name, resolved from open-color.json,
-     * or a literal "#rrggbb". The literal form is what lets an icon follow the
-     * active stylesheet: a fixed palette shade cannot, and the icons were left
-     * near-black against a dark card because of it. Either way nothing is
-     * baked in here. */
-    if (outline_family) {
-        if (outline_family[0] == '#') {
-            snprintf(outline_hex, sizeof(outline_hex), "%s", outline_family);
-        } else if (curie_oc_color(outline_family, outline_idx, &r, &g, &b)) {
-            snprintf(outline_hex, sizeof(outline_hex), "#%02x%02x%02x", r, g, b);
-        } else {
-            fprintf(stderr, "svg: no colour %s-%d\n", outline_family, outline_idx);
-            goto done;
-        }
+    /* A channel is a literal "#rrggbb", which is what lets an icon follow the
+     * active stylesheet - the caller passes whatever --links or --text-muted
+     * resolved to this frame. This used to accept an Open-Color family and
+     * shade as well, and that was exactly the problem: a fixed palette shade
+     * cannot track a theme, and it left the card's icons near-black against a
+     * dark background. */
+    if (outline_colour) {
+        snprintf(outline_hex, sizeof(outline_hex), "%s", outline_colour);
     }
-    if (inside_family) {
-        if (inside_family[0] == '#') {
-            snprintf(inside_hex, sizeof(inside_hex), "%s", inside_family);
-        } else if (curie_oc_color(inside_family, inside_idx, &r, &g, &b)) {
-            snprintf(inside_hex, sizeof(inside_hex), "#%02x%02x%02x", r, g, b);
-        } else {
-            fprintf(stderr, "svg: no colour %s-%d\n", inside_family, inside_idx);
-            goto done;
-        }
+    if (inside_colour) {
+        snprintf(inside_hex, sizeof(inside_hex), "%s", inside_colour);
     }
 
     snprintf(fill_decl,   sizeof(fill_decl),   "fill:%s", inside_hex);
@@ -192,12 +178,12 @@ plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
         if (!str_scale_stroke(src, stage0, cap, stroke_scale)) goto done;
         src = stage0;
     }
-    if (inside_family) {
+    if (inside_colour) {
         if (!str_replace_all(src, stage1, cap, "fill:none", fill_decl))
             goto done;
         src = stage1;
     }
-    if (outline_family) {
+    if (outline_colour) {
         if (!str_replace_all(src, stage2, cap, "stroke:#000", stroke_decl))
             goto done;
         if (!str_replace_all(stage2, stage3, cap, "<path ", path_open)) {
@@ -228,15 +214,13 @@ done:
 }
 
 int curie_svg_icon_dump(const char *name, int size,
-                        const char *outline_family, int outline_idx,
-                        const char *inside_family, int inside_idx,
+                        const char *outline_colour, const char *inside_colour,
                         const char *png_path)
 {
     plutovg_surface_t *surf;
     int ok;
 
-    surf = curie_svg_surface(name, size, outline_family, outline_idx,
-                             inside_family, inside_idx);
+    surf = curie_svg_surface(name, size, outline_colour, inside_colour);
     if (!surf) return 0;
     ok = plutovg_surface_write_to_png(surf, png_path) ? 1 : 0;
     plutovg_surface_destroy(surf);

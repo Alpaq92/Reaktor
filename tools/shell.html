@@ -1,0 +1,69 @@
+<!doctype html>
+<!-- shell.html - the page Emscripten links curie.wasm into.
+     Emscripten's stock shell carries a logo, a link and two debug checkboxes;
+     this is the canvas and nothing else, on the same background the app
+     clears to, so the page and the app are one surface. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curie</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #252525;      /* tiny.css --background-body, dark */
+    overflow: hidden;
+  }
+  /* No width or height on the canvas: SDL sizes it to the window it asks
+     for, and the app asks for the page's size. A CSS size here would stretch
+     the rendering instead of resizing it. */
+  #canvas {
+    display: block;
+    outline: none;
+  }
+  #status {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #c0c0c0;
+    font: 14px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+          Roboto, sans-serif;
+    /* It covers the canvas, and without this it also swallows every click on
+       it: mousemove is delivered from the document and still reached the app,
+       so the UI highlighted on hover and then ignored every press - which
+       looked like broken input handling and was a stray div. */
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="status">loading&hellip;</div>
+  <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()">
+  </canvas>
+  <script>
+    var statusEl = document.getElementById('status');
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      print: function (text) { console.log(text); },
+      printErr: function (text) { console.error(text); },
+      setStatus: function (text) {
+        if (!statusEl) return;
+        if (text) { statusEl.textContent = text; return; }
+        statusEl.remove();
+        statusEl = null;
+      }
+    };
+    /* The canvas has to hold focus for keys to reach the app, and a click on
+       it is the browser's own gesture for that. */
+    Module.canvas.addEventListener('mousedown', function () {
+      Module.canvas.focus();
+    });
+    /* Emscripten calls setStatus('') when it is ready, but only on some
+       paths; this is the one that always fires. */
+    Module.onRuntimeInitialized = function () { Module.setStatus(''); };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

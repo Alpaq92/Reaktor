@@ -131,28 +131,26 @@ target_include_directories(curie_core PUBLIC src)
 target_link_libraries(curie_core PUBLIC plutosvg)
 
 # --------------------------------------------------- icon generator ---------
-# Renders the Ionicons glyph with the Open-Color palette at build time, so the
-# executable's icon is generated from the submodules rather than committed.
-add_executable(mkicon tools/mkicon.c)
-target_link_libraries(mkicon PRIVATE curie_core)
-
-set(ICON_GLYPH        browsers-outline)
-set(ICON_OUTLINE_FAM  violet)
-set(ICON_OUTLINE_SH   7)
-set(ICON_INSIDE_FAM   indigo)
-set(ICON_INSIDE_SH    2)
-
+# Renders the Ionicons glyph at build time, so the executable's icon is
+# generated from the submodule rather than committed. The colour is the app's
+# own (CURIE_BRAND in src/curie.h): the desktop draws this one, outside the
+# window and before any stylesheet exists.
+set(ICON_GLYPH browsers-outline)
 set(APP_RESOURCES "")
+
+if(NOT EMSCRIPTEN)
+    add_executable(mkicon tools/mkicon.c)
+    target_link_libraries(mkicon PRIVATE curie_core)
+endif()
+
 if(WIN32)
     set(GEN "${CMAKE_BINARY_DIR}/gen")
     file(MAKE_DIRECTORY "${GEN}")
     add_custom_command(
         OUTPUT  "${GEN}/curie.ico" "${GEN}/curie.rc"
-        COMMAND mkicon "${GEN}/curie.ico" "${GEN}/curie.rc"
-                ${ICON_GLYPH} ${ICON_OUTLINE_FAM} ${ICON_OUTLINE_SH}
-                ${ICON_INSIDE_FAM} ${ICON_INSIDE_SH}
+        COMMAND mkicon "${GEN}/curie.ico" "${GEN}/curie.rc" ${ICON_GLYPH}
         DEPENDS mkicon
-        COMMENT "Generating application icon from Ionicons + Open-Color"
+        COMMENT "Generating application icon from Ionicons"
         VERBATIM)
     set(APP_RESOURCES "${GEN}/curie.rc")
 endif()
@@ -166,6 +164,7 @@ add_executable(curie WIN32
     src/metrics.c
     src/style.c
     src/cssflat.c
+    src/showcase.c
     ${APP_RESOURCES})
 
 target_include_directories(curie PRIVATE
@@ -177,16 +176,118 @@ target_link_libraries(curie PRIVATE
     SDL3::SDL3-static
     lcui)
 
+# ------------------------------------------------------------- wasm --------
+# The same sources, linked to a page instead of an executable.
+#
+# Two things have to change and only two. The assets are read from the
+# submodules at runtime by path, so they are packaged into Emscripten's
+# virtual filesystem at exactly the paths the code already asks for - see
+# curie_root() in src/util.c, which answers "" here for that reason. And the
+# window is a canvas, so there is no frame to remove and no frame to draw:
+# main.c defaults CURIE_BORDERLESS off under __EMSCRIPTEN__.
+#
+# Everything else - SDL3, libcss, plutovg, Nuklear, the CSS seam - is portable
+# C and comes across untouched, which was the point of the callback main loop
+# in the first place.
+if(EMSCRIPTEN)
+    # -Oz on the compile side too; CMAKE_BUILD_TYPE=Release would otherwise
+    # hand every translation unit -O3, which optimises for speed.
+    target_compile_options(curie PRIVATE -Oz)
+    target_compile_options(lcui PRIVATE -Oz)
+    target_compile_options(plutovg PRIVATE -Oz)
+    target_compile_options(plutosvg PRIVATE -Oz)
+    target_compile_options(curie_core PRIVATE -Oz)
+
+    # Every asset the app opens is named by a string literal in src/*.c, so
+    # the package is built from those rather than from a directory: the font
+    # directory alone is 1 MB of typefaces against the one that is loaded, and
+    # a hand-written list would go stale the first time a path changed.
+    set(WASM_ASSETS "")
+    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+    foreach(_s IN LISTS _curie_srcs)
+        file(STRINGS "${_s}" _lines REGEX "third_party/[^\"]*\.(css|ttf)")
+        foreach(_l IN LISTS _lines)
+            string(REGEX MATCHALL "third_party/[A-Za-z0-9_/.-]*\.(css|ttf)"
+                   _paths "${_l}")
+            list(APPEND WASM_ASSETS ${_paths})
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES WASM_ASSETS)
+
+    # The Ionicons submodule is 1357 files and 3.6 MB; about twenty of them
+    # are ever drawn. Their names are string literals in src/*.c, so they are
+    # found rather than listed - a hand-written list would be wrong the first
+    # time a page gained an icon.
+    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+    set(WASM_ICONS "")
+    foreach(_s IN LISTS _curie_srcs)
+        file(STRINGS "${_s}" _lines REGEX "[a-z0-9-]+-outline")
+        foreach(_l IN LISTS _lines)
+            string(REGEX MATCHALL "[a-z0-9]+(-[a-z0-9]+)*-outline" _n "${_l}")
+            list(APPEND WASM_ICONS ${_n})
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES WASM_ICONS)
+    list(LENGTH WASM_ICONS _icon_count)
+    list(LENGTH WASM_ASSETS _asset_count)
+    message(STATUS "wasm: packaging ${_asset_count} assets and ${_icon_count} icons")
+
+    # SHELL: keeps CMake from de-duplicating the repeated --preload-file flag
+    # and leaving one flag in front of every path, which emcc then reads as
+    # input files it cannot find.
+    set(WASM_PRELOAD "")
+    foreach(_a IN LISTS WASM_ASSETS)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_a}")
+            list(APPEND WASM_PRELOAD
+                 "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/${_a}@/${_a}")
+        endif()
+    endforeach()
+    foreach(_i IN LISTS WASM_ICONS)
+        set(_rel "third_party/ionicons/src/svg/${_i}.svg")
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_rel}")
+            list(APPEND WASM_PRELOAD
+                 "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/${_rel}@/${_rel}")
+        endif()
+    endforeach()
+
+    set_target_properties(curie PROPERTIES SUFFIX ".html")
+    target_link_options(curie PRIVATE
+        ${WASM_PRELOAD}
+        # The font atlas and the SVG rasters are allocated as the UI is first
+        # drawn, so the heap has to be able to grow past whatever is reserved.
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=64MB
+        -sSTACK_SIZE=4MB
+        # SDL3's renderer targets GLES2/WebGL here.
+        -sMIN_WEBGL_VERSION=2
+        -sMAX_WEBGL_VERSION=2
+        -sEXIT_RUNTIME=0
+        # Size, not speed: this is a download. -Oz on the link line is what
+        # runs Binaryen's wasm-opt over the module - Binaryen is not an
+        # alternative to Emscripten, it is the part of it that does this.
+        -Oz
+        --closure 1
+        "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.html")
+    set_property(TARGET curie APPEND PROPERTY LINK_DEPENDS
+                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.html")
+endif()
+
 if(MSVC)
     # C5287/C4101 are Nuklear's; C4244/C4267 are plutovg's narrowing warnings.
     target_compile_options(curie PRIVATE /wd5287 /wd4101)
     target_compile_options(plutovg PRIVATE /wd4244 /wd4267 /wd4018)
     target_compile_definitions(curie PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_definitions(curie_core PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_definitions(mkicon PRIVATE _CRT_SECURE_NO_WARNINGS)
+    if(NOT EMSCRIPTEN)
+        target_compile_definitions(mkicon PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
 endif()
 
 # The app finds assets by walking up from the executable to the directory
 # containing third_party/, so keep the binary inside the tree.
-set_target_properties(curie mkicon PROPERTIES
+set_target_properties(curie PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+if(NOT EMSCRIPTEN)
+    set_target_properties(mkicon PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()

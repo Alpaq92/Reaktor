@@ -1,68 +1,100 @@
-/* util.c - repo-root discovery, file loading, and Open-Color lookup.
+/* util.c - path resolution and whole-file reading.
  *
- * The Open-Color reader is a deliberately small scanner rather than a general
- * JSON parser: open-color.json is a flat map of family -> array of hex
- * strings, so locating "family" and then counting quoted strings inside the
- * following [...] is sufficient and keeps the dependency count at zero. */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+ * Everything the app needs from third_party/ is read from disk at runtime, so
+ * these two functions are the whole of the I/O layer - and the only place in
+ * the tree that has to know what a filesystem looks like on each platform.
+ *
+ * Paths are joined with '/' everywhere, including Windows: every Win32 file
+ * API and the CRT accept it, and one separator means one code path. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#  include <psapi.h>
+#elif defined(__EMSCRIPTEN__)
+/* nothing: the root is fixed, see below */
+#else
+#  include <unistd.h>
+#  include <sys/stat.h>
+#endif
+
 #include "curie.h"
+
+#define CURIE_PATH_CAP 1024
+
+static int copy_out(char *out, size_t cap, const char *src)
+{
+    size_t len = strlen(src);
+    if (len + 1 > cap) return 0;
+    memcpy(out, src, len + 1);
+    return 1;
+}
 
 int curie_root(char *out, size_t cap)
 {
-    char exe[MAX_PATH];
-    char probe[MAX_PATH];
-    DWORD n;
-    size_t i;
-
     /* Explicit override wins: needed for installed layouts, and for running
      * the binary from anywhere. */
+    const char *env = getenv("CURIE_ROOT");
+    if (env && *env) return copy_out(out, cap, env);
+
+#if defined(__EMSCRIPTEN__)
+    /* There is no executable to walk up from, and no ambiguity to resolve:
+     * the assets are packaged into the virtual filesystem at exactly the
+     * paths the rest of the code already asks for, so the root is its root.
+     * "" rather than "/" because curie_path inserts the separator. */
+    return copy_out(out, cap, "");
+#else
     {
-        const char *env = getenv("CURIE_ROOT");
-        if (env && *env) {
-            size_t len = strlen(env);
-            if (len + 1 > cap) return 0;
-            for (i = 0; i <= len; i++) out[i] = env[i];
-            return 1;
+        char exe[CURIE_PATH_CAP];
+        char probe[CURIE_PATH_CAP];
+        int i;
+
+#  if defined(_WIN32)
+        DWORD n = GetModuleFileNameA(NULL, exe, (DWORD)sizeof(exe));
+        if (n == 0 || n >= sizeof(exe)) return 0;
+        /* Normalise, so the walk below only has to look for one separator. */
+        for (i = 0; exe[i]; i++) if (exe[i] == '\\') exe[i] = '/';
+#  else
+        /* No executable path without a platform call; the working directory
+         * is the honest fallback, and CURIE_ROOT covers the rest. */
+        if (!getcwd(exe, sizeof(exe))) return 0;
+        (void)i;
+#  endif
+
+        /* Walk up looking for the .curie-root sentinel.
+         *
+         * This used to probe for a "third_party" directory, which broke under
+         * CMake: add_subdirectory(third_party/SDL) mirrors that path into the
+         * build tree, so build/third_party existed and the walk stopped one
+         * level too early. A dedicated marker cannot be shadowed that way. */
+        for (;;) {
+            char *slash = strrchr(exe, '/');
+            if (!slash) return 0;
+            *slash = '\0';
+
+            if (snprintf(probe, sizeof(probe), "%s/.curie-root", exe) < 0)
+                return 0;
+            probe[sizeof(probe) - 1] = '\0';
+            {
+                FILE *f = fopen(probe, "rb");
+                if (f) { fclose(f); return copy_out(out, cap, exe); }
+            }
+            /* Stop once we have chewed back to the root. */
+            if (strchr(exe, '/') == NULL) return 0;
         }
     }
-
-    n = GetModuleFileNameA(NULL, exe, (DWORD)sizeof(exe));
-    if (n == 0 || n >= sizeof(exe)) return 0;
-
-    /* Walk up from the executable looking for the .curie-root sentinel.
-     *
-     * This used to probe for a "third_party" directory, which broke under
-     * CMake: add_subdirectory(third_party/SDL) mirrors that path into the
-     * build tree, so build/third_party exists and the walk stopped one level
-     * too early. A dedicated marker cannot be shadowed that way. */
-    for (;;) {
-        char *slash = strrchr(exe, '\\');
-        if (!slash) return 0;
-        *slash = '\0';
-
-        if (_snprintf(probe, sizeof(probe), "%s\\.curie-root", exe) < 0) return 0;
-        probe[sizeof(probe) - 1] = '\0';
-        if (GetFileAttributesA(probe) != INVALID_FILE_ATTRIBUTES) {
-            size_t len = strlen(exe);
-            if (len + 1 > cap) return 0;
-            for (i = 0; i <= len; i++) out[i] = exe[i];
-            return 1;
-        }
-        /* Stop once we have chewed back to the drive root. */
-        if (strchr(exe, '\\') == NULL) return 0;
-    }
+#endif
 }
 
 int curie_path(char *out, size_t cap, const char *rel)
 {
-    char root[MAX_PATH];
+    char root[CURIE_PATH_CAP];
+
     if (!curie_root(root, sizeof(root))) return 0;
-    if (_snprintf(out, cap, "%s\\%s", root, rel) < 0) return 0;
+    if (snprintf(out, cap, "%s/%s", root, rel) < 0) return 0;
     out[cap - 1] = '\0';
     return 1;
 }
@@ -95,76 +127,33 @@ char *curie_read_file(const char *path, size_t *len)
 
 void curie_free(void *p) { free(p); }
 
-static int hex_nibble(char c)
+size_t curie_process_rss(void)
 {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
+#if defined(_WIN32)
+    /* psapi via GetProcessMemoryInfo, reached through the process handle we
+     * already have - no import, so nothing links against psapi. */
+    PROCESS_MEMORY_COUNTERS pmc;
+    typedef BOOL(WINAPI * fn_t)(HANDLE, PROCESS_MEMORY_COUNTERS *, DWORD);
+    static fn_t get_info;
+    static int looked_up;
 
-/* Parses "#rrggbb". Returns 0 if malformed. */
-static int parse_hex_color(const char *s, unsigned char *r, unsigned char *g,
-                           unsigned char *b)
-{
-    int v[6];
-    int i;
-    if (!s || *s != '#') return 0;
-    for (i = 0; i < 6; i++) {
-        v[i] = hex_nibble(s[1 + i]);
-        if (v[i] < 0) return 0;
+    if (!looked_up) {
+        HMODULE m = LoadLibraryA("psapi.dll");
+        if (m) get_info = (fn_t)(void *)GetProcAddress(m, "GetProcessMemoryInfo");
+        looked_up = 1;
     }
-    *r = (unsigned char)(v[0] * 16 + v[1]);
-    *g = (unsigned char)(v[2] * 16 + v[3]);
-    *b = (unsigned char)(v[4] * 16 + v[5]);
-    return 1;
-}
-
-int curie_oc_color(const char *family, int index, unsigned char *r,
-                   unsigned char *g, unsigned char *b)
-{
-    char path[MAX_PATH];
-    char key[64];
-    char *json;
-    const char *p;
-    int found = 0;
-    int i;
-
-    if (index < 0) return 0;
-    if (!curie_path(path, sizeof(path),
-                    "third_party\\open-color\\open-color.json")) return 0;
-
-    json = curie_read_file(path, NULL);
-    if (!json) return 0;
-
-    if (_snprintf(key, sizeof(key), "\"%s\"", family) < 0) {
-        curie_free(json);
-        return 0;
-    }
-    key[sizeof(key) - 1] = '\0';
-
-    p = strstr(json, key);
-    if (p) {
-        p = strchr(p + strlen(key), '[');   /* start of the shade array */
-        if (p) {
-            const char *q = p;
-            /* Walk to the index-th quoted string, stopping at the closing ]. */
-            for (i = 0; i <= index; i++) {
-                const char *open = strchr(q, '"');
-                const char *end  = strchr(q, ']');
-                if (!open || (end && end < open)) { q = NULL; break; }
-                q = open + 1;               /* first char inside the quotes */
-                if (i == index) {
-                    found = parse_hex_color(q, r, g, b);
-                    break;
-                }
-                q = strchr(q, '"');          /* closing quote of this entry */
-                if (!q) break;
-                q++;
-            }
-        }
-    }
-
-    curie_free(json);
-    return found;
+    if (!get_info) return 0;
+    pmc.cb = sizeof(pmc);
+    if (!get_info(GetCurrentProcess(), &pmc, sizeof(pmc))) return 0;
+    return (size_t)pmc.WorkingSetSize;
+#elif defined(__linux__)
+    FILE *f = fopen("/proc/self/statm", "r");
+    unsigned long total = 0, resident = 0;
+    if (!f) return 0;
+    if (fscanf(f, "%lu %lu", &total, &resident) != 2) resident = 0;
+    fclose(f);
+    return (size_t)resident * (size_t)sysconf(_SC_PAGESIZE);
+#else
+    return 0;
+#endif
 }

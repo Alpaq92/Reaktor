@@ -5,3 +5,4 @@ gen/
 *.exe
 *.pdb
 *.ilk
+build-wasm/

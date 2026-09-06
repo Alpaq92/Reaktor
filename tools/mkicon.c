@@ -93,8 +93,7 @@ static int write_dib(FILE *f, const plutovg_surface_t *surf)
 int main(int argc, char **argv)
 {
     const char *ico_path, *rc_path, *svg_name;
-    const char *outline_family, *inside_family;
-    int outline_idx, inside_idx;
+    const char *outline_colour, *inside_colour;
     plutovg_surface_t *surf[NSIZES];
     ICONDIR dir;
     ICONDIRENTRY ent[NSIZES];
@@ -102,24 +101,22 @@ int main(int argc, char **argv)
     unsigned int offset;
     int i, n = 0;
 
-    if (argc < 8) {
+    if (argc < 4) {
         fprintf(stderr, "usage: %s <out.ico> <out.rc> <svg-name>"
-                        " <outline_family> <outline_idx>"
-                        " <inside_family> <inside_idx>\n", argv[0]);
+                        " [#stroke] [#fill]\n", argv[0]);
         return 2;
     }
     ico_path       = argv[1];
     rc_path        = argv[2];
     svg_name       = argv[3];
-    outline_family = argv[4];
-    outline_idx    = atoi(argv[5]);
-    inside_family  = argv[6];
-    inside_idx     = atoi(argv[7]);
+    /* The default is the app's own colour, from curie.h, because the desktop
+     * draws this icon with no stylesheet anywhere in sight. */
+    outline_colour = argc > 4 ? argv[4] : CURIE_BRAND;
+    inside_colour  = argc > 5 ? argv[5] : NULL;
 
     for (i = 0; i < NSIZES; i++) {
         surf[n] = curie_svg_surface(svg_name, SIZES[i],
-                                    outline_family, outline_idx,
-                                    inside_family, inside_idx);
+                                    outline_colour, inside_colour);
         if (!surf[n]) {
             fprintf(stderr, "mkicon: failed to render %s at %dpx\n",
                     svg_name, SIZES[i]);

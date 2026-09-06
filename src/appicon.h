@@ -8,25 +8,27 @@
 
 #include "plutovg.h"
 
-/* Loads third_party/ionicons/src/svg/<name>.svg, recolours it from Open-Color
- * (strokes -> outline_family/idx, fills -> inside_family/idx) and rasterises
- * it at size x size. Caller owns the surface. NULL on failure.
- * Shared by the app and by tools/mkicon.c so both use one code path. */
-/* Loads an arbitrary SVG by path relative to the repo root and rasterises it
- * at size x size. Pass NULL for either family to leave those colours alone,
- * which is what a plain <img src="..."> wants. Caller owns the surface. */
-/* stroke_scale multiplies every stroke-width the artwork declares; 0 or 1
+/* Loads an SVG by path relative to the repo root, substitutes the two
+ * colours into it and rasterises it at size x size. Caller owns the surface.
+ *
+ * outline_colour and inside_colour are "#rrggbb" literals, or NULL to leave
+ * that channel as the artwork has it. They are literals because the callers
+ * pass whatever the stylesheet's tokens resolved to this frame, which is the
+ * only way an icon can follow a theme.
+ *
+ * stroke_scale multiplies every stroke-width the artwork declares; 0 or 1
  * leaves it alone. Ionicons set a stroke of 6.25% of the glyph, which below
  * about 20px is a hairline that anti-aliases to grey, so a glyph drawn small
  * needs a heavier line to read as solid. */
 plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
-                                          const char *outline_family, int outline_idx,
-                                          const char *inside_family, int inside_idx,
+                                          const char *outline_colour,
+                                          const char *inside_colour,
                                           float stroke_scale);
 
+/* The same, for a glyph named inside the Ionicons submodule. */
 plutovg_surface_t *curie_svg_surface(const char *name, int size,
-                                     const char *outline_family, int outline_idx,
-                                     const char *inside_family, int inside_idx);
+                                     const char *outline_colour,
+                                     const char *inside_colour);
 
 /* Converts plutovg's premultiplied ARGB32 to straight alpha in place.
  * Both SDL surfaces and Windows icon bitmaps sample straight alpha;
@@ -36,8 +38,7 @@ void curie_unpremultiply(unsigned char *px, int w, int h, int stride);
 /* Same pipeline, written to a PNG instead. Used by `curie --dump-icon`
  * to eyeball the recolour without launching the UI. Returns 0 on failure. */
 int curie_svg_icon_dump(const char *name, int size,
-                        const char *outline_family, int outline_idx,
-                        const char *inside_family, int inside_idx,
+                        const char *outline_colour, const char *inside_colour,
                         const char *png_path);
 
 #endif /* CURIE_APPICON_H */

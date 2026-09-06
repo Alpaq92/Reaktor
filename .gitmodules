@@ -7,9 +7,6 @@
 [submodule "third_party/ionicons"]
 	path = third_party/ionicons
 	url = https://github.com/ionic-team/ionicons.git
-[submodule "third_party/open-color"]
-	path = third_party/open-color
-	url = https://github.com/yeun/open-color.git
 [submodule "third_party/SDL"]
 	path = third_party/SDL
 	url = https://github.com/libsdl-org/SDL.git
