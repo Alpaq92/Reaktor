@@ -137,7 +137,7 @@ typedef struct curie_diag {
     const char *frame_rate;    /* SDL_HINT_MAIN_CALLBACK_RATE at rest */
     const char *drag_rate;     /* and while a button is held */
     const char *font;
-    int   vsync, aa, dark, sheets, paints, tab;
+    int   vsync, aa, dark, sheets, tab;
     float scale, style_ms, fps, build_ms, render_ms, present_ms;
     float frame_gap_ms;        /* since the previous drawn frame */
     /* Where the memory is. nk_bytes is Nuklear's own command buffer, which
@@ -146,6 +146,10 @@ typedef struct curie_diag {
     unsigned long nk_bytes, nk_used, icon_bytes, rss_bytes;
     int icons;
     int atlas_w, atlas_h;      /* the baked font atlas, RGBA32 */
+    /* Resident set at each startup milestone: on entry, after SDL_Init,
+     * after the window and renderer, after nk_sdl_init, after the font bake,
+     * after the stylesheets. */
+    unsigned long rss_at[6];
 } curie_diag;
 
 void curie_diagnostics(App *app, curie_diag *out);

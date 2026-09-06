@@ -23,17 +23,26 @@ endif()
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
 # ---------------------------------------------------------------- SDL3 -----
-# Only video and events are used. Dialogs stay: SDL_ShowOpenFileDialog is the
-# portable file picker (FINDINGS 13.1). Trimming these took curie.exe from
-# 3.39 MB to 2.66 MB.
+# Only video and events are used. Two stay on purpose: SDL_DIALOG, because
+# SDL_ShowOpenFileDialog is the portable file picker, and the dummy video
+# driver, which is what lets the binary start without a display.
 set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
 set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES     OFF CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
-foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER GPU)
+foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER GPU TRAY OFFSCREEN)
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
+endforeach()
+
+# And the render backends this app can never end up on. SDL probes its list
+# in order and stops at the first that works - on Windows that is Direct3D 11
+# - so Direct3D 9, Direct3D 12 and Vulkan are compiled in, and their loaders
+# probed at startup, only to be passed over. Metal and the GL drivers stay:
+# they are the first choice on macOS, on Linux and under Emscripten.
+foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
+    set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)
 

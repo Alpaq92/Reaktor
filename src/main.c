@@ -77,6 +77,15 @@ static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19 };
 #define TITLE_GAP      6   /* between the app mark and the name */
 #define MARK_SIZE     18   /* the app mark, drawn size */
 
+/* The resident set at each step of the startup, so the diagnostics can say
+ * what each piece costs rather than leaving it to be guessed at. Sampled into
+ * a file static because the first two land before App exists. */
+enum {
+    RSS_ENTRY, RSS_SDL, RSS_WINDOW, RSS_NUKLEAR, RSS_FONT, RSS_STYLE,
+    RSS_STEPS
+};
+static size_t g_rss[RSS_STEPS];
+
 /* Ionicons draw a 32-unit stroke on a 512 viewBox - 6.25% of the glyph - so
  * below 16px the line falls under one pixel and anti-aliases to grey. That,
  * not the artwork, is why a glyph looked "greyed out": at 12px the minimise
@@ -262,7 +271,6 @@ struct App {
      * same thing at once, and costs a subtraction on a value already read. */
     Uint64 last_frame_ms;
     float  frame_gap_ms;
-    int   n_paints;
     int   style_ms_x100;   /* time the last stylesheet load took */
     /* Where a frame goes, in hundredths of a millisecond: building the UI,
      * converting and submitting it, and waiting on present. Split three ways
@@ -2383,7 +2391,6 @@ curie_diagnostics(App *app, curie_diag *out)
     out->aa         = app->aa;
     out->dark       = app->dark;
     out->sheets     = SHEET_COUNT;
-    out->paints     = app->n_paints;
     out->tab        = app->tab;
     out->scale      = curie_scale();
     out->style_ms   = app->style_ms_x100 / 100.0f;
@@ -2407,6 +2414,10 @@ curie_diagnostics(App *app, curie_diag *out)
     out->rss_bytes  = (unsigned long)curie_process_rss();
     out->atlas_w    = app->atlas_w;
     out->atlas_h    = app->atlas_h;
+    {
+        int i;
+        for (i = 0; i < RSS_STEPS; i++) out->rss_at[i] = (unsigned long)g_rss[i];
+    }
     out->build_ms   = app->build_ms_x100 / 100.0f;
     out->render_ms  = app->render_ms_x100 / 100.0f;
     out->present_ms = app->present_ms_x100 / 100.0f;
@@ -2461,10 +2472,13 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
         return ok ? SDL_APP_SUCCESS : SDL_APP_FAILURE;
     }
 
+    g_rss[RSS_ENTRY] = curie_process_rss();
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
+
+    g_rss[RSS_SDL] = curie_process_rss();
 
     app = (App *)SDL_calloc(1, sizeof(App));
     if (!app) return SDL_APP_FAILURE;
@@ -2592,9 +2606,14 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     set_window_icon(app->win);
     curie_set_scale(curie_dpi_query_scale(app->win));   /* needs the window */
 
+    g_rss[RSS_WINDOW] = curie_process_rss();
+
     app->ctx = nk_sdl_init(app->win, app->ren, nk_sdl_allocator());
     if (!app->ctx) return SDL_APP_FAILURE;
+    g_rss[RSS_NUKLEAR] = curie_process_rss();
+
     rebuild_font(app);
+    g_rss[RSS_FONT] = curie_process_rss();
 
     app->cur_default = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
     app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
@@ -2614,6 +2633,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     nk_textedit_init_fixed(&app->edit, app->edit_buf, sizeof(app->edit_buf));
 
     load_theme(app);
+    g_rss[RSS_STYLE] = curie_process_rss();
 
     app->dirty = 1;
 
@@ -3002,7 +3022,6 @@ SDL_AppIterate(void *appstate)
 
     nk_input_begin(ctx);       /* collect again for the next frame */
 
-    app->n_paints++;
     app->dirty = 0;
     if (app->restore_rate > 0) {
         if (--app->restore_rate > 0) app->dirty = 1;

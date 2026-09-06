@@ -52,6 +52,15 @@ int curie_style_init(const char *const *css_paths, int count)
         g.metrics.scaled_density = 1.0f;
         g.metrics.scale = 1.0f;
         g.ready = 1;
+    } else {
+        /* Parsing adds rules to libcss's global store and nothing takes the
+         * previous sheet's rules back out, so without this a scheme change
+         * stacks a second copy of tiny.css on top of the first - measured at
+         * about 95 KB per switch, and it never levels off. Only the rule
+         * store is rebuilt: the keyword, property and value registries are
+         * fixed tables that do not grow with a parse. */
+        css_destroy_library();
+        css_init_library();
     }
     g.cache_n = 0;
 

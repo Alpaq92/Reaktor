@@ -1537,18 +1537,16 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
     /* From the gap to the previous frame, not from a count over a second:
      * that second only advances when a frame is drawn, so it reads stale for
      * as long as the app is quiet - which here is most of the time. */
-    if (d.frame_gap_ms > 0.0f) {
+    /* Milliseconds are the natural unit for a frame, but a quiet app can sit
+     * for minutes: past a second the number stops reading as a duration. */
+    if (d.frame_gap_ms >= 1000.0f)
+        SDL_snprintf(v, sizeof(v), "%.2f s since the last one",
+                     (double)d.frame_gap_ms / 1000.0);
+    else if (d.frame_gap_ms > 0.0f)
         SDL_snprintf(v, sizeof(v), "%.0f ms since the last one",
                      (double)d.frame_gap_ms);
-        diag_row(app, ctx, "this frame", v);
-        SDL_snprintf(v, sizeof(v), "%.0f", 1000.0 / (double)d.frame_gap_ms);
-        diag_row(app, ctx, "which is, per second", v);
-    } else {
-        diag_row(app, ctx, "this frame", "the first");
-        diag_row(app, ctx, "which is, per second", "-");
-    }
-    SDL_snprintf(v, sizeof(v), "%d since launch", d.paints);
-    diag_row(app, ctx, "frames drawn", v);
+    else SDL_strlcpy(v, "the first", sizeof(v));
+    diag_row(app, ctx, "this frame", v);
 
     section(app, ctx, "Where a frame goes",
             "Split three ways because guessing which one dominates has been "
@@ -1597,6 +1595,28 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
     diag_row(app, ctx, "font atlas", v);
     SDL_snprintf(v, sizeof(v), "%.1f MB", d.rss_bytes / 1048576.0);
     diag_row(app, ctx, "process, resident", v);
+
+    section(app, ctx, "What startup costs",
+            "The resident set sampled at each step, and the difference each "
+            "one made. Anything left over is what the C runtime, the graphics "
+            "driver and the loader wanted before main ran.");
+
+    {
+        static const char *const step[5] = {
+            "SDL_Init(VIDEO)", "window and renderer", "Nuklear context",
+            "font atlas", "stylesheets"
+        };
+        int i;
+
+        SDL_snprintf(v, sizeof(v), "%.1f MB", d.rss_at[0] / 1048576.0);
+        diag_row(app, ctx, "before any of it", v);
+        for (i = 0; i < 5; i++) {
+            double delta = (d.rss_at[i + 1] - (double)d.rss_at[i]) / 1048576.0;
+            SDL_snprintf(v, sizeof(v), "%+.1f MB   (%.1f MB total)", delta,
+                         d.rss_at[i + 1] / 1048576.0);
+            diag_row(app, ctx, step[i], v);
+        }
+    }
 
     nk_layout_row_dynamic(ctx, 8.0f, 1);
     nk_spacer(ctx);
