@@ -48,6 +48,42 @@ static int str_replace_all(const char *in, char *out, size_t cap,
     return str_append(out, cap, &len, p, strlen(p));
 }
 
+/* Multiplies every stroke-width the artwork declares by k. A multiplier, not
+ * a width: an Ionicons glyph happens to carry a 32-unit stroke on a 512-unit
+ * viewBox, but nothing here should know that, and scaling keeps the number
+ * where it belongs - in the submodule. Returns 0 on overflow. */
+static int str_scale_stroke(const char *in, char *out, size_t cap, float k)
+{
+    static const char key[] = "stroke-width:";
+    const size_t klen = sizeof(key) - 1;
+    size_t len = 0;
+    const char *p = in;
+
+    out[0] = '\0';
+    for (;;) {
+        const char *hit = strstr(p, key);
+        const char *num;
+        char *end;
+        char repl[48];
+        double w;
+
+        if (!hit) break;
+        if (!str_append(out, cap, &len, p, (size_t)(hit - p))) return 0;
+        if (!str_append(out, cap, &len, key, klen)) return 0;
+        num = hit + klen;
+        w = strtod(num, &end);
+        if (end == num) { p = num; continue; }   /* not a number after all */
+        /* Rounded to whole viewBox units: the result is integral for every
+         * width Ionicons uses, and printing no fraction sidesteps a locale
+         * that would spell the decimal point with a comma. Any unit suffix
+         * ("px") is left where it stands. */
+        snprintf(repl, sizeof(repl), "%ld", (long)(w * (double)k + 0.5));
+        if (!str_append(out, cap, &len, repl, strlen(repl))) return 0;
+        p = end;
+    }
+    return str_append(out, cap, &len, p, strlen(p));
+}
+
 /* Un-premultiplies plutovg's ARGB32 output. Windows icon bitmaps are sampled
  * as straight alpha, so premultiplied pixels would render too dark. */
 void curie_unpremultiply(unsigned char *px, int w, int h, int stride)
@@ -81,7 +117,7 @@ plutovg_surface_t *curie_svg_surface(const char *name, int size,
         return NULL;
     rel[sizeof(rel) - 1] = '\0';
     return curie_svg_surface_path(rel, size, outline_family, outline_idx,
-                                  inside_family, inside_idx);
+                                  inside_family, inside_idx, 0.0f);
 }
 
 /* Loads any SVG under the repo root, optionally recolours it from
@@ -89,7 +125,8 @@ plutovg_surface_t *curie_svg_surface(const char *name, int size,
  * leaves that channel as the artwork has it. */
 plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
                                           const char *outline_family, int outline_idx,
-                                          const char *inside_family, int inside_idx)
+                                          const char *inside_family, int inside_idx,
+                                          float stroke_scale)
 {
     char path[CURIE_PATH_MAX];
     char outline_hex[16] = "#000000", inside_hex[16] = "none";
@@ -97,7 +134,7 @@ plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
     unsigned char r, g, b;
     char *svg;
     const char *src;
-    char *stage1 = NULL, *stage2 = NULL, *stage3 = NULL;
+    char *stage0 = NULL, *stage1 = NULL, *stage2 = NULL, *stage3 = NULL;
     size_t cap;
     plutosvg_document_t *doc = NULL;
     plutovg_surface_t *surf = NULL;
@@ -110,20 +147,30 @@ plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
     svg = curie_read_file(path, NULL);
     if (!svg) { fprintf(stderr, "svg: cannot read %s\n", path); return NULL; }
 
-    /* Colours come from open-color.json; nothing is baked in here. */
+    /* A channel is either an Open-Color name, resolved from open-color.json,
+     * or a literal "#rrggbb". The literal form is what lets an icon follow the
+     * active stylesheet: a fixed palette shade cannot, and the icons were left
+     * near-black against a dark card because of it. Either way nothing is
+     * baked in here. */
     if (outline_family) {
-        if (!curie_oc_color(outline_family, outline_idx, &r, &g, &b)) {
+        if (outline_family[0] == '#') {
+            snprintf(outline_hex, sizeof(outline_hex), "%s", outline_family);
+        } else if (curie_oc_color(outline_family, outline_idx, &r, &g, &b)) {
+            snprintf(outline_hex, sizeof(outline_hex), "#%02x%02x%02x", r, g, b);
+        } else {
             fprintf(stderr, "svg: no colour %s-%d\n", outline_family, outline_idx);
             goto done;
         }
-        snprintf(outline_hex, sizeof(outline_hex), "#%02x%02x%02x", r, g, b);
     }
     if (inside_family) {
-        if (!curie_oc_color(inside_family, inside_idx, &r, &g, &b)) {
+        if (inside_family[0] == '#') {
+            snprintf(inside_hex, sizeof(inside_hex), "%s", inside_family);
+        } else if (curie_oc_color(inside_family, inside_idx, &r, &g, &b)) {
+            snprintf(inside_hex, sizeof(inside_hex), "#%02x%02x%02x", r, g, b);
+        } else {
             fprintf(stderr, "svg: no colour %s-%d\n", inside_family, inside_idx);
             goto done;
         }
-        snprintf(inside_hex, sizeof(inside_hex), "#%02x%02x%02x", r, g, b);
     }
 
     snprintf(fill_decl,   sizeof(fill_decl),   "fill:%s", inside_hex);
@@ -132,14 +179,19 @@ plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
               outline_hex);
 
     cap = strlen(svg) * 4 + 1024;
+    stage0 = (char *)malloc(cap);
     stage1 = (char *)malloc(cap);
     stage2 = (char *)malloc(cap);
     stage3 = (char *)malloc(cap);
-    if (!stage1 || !stage2 || !stage3) { fprintf(stderr, "svg: alloc failed\n"); goto done; }
+    if (!stage0 || !stage1 || !stage2 || !stage3) { fprintf(stderr, "svg: alloc failed\n"); goto done; }
 
     /* Each requested channel is one substitution pass; an unrequested one is
      * skipped outright rather than matched against a sentinel. */
     src = svg;
+    if (stroke_scale > 0.0f && stroke_scale != 1.0f) {
+        if (!str_scale_stroke(src, stage0, cap, stroke_scale)) goto done;
+        src = stage0;
+    }
     if (inside_family) {
         if (!str_replace_all(src, stage1, cap, "fill:none", fill_decl))
             goto done;
@@ -170,6 +222,7 @@ done:
     free(stage3);
     free(stage2);
     free(stage1);
+    free(stage0);
     curie_free(svg);
     return surf;
 }

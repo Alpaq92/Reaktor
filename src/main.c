@@ -25,6 +25,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "nk_common.h"
 #include "../third_party/nuklear/demo/sdl3_renderer/nuklear_sdl3_renderer.h"
@@ -47,6 +48,37 @@ static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19, 23 };
 
 #define IMG_CACHE_MAX 32
 #define CARD_W        420
+
+/* Height of the titlebar this app draws for itself when the native one is
+ * turned off, and how wide a strip along each edge grabs for a resize. */
+#define TITLEBAR_H    36
+#define RESIZE_EDGE    6
+#define CTL_SIZE      28   /* the control's square hit area */
+/* On top of each of these Nuklear inserts its own 4px between columns, and
+ * the group pads its contents again, so the gap on screen is about ten pixels
+ * wider than the number here - which is why the mark sat further from the
+ * edge than from the title while these read 6 and 2. */
+#define TITLE_PAD      1   /* before the app mark */
+#define TITLE_GAP      6   /* between the app mark and the name */
+
+/* Ionicons draw a 32-unit stroke on a 512 viewBox - 6.25% of the glyph - so
+ * below 16px the line falls under one pixel and anti-aliases to grey. That,
+ * not the artwork, is why a glyph looked "greyed out": at 12px the minimise
+ * faded, and dropping the maximise to 14px faded that one instead. Every
+ * glyph therefore stays at or above 16, and the remaining differences are
+ * optical - a cross and a dash read smaller than a square of equal size. */
+/* Even sizes, so that (CTL_SIZE - glyph) / 2 is a whole number of pixels.
+ * At 17 the padding was 5.5 and the minimise dash - a single horizontal line
+ * through the middle of the box - straddled a pixel boundary and came out as
+ * one bright row between two dim ones however heavy the stroke was. */
+#define GLYPH_MINIMISE 18
+#define GLYPH_MAXIMISE 16
+#define GLYPH_CLOSE    18
+
+/* Size alone only got them off the grey floor; at this scale the artwork's
+ * own line is about one device pixel and reads as a hairline against the bar.
+ * Doubling it puts two solid pixels down - see curie_svg_surface_path. */
+#define GLYPH_STROKE  2.0f
 
 /* tiny.css keeps its palette and its rules in separate files - its own light
  * and dark builds are nothing but "@import variables-X; @import core" - so a
@@ -94,11 +126,12 @@ typedef struct {
     struct nk_font *faces[FONT_STEPS];
     char            font_status[160];
 
-    /* Nuklear owns the edit state: nk_edit_string handles the caret,
-     * selection, clipboard and IME. The previous engine had none of that and
-     * carried ~120 lines re-implementing it against nk_textedit. */
-    char email[128];
-    int  email_len;
+    /* Nuklear owns the editing behaviour - caret, selection, clipboard, IME -
+     * but the state lives here rather than inside the widget, because a
+     * context menu has to act on it: nk_edit_string keeps its buffer private,
+     * nk_edit_buffer takes ours. */
+    struct nk_text_edit edit;
+    char                edit_buf[128];
 
     /* Decided while the frame is built - Nuklear knows what is under the
      * pointer only as each widget is emitted - and applied once at the end,
@@ -112,10 +145,31 @@ typedef struct {
     /* How SDL paces SDL_AppIterate: "waitevent", a frame rate, or 0 for
      * uncapped. See the note where it is applied. */
     char frame_rate[16];
+    char drag_rate[16];        /* the display's refresh, as a rate string */
     int  first_frame_done;
+    int  dragging;             /* a mouse button is held */
+
+    /* Borderless: the window has no native frame, so the titlebar above is
+     * drawn like any other widget and SDL_SetWindowHitTest tells the desktop
+     * which parts of it drag and which resize. The control rects are recorded
+     * as they are emitted, because the hit test runs on the OS's thread and
+     * cannot ask Nuklear anything. */
+    int            borderless;
+    struct nk_rect ctl[3];     /* minimise, maximise, close */
+    int            ctl_n;
+    int            want_quit;
+
+    /* Where the text field was on the last painted frame, and whether the
+     * current drag started inside it. See the clamp in SDL_AppEvent. */
+    struct nk_rect field_rect;
+    int            field_rect_valid;
+    int            drag_in_field;
 
     int   theme_mode;          /* THEME_SYSTEM | THEME_LIGHT | THEME_DARK */
     struct nk_color page, card_bg, text;
+    /* --text-muted as "#rrggbb", so button icons can be recoloured to match
+     * the label instead of being pinned to one Open-Color shade. */
+    char  icon_hex[10];
 
     /* Where the interactive widgets ended up on the last painted frame, and
      * what hovering each one actually costs.
@@ -147,6 +201,10 @@ typedef struct {
     Uint64 fps_t0;
     int   n_paints;
     int   style_ms_x100;   /* time the last stylesheet load took */
+    /* Where a frame goes, in hundredths of a millisecond: building the UI,
+     * converting and submitting it, and waiting on present. Split three ways
+     * because guessing which one dominates has been wrong twice. */
+    int   build_ms_x100, render_ms_x100, present_ms_x100;
 } App;
 
 static int
@@ -204,6 +262,19 @@ load_theme(App *app)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(226, 226, 226);
     app->text    = curie_style_token("--text-main", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(51, 51, 51);
+    if (curie_style_token("--text-muted", c))
+        SDL_snprintf(app->icon_hex, sizeof(app->icon_hex),
+                     "#%02x%02x%02x", c[0], c[1], c[2]);
+    else
+        SDL_strlcpy(app->icon_hex, "#6a6a6a", sizeof(app->icon_hex));
+
+    /* The desktop's own title bar, so a pinned scheme is not contradicted by
+     * the frame around it. */
+    curie_window_set_dark(
+        SDL_GetPointerProperty(SDL_GetWindowProperties(app->win),
+                               SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL),
+        app->dark);
+
     app->clear   = app->page;
     app->dirty   = 1;
 }
@@ -211,13 +282,27 @@ load_theme(App *app)
 /* --- images -------------------------------------------------------------
  * An icon path may carry "?stroke=<family>-<shade>&fill=<family>-<shade>",
  * which recolours the SVG at load time. Kept from the previous design: it is
- * how an icon follows a palette, since CSS cannot reach inside an SVG. */
+ * how an icon follows a palette, since CSS cannot reach inside an SVG.
+ * "&sw=<k>" is the same idea for weight: it multiplies the stroke the artwork
+ * declares, which is what a glyph drawn at titlebar size needs to stop
+ * reading as a hairline. The query string is also the cache key, so two
+ * weights of one glyph are simply two slots. */
 
+/* "violet-7" names an Open-Color shade; "#rrggbb" is taken literally, which
+ * is how an icon follows the stylesheet's own text colour. */
 static int
 parse_shade(const char *spec, char *family, size_t cap, int *idx)
 {
-    const char *dash = strrchr(spec, '-');
+    const char *dash;
     size_t n;
+
+    if (spec[0] == '#') {
+        if (strlen(spec) >= cap) return 0;
+        strcpy(family, spec);
+        *idx = 0;
+        return 1;
+    }
+    dash = strrchr(spec, '-');
     if (!dash || !dash[1]) return 0;
     n = (size_t)(dash - spec);
     if (n == 0 || n >= cap) return 0;
@@ -235,6 +320,7 @@ img_lookup(App *app, const char *src, int px)
 {
     char rel[192], ofam[32] = {0}, ifam[32] = {0};
     int oidx = 0, iidx = 0;
+    float swk = 0.0f;
     const char *q;
     plutovg_surface_t *surf;
     SDL_Surface *sdlsurf;
@@ -263,12 +349,14 @@ img_lookup(App *app, const char *src, int px)
                 parse_shade(tok + 7, ofam, sizeof(ofam), &oidx);
             else if (SDL_strncmp(tok, "fill=", 5) == 0)
                 parse_shade(tok + 5, ifam, sizeof(ifam), &iidx);
+            else if (SDL_strncmp(tok, "sw=", 3) == 0)
+                swk = (float)SDL_atof(tok + 3);
         }
     }
 
     surf = curie_svg_surface_path(rel, px,
                                   ofam[0] ? ofam : NULL, oidx,
-                                  ifam[0] ? ifam : NULL, iidx);
+                                  ifam[0] ? ifam : NULL, iidx, swk);
 
     /* Cache the failure too, so a bad src is not retried every frame. */
     SDL_strlcpy(app->img[app->img_count].src, src,
@@ -311,7 +399,16 @@ icon(App *app, const char *src, int px)
 {
     int raster = (int)(px * curie_scale() * 2.0f + 0.5f);
     struct img_slot *slot = img_lookup(app, src, raster);
-    return slot ? nk_image_ptr(slot->tex) : nk_image_id(0);
+
+    if (!slot) return nk_image_id(0);
+    /* A sub-image with the real dimensions, not nk_image_ptr, which leaves
+     * w, h and the source region at zero. Nuklear's widget path fills those
+     * in for itself, so nk_image and nk_button_image never noticed; drawing
+     * straight onto the canvas with nk_draw_image does not, and a degenerate
+     * source region came out as a white quad - which is what the window
+     * controls were, while the very same SVGs rasterised correctly. */
+    return nk_subimage_ptr(slot->tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
+                           nk_rect(0.0f, 0.0f, (float)slot->w, (float)slot->h));
 }
 
 /* --- fonts --------------------------------------------------------------- */
@@ -528,6 +625,66 @@ css_button(App *app, struct nk_context *ctx, const char *selector,
     return clicked;
 }
 
+/* WCAG relative luminance, and the contrast ratio between two colours.
+ *
+ * The accent button needs a label colour, and neither candidate is right in
+ * both themes: tiny.css's --links is #0070E0 in light, where white reads
+ * cleanly, and #56c7ff in dark, where white does not - that pale blue is
+ * bright enough that white on it is barely legible. Choosing by measured
+ * contrast gets both right without naming a colour here, and keeps working if
+ * the palette changes. */
+static float
+luminance(const unsigned char c[4])
+{
+    float ch[3];
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        float v = c[i] / 255.0f;
+        ch[i] = v <= 0.04045f ? v / 12.92f
+                              : powf((v + 0.055f) / 1.055f, 2.4f);
+    }
+    return 0.2126f * ch[0] + 0.7152f * ch[1] + 0.0722f * ch[2];
+}
+
+static float
+contrast_ratio(const unsigned char a[4], const unsigned char b[4])
+{
+    float la = luminance(a), lb = luminance(b);
+    float hi = la > lb ? la : lb, lo = la > lb ? lb : la;
+
+    return (hi + 0.05f) / (lo + 0.05f);
+}
+
+/* The stylesheet's own label colour, unless it is unreadable on `bg`.
+ *
+ * Not "whichever measures higher". On tiny.css's light accent (#0070E0) the
+ * two candidates are 4.39 and 4.46 - a coin flip - and picking the maximum
+ * flipped the label from the black the stylesheet asked for to near-white for
+ * a gain of 0.07, which is a change nobody asked for and everybody notices.
+ * On the dark accent (#56c7ff) white measures 1.91, which is genuinely
+ * illegible, and the fallback is worth taking at 8.04.
+ *
+ * So the stylesheet wins by default and is only overridden when it fails. */
+#define READABLE_MIN 3.0f
+
+static struct nk_color
+readable_on(const unsigned char bg[4], const char *preferred,
+            const char *fallback)
+{
+    unsigned char a[4], b[4];
+
+    if (curie_style_token(preferred, a)) {
+        if (contrast_ratio(bg, a) >= READABLE_MIN) return col_of(a);
+        if (curie_style_token(fallback, b) &&
+            contrast_ratio(bg, b) > contrast_ratio(bg, a))
+            return col_of(b);
+        return col_of(a);
+    }
+    if (curie_style_token(fallback, b)) return col_of(b);
+    return nk_rgb(255, 255, 255);
+}
+
 /* The same button, filled from a palette token instead of its own rule.
  *
  * tiny.css is classless and has exactly one button style, so a primary action
@@ -564,7 +721,15 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
                                  nk_style_item_color(col_of(hov)));
         a.items = 3;
         nk_style_push_color(ctx, &ctx->style.button.border_color, col_of(c));
-        a.colors = 1;
+
+        {
+            struct nk_color label_col =
+                readable_on(c, "--text-bright", "--background-body");
+            nk_style_push_color(ctx, &ctx->style.button.text_normal, label_col);
+            nk_style_push_color(ctx, &ctx->style.button.text_hover, label_col);
+            nk_style_push_color(ctx, &ctx->style.button.text_active, label_col);
+        }
+        a.colors = 4;
     }
 
     clicked = nk_button_label(ctx, label);
@@ -597,6 +762,37 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
  * `hint` is a placeholder, not a value: it is painted into the empty field and
  * never enters the buffer, so it cannot be submitted and does not need
  * clearing on the first click. Nuklear has no placeholder of its own. */
+/* Copies the current selection to the clipboard, the way nk_edit_buffer does
+ * it internally for Ctrl+C: selection bounds are glyph indices, so the text
+ * pointer comes from nk_str_at_const rather than from the raw buffer. */
+static void
+edit_copy_selection(struct nk_context *ctx, struct nk_text_edit *edit)
+{
+    int b = edit->select_start, e = edit->select_end;
+    int begin = NK_MIN(b, e), end = NK_MAX(b, e);
+    int glyph_len;
+    nk_rune unicode;
+    const char *text;
+
+    if (begin == end || !ctx->clip.copy) return;
+    text = nk_str_at_const(&edit->string, begin, &unicode, &glyph_len);
+    if (text) ctx->clip.copy(ctx->clip.userdata, text, end - begin);
+}
+
+static void
+edit_paste_clipboard(struct nk_text_edit *edit)
+{
+    char *text = SDL_GetClipboardText();
+
+    if (!text) return;
+    if (*text) {
+        /* Glyph count, not byte length: the same Nuklear bug the SDL backend
+         * works around in its own paste hook. */
+        nk_textedit_paste(edit, text, (int)SDL_utf8strlen(text));
+    }
+    SDL_free(text);
+}
+
 static void
 css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
           const char *hint)
@@ -605,6 +801,9 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
     curie_style s, foc;
     style_frame f = { 0, 0, 0, 0, 0 };
     unsigned char muted[4];
+
+    app->field_rect = bounds;
+    app->field_rect_valid = 1;
 
     /* The field's hover background is its resting colour, so hovering it
      * changes only the cursor - which needs no frame. */
@@ -631,7 +830,28 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
         nk_style_push_color(ctx, &ctx->style.edit.text_hover, col_of(s.fg));
         nk_style_push_color(ctx, &ctx->style.edit.text_active, col_of(s.fg));
         nk_style_push_color(ctx, &ctx->style.edit.cursor_normal, col_of(s.fg));
-        f.colors = 5;
+
+        /* Selection in --focus, tiny.css's own blue for exactly this - the
+         * colour it already puts on a focused input's border - rather than
+         * Nuklear's grey. The text on top is whichever of the palette's two
+         * ends stays readable against it. */
+        {
+            unsigned char sel[4];
+            struct nk_color selbg, seltx;
+
+            if (curie_style_token("--focus", sel)) {
+                selbg = col_of(sel);
+                seltx = readable_on(sel, "--text-bright", "--background-body");
+            } else {
+                selbg = nk_rgb(0x7a, 0xa3, 0xfc);
+                seltx = nk_rgb(0x20, 0x20, 0x20);
+            }
+            nk_style_push_color(ctx, &ctx->style.edit.selected_normal, selbg);
+            nk_style_push_color(ctx, &ctx->style.edit.selected_hover, selbg);
+            nk_style_push_color(ctx, &ctx->style.edit.selected_text_normal, seltx);
+            nk_style_push_color(ctx, &ctx->style.edit.selected_text_hover, seltx);
+        }
+        f.colors = 9;
 
         nk_style_push_float(ctx, &ctx->style.edit.rounding, s.rounding);
         nk_style_push_float(ctx, &ctx->style.edit.border, s.border);
@@ -642,8 +862,27 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
         f.vec2s = 1;
     }
 
-    nk_edit_string(ctx, NK_EDIT_FIELD, buf, len, cap, nk_filter_default);
+    nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit, nk_filter_default);
     pop_style(ctx, f);
+
+    /* Right-click menu. Nuklear places and dismisses it; the items act on the
+     * edit state directly, which is why it is ours to hold. */
+    if (nk_contextual_begin(ctx, 0, nk_vec2(160, 172), bounds)) {
+        int has_sel = app->edit.select_start != app->edit.select_end;
+
+        nk_layout_row_dynamic(ctx, 26, 1);
+        if (has_sel && nk_contextual_item_label(ctx, "Cut", NK_TEXT_LEFT)) {
+            edit_copy_selection(ctx, &app->edit);
+            nk_textedit_cut(&app->edit);
+        }
+        if (has_sel && nk_contextual_item_label(ctx, "Copy", NK_TEXT_LEFT))
+            edit_copy_selection(ctx, &app->edit);
+        if (nk_contextual_item_label(ctx, "Paste", NK_TEXT_LEFT))
+            edit_paste_clipboard(&app->edit);
+        if (nk_contextual_item_label(ctx, "Select all", NK_TEXT_LEFT))
+            nk_textedit_select_all(&app->edit);
+        nk_contextual_end(ctx);
+    }
 
     if (hint && *len == 0) {
         struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
@@ -659,6 +898,213 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
     }
 }
 
+/* Which parts of a frameless window the desktop should treat as chrome.
+ *
+ * Without this a borderless window cannot be moved, resized, snapped or
+ * double-clicked to maximise - all of which the native frame was providing.
+ * SDL calls this from its own event handling, so it reads only the rects the
+ * last frame recorded and never touches Nuklear. */
+static SDL_HitTestResult SDLCALL
+window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
+{
+    App *app = (App *)data;
+    int w = 0, h = 0, i;
+    int left, right, top, bottom;
+
+    SDL_GetWindowSize(win, &w, &h);
+
+    /* A maximised window has no outside edge to grab. */
+    if (!(SDL_GetWindowFlags(win) & SDL_WINDOW_MAXIMIZED)) {
+        left   = pt->x < RESIZE_EDGE;
+        right  = pt->x >= w - RESIZE_EDGE;
+        top    = pt->y < RESIZE_EDGE;
+        bottom = pt->y >= h - RESIZE_EDGE;
+
+        if (top && left)     return SDL_HITTEST_RESIZE_TOPLEFT;
+        if (top && right)    return SDL_HITTEST_RESIZE_TOPRIGHT;
+        if (bottom && left)  return SDL_HITTEST_RESIZE_BOTTOMLEFT;
+        if (bottom && right) return SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+        if (top)             return SDL_HITTEST_RESIZE_TOP;
+        if (bottom)          return SDL_HITTEST_RESIZE_BOTTOM;
+        if (left)            return SDL_HITTEST_RESIZE_LEFT;
+        if (right)           return SDL_HITTEST_RESIZE_RIGHT;
+    }
+
+    if (pt->y < TITLEBAR_H) {
+        /* The buttons are holes in the drag region, or they could never be
+         * clicked - the desktop would start moving the window instead. */
+        for (i = 0; i < app->ctl_n; i++) {
+            struct nk_rect r = app->ctl[i];
+            if (pt->x >= r.x && pt->x <= r.x + r.w &&
+                pt->y >= r.y && pt->y <= r.y + r.h)
+                return SDL_HITTEST_NORMAL;
+        }
+        return SDL_HITTEST_DRAGGABLE;
+    }
+    return SDL_HITTEST_NORMAL;
+}
+
+/* The three window controls.
+ *
+ * Drawn as line work rather than from Ionicons. A minimise, a maximise and a
+ * close are geometry, not iconography - every desktop draws them as hairlines
+ * - and an icon set's outline weight is tuned for 24px content, so at 14px in
+ * a titlebar it came out heavy and blunt next to the system's own. Two
+ * strokes and a rectangle are also fewer moving parts than three SVG loads,
+ * a raster cache and a texture upload.
+ *
+ * The button is built by hand for the same reason: nk_button_image would fill
+ * a background and centre an image, and what is wanted is a hover wash with a
+ * crisp 1px glyph on top. */
+/* Defined below; the titlebar switch needs to (un)install it. */
+static SDL_HitTestResult SDLCALL window_hit_test(SDL_Window *win,
+                                                const SDL_Point *pt,
+                                                void *data);
+
+/* One window control: an Ionicon on a circular hover wash.
+ *
+ * Built from nk_button_image rather than by drawing onto the canvas by hand.
+ * The hand-rolled version painted the glyph with nk_draw_image and got three
+ * white squares - the same SVGs rasterise correctly at this exact size, so
+ * the fault was the direct-to-canvas path, not the artwork. Going through the
+ * widget also makes the hover Nuklear's job, and a rounding of half the
+ * button height turns its highlight into the circle a titlebar wants.
+ *
+ * image_padding is what sets the drawn glyph size: nk_button_image fills the
+ * whole widget otherwise, which is how a 14px icon came out stretched across
+ * a 36x28 slot. */
+static int
+titlebar_button(App *app, struct nk_context *ctx, const char *glyph, int px)
+{
+    struct nk_rect b = nk_widget_bounds(ctx);
+    style_frame f = { 0, 0, 0, 0, 0 };
+    unsigned char c[4];
+    struct nk_color clear = nk_rgba(0, 0, 0, 0);
+    struct nk_color wash = curie_style_token("--background-hover", c)
+                         ? col_of(c) : nk_rgba(255, 255, 255, 26);
+    char src[176];
+    float pad_x, pad_y;
+    int clicked;
+
+    hot_push(app, b, 1, 1);
+    if (app->ctl_n < (int)(sizeof(app->ctl) / sizeof(app->ctl[0])))
+        app->ctl[app->ctl_n++] = b;
+
+    nk_style_push_style_item(ctx, &ctx->style.button.normal,
+                             nk_style_item_color(clear));
+    nk_style_push_style_item(ctx, &ctx->style.button.hover,
+                             nk_style_item_color(wash));
+    nk_style_push_style_item(ctx, &ctx->style.button.active,
+                             nk_style_item_color(wash));
+    f.items = 3;
+
+    nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
+    nk_style_push_float(ctx, &ctx->style.button.rounding,
+                        (b.h > 0.0f ? b.h : (float)CTL_SIZE) * 0.5f);
+    /* nk_draw_button_image tints the glyph by this factor. It is not part of
+     * any style we set, so whatever it holds decides whether the icon is
+     * visible at all - at zero the image multiplies to black, which on a dark
+     * titlebar is indistinguishable from not being drawn. */
+    nk_style_push_float(ctx, &ctx->style.button.color_factor_background, 1.0f);
+    f.floats = 3;
+
+    /* The button's own padding is zeroed first. nk_do_button_image insets by
+     * padding *and then* by image_padding, so leaving the default in place
+     * made the content rect collapse and the glyph disappear entirely. With
+     * it at zero, image_padding alone centres the glyph.
+     *
+     * nk_do_button_text_image derives the glyph square from the button's
+     * *height* and then insets it by image_padding, so on a square button one
+     * value both sizes and centres it. */
+    nk_style_push_vec2(ctx, &ctx->style.button.padding, nk_vec2(0.0f, 0.0f));
+
+    /* nk_do_button_text_image derives the glyph square from the button's
+     * *height* and then insets it by image_padding, so with a square button
+     * one padding value both sizes and centres it. That is also why the slot
+     * is square: in a wider button the glyph is pinned to the left edge, not
+     * centred, which is what had them sitting far apart. */
+    pad_x = pad_y = (b.h - (float)px) * 0.5f;
+    if (pad_x < 0.0f) pad_x = pad_y = 0.0f;
+    nk_style_push_vec2(ctx, &ctx->style.button.image_padding,
+                       nk_vec2(pad_x, pad_y));
+    f.vec2s = 2;
+
+    SDL_snprintf(src, sizeof(src),
+                 "third_party/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
+                 glyph, app->icon_hex, (double)GLYPH_STROKE);
+
+    /* nk_button_image_label with an empty label, not nk_button_image: the
+     * latter draws the background and then nothing at all here, while this is
+     * the same call the card's icon buttons already use and it works. */
+    clicked = nk_button_image_label(ctx, icon(app, src, px), "",
+                                    NK_TEXT_CENTERED);
+    pop_style(ctx, f);
+    return clicked;
+}
+
+static void
+titlebar(App *app, struct nk_context *ctx, int win_w)
+{
+    unsigned char c[4];
+    int maximised = (SDL_GetWindowFlags(app->win) & SDL_WINDOW_MAXIMIZED) != 0;
+
+    app->ctl_n = 0;
+    if (!nk_group_begin(ctx, "titlebar", NK_WINDOW_NO_SCROLLBAR)) return;
+
+    nk_layout_row_begin(ctx, NK_STATIC, (float)CTL_SIZE, 7);
+
+    nk_layout_row_push(ctx, (float)TITLE_PAD);
+    nk_spacing(ctx, 1);
+
+    /* The same mark the desktop shows for the window and the executable, so
+     * a frameless window still identifies itself. */
+    nk_layout_row_push(ctx, (float)CTL_SIZE);
+    nk_image(ctx, icon(app, "third_party/ionicons/src/svg/"
+                            "browsers-outline.svg"
+                            "?stroke=violet-7&fill=indigo-2", 18));
+
+    nk_layout_row_push(ctx, (float)TITLE_GAP);
+    nk_spacing(ctx, 1);
+
+    /* Exactly the remainder, so the controls finish flush with the right
+     * edge: the group's own padding either side, plus the five inter-column
+     * gaps Nuklear inserts across six columns. A guessed constant here left a
+     * visible strip of dead titlebar past the close button. */
+    nk_layout_row_push(ctx, (float)(win_w - TITLE_PAD - CTL_SIZE - TITLE_GAP -
+                                    3 * CTL_SIZE - 2 * 4 - 6 * 4));
+    {
+        nk_style_push_font(ctx, pick_font(app, 13, 0));
+        if (curie_style_token("--text-muted", c))
+            nk_style_push_color(ctx, &ctx->style.text.color, col_of(c));
+        else
+            nk_style_push_color(ctx, &ctx->style.text.color, app->text);
+        nk_label(ctx, "Curie", NK_TEXT_LEFT);
+        nk_style_pop_color(ctx);
+        nk_style_pop_font(ctx);
+    }
+
+    /* Glyph names only - titlebar_button builds the path and appends the
+     * theme's stroke colour. */
+    nk_layout_row_push(ctx, (float)CTL_SIZE);
+    if (titlebar_button(app, ctx, "remove-outline", GLYPH_MINIMISE))
+        SDL_MinimizeWindow(app->win);
+
+    nk_layout_row_push(ctx, (float)CTL_SIZE);
+    if (titlebar_button(app, ctx,
+                        maximised ? "copy-outline" : "square-outline",
+                        GLYPH_MAXIMISE)) {
+        if (maximised) SDL_RestoreWindow(app->win);
+        else           SDL_MaximizeWindow(app->win);
+    }
+
+    nk_layout_row_push(ctx, (float)CTL_SIZE);
+    if (titlebar_button(app, ctx, "close-outline", GLYPH_CLOSE))
+        app->want_quit = 1;
+
+    nk_layout_row_end(ctx);
+    nk_group_end(ctx);
+}
+
 /* --- the screen ---------------------------------------------------------- */
 
 /* Row heights, in logical px, and the single gap between every row. Keeping
@@ -671,7 +1117,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
 #define ROW_BUTTON  40
 #define ROW_SMALL   18
 #define ROW_GAP     15
-#define DIAG_ROWS   3
+#define DIAG_ROWS   4
 
 /* Nuklear's default group padding is 4px, which put the field and the buttons
  * hard against the card's edge. */
@@ -681,10 +1127,10 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
 static float
 card_height(int with_diag)
 {
-    int rows = 8;                    /* brand..scheme switch */
+    int rows = 9;                    /* brand..diagnostics link */
     float h = (float)(ROW_BRAND + ROW_FIELD + ROW_BUTTON +
                       ROW_SMALL + ROW_BUTTON + ROW_BUTTON + ROW_SMALL +
-                      ROW_SMALL);
+                      ROW_SMALL + ROW_SMALL);
     if (with_diag) {
         rows += DIAG_ROWS;
         h += DIAG_ROWS * ROW_SMALL;
@@ -733,13 +1179,23 @@ login_screen(App *app, struct nk_context *ctx, int win_w, int win_h)
      * would re-centre the card every time diagnostics opens, so the whole
      * screen jumped on a click that should only have added rows underneath. */
     float card_h = card_height(app->show_diag);
+    float chrome = app->borderless ? (float)TITLEBAR_H : 0.0f;
     float side = (win_w - CARD_W) * 0.5f;
-    float top  = (win_h - card_height(0)) * 0.5f;
+    float top  = chrome + (win_h - chrome - card_height(0)) * 0.5f;
 
     if (side < 8.0f) side = 8.0f;
-    if (top  < 8.0f) top  = 8.0f;
+    if (top  < chrome + 8.0f) top = chrome + 8.0f;
 
-    nk_layout_space_begin(ctx, NK_STATIC, (float)win_h, 1);
+    nk_layout_space_begin(ctx, NK_STATIC, (float)win_h, 2);
+
+    if (app->borderless) {
+        nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
+                                 nk_style_item_color(app->card_bg));
+        nk_layout_space_push(ctx, nk_rect(0, 0, (float)win_w, (float)TITLEBAR_H));
+        titlebar(app, ctx, win_w);
+        nk_style_pop_style_item(ctx);
+    }
+
     nk_layout_space_push(ctx, nk_rect(side, top, (float)CARD_W, card_h));
 
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
@@ -767,8 +1223,11 @@ login_screen(App *app, struct nk_context *ctx, int win_w, int win_h)
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, ROW_FIELD, 1);
-        css_field(app, ctx, app->email, &app->email_len, sizeof(app->email),
-                  "you@example.com");
+        {
+            int used = (int)app->edit.string.len;
+            css_field(app, ctx, app->edit_buf, &used, sizeof(app->edit_buf),
+                      "you@example.com");
+        }
 
         nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
         css_button_accent(app, ctx, "button", "Continue with email", "--links");
@@ -778,16 +1237,22 @@ login_screen(App *app, struct nk_context *ctx, int win_w, int win_h)
         nk_label(ctx, "or", NK_TEXT_CENTERED);
         nk_style_pop_font(ctx);
 
-        nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
-        css_button_icon(app, ctx, "button",
-                        "third_party/ionicons/src/svg/"
-                        "key-outline.svg?stroke=gray-7", "Use a passkey");
+        {
+            char key_src[160], bio_src[160];
 
-        nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
-        css_button_icon(app, ctx, "button",
-                        "third_party/ionicons/src/svg/"
-                        "finger-print-outline.svg?stroke=gray-7",
-                        "Use biometrics");
+            SDL_snprintf(key_src, sizeof(key_src),
+                         "third_party/ionicons/src/svg/"
+                         "key-outline.svg?stroke=%s", app->icon_hex);
+            SDL_snprintf(bio_src, sizeof(bio_src),
+                         "third_party/ionicons/src/svg/"
+                         "finger-print-outline.svg?stroke=%s", app->icon_hex);
+
+            nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
+            css_button_icon(app, ctx, "button", key_src, "Use a passkey");
+
+            nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
+            css_button_icon(app, ctx, "button", bio_src, "Use biometrics");
+        }
 
         /* scheme switch: system follows SDL_GetSystemTheme(), the other two
          * pin it. Changing it reloads the stylesheets, which is the whole
@@ -820,6 +1285,22 @@ login_screen(App *app, struct nk_context *ctx, int win_w, int win_h)
         }
 
         nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
+        if (text_link(app, ctx, app->borderless ? "native titlebar"
+                                                : "custom titlebar", 0)) {
+            /* Switched live rather than at startup. SDL_SetWindowBordered
+             * puts the desktop's frame back, and the hit test has to go with
+             * it - leaving it installed would keep claiming the top of a
+             * window that no longer draws a titlebar there. */
+            app->borderless = !app->borderless;
+            SDL_SetWindowBordered(app->win, app->borderless ? false : true);
+            SDL_SetWindowHitTest(app->win,
+                                 app->borderless ? window_hit_test : NULL,
+                                 app->borderless ? app : NULL);
+            app->ctl_n = 0;
+            app->dirty = 1;
+        }
+
+        nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
         if (text_link(app, ctx,
                       app->show_diag ? "hide diagnostics" : "diagnostics", 0))
             app->show_diag = !app->show_diag;
@@ -829,10 +1310,10 @@ login_screen(App *app, struct nk_context *ctx, int win_w, int win_h)
 
             nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
             SDL_snprintf(line, sizeof(line),
-                         "%s (%s)   vsync %s   aa %s   rate %s",
+                         "%s (%s)   vsync %s   aa %s   rate %s / %s",
                          SDL_GetRendererName(app->ren), app->render_mode,
                          app->vsync_on ? "on" : "off", app->aa ? "on" : "off",
-                         app->frame_rate);
+                         app->frame_rate, app->drag_rate);
             nk_label(ctx, line, NK_TEXT_CENTERED);
 
             nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
@@ -845,6 +1326,14 @@ login_screen(App *app, struct nk_context *ctx, int win_w, int win_h)
                          "%s theme, %d sheets in %.2f ms      %.0f fps",
                          app->dark ? "dark" : "light", SHEET_COUNT,
                          app->style_ms_x100 / 100.0f, app->fps);
+            nk_label(ctx, line, NK_TEXT_CENTERED);
+
+            nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
+            SDL_snprintf(line, sizeof(line),
+                         "build %.2f   render %.2f   present %.2f ms",
+                         app->build_ms_x100 / 100.0f,
+                         app->render_ms_x100 / 100.0f,
+                         app->present_ms_x100 / 100.0f);
             nk_label(ctx, line, NK_TEXT_CENTERED);
         }
         nk_style_pop_font(ctx);
@@ -906,8 +1395,15 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
         }
     }
 
+    /* Borderless by default: the titlebar is drawn by this app, so it can
+     * follow the stylesheet like everything else. CURIE_BORDERLESS=0 restores
+     * the desktop's own frame, which is worth keeping - a custom titlebar
+     * gives up whatever the platform does for free there. */
+    app->borderless = env_int("CURIE_BORDERLESS", 1) != 0;
+
     if (!SDL_CreateWindowAndRenderer("Curie", WINDOW_WIDTH, WINDOW_HEIGHT,
-            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY,
+            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
+            (app->borderless ? SDL_WINDOW_BORDERLESS : 0),
             &app->win, &app->ren)) {
         SDL_Log("CreateWindowAndRenderer failed: %s", SDL_GetError());
         return SDL_APP_FAILURE;
@@ -940,6 +1436,25 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
         SDL_strlcpy(app->frame_rate, rate, sizeof(app->frame_rate));
     }
 
+    /* The rate to run at while the pointer is held: the display's own
+     * refresh, so a frame is produced for each one and no more.
+     *
+     * "0" - as fast as SDL will call - is worse, not better. Presenting more
+     * often than the display accepts fills the swapchain, and then
+     * SDL_RenderPresent blocks on it: measured at 29 ms a frame, against
+     * 0.11 ms of building and 0.19 ms of rendering, which held a drag at
+     * 35 fps. Asking for exactly the refresh rate keeps present from
+     * queueing. */
+    {
+        const SDL_DisplayMode *m =
+            SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(app->win));
+        float hz = (m && m->refresh_rate > 1.0f) ? m->refresh_rate : 60.0f;
+        SDL_snprintf(app->drag_rate, sizeof(app->drag_rate), "%.2f", hz);
+    }
+
+    if (app->borderless) SDL_SetWindowHitTest(app->win, window_hit_test, app);
+    /* Either way it can be changed from the card at runtime. */
+
     set_window_icon(app->win);
     curie_set_scale(curie_dpi_query_scale(app->win));   /* needs the window */
 
@@ -954,10 +1469,28 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     /* Follow the desktop until told otherwise. load_theme() reads
      * SDL_GetSystemTheme() through curie_prefers_dark() and picks the
      * matching tiny.css palette file. */
+    nk_textedit_init_fixed(&app->edit, app->edit_buf, sizeof(app->edit_buf));
+
     app->theme_mode = THEME_SYSTEM;
     load_theme(app);
 
     app->dirty = 1;
+
+    /* Nuklear accumulates input between nk_input_begin and nk_input_end, and
+     * it is nk_input_end that turns what accumulated into the edge-triggered
+     * state a frame reads - "this key was pressed", "this button was
+     * clicked". Neither was ever called here.
+     *
+     * Typing still worked, because characters go into a separate buffer, and
+     * so did clicks, because a press and its release usually straddled a
+     * frame. Ctrl+V did not: paste is a key *edge*, and the edge was never
+     * computed. Ctrl+A and Ctrl+Z were dead for the same reason.
+     *
+     * The window is opened here, closed at the top of a frame that is
+     * actually drawn, and reopened after it. Frames that are skipped leave it
+     * open, so input simply keeps accumulating until the next real frame -
+     * which is what a key press causes anyway, by marking the app dirty. */
+    nk_input_begin(app->ctx);
     return SDL_APP_CONTINUE;
 }
 
@@ -1006,9 +1539,19 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
              * needs no frame: the rects were recorded when the last one was
              * built. The cursor follows the pointer at full motion rate for
              * free, and a rebuild is asked for only when the pointer crosses
-             * into or out of a control that looks different when hovered. */
+             * into or out of a control that looks different when hovered.
+             *
+             * A held button is the exception, and it has to be, because
+             * dragging is how text is selected. The pointer stays inside the
+             * field for the whole gesture, so it never crosses anything, and
+             * the crossing rule alone drew no frames at all - Nuklear tracks
+             * a drag while it builds one, so the selection never moved. While
+             * a button is down every move is a frame; vsync caps the rate,
+             * and the cost only lasts as long as the gesture. */
             float mx = event->motion.x, my = event->motion.y;
             int i, over = -1;
+
+            if (app->dragging) app->dirty = 1;
 
             for (i = 0; i < app->hot_n; i++) {
                 struct nk_rect r = app->hot[i].r;
@@ -1025,6 +1568,63 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
             }
             break;
         }
+
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            /* Run a real frame loop for the duration of the gesture.
+             *
+             * "waitevent" is right when the app is idle and wrong while the
+             * pointer is being dragged: SDL waits for an event, we draw in
+             * half a millisecond, and then SDL_RenderPresent blocks on a full
+             * swapchain - measured at 29 ms against 0.09 ms of building and
+             * 0.46 ms of rendering. The whole frame was waiting, and the
+             * waiting and the event-wait interleaved badly enough to hold the
+             * drag at ~33 fps. Letting SDL call us continuously lets vsync do
+             * the pacing it is meant to. */
+            app->dragging = 1;
+            /* A drag that begins in the field keeps extending the selection
+             * even after the pointer leaves it; see the clamp below. */
+            if (app->field_rect_valid) {
+                struct nk_rect r = app->field_rect;
+                float bx = event->button.x, by = event->button.y;
+                app->drag_in_field = bx >= r.x && bx <= r.x + r.w &&
+                                     by >= r.y && by <= r.y + r.h;
+            }
+            /* No rate limiter at all while the pointer is held - the events
+             * themselves are the clock.
+             *
+             * Both candidates were worse, measured rather than assumed. Vsync
+             * on: SDL_RenderPresent blocked two refresh intervals (29 ms
+             * against 0.4 ms of actual work), holding the drag at 33 fps.
+             * SDL pacing the callback at the display's 64 Hz: 45 fps, because
+             * that pacing rests on the Windows timer, whose granularity is
+             * ~15.6 ms. Stacking the two was worst of all.
+             *
+             * Nor is "waitevent" right here, though it is what the app uses
+             * at rest. It makes event *arrival* the clock, and Windows
+             * coalesces mouse moves - a synthetic 250 moves a second reached
+             * this app as 40 - so the selection advanced in whatever uneven
+             * steps the OS happened to deliver. Steady is what a drag needs,
+             * not merely fast.
+             *
+             * So for the duration of the gesture SDL drives a fixed-rate
+             * loop at the display's refresh and the frame below is drawn
+             * unconditionally, at an even cadence, rather than one frame per
+             * event.
+             *
+             * Vsync is left alone. Turning it off looked like a win and was
+             * not: present still stalled ~30 ms on scattered frames, because
+             * a windowed app is paced by the compositor whether or not it
+             * asks to be. Leaving vsync on makes present block predictably
+             * for one refresh interval instead of occasionally for two. */
+            SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
+            break;
+
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            app->dragging = 0;
+            app->drag_in_field = 0;
+            SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
+            SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
+            break;
 
         case SDL_EVENT_SYSTEM_THEME_CHANGED:
             /* One portable event, in place of WM_SETTINGCHANGE plus the macOS
@@ -1045,6 +1645,29 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
         default:
             break;
         }
+        /* Nuklear extends a text selection only while the pointer is inside
+         * the widget: nk_do_edit guards nk_textedit_drag with is_hovered. So
+         * dragging past the end of the field - which is exactly how you select
+         * to the end of a line - silently stopped selecting, and letting go
+         * outside left a partial selection.
+         *
+         * The position Nuklear sees is therefore clamped into the field for
+         * the duration of a drag that started there. It keeps is_hovered true
+         * and pins the caret to the nearer edge, which is the behaviour every
+         * other text field has. Our own hover logic above already ran on the
+         * real coordinates. */
+        if (app->drag_in_field && event->type == SDL_EVENT_MOUSE_MOTION &&
+            app->field_rect_valid) {
+            struct nk_rect r = app->field_rect;
+            float lo_x = r.x + 2.0f, hi_x = r.x + r.w - 2.0f;
+            float lo_y = r.y + 2.0f, hi_y = r.y + r.h - 2.0f;
+
+            if (event->motion.x < lo_x) event->motion.x = lo_x;
+            if (event->motion.x > hi_x) event->motion.x = hi_x;
+            if (event->motion.y < lo_y) event->motion.y = lo_y;
+            if (event->motion.y > hi_y) event->motion.y = hi_y;
+        }
+
         nk_sdl_handle_event(app->ctx, event);
     }
     return SDL_APP_CONTINUE;
@@ -1059,6 +1682,11 @@ SDL_AppIterate(void *appstate)
 
     SDL_GetWindowSize(app->win, &win_w, &win_h);
     if (win_w != app->laid_w || win_h != app->laid_h) app->dirty = 1;
+
+    /* While a button is held, every scheduled frame is drawn whether or not
+     * an event arrived for it. That is what makes the cadence even: the frame
+     * rate stops depending on how the OS happened to batch the mouse. */
+    if (app->dragging) app->dirty = 1;
 
     /* Pointer motion only matters when it changes which widget is under the
      * cursor. Nuklear is immediate mode - a frame drawn because the mouse
@@ -1097,6 +1725,22 @@ SDL_AppIterate(void *appstate)
             app->fps = app->fps_frames * 1000.0f / (float)(now - app->fps_t0);
             app->fps_frames = 0;
             app->fps_t0 = now;
+
+            /* Opt-in trace. A GUI-subsystem binary has no console, and
+             * reading these off a screenshot proved too fragile to trust. */
+            if (SDL_getenv("CURIE_STATS")) {
+                FILE *lf = fopen("build/stats.log", "a");
+                if (lf) {
+                    char ln[160];
+                    SDL_snprintf(ln, sizeof(ln),
+                                 "fps=%.0f drag=%d build=%.2f render=%.2f present=%.2f",
+                                 app->fps, app->dragging,
+                                 app->build_ms_x100 / 100.0f,
+                                 app->render_ms_x100 / 100.0f,
+                                 app->present_ms_x100 / 100.0f);
+                    fputs(ln, lf); fputc(10, lf); fclose(lf);
+                }
+            }
         }
     }
 
@@ -1107,6 +1751,9 @@ SDL_AppIterate(void *appstate)
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(app->clear));
 
+    Uint64 t_build0 = SDL_GetPerformanceCounter();
+
+    nk_input_end(ctx);
     ctx->style.text.color = app->text;
 
     if (nk_begin(ctx, "page", nk_rect(0, 0, (float)win_w, (float)win_h),
@@ -1126,14 +1773,30 @@ SDL_AppIterate(void *appstate)
     nk_style_pop_float(ctx);
     nk_style_pop_vec2(ctx);
 
-    SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g,
-                           app->clear.b, app->clear.a);
-    SDL_RenderClear(app->ren);
-    nk_sdl_render(ctx, app->aa ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
-    SDL_RenderPresent(app->ren);
+    {
+        Uint64 f = SDL_GetPerformanceFrequency();
+        Uint64 t_render0 = SDL_GetPerformanceCounter();
+        Uint64 t_present0, t_end;
+
+        SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g,
+                               app->clear.b, app->clear.a);
+        SDL_RenderClear(app->ren);
+        nk_sdl_render(ctx, app->aa ? NK_ANTI_ALIASING_ON
+                                   : NK_ANTI_ALIASING_OFF);
+        t_present0 = SDL_GetPerformanceCounter();
+        SDL_RenderPresent(app->ren);
+        t_end = SDL_GetPerformanceCounter();
+
+        app->build_ms_x100   = (int)(100000.0 * (double)(t_render0 - t_build0) / (double)f);
+        app->render_ms_x100  = (int)(100000.0 * (double)(t_present0 - t_render0) / (double)f);
+        app->present_ms_x100 = (int)(100000.0 * (double)(t_end - t_present0) / (double)f);
+    }
+
+    nk_input_begin(ctx);       /* collect again for the next frame */
 
     app->n_paints++;
     app->dirty = 0;
+    if (app->want_quit) return SDL_APP_SUCCESS;
 
     /* Applied after the first frame, not before it. SDL only guarantees a
      * free SDL_AppIterate immediately after the hint is set from 3.6.0; this
@@ -1154,6 +1817,7 @@ SDL_AppQuit(void *appstate, SDL_AppResult result)
     (void)result;
     if (!app) return;
 
+    if (app->ctx) nk_input_end(app->ctx);
     curie_style_shutdown();
     {
         int i;

@@ -15,9 +15,14 @@
 /* Loads an arbitrary SVG by path relative to the repo root and rasterises it
  * at size x size. Pass NULL for either family to leave those colours alone,
  * which is what a plain <img src="..."> wants. Caller owns the surface. */
+/* stroke_scale multiplies every stroke-width the artwork declares; 0 or 1
+ * leaves it alone. Ionicons set a stroke of 6.25% of the glyph, which below
+ * about 20px is a hairline that anti-aliases to grey, so a glyph drawn small
+ * needs a heavier line to read as solid. */
 plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
                                           const char *outline_family, int outline_idx,
-                                          const char *inside_family, int inside_idx);
+                                          const char *inside_family, int inside_idx,
+                                          float stroke_scale);
 
 plutovg_surface_t *curie_svg_surface(const char *name, int size,
                                      const char *outline_family, int outline_idx,
