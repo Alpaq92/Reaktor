@@ -165,7 +165,9 @@ typedef struct curie_diag {
      * is the process's own. Every rss_at milestone below is working set. */
     unsigned long rss_bytes, private_bytes;
     int icons;
-    int atlas_w, atlas_h;      /* the baked font atlas, RGBA32 */
+    /* The baked font atlas. atlas_bpp is read off the texture, so it says
+     * what the backend actually produced rather than what it prefers. */
+    int atlas_w, atlas_h, atlas_bpp;
     unsigned long rss_at[RSS_STEPS];   /* working set, one per milestone */
     unsigned long priv_at[RSS_STEPS];  /* private commit, the same milestones */
 } curie_diag;

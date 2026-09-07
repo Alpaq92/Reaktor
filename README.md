@@ -2,6 +2,10 @@
 
 A desktop application in C where none of the styling is compiled in.
 
+![The Curie login screen: a centred card on a dark page, with a tab strip
+across the top and a scheme switch beside the window
+controls](docs/screenshot.png)
+
 - **Nuklear** draws every widget and lays out every row.
 - **libcss**, taken from LCUI, parses a stylesheet at runtime; its computed
   values are pushed into `nk_style` around each widget call.

@@ -1,38 +1,24 @@
 /* vmwalk.c - what a running process's private bytes are actually made of.
  *
- * The Diagnostics tab can say what this application allocates. It cannot say
- * where the rest goes, and "the rest" is about 95% of the number: a memory
- * audit of Curie accounted for 0.45 MB of a 9.6 MB process and had to leave
- * the remainder as one unattributed line. Worse, runs of the same binary vary
- * by around 2 MB, so nothing smaller than a megabyte can be measured at all by
- * launching and reading a counter.
- *
- * This walks another process's address space and buckets every committed
- * region, so the 2 MB of variance can be given a name and everything else
- * diffed at page resolution. It is read-only and out-of-process: OpenProcess,
- * VirtualQueryEx and QueryWorkingSetEx allocate nothing in the target and
- * fault nothing in, so measuring does not move what is being measured.
+ * A memory audit of Curie accounted for 0.45 MB of a 9.6 MB process, and runs
+ * of the same binary vary by ~2 MB - so nothing under a megabyte is
+ * measurable by launching and reading a counter. This walks another process's
+ * address space and buckets every committed region. Read-only and
+ * out-of-process: VirtualQueryEx and QueryWorkingSetEx allocate nothing in
+ * the target and fault nothing in, so measuring does not move what is
+ * measured.
  *
  *     vmwalk <pid> [--csv]
  *
- * Windows only, and a host tool rather than part of the application - it is
- * excluded from the Emscripten build for the same reason mkicon is.
+ * Windows-only host tool, excluded from the Emscripten build like mkicon.
  *
- * Why the buckets are what they are:
- *
- *   MEM_PRIVATE + MEM_COMMIT   charged to private bytes in full. Sub-divided
- *                              by what the pages look like, because "9 MB of
- *                              private commit" and "9 MB of heap" are very
- *                              different findings.
- *   MEM_IMAGE + MEM_COMMIT     mostly shared, file-backed and free. Only the
- *                              copy-on-write pages that have actually been
- *                              written are ours, and VirtualQueryEx cannot
- *                              tell which those are - QueryWorkingSetEx can,
- *                              per page, via Valid && !Shared.
- *   MEM_MAPPED + MEM_COMMIT    same treatment as image.
- *   MEM_RESERVE                printed separately and labelled, because a 1 MB
- *                              stack reserve is not a megabyte of cost and
- *                              gets read as one every time.
+ *   MEM_PRIVATE+COMMIT  charged to private bytes in full, split by what the
+ *                       pages look like.
+ *   MEM_IMAGE+COMMIT    only written copy-on-write pages are ours, and
+ *   MEM_MAPPED+COMMIT   VirtualQueryEx cannot say which - QueryWorkingSetEx
+ *                       can, per page, via Valid && !Shared.
+ *   MEM_RESERVE         listed separately: a 1 MB stack reserve is not a
+ *                       megabyte of cost.
  */
 #define PSAPI_VERSION 2
 #define WIN32_LEAN_AND_MEAN
@@ -46,8 +32,12 @@
 
 enum {
     B_STACK,        /* an allocation containing a guard page */
-    B_HEAP,         /* private read/write, below the driver threshold */
-    B_ANON_BIG,     /* private read/write, 1 MB or more in one allocation */
+    /* Everything the process asked for and writes to: the CRT heap, and the
+     * graphics stack's arenas. This was two buckets split at a 1 MB region
+     * size, which measured as noise - VirtualQuery reports runs of pages, not
+     * allocations, so the same bytes crossed between them whenever a
+     * protection changed. One bucket says what the split could not. */
+    B_HEAP,         /* private read/write */
     B_JIT,          /* private and executable: a shader or JIT compiler */
     B_PRIV_OTHER,   /* private, but none of the above - read-only, no-access */
     B_IMAGE_COW,    /* image pages written since load */
@@ -57,8 +47,7 @@ enum {
 
 static const char *const g_bucket[B_COUNT] = {
     "thread stacks (commit)",
-    "heap and loader",
-    "large private blocks (>=1MB)",
+    "private read/write (heap, arenas)",
     "private executable (JIT/shader)",
     "private, other protection",
     "image pages, copy-on-write dirty",
@@ -255,15 +244,31 @@ static int count_threads(DWORD pid)
  * allocation a thread stack rather than a large heap block. */
 static int allocation_has_guard(HANDLE proc, unsigned char *alloc_base)
 {
+    /* Memoised for the allocation just asked about. The main walk visits an
+     * allocation's regions consecutively, so one entry turns what would be a
+     * rescan per region - quadratic on exactly the fragmented processes this
+     * tool is for - into one rescan per allocation. */
+    static unsigned char *cached_base;
+    static int cached_answer;
     MEMORY_BASIC_INFORMATION mbi;
     unsigned char *p = alloc_base;
+    int found = 0;
+
+    if (!alloc_base) return 0;
+    if (alloc_base == cached_base) return cached_answer;
 
     while (VirtualQueryEx(proc, p, &mbi, sizeof(mbi)) == sizeof(mbi)) {
         if ((unsigned char *)mbi.AllocationBase != alloc_base) break;
-        if (mbi.State == MEM_COMMIT && (mbi.Protect & PAGE_GUARD)) return 1;
+        if (mbi.State == MEM_COMMIT && (mbi.Protect & PAGE_GUARD)) {
+            found = 1;
+            break;
+        }
+        if (mbi.RegionSize == 0) break;
         p = (unsigned char *)mbi.BaseAddress + mbi.RegionSize;
     }
-    return 0;
+    cached_base = alloc_base;
+    cached_answer = found;
+    return found;
 }
 
 int main(int argc, char **argv)
@@ -292,6 +297,10 @@ int main(int argc, char **argv)
     memset(bucket, 0, sizeof(bucket));
     GetSystemInfo(&si);
 
+    /* PROCESS_VM_READ is required even though nothing here calls
+     * ReadProcessMemory: EnumProcessModulesEx and GetModuleInformation need
+     * it, and without it collect_modules fails silently - every thread then
+     * reports "(not in any module)" and the module table comes out empty. */
     proc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
     if (!proc) {
         fprintf(stderr, "vmwalk: cannot open pid %lu (error %lu)\n",
@@ -308,8 +317,7 @@ int main(int argc, char **argv)
 
         if (mbi.State == MEM_RESERVE) {
             reserved += len;
-            if ((unsigned char *)mbi.AllocationBase &&
-                allocation_has_guard(proc, (unsigned char *)mbi.AllocationBase))
+            if (allocation_has_guard(proc, (unsigned char *)mbi.AllocationBase))
                 stacks_reserved += len;
         } else if (mbi.State == MEM_COMMIT) {
             if (mbi.Type == MEM_PRIVATE) {
@@ -326,8 +334,7 @@ int main(int argc, char **argv)
                            prot == PAGE_EXECUTE_WRITECOPY) {
                     bucket[B_JIT] += len;
                 } else if (prot == PAGE_READWRITE || prot == PAGE_WRITECOPY) {
-                    if (mbi.RegionSize >= 1048576) bucket[B_ANON_BIG] += len;
-                    else                           bucket[B_HEAP] += len;
+                    bucket[B_HEAP] += len;
                 } else {
                     bucket[B_PRIV_OTHER] += len;
                 }
@@ -393,14 +400,23 @@ int main(int argc, char **argv)
         list_threads(pid);
 
         printf("\n  image pages written since load, by module:\n");
-        for (i = 0; i < g_mod_n; i++) {
-            int j, top = -1;
-            SIZE_T best = 0;
-            for (j = 0; j < g_mod_n; j++)
-                if (g_mod[j].dirty > best) { best = g_mod[j].dirty; top = j; }
-            if (top < 0) break;
-            printf("  %-34s %10.3f\n", g_mod[top].name, mb(g_mod[top].dirty));
-            g_mod[top].dirty = 0;         /* consumed, so the next pass moves on */
+        {
+            char shown[MODULES_MAX] = { 0 };
+            int printed;
+
+            for (printed = 0; printed < g_mod_n; printed++) {
+                int j, top = -1;
+                SIZE_T best = 0;
+                for (j = 0; j < g_mod_n; j++)
+                    if (!shown[j] && g_mod[j].dirty > best) {
+                        best = g_mod[j].dirty;
+                        top = j;
+                    }
+                if (top < 0) break;
+                printf("  %-34s %10.3f\n", g_mod[top].name,
+                       mb(g_mod[top].dirty));
+                shown[top] = 1;
+            }
         }
     }
 

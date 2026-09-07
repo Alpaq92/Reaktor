@@ -18,15 +18,11 @@ int curie_path(char *out, size_t cap, const char *rel);
  * *len receives the byte count (excluding the NUL terminator it appends). */
 char *curie_read_file(const char *path, size_t *len);
 
-/* The process's resident set, in bytes, or 0 where the platform will not say.
- * Only the diagnostics page reads this. */
-size_t curie_process_rss(void);
-
-/* The process's private commit, in bytes, or 0 where the platform will not
- * say. Not the same question as the resident set: this one excludes the shared
- * pages of every DLL and driver mapped into the process, and is the number
- * Task Manager calls "commit size". */
-size_t curie_process_private(void);
+/* Both memory counters, in bytes, or 0 where the platform will not say.
+ * `rss` is the resident set, the shared pages of every mapped DLL and driver
+ * included; `priv` is private commit, what Task Manager calls "commit size".
+ * They answer different questions. */
+void curie_process_memory(size_t *rss, size_t *priv);
 void  curie_free(void *p);
 
 /* The app's own colour, for the window icon and the .ico in the executable.

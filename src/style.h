@@ -2,7 +2,7 @@
  *
  * Nuklear draws the widgets and lays them out; the look comes from CSS. This
  * is the seam between the two: parse the stylesheets once, then ask for the
- * computed values behind a selector - "button.pure-button", or the same with
+ * computed values behind a selector - "button", or the same with
  * ":hover" - and push those into nk_style around the widget call.
  *
  * The engine behind it is LCUI's libcss (parser, selector matching, cascade)
@@ -31,18 +31,16 @@ typedef struct curie_style {
     int           matched;       /* 0 when the selector matched no rule */
 } curie_style;
 
-/* Reads and parses `count` stylesheets, in order. Returns 0 on failure.
- * The text goes through cssflat.c first: Pure is written in em and
- * font-size: 100%, and LCUI's length parser accepts px, %, dp, sp and pt
- * only. */
+/* Reads and parses `count` stylesheets, in order. Returns 0 on failure. The
+ * text goes through cssflat.c first: LCUI's length parser accepts px, %, dp,
+ * sp and pt only, and no custom properties. */
 int  curie_style_init(const char *const *css_paths, int count);
 void curie_style_shutdown(void);
 
 /* Computed values behind a CSS selector. `selector` is what a stylesheet
- * would write - "a.pure-button", "button.pure-button-primary:hover" - and is
- * matched by LCUI against everything loaded. Never fails: an unmatched
- * selector yields zeroed values with `matched` clear, so a caller can fall
- * back to Nuklear's own defaults. */
+ * would write - "button", "input:focus" - matched by LCUI against everything
+ * loaded. Never fails: an unmatched selector yields zeroed values with
+ * `matched` clear, so a caller can fall back to Nuklear's defaults. */
 void curie_style_get(const char *selector, curie_style *out);
 
 /* Darkens an already-resolved colour by `amount` (0..1). Kept for stylesheets

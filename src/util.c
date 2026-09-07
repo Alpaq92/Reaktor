@@ -141,44 +141,47 @@ static int win_mem(PROCESS_MEMORY_COUNTERS_EX *out)
 }
 #endif
 
-size_t curie_process_rss(void)
+void curie_process_memory(size_t *rss, size_t *priv)
 {
-#if defined(_WIN32)
-    PROCESS_MEMORY_COUNTERS_EX pmc;
-    return win_mem(&pmc) ? (size_t)pmc.WorkingSetSize : 0;
-#elif defined(__linux__)
-    FILE *f = fopen("/proc/self/statm", "r");
-    unsigned long total = 0, resident = 0;
-    if (!f) return 0;
-    if (fscanf(f, "%lu %lu", &total, &resident) != 2) resident = 0;
-    fclose(f);
-    return (size_t)resident * (size_t)sysconf(_SC_PAGESIZE);
-#else
-    return 0;
-#endif
-}
+    *rss = *priv = 0;
 
-size_t curie_process_private(void)
-{
 #if defined(_WIN32)
-    PROCESS_MEMORY_COUNTERS_EX pmc;
-    return win_mem(&pmc) ? (size_t)pmc.PrivateUsage : 0;
-#elif defined(__linux__)
-    /* The private half of the resident set: the "Private" rows of the smaps
-     * rollup, which is the nearest thing Linux has to Windows' commit. */
-    FILE *f = fopen("/proc/self/smaps_rollup", "r");
-    char line[256];
-    unsigned long kb = 0, v;
-
-    if (!f) return 0;
-    while (fgets(line, sizeof(line), f)) {
-        if (sscanf(line, "Private_Clean: %lu kB", &v) == 1 ||
-            sscanf(line, "Private_Dirty: %lu kB", &v) == 1)
-            kb += v;
+    {
+        PROCESS_MEMORY_COUNTERS_EX pmc;
+        if (win_mem(&pmc)) {
+            *rss  = (size_t)pmc.WorkingSetSize;
+            *priv = (size_t)pmc.PrivateUsage;
+        }
     }
-    fclose(f);
-    return (size_t)kb * 1024u;
-#else
-    return 0;
+#elif defined(__linux__)
+    {
+        FILE *f = fopen("/proc/self/statm", "r");
+        unsigned long resident = 0;
+
+        if (f) {
+            if (fscanf(f, "%*lu %lu", &resident) == 1)
+                *rss = (size_t)resident * (size_t)sysconf(_SC_PAGESIZE);
+            fclose(f);
+        }
+        /* The nearest thing Linux has to Windows' commit. The kernel
+         * synthesises this file by walking every mapping, so both wanted rows
+         * are taken on one pass and the loop stops as soon as it has them. */
+        f = fopen("/proc/self/smaps_rollup", "r");
+        if (f) {
+            char line[256];
+            unsigned long kb = 0;
+            int got = 0;
+
+            while (got < 2 && fgets(line, sizeof(line), f)) {
+                if (strncmp(line, "Private_Clean:", 14) == 0 ||
+                    strncmp(line, "Private_Dirty:", 14) == 0) {
+                    kb += strtoul(line + 14, NULL, 10);
+                    got++;
+                }
+            }
+            fclose(f);
+            *priv = (size_t)kb * 1024u;
+        }
+    }
 #endif
 }

@@ -5,19 +5,19 @@ How the pieces fit, and what to know before changing them.
 ## The pipeline
 
 ```
-third_party/tinycss/src/*.css
-        |
-        v
-  src/cssflat.c      narrows the text to what libcss implements,
-        |            and resolves every var() before it gets there
-        v
-  src/style.c        libcss: parse, match a selector, compute
-        |
-        v
-  apply_widget_style()   in src/main.c - the one place that writes nk_style
-        |
-        v
-  Nuklear draws
+  third_party/tinycss/src/*.css        the stylesheet, read as it ships
+              │
+              ▼
+  src/cssflat.c                        narrow to what libcss implements,
+              │                        and resolve every var() first
+              ▼
+  src/style.c                          libcss: parse, match, compute
+              │
+              ▼
+  apply_widget_style()   in main.c     the one place that writes nk_style
+              │
+              ▼
+  Nuklear                              draws it
 ```
 
 Three things are worth knowing about that chain.
@@ -86,13 +86,15 @@ it — see [NOTICE.md](NOTICE.md#fonts) for where Aileron's terms were traced to
 It is an OTF, which costs nothing: stb_truetype reads CFF outlines too. Changing
 face is one `#define FONT_FILE` in `src/main.c`.
 
-The atlas is 1024x128 RGBA32, half a megabyte, and lives on the GPU — it is a
-texture, not process heap, so it appears in neither memory counter the
-Diagnostics tab reports. Three things got it there: oversampling is off in both
-axes (it costs exactly its area — the 3x2 default stores six copies of every
-glyph at every size, which made the atlas 1024x512), the 23px step was dropped
-because nothing asked for it, and `nk_font_atlas_cleanup` releases the five
-copies of the font file the bake keeps.
+The atlas is 1024x128 and 8-bit indexed — **128 KB**. Three things got it
+there: oversampling is off in both axes (it costs exactly its area, and the 3x2
+default stores six copies of every glyph at every size, which made the atlas
+1024x512), the 23px step was dropped because nothing asked for it, and
+`nk_font_atlas_cleanup` releases the five copies of the font file the bake
+keeps.
+
+Where that 128 KB lives depends on the machine — see
+[PERFORMANCE.md](PERFORMANCE.md).
 
 Two things about rebaking, both found by audit rather than by symptom:
 
@@ -105,23 +107,13 @@ Two things about rebaking, both found by audit rather than by symptom:
   previous face's and pushed the packer from 1024x128 to 1024x256 on their own.
   Check the atlas row in Diagnostics after any font change.
 
-**The atlas is 8-bit indexed, not RGBA32.** A baked glyph is coverage and
-nothing else: upstream's RGBA32 path runs `nk_font_bake_convert`, which writes
-`((alpha << 24) | 0x00FFFFFF)` for every pixel, so three of every four bytes
-are the constant `0xFF`. Colour comes from the vertex, not from the atlas.
+**The atlas is 8-bit indexed rather than RGBA32** — 128 KB instead of 512 KB,
+and one fewer 524 KB buffer on the startup peak. The reasoning is at the code,
+in `src/nk_sdl3_renderer.h`, which exists for this: the format is chosen inside
+`nk_sdl_font_stash_end`, so the backend had to be vendored.
 
-SDL3 has no A8 texture format, so a plain ALPHA8 bake would have to be expanded
-back to RGBA before upload and would save nothing. The route that works is
-ALPHA8 plus `SDL_PIXELFORMAT_INDEX8` with a 256-entry palette whose entry `i`
-is white at alpha `i` — which reproduces the RGBA32 texture exactly, at
-**128 KB instead of 512 KB**. It also keeps a 524 KB RGBA conversion buffer out
-of the startup peak, since `nk_font_atlas_bake` holds it live alongside the
-alpha8 one.
-
-This is why `src/nk_sdl3_renderer.h` exists: the format is chosen inside
-`nk_sdl_font_stash_end`, so the backend had to be vendored. Four lines differ
-from upstream, all marked `CURIE`. Three things were verified before taking it,
-and are worth re-checking after any re-vendor:
+Three things were verified before taking it, and are worth re-checking after
+any re-vendor:
 
 - **Every SDL3 backend registers `SDL_PIXELFORMAT_INDEX8`** — D3D11, OpenGL,
   Metal, Vulkan, GLES2 and software — so no platform loses.
@@ -131,9 +123,8 @@ and are worth re-checking after any re-vendor:
   `SDL_SCALEMODE_NEAREST` for indexed textures and does linear filtering in the
   palette shader instead. Checked at `CURIE_SCALE=1.5`.
 
-Whether it is worth anything depends on the machine: on real hardware the atlas
-is VRAM, so this buys nothing in private bytes. On the reference machine, which
-has no GPU and rasterises through WARP, it is about 0.4 MB.
+It buys about 0.4 MB on the reference machine and nothing on a GPU, where the
+atlas is VRAM.
 
 ## Icons
 
@@ -174,10 +165,10 @@ cost was inside the renderer.
 
 For memory specifically, know what the numbers are before steering by them.
 The tab reports **private bytes** (commit — the process's own) and **working
-set** (residency, shared driver pages included); the startup breakdown is
-working set throughout. Runs of the same binary vary by about 2 MB, so a
-single reading proves nothing — see
-[PERFORMANCE.md](PERFORMANCE.md#memory) for what that costs in sample size.
+set** (residency, shared driver pages included), and the startup breakdown
+gives both per step. Runs of the same binary vary by about 2 MB, so a single
+reading proves nothing — see [PERFORMANCE.md](PERFORMANCE.md#memory) for what
+that costs in sample size.
 
 When that is not enough, `tools/vmwalk.c` attributes another process's private
 bytes to named buckets — heap, large private blocks, thread stacks, dirtied

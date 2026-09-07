@@ -681,11 +681,13 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
 
     section(app, ctx, "Text",
             "One rule - tiny.css's `input` - supplies the fill, the radius, "
-            "the padding and the border; `input:focus` supplies the focus "
-            "colour, which Nuklear can only apply to every state at once "
-            "because its edit style carries a single border colour. A filter "
-            "rejects a keystroke before it reaches the buffer, so the field "
-            "cannot hold a value it would have to validate later.");
+            "the padding and the border - 2px of transparent until "
+            "`input:focus` colours it. Only the focused field takes that "
+            "colour; the rest get the neutral edge, because the rule assumes "
+            "a field sits on the page and on the login card the field and the "
+            "card are the same colour. A filter rejects a keystroke before it "
+            "reaches the buffer, so the field cannot hold a value it would "
+            "have to validate later.");
     api(app, ctx, "nk_edit_string with nk_filter_default / _decimal / _hex");
 
     nk_layout_row_dynamic(ctx, 36.0f, 1);
@@ -1637,15 +1639,13 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
             "grows to fit the busiest frame it has been asked to draw and is "
             "never handed back, so it records the high-water mark rather than "
             "the current page; the icon cache holds every SVG rasterised so "
-            "far, at twice the size it is drawn. The font atlas is one "
-            "8-bit indexed texture holding every baked size at once - a glyph "
-            "is coverage and nothing else, so a byte a pixel and a palette "
-            "say everything four bytes did. The two figures below answer "
-            "different questions: private is what this process has committed, "
-            "resident is what is in memory right now including the shared "
-            "pages of every DLL and driver mapped into it. Only the first is "
-            "ours - and on a machine with no GPU, as here, textures are in "
-            "it too.");
+            "far, at twice the size it is drawn. The font atlas holds every "
+            "baked size in one texture, normally 8-bit indexed - a glyph is "
+            "coverage, so a byte a pixel and a palette say what four bytes "
+            "did; the row below reports what this run got. Private is what "
+            "this process has committed, resident is what is in memory now "
+            "including every mapped DLL and driver. Only the first is ours - "
+            "and with no GPU, as here, textures are in it too.");
 
     SDL_snprintf(v, sizeof(v), "%.0f KB reserved, %.0f KB used by this frame",
                  d.nk_bytes / 1024.0, d.nk_used / 1024.0);
@@ -1653,8 +1653,10 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
     SDL_snprintf(v, sizeof(v), "%.0f KB in %d rasters", d.icon_bytes / 1024.0,
                  d.icons);
     diag_row(app, ctx, "icon cache", v);
-    SDL_snprintf(v, sizeof(v), "%d x %d indexed, %.0f KB", d.atlas_w,
-                 d.atlas_h, d.atlas_w * (double)d.atlas_h / 1024.0);
+    SDL_snprintf(v, sizeof(v), "%d x %d %s, %.0f KB", d.atlas_w, d.atlas_h,
+                 !d.atlas_bpp ? "none" : d.atlas_bpp == 1 ? "indexed"
+                                                          : "RGBA32",
+                 d.atlas_w * (double)d.atlas_h * d.atlas_bpp / 1024.0);
     diag_row(app, ctx, "font atlas", v);
     SDL_snprintf(v, sizeof(v), "%.1f MB", d.private_bytes / 1048576.0);
     diag_row(app, ctx, "process, private", v);

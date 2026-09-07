@@ -2,18 +2,13 @@
 
 /* VENDORED COPY - see docs/NOTICE.md.
  *
- * Taken verbatim from third_party/nuklear/demo/sdl3_renderer/, which is where
- * upstream keeps it, and changed in exactly one place: the font atlas is baked
- * and uploaded as 8-bit indexed rather than RGBA32.
+ * Nuklear's SDL3 backend, taken from third_party/nuklear/demo/sdl3_renderer/
+ * and changed to bake and upload the font atlas 8-bit indexed rather than
+ * RGBA32. It could not stay an include: the format is chosen inside
+ * nk_sdl_font_stash_end, and this project does not edit submodules.
  *
- * Why it could not stay a submodule include: nk_sdl_font_stash_end hard-codes
- * both NK_FONT_ATLAS_RGBA32 and SDL_PIXELFORMAT_ARGB8888, and this project
- * does not edit submodules. Search this file for CURIE to find every line that
- * differs from upstream - there are four, and they are commented.
- *
- * The cost of that decision is that this file no longer tracks upstream. When
- * Nuklear's SDL3 backend changes, this has to be re-vendored and the CURIE
- * hunks re-applied. */
+ * Grep CURIE for the changed hunks. Re-vendoring means re-applying them.
+ */
 
 /*
  * ==============================================================
@@ -156,6 +151,28 @@ nk_sdl_allocator()
     return allocator;
 }
 
+/* CURIE: the palette that makes an INDEX8 atlas equal the RGBA32 one -
+ * entry i is white at alpha i. SDL keeps its own reference, so this frees
+ * ours. */
+static bool
+nk_sdl_set_coverage_palette(SDL_Texture *tex)
+{
+    SDL_Palette *pal = SDL_CreatePalette(256);
+    SDL_Color ramp[256];
+    bool ok;
+    int i;
+
+    if (!pal) return false;
+    for (i = 0; i < 256; i++) {
+        ramp[i].r = ramp[i].g = ramp[i].b = 255;
+        ramp[i].a = (Uint8)i;
+    }
+    SDL_SetPaletteColors(pal, ramp, 0, 256);
+    ok = SDL_SetTexturePalette(tex, pal);
+    SDL_DestroyPalette(pal);
+    return ok;
+}
+
 NK_INTERN void
 nk_sdl_device_upload_atlas(struct nk_context* ctx, const void *image, int width, int height)
 {
@@ -188,23 +205,46 @@ nk_sdl_device_upload_atlas(struct nk_context* ctx, const void *image, int width,
      * software - so no platform loses by it.
      *
      * SDL keeps its own reference to the palette, so it is freed here. */
+    /* CURIE: 8-bit indexed, not ARGB8888.
+     *
+     * A baked glyph is coverage: nk_font_bake_convert writes
+     * ((alpha << 24) | 0x00FFFFFF) per pixel, so three of four bytes are a
+     * constant and the colour comes from the vertex. SDL3 has no A8 format,
+     * so the alpha8 bake goes up as INDEX8 with a palette whose entry i is
+     * white at alpha i - the same texture, a quarter the size. Every SDL3
+     * backend registers INDEX8.
+     *
+     * Falling back matters: an indexed texture with no palette samples an
+     * undefined one, which would put every glyph wrong with nothing to say
+     * why. The conversion buffer is only allocated once indexed has lost. */
     sdl->ogl.font_tex = SDL_CreateTexture(sdl->renderer, SDL_PIXELFORMAT_INDEX8, SDL_TEXTUREACCESS_STATIC, width, height);
-    NK_ASSERT(sdl->ogl.font_tex);
-    {
-        SDL_Palette *pal = SDL_CreatePalette(256);
-        if (pal) {
-            SDL_Color ramp[256];
-            int i;
-            for (i = 0; i < 256; i++) {
-                ramp[i].r = ramp[i].g = ramp[i].b = 255;
-                ramp[i].a = (Uint8)i;
-            }
-            SDL_SetPaletteColors(pal, ramp, 0, 256);
-            SDL_SetTexturePalette(sdl->ogl.font_tex, pal);
-            SDL_DestroyPalette(pal);
+    if (sdl->ogl.font_tex && !nk_sdl_set_coverage_palette(sdl->ogl.font_tex)) {
+        SDL_DestroyTexture(sdl->ogl.font_tex);
+        sdl->ogl.font_tex = NULL;
+    }
+
+    if (sdl->ogl.font_tex) {
+        SDL_UpdateTexture(sdl->ogl.font_tex, NULL, image, width);
+    } else {
+        size_t n = (size_t)width * (size_t)height;
+        void *rgba = SDL_malloc(n * 4);
+
+        SDL_Log("nk_sdl: indexed font atlas unavailable (%s); using RGBA32",
+                SDL_GetError());
+        if (rgba) {
+            nk_font_bake_convert(rgba, width, height, image);
+            sdl->ogl.font_tex = SDL_CreateTexture(sdl->renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, width, height);
+            if (sdl->ogl.font_tex)
+                SDL_UpdateTexture(sdl->ogl.font_tex, NULL, rgba, 4 * width);
+            SDL_free(rgba);
         }
     }
-    SDL_UpdateTexture(sdl->ogl.font_tex, NULL, image, 1 * width);   /* CURIE: 1 byte per pixel */
+
+    if (!sdl->ogl.font_tex) {
+        SDL_Log("nk_sdl: no font atlas texture (%s); text will not draw",
+                SDL_GetError());
+        return;
+    }
     SDL_SetTextureBlendMode(sdl->ogl.font_tex, SDL_BLENDMODE_BLEND);
 }
 
@@ -474,9 +514,8 @@ nk_sdl_font_stash_end(struct nk_context* ctx)
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
-    /* CURIE: alpha8, to match the INDEX8 upload above. This also keeps the
-     * 4x RGBA conversion buffer out of the startup peak - nk_font_atlas_bake
-     * holds it live alongside the alpha8 one. */
+    /* CURIE: alpha8, to match the upload. Also keeps the 4x RGBA buffer out
+     * of the startup peak - the bake holds it live alongside the alpha8 one. */
     image = nk_font_atlas_bake(&sdl->atlas, &w, &h, NK_FONT_ATLAS_ALPHA8);
     NK_ASSERT(image);
     nk_sdl_device_upload_atlas(&sdl->ctx, image, w, h);

@@ -21,9 +21,9 @@ Refresh the pinned revisions with `git submodule status`.
 
 `src/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
 `third_party/nuklear/demo/sdl3_renderer/` and covered by Nuklear's licence
-above — MIT or public domain, at your option. It is 731 lines and differs from
-upstream in four commented places, all marked `CURIE`: the font atlas is baked
-and uploaded as 8-bit indexed rather than RGBA32.
+above — MIT or public domain, at your option. It differs from upstream only in
+baking and uploading the font atlas 8-bit indexed rather than RGBA32; grep
+`CURIE` for the changed hunks.
 
 It could not stay an include from the submodule because the format is chosen
 inside `nk_sdl_font_stash_end`, and this project does not edit submodules. The
@@ -46,8 +46,7 @@ to build a distributable on.
 
 | Font | Role | Licence | Where the terms are |
 | --- | --- | --- | --- |
-| **Aileron** | **The UI face.** Regular is baked; Bold is vendored but not baked. | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
-| Zerove | Not loaded. Unicase — `a` and `A` are the same outline at 1434 units — so a wordmark face, not a UI one. | CC0 1.0 | `assets/fonts/Zerove-License.txt` |
+| **Aileron** | The UI face. Regular is baked; Bold is vendored but not baked. | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
 
 Aileron is by Sora Sagano of DOT COLON. Its download ships no licence file either,
 so rather than repeat Karla's problem the terms were traced to their source and
