@@ -11,5 +11,8 @@
 #define NK_IMPLEMENTATION
 #include "nk_common.h"
 
+/* A vendored copy, not the submodule's: the atlas is baked 8-bit indexed
+ * rather than RGBA32, which is a change inside the backend. See the header of
+ * that file, and docs/NOTICE.md. */
 #define NK_SDL3_RENDERER_IMPLEMENTATION
-#include "../third_party/nuklear/demo/sdl3_renderer/nuklear_sdl3_renderer.h"
+#include "nk_sdl3_renderer.h"

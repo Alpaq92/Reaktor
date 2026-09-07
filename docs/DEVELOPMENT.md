@@ -86,21 +86,54 @@ it — see [NOTICE.md](NOTICE.md#fonts) for where Aileron's terms were traced to
 It is an OTF, which costs nothing: stb_truetype reads CFF outlines too. Changing
 face is one `#define FONT_FILE` in `src/main.c`.
 
-The atlas is 1024x128 RGBA32, half a megabyte, and is the largest single
-allocation the application makes. Two things got it there: oversampling is 2x1
-rather than 3x2 (oversampling costs exactly its area), and the 23px step was
-dropped because nothing ever asked for it.
+The atlas is 1024x128 RGBA32, half a megabyte, and lives on the GPU — it is a
+texture, not process heap, so it appears in neither memory counter the
+Diagnostics tab reports. Three things got it there: oversampling is off in both
+axes (it costs exactly its area — the 3x2 default stores six copies of every
+glyph at every size, which made the atlas 1024x512), the 23px step was dropped
+because nothing asked for it, and `nk_font_atlas_cleanup` releases the five
+copies of the font file the bake keeps.
 
-**The remaining lever, not yet taken.** Baking `NK_FONT_ATLAS_ALPHA8` instead
-of RGBA32 would take the atlas to roughly 0.13 MB with no visible difference —
-Nuklear draws glyphs by modulating a colour, so the three colour channels
-carry nothing. It is not done because `nk_sdl_font_stash_end()` in Nuklear's
-SDL3 backend hard-codes the RGBA32 bake, and this project does not edit
-submodules. Taking it would mean vendoring that backend — roughly 700 lines,
-MIT — into `src/` and maintaining it against upstream. Worth doing if the
-memory matters more than the drift: against a process whose private bytes vary
-by about 1.8 MB run to run because of the graphics driver, 0.4 MB is below the
-noise floor.
+Two things about rebaking, both found by audit rather than by symptom:
+
+- **`nk_sdl_font_stash_begin` does not free the previous atlas.** It calls
+  `nk_font_atlas_init`, which zeroes the struct outright, dropping the last
+  bake's configs, blobs, fonts and glyph array unfreed. It only shows when the
+  display scale changes and `rebuild_font` runs a second time. `rebuild_font`
+  therefore keeps the atlas pointer and calls `nk_font_atlas_clear` first.
+- **The face changes the atlas size.** Aileron's glyphs are wider than the
+  previous face's and pushed the packer from 1024x128 to 1024x256 on their own.
+  Check the atlas row in Diagnostics after any font change.
+
+**The atlas is 8-bit indexed, not RGBA32.** A baked glyph is coverage and
+nothing else: upstream's RGBA32 path runs `nk_font_bake_convert`, which writes
+`((alpha << 24) | 0x00FFFFFF)` for every pixel, so three of every four bytes
+are the constant `0xFF`. Colour comes from the vertex, not from the atlas.
+
+SDL3 has no A8 texture format, so a plain ALPHA8 bake would have to be expanded
+back to RGBA before upload and would save nothing. The route that works is
+ALPHA8 plus `SDL_PIXELFORMAT_INDEX8` with a 256-entry palette whose entry `i`
+is white at alpha `i` — which reproduces the RGBA32 texture exactly, at
+**128 KB instead of 512 KB**. It also keeps a 524 KB RGBA conversion buffer out
+of the startup peak, since `nk_font_atlas_bake` holds it live alongside the
+alpha8 one.
+
+This is why `src/nk_sdl3_renderer.h` exists: the format is chosen inside
+`nk_sdl_font_stash_end`, so the backend had to be vendored. Four lines differ
+from upstream, all marked `CURIE`. Three things were verified before taking it,
+and are worth re-checking after any re-vendor:
+
+- **Every SDL3 backend registers `SDL_PIXELFORMAT_INDEX8`** — D3D11, OpenGL,
+  Metal, Vulkan, GLES2 and software — so no platform loses.
+- **Vertex-colour modulation composes with the palette.** If it did not, every
+  glyph would render white. Check a screen with text in several colours.
+- **Fractional display scales still look right.** D3D11 forces
+  `SDL_SCALEMODE_NEAREST` for indexed textures and does linear filtering in the
+  palette shader instead. Checked at `CURIE_SCALE=1.5`.
+
+Whether it is worth anything depends on the machine: on real hardware the atlas
+is VRAM, so this buys nothing in private bytes. On the reference machine, which
+has no GPU and rasterises through WARP, it is about 0.4 MB.
 
 ## Icons
 
@@ -138,6 +171,21 @@ went and where the memory went. Prefer it to a guess: several plausible
 optimisations here turned out to be measurably worse, and one 4x CPU
 regression was invisible in the build, render and present timings because the
 cost was inside the renderer.
+
+For memory specifically, know what the numbers are before steering by them.
+The tab reports **private bytes** (commit — the process's own) and **working
+set** (residency, shared driver pages included); the startup breakdown is
+working set throughout. Runs of the same binary vary by about 2 MB, so a
+single reading proves nothing — see
+[PERFORMANCE.md](PERFORMANCE.md#memory) for what that costs in sample size.
+
+When that is not enough, `tools/vmwalk.c` attributes another process's private
+bytes to named buckets — heap, large private blocks, thread stacks, dirtied
+image pages per module — and prints what it could not account for rather than
+pretending the buckets are exhaustive. It is not built by default:
+`cmake --build build --target vmwalk`, then `build/vmwalk.exe <pid>`. It reads
+the target through `VirtualQueryEx` and `QueryWorkingSetEx` only, so it
+allocates nothing there and faults nothing in.
 
 ## The web build
 
@@ -198,11 +246,8 @@ code, and none of them is a bug.
   `showcase.c` wraps `nk_checkbox_label_align` in the same four lines the
   library would have.
 - **The SDL backend's malloc-only allocator is not a leak.**
-  `nk_buffer_realloc` copies and frees the old pointer itself.
-
-## Loose ends
-
-- `src/cssflat.h` still describes the pass in terms of Open-Color and
-  `app.css`, both of which are gone. The code is current; the comment is not.
-- `assets/demo.html` refers to `third_party/pico`, a submodule that no longer
-  exists, and nothing loads it.
+  `nk_buffer_realloc` copies and frees the old pointer itself. It is, however,
+  a full malloc-and-memcpy on every growth, and `nk_sdl_render` re-inits and
+  frees its vertex and element buffers every frame.
+- **`nk_sdl_font_stash_begin` leaks the atlas it replaces.** See
+  [Fonts and the atlas](#fonts-and-the-atlas).

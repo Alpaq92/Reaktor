@@ -5,11 +5,11 @@
  * css_computed_style_t declares a custom_props field, but nothing in lib/css
  * ever reads it - and it has no @media at all.
  *
- * That matters here because the palette *is* custom properties: Open-Color
- * ships 264 of them and app.css is written entirely in terms of them, which is
- * how the project avoids transcribing colour values out of the submodule. So
- * the substitution happens here, before the engine sees the text, rather than
- * by rewriting the stylesheets.
+ * That matters here because the palette *is* custom properties: tiny.css keeps
+ * every colour in :root, in variables-light.css and variables-dark.css, and
+ * writes its rules in terms of them. Substituting here, before the engine sees
+ * the text, is what lets the sheets be read as they ship - no value is copied
+ * out of the submodule and into this tree.
  *
  * What this pass does:
  *   - strips comments;
@@ -20,9 +20,10 @@
  *   - drops @media blocks, and selectors carrying [attr] or ::pseudo, which
  *     LCUI's parser cannot represent.
  *
- * The resolved map is handed back too: a few tokens describe things CSS can
- * express but this engine cannot paint - the backdrop gradient - so the
- * application reads those directly rather than duplicating the values. */
+ * The resolved map is handed back too. Some of the palette never reaches a
+ * rule this engine can apply - the surfaces the application paints itself, and
+ * anything behind a selector dropped above - so those tokens are read straight
+ * from the map instead. */
 #ifndef CURIE_CSSFLAT_H
 #define CURIE_CSSFLAT_H
 
@@ -41,7 +42,7 @@ char *curie_css_flatten(const char *const *paths, int count,
 char *curie_css_flatten_text(const char *const *texts, int count,
                              const char *theme, curie_cssvars **out_vars);
 
-/* Resolved value of a custom property, e.g. "--app-backdrop-from", or NULL. */
+/* Resolved value of a custom property, e.g. "--background-body", or NULL. */
 const char *curie_cssvars_get(const curie_cssvars *vars, const char *name);
 
 /* Resolved custom property parsed as #rgb/#rrggbb. Returns 0 if absent or

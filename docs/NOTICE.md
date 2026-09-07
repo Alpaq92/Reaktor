@@ -17,6 +17,19 @@ Refresh the pinned revisions with `git submodule status`.
 | [plutosvg](https://github.com/sammycage/plutosvg) | Rasterising those SVGs | MIT | `v0.0.8` |
 | [plutovg](https://github.com/sammycage/plutovg) | The 2D canvas plutosvg draws on (nested submodule) | MIT | tracked by plutosvg |
 
+## The one vendored source file
+
+`src/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
+`third_party/nuklear/demo/sdl3_renderer/` and covered by Nuklear's licence
+above — MIT or public domain, at your option. It is 731 lines and differs from
+upstream in four commented places, all marked `CURIE`: the font atlas is baked
+and uploaded as 8-bit indexed rather than RGBA32.
+
+It could not stay an include from the submodule because the format is chosen
+inside `nk_sdl_font_stash_end`, and this project does not edit submodules. The
+cost is that the file no longer tracks upstream: when Nuklear's backend
+changes it has to be re-vendored and the four hunks re-applied.
+
 Only two of LCUI's libraries are built — `libcss` and `yutil` — not the
 toolkit. SDL is built static, with the audio, joystick, haptic, HID, sensor,
 camera, power, GPU, tray and offscreen subsystems disabled, along with the

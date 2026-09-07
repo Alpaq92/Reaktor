@@ -154,6 +154,14 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(mkicon PRIVATE curie_core)
 endif()
 
+# Attributes another process's private bytes to named buckets. A diagnostic
+# for the maintainer rather than part of the app - not built by default, and
+# not on the web, where there is no address space to walk:
+#     cmake --build build --target vmwalk
+if(WIN32 AND NOT EMSCRIPTEN)
+    add_executable(vmwalk EXCLUDE_FROM_ALL tools/vmwalk.c)
+endif()
+
 if(WIN32)
     set(GEN "${CMAKE_BINARY_DIR}/gen")
     file(MAKE_DIRECTORY "${GEN}")

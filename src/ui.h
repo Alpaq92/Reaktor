@@ -159,10 +159,15 @@ typedef struct curie_diag {
     /* Where the memory is. nk_bytes is Nuklear's own command buffer, which
      * grows to fit the busiest frame drawn so far and is never given back;
      * icon_bytes is the rasterised SVG cache. */
-    unsigned long nk_bytes, nk_used, icon_bytes, rss_bytes;
+    unsigned long nk_bytes, nk_used, icon_bytes;
+    /* Two different questions. rss_bytes is the working set - what is resident,
+     * shared driver and system pages included. private_bytes is commit, which
+     * is the process's own. Every rss_at milestone below is working set. */
+    unsigned long rss_bytes, private_bytes;
     int icons;
     int atlas_w, atlas_h;      /* the baked font atlas, RGBA32 */
-    unsigned long rss_at[RSS_STEPS];   /* one per milestone above */
+    unsigned long rss_at[RSS_STEPS];   /* working set, one per milestone */
+    unsigned long priv_at[RSS_STEPS];  /* private commit, the same milestones */
 } curie_diag;
 
 void curie_diagnostics(App *app, curie_diag *out);

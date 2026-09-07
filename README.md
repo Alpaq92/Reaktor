@@ -84,6 +84,7 @@ A `file://` page cannot fetch the `.wasm`, so serve the output directory:
 | `src/style.c` | libcss: parse the sheets, resolve a selector, hand back computed values |
 | `src/cssflat.c` | Narrows CSS to what libcss implements, and resolves `var()` first |
 | `src/appicon.c` | An Ionicons SVG, recoloured and rasterised at runtime |
+| `src/nk_sdl3_renderer.h` | Nuklear's SDL3 backend, vendored so the font atlas can be 8-bit indexed |
 | `src/metrics.c` | The display scale, in one place |
 | `src/theme.c` | Which colour scheme the desktop is using |
 | `src/util.c` | Paths, whole-file reads, the resident set |

@@ -127,25 +127,25 @@ char *curie_read_file(const char *path, size_t *len)
 
 void curie_free(void *p) { free(p); }
 
+#if defined(_WIN32)
+/* Both counters come from one call. <psapi.h> maps GetProcessMemoryInfo to
+ * K32GetProcessMemoryInfo, which kernel32 exports, so this needs no import
+ * library and no runtime lookup. The EX form is a superset - PrivateUsage is
+ * appended after the fields the plain struct has. */
+static int win_mem(PROCESS_MEMORY_COUNTERS_EX *out)
+{
+    out->cb = sizeof(*out);
+    return GetProcessMemoryInfo(GetCurrentProcess(),
+                                (PROCESS_MEMORY_COUNTERS *)out,
+                                sizeof(*out)) ? 1 : 0;
+}
+#endif
+
 size_t curie_process_rss(void)
 {
 #if defined(_WIN32)
-    /* psapi via GetProcessMemoryInfo, reached through the process handle we
-     * already have - no import, so nothing links against psapi. */
-    PROCESS_MEMORY_COUNTERS pmc;
-    typedef BOOL(WINAPI * fn_t)(HANDLE, PROCESS_MEMORY_COUNTERS *, DWORD);
-    static fn_t get_info;
-    static int looked_up;
-
-    if (!looked_up) {
-        HMODULE m = LoadLibraryA("psapi.dll");
-        if (m) get_info = (fn_t)(void *)GetProcAddress(m, "GetProcessMemoryInfo");
-        looked_up = 1;
-    }
-    if (!get_info) return 0;
-    pmc.cb = sizeof(pmc);
-    if (!get_info(GetCurrentProcess(), &pmc, sizeof(pmc))) return 0;
-    return (size_t)pmc.WorkingSetSize;
+    PROCESS_MEMORY_COUNTERS_EX pmc;
+    return win_mem(&pmc) ? (size_t)pmc.WorkingSetSize : 0;
 #elif defined(__linux__)
     FILE *f = fopen("/proc/self/statm", "r");
     unsigned long total = 0, resident = 0;
@@ -153,6 +153,31 @@ size_t curie_process_rss(void)
     if (fscanf(f, "%lu %lu", &total, &resident) != 2) resident = 0;
     fclose(f);
     return (size_t)resident * (size_t)sysconf(_SC_PAGESIZE);
+#else
+    return 0;
+#endif
+}
+
+size_t curie_process_private(void)
+{
+#if defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS_EX pmc;
+    return win_mem(&pmc) ? (size_t)pmc.PrivateUsage : 0;
+#elif defined(__linux__)
+    /* The private half of the resident set: the "Private" rows of the smaps
+     * rollup, which is the nearest thing Linux has to Windows' commit. */
+    FILE *f = fopen("/proc/self/smaps_rollup", "r");
+    char line[256];
+    unsigned long kb = 0, v;
+
+    if (!f) return 0;
+    while (fgets(line, sizeof(line), f)) {
+        if (sscanf(line, "Private_Clean: %lu kB", &v) == 1 ||
+            sscanf(line, "Private_Dirty: %lu kB", &v) == 1)
+            kb += v;
+    }
+    fclose(f);
+    return (size_t)kb * 1024u;
 #else
     return 0;
 #endif

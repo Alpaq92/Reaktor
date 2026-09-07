@@ -77,10 +77,24 @@ static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19 };
 #define TITLE_GAP      6   /* between the app mark and the name */
 #define MARK_SIZE     18   /* the app mark, drawn size */
 
-/* The resident set at each startup milestone (the list is in ui.h, next to
- * the page that prints it). A file static because the first two samples land
- * before App exists. */
+/* Both memory counters at each startup milestone (the list is in ui.h, next
+ * to the page that prints them). File statics because the first two samples
+ * land before App exists.
+ *
+ * Two counters rather than one because they answer different questions and
+ * the difference is the whole point: the resident set says what a step maps
+ * in, which for the renderer is mostly the graphics driver's shared pages,
+ * while the private commit says what it costs this process. Reporting only
+ * the first is what made an earlier revision of docs/PERFORMANCE.md credit a
+ * build change with a saving the binary makes impossible. */
 static size_t g_rss[RSS_STEPS];
+static size_t g_priv[RSS_STEPS];
+
+static void rss_mark(int step)
+{
+    g_rss[step]  = curie_process_rss();
+    g_priv[step] = curie_process_private();
+}
 
 /* Ionicons draw a 32-unit stroke on a 512 viewBox - 6.25% of the glyph - so
  * below 16px the line falls under one pixel and anti-aliases to grey. That,
@@ -150,6 +164,9 @@ struct App {
      * the stylesheet asks for and selected per draw. */
     struct nk_font *faces[FONT_STEPS];
     char            font_status[160];
+    /* The backend's atlas, kept only so a rebake can free the bake before it -
+     * see rebuild_font. */
+    struct nk_font_atlas *atlas;
     /* The baked atlas, so the diagnostics can say what the text costs: it is
      * one RGBA32 texture and the largest single allocation the app makes. */
     int             atlas_w, atlas_h;
@@ -563,23 +580,41 @@ rebuild_font(App *app)
     struct nk_font *font = NULL;
     char path[1024];
 
+    /* nk_sdl_font_stash_begin calls nk_font_atlas_init, which zeroes the
+     * atlas struct outright - so a second bake drops the first one's font
+     * configs, its copy of the TTF, its nk_font records and its glyph array
+     * without freeing any of them. Nothing notices until the display scale
+     * changes and this function runs again, which is a leak that grows with
+     * every monitor the window is dragged between.
+     *
+     * The clear has to sit exactly here: it frees the nk_font that
+     * ctx->style.font and app->faces[] point at, and both are reassigned
+     * below before any frame is drawn. */
+    if (app->atlas) {
+        nk_font_atlas_clear(app->atlas);
+        SDL_memset(app->faces, 0, sizeof(app->faces));
+    }
     atlas = nk_sdl_font_stash_begin(app->ctx);
+    app->atlas = atlas;
 
     if (curie_path(path, sizeof(path), FONT_FILE)) {
         struct nk_font_config cfg = nk_font_config(0);
         int i;
 
-        /* 2x1, not 3x2.
+        /* No oversampling, in either axis.
          *
          * Oversampling rasterises each glyph several times at sub-pixel
          * offsets so it can be positioned off the pixel grid without
-         * shimmering, and it costs exactly its area: 3x2 stores six copies of
-         * every glyph at every size, which is what made the atlas a 1024x512
-         * RGBA texture - two megabytes, and the largest allocation in the
-         * app by an order of magnitude. Horizontal offsets are the ones that
-         * matter for horizontal text; the vertical pass buys almost nothing
-         * here because rows sit on integer baselines. */
-        cfg.oversample_h = 2;
+         * shimmering, and it costs exactly its area. The default 3x2 stores
+         * six copies of every glyph at every size, which made the atlas a
+         * 1024x512 RGBA texture - two megabytes. 2x1 halved it twice, to
+         * 1024x128, and stayed there until the typeface changed: Aileron's
+         * glyphs are wider than the face before it and pushed the packer to
+         * 1024x256. Dropping the horizontal pass too puts it back at 1024x128
+         * and, compared side by side at 2x zoom, costs a barely perceptible
+         * softening of diagonal strokes - text sits on integer baselines here
+         * and is not animated, which is the case oversampling exists for. */
+        cfg.oversample_h = 1;
         cfg.oversample_v = 1;
         cfg.pixel_snap   = 0;
         for (i = 0; i < FONT_STEPS; i++) {
@@ -607,6 +642,11 @@ rebuild_font(App *app)
     }
 
     nk_sdl_font_stash_end(app->ctx);
+    /* The atlas holds a copy of the whole font file per baked face - five
+     * copies of the same 27 KB here - and nothing reads them once stb_truetype
+     * has the outlines. nk_font_atlas_clear skips what this has already freed,
+     * so the two compose. */
+    nk_font_atlas_cleanup(atlas);
 
     /* Read off the texture, not off the atlas: nk_font_atlas_end clears the
      * baked dimensions as part of releasing the staging buffers. Every baked
@@ -2433,11 +2473,15 @@ curie_diagnostics(App *app, curie_diag *out)
     }
 
     out->rss_bytes  = (unsigned long)curie_process_rss();
+    out->private_bytes = (unsigned long)curie_process_private();
     out->atlas_w    = app->atlas_w;
     out->atlas_h    = app->atlas_h;
     {
         int i;
-        for (i = 0; i < RSS_STEPS; i++) out->rss_at[i] = (unsigned long)g_rss[i];
+        for (i = 0; i < RSS_STEPS; i++) {
+            out->rss_at[i]  = (unsigned long)g_rss[i];
+            out->priv_at[i] = (unsigned long)g_priv[i];
+        }
     }
     out->build_ms   = app->build_ms_x100 / 100.0f;
     out->render_ms  = app->render_ms_x100 / 100.0f;
@@ -2493,13 +2537,33 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
         return ok ? SDL_APP_SUCCESS : SDL_APP_FAILURE;
     }
 
-    g_rss[RSS_ENTRY] = curie_process_rss();
+    /* Two things SDL does on Windows by default that this app should not
+     * inherit. Both are read during SDL_Init, so they are settled first.
+     *
+     * The screensaver: SDL_VideoInit disables it unless this hint says
+     * otherwise, which on Windows is SetThreadExecutionState with
+     * ES_DISPLAY_REQUIRED held for the life of the process. That is right for
+     * a game and wrong for this - SDL's own comment beside the call says a
+     * desktop app should re-enable it.
+     *
+     * The timer: SDL_HINT_TIMER_RESOLUTION defaults to 1, a system-wide
+     * timeBeginPeriod(1) also held for the process's life. This app blocks on
+     * events and asks for no timed wakeups, so it has nothing to spend that
+     * on. The exception is a pinned numeric CURIE_FRAME_RATE, which does pace
+     * and would feel a 15.6 ms floor. */
+    SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
+    {
+        const char *rate = SDL_getenv("CURIE_FRAME_RATE");
+        if (!rate || !*rate) SDL_SetHint(SDL_HINT_TIMER_RESOLUTION, "0");
+    }
+
+    rss_mark(RSS_ENTRY);
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    g_rss[RSS_SDL] = curie_process_rss();
+    rss_mark(RSS_SDL);
 
     app = (App *)SDL_calloc(1, sizeof(App));
     if (!app) return SDL_APP_FAILURE;
@@ -2624,21 +2688,21 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     if (app->borderless) SDL_SetWindowHitTest(app->win, window_hit_test, app);
     /* Either way it can be changed from the card at runtime. */
 
-    g_rss[RSS_WINDOW] = curie_process_rss();
+    rss_mark(RSS_WINDOW);
 
     /* Its own milestone: this is the first thing to touch plutosvg, and
      * folding that into the renderer's figure was exactly the sort of
      * misattribution the table exists to prevent. */
     set_window_icon(app->win);
     curie_set_scale(curie_dpi_query_scale(app->win));   /* needs the window */
-    g_rss[RSS_ICON] = curie_process_rss();
+    rss_mark(RSS_ICON);
 
     app->ctx = nk_sdl_init(app->win, app->ren, nk_sdl_allocator());
     if (!app->ctx) return SDL_APP_FAILURE;
-    g_rss[RSS_NUKLEAR] = curie_process_rss();
+    rss_mark(RSS_NUKLEAR);
 
     rebuild_font(app);
-    g_rss[RSS_FONT] = curie_process_rss();
+    rss_mark(RSS_FONT);
 
     app->cur_default = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
     app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
@@ -2658,7 +2722,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     nk_textedit_init_fixed(&app->edit, app->edit_buf, sizeof(app->edit_buf));
 
     load_theme(app);
-    g_rss[RSS_STYLE] = curie_process_rss();
+    rss_mark(RSS_STYLE);
 
     app->dirty = 1;
 

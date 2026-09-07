@@ -49,7 +49,11 @@ These came out of earlier reviews. Treat them as binding unless you make the
 case for changing one.
 
 - **Submodules are read, never edited and never quoted.** Everything in
-  `third_party/` is used as it ships. No colour, path, metric or other value
+  `third_party/` is used as it ships. Where that is genuinely impossible the
+  file is copied into `src/`, marked as vendored, and every deviation from
+  upstream commented — `src/nk_sdl3_renderer.h` is the only one, and it carries
+  the maintenance cost of no longer tracking upstream. Copying is a last
+  resort, not a shortcut. No colour, path, metric or other value
   is copied out of a submodule into this tree — the app opens the file at
   runtime and reads it. If you find yourself typing a hex code you saw in a
   submodule, that is the signal to load the file instead.
