@@ -21,14 +21,18 @@ Refresh the pinned revisions with `git submodule status`.
 
 `src/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
 `third_party/nuklear/demo/sdl3_renderer/` and covered by Nuklear's licence
-above — MIT or public domain, at your option. It differs from upstream only in
-baking and uploading the font atlas 8-bit indexed rather than RGBA32; grep
-`CURIE` for the changed hunks.
+above — MIT or public domain, at your option. It differs from upstream in a
+handful of hunks, each marked `CURIE`: the font atlas is baked and uploaded
+8-bit indexed rather than RGBA32; untextured geometry samples a 1x1 white
+texture of its own instead of a texel in the atlas; on the software renderer
+every vertex is put on the pixel grid; on hardware, glyph quads are; and
+`nk_sdl_render_ex` feathers fills and strokes independently. The reasoning for
+each is in [DEVELOPMENT.md](DEVELOPMENT.md).
 
-It could not stay an include from the submodule because the format is chosen
-inside `nk_sdl_font_stash_end`, and this project does not edit submodules. The
-cost is that the file no longer tracks upstream: when Nuklear's backend
-changes it has to be re-vendored and the four hunks re-applied.
+It could not stay an include from the submodule because the first of those is
+chosen inside `nk_sdl_font_stash_end`, and this project does not edit
+submodules. The cost is that the file no longer tracks upstream: when Nuklear's
+backend changes it has to be re-vendored and the hunks re-applied.
 
 Only two of LCUI's libraries are built — `libcss` and `yutil` — not the
 toolkit. SDL is built static, with the audio, joystick, haptic, HID, sensor,
@@ -64,14 +68,20 @@ Seven other faces were built and looked at before this one: Jupiteroid, Liber
 Struct, Vegur, Tenderness, Seshat and Medio (all CC0), plus Karla, Public Sans and
 IBM Plex Sans (all OFL). None is in the tree — everything shipped here is CC0.
 
+## The mark
+
+`branding/` is original work, not vendored: the icon in both inks, each as SVG,
+PNG and `.ico`. It is covered by this project's own MIT licence. Its colours are USWDS system tokens, which are public domain
+(a U.S. Government work); the shapes are not taken from anywhere.
+
 ## What is redistributed
 
 A native build links SDL, libcss, yutil, plutosvg and plutovg statically, and
 compiles Nuklear into the binary. That binary therefore carries the zlib and
 MIT terms above, all of which are satisfied by shipping this file with it.
 
-The application does **not** embed the stylesheet, the icons or the font: it
-opens them at runtime from the submodule checkout, resolved relative to the
+The application does **not** embed the stylesheet, the icons, the mark or the
+font: it opens them at runtime from the submodule checkout, resolved relative to the
 `.curie-root` marker. A distributable build has to ship those files alongside
 the binary. The WebAssembly build is the exception — Emscripten packages the
 handful of files actually referenced into `curie.data`, which is why that

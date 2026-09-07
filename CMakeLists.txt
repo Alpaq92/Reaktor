@@ -23,9 +23,9 @@ endif()
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
 # ---------------------------------------------------------------- SDL3 -----
-# Only video and events are used. Two stay on purpose: SDL_DIALOG, because
-# SDL_ShowOpenFileDialog is the portable file picker, and the dummy video
-# driver, which is what lets the binary start without a display.
+# Only video and events are used. Two stay on purpose: SDL_DIALOG, which File >
+# Open on the Popups page calls, and the dummy video driver, which is what lets
+# the binary start without a display.
 set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
 set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
@@ -141,17 +141,23 @@ add_library(curie_core STATIC
 target_include_directories(curie_core PUBLIC src)
 target_link_libraries(curie_core PUBLIC plutosvg)
 
-# --------------------------------------------------- icon generator ---------
-# Renders the Ionicons glyph at build time, so the executable's icon is
-# generated from the submodule rather than committed. The colour is the app's
-# own (CURIE_BRAND in src/curie.h): the desktop draws this one, outside the
-# window and before any stylesheet exists.
-set(ICON_GLYPH browsers-outline)
+# ------------------------------------------------------------ icon ----------
+# Explorer reads the icon from a linked Win32 resource, so it has to exist
+# before the linker runs. branding/ holds it: the mark is authored art, not
+# something generated at build time.
+set(APP_ICON branding/curie-icon.ico)
 set(APP_RESOURCES "")
 
+# Phase 1 of docs/ACCESSIBILITY.md: the shadow-tree model and its diff, with no
+# platform behind it and nothing instrumented yet. Built by default rather than
+# on demand so it cannot rot silently - nothing else compiles src/a11y.c until
+# phase 2 - and run by hand:
+#     build/a11ytest
 if(NOT EMSCRIPTEN)
-    add_executable(mkicon tools/mkicon.c)
-    target_link_libraries(mkicon PRIVATE curie_core)
+    add_executable(a11ytest tools/a11ytest.c src/a11y.c)
+    target_include_directories(a11ytest PRIVATE src)
+    set_target_properties(a11ytest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 # Attributes another process's private bytes to named buckets. A diagnostic
@@ -163,20 +169,23 @@ if(WIN32 AND NOT EMSCRIPTEN)
 endif()
 
 if(WIN32)
+    # The .rc is written here rather than committed because it is two lines of
+    # boilerplate; the icon it names is copied next to it so rc.exe resolves
+    # the reference without a search path. Resource id 1: the lowest-numbered
+    # ICON is the one Explorer displays.
     set(GEN "${CMAKE_BINARY_DIR}/gen")
     file(MAKE_DIRECTORY "${GEN}")
-    add_custom_command(
-        OUTPUT  "${GEN}/curie.ico" "${GEN}/curie.rc"
-        COMMAND mkicon "${GEN}/curie.ico" "${GEN}/curie.rc" ${ICON_GLYPH}
-        DEPENDS mkicon
-        COMMENT "Generating application icon from Ionicons"
-        VERBATIM)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/${APP_ICON}"
+                   "${GEN}/curie.ico" COPYONLY)
+    file(WRITE "${GEN}/curie.rc" "1 ICON \"curie.ico\"
+")
     set(APP_RESOURCES "${GEN}/curie.rc")
 endif()
 
 # ---------------------------------------------------------------- app -------
 # WIN32 selects the GUI subsystem; SDL's main shim supplies the entry point.
 add_executable(curie WIN32
+    src/a11y.c
     src/main.c
     src/nk_impl.c
     src/theme.c
@@ -194,6 +203,12 @@ target_link_libraries(curie PRIVATE
     curie_core
     SDL3::SDL3-static
     lcui)
+# dxguid supplies IID_IDXGIDevice, which is how the app asks the renderer SDL
+# gave it whether Direct3D is talking to a real GPU - see renderer_is_software
+# in src/main.c. Nothing else in the tree touches Direct3D.
+if(WIN32 AND NOT EMSCRIPTEN)
+    target_link_libraries(curie PRIVATE dxguid)
+endif()
 
 # ------------------------------------------------------------- wasm --------
 # The same sources, linked to a page instead of an executable.
@@ -217,16 +232,24 @@ if(EMSCRIPTEN)
     target_compile_options(plutosvg PRIVATE -Oz)
     target_compile_options(curie_core PRIVATE -Oz)
 
-    # Every asset the app opens is named by a string literal in src/*.c, so
+    # Every asset the app opens is named by a string literal in src/, so
     # the package is built from those rather than from a directory: assets/fonts
     # holds several faces against the one that is loaded, and a hand-written
-    # list would go stale the first time a path changed.
+    # list would go stale the first time a path changed. The branding SVG comes
+    # along the same way - it is the window icon.
     set(WASM_ASSETS "")
-    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
     foreach(_s IN LISTS _curie_srcs)
-        file(STRINGS "${_s}" _lines REGEX "(third_party|assets)/[^\"]*\.(css|ttf|otf)")
+        # \. and not \. : CMake unescapes a quoted argument before the regex
+        # engine sees it, so \. arrives as a bare dot, which matches anything.
+        # That was harmless while the extensions were css|ttf|otf, and stopped
+        # being harmless the moment svg was added - "ionicons/src/svg" then
+        # matched as an asset, and emcc preloads a directory whole. The web
+        # bundle went from 47 KB of data to 903 KB, all 1357 icons of it.
+        file(STRINGS "${_s}" _lines REGEX "(third_party|assets|branding)/[^\"]*\\.(css|ttf|otf|svg|png)")
         foreach(_l IN LISTS _lines)
-            string(REGEX MATCHALL "(third_party|assets)/[A-Za-z0-9_/.-]*\.(css|ttf|otf)"
+            string(REGEX MATCHALL "(third_party|assets|branding)/[A-Za-z0-9_/.-]*\\.(css|ttf|otf|svg|png)"
                    _paths "${_l}")
             list(APPEND WASM_ASSETS ${_paths})
         endforeach()
@@ -234,10 +257,11 @@ if(EMSCRIPTEN)
     list(REMOVE_DUPLICATES WASM_ASSETS)
 
     # The Ionicons submodule is 1357 files and 3.6 MB; about twenty of them
-    # are ever drawn. Their names are string literals in src/*.c, so they are
+    # are ever drawn. Their names are string literals in src/, so they are
     # found rather than listed - a hand-written list would be wrong the first
     # time a page gained an icon.
-    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
     set(WASM_ICONS "")
     foreach(_s IN LISTS _curie_srcs)
         file(STRINGS "${_s}" _lines REGEX "[a-z0-9-]+-outline")
@@ -297,16 +321,9 @@ if(MSVC)
     target_compile_options(plutovg PRIVATE /wd4244 /wd4267 /wd4018)
     target_compile_definitions(curie PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_definitions(curie_core PRIVATE _CRT_SECURE_NO_WARNINGS)
-    if(NOT EMSCRIPTEN)
-        target_compile_definitions(mkicon PRIVATE _CRT_SECURE_NO_WARNINGS)
-    endif()
 endif()
 
 # The app finds assets by walking up from the executable to the directory
 # containing third_party/, so keep the binary inside the tree.
 set_target_properties(curie PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-if(NOT EMSCRIPTEN)
-    set_target_properties(mkicon PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-endif()

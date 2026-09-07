@@ -88,11 +88,11 @@ A `file://` page cannot fetch the `.wasm`, so serve the output directory:
 | `src/style.c` | libcss: parse the sheets, resolve a selector, hand back computed values |
 | `src/cssflat.c` | Narrows CSS to what libcss implements, and resolves `var()` first |
 | `src/appicon.c` | An Ionicons SVG, recoloured and rasterised at runtime |
-| `src/nk_sdl3_renderer.h` | Nuklear's SDL3 backend, vendored so the font atlas can be 8-bit indexed |
+| `src/nk_sdl3_renderer.h` | Nuklear's SDL3 backend, vendored: 8-bit atlas, glyphs on the pixel grid, fills and strokes feathered separately — see [DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 | `src/metrics.c` | The display scale, in one place |
 | `src/theme.c` | Which colour scheme the desktop is using |
 | `src/util.c` | Paths, whole-file reads, the resident set |
-| `tools/mkicon.c` | Bakes the window icon during the build |
+| `branding/` | The project's mark: two inks, each as SVG, PNG and `.ico` |
 | `assets/fonts/` | Aileron, the CC0 typeface the UI is set in — vendored rather than submoduled, the one exception to the rule |
 
 ## Documentation
@@ -102,6 +102,8 @@ A `file://` page cannot fetch the `.wasm`, so serve the output directory:
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — size, memory, CPU, and what it
   needs to run
 - [docs/NOTICE.md](docs/NOTICE.md) — every dependency and its licence
+- [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) — what a screen reader gets
+  today, and the plan for the rest
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Licence

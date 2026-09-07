@@ -23,6 +23,8 @@ char *curie_read_file(const char *path, size_t *len);
  * included; `priv` is private commit, what Task Manager calls "commit size".
  * They answer different questions. */
 void curie_process_memory(size_t *rss, size_t *priv);
+/* CPU time used so far by this process, every thread, in milliseconds. */
+double curie_process_cpu_ms(void);
 void  curie_free(void *p);
 
 /* The app's own colour, for the window icon and the .ico in the executable.
@@ -33,5 +35,9 @@ void  curie_free(void *p);
  * upstream to read it from. The mark *inside* the window is a different thing
  * and does follow tiny.css - see --links in main.c. */
 #define CURIE_BRAND "#6b4ee6"
+
+/* The application mark. One file, so the title bar, the window icon and the
+ * linked .ico cannot drift apart. */
+#define CURIE_MARK "branding/curie-icon.svg"
 
 #endif /* CURIE_H */

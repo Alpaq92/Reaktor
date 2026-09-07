@@ -48,6 +48,8 @@ NK_API void                 nk_sdl_font_stash_end(struct nk_context* ctx);
 #endif
 NK_API int                  nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt);
 NK_API void                 nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing);
+/* CURIE: fills and strokes feathered independently - see nk_sdl_render_ex. */
+NK_API void                 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA);
 NK_API void                 nk_sdl_update_TextInput(struct nk_context* ctx);
 NK_API void                 nk_sdl_shutdown(struct nk_context* ctx);
 NK_API nk_handle            nk_sdl_get_userdata(struct nk_context* ctx);
@@ -76,6 +78,14 @@ struct nk_sdl_device {
     struct nk_buffer cmds;
     struct nk_draw_null_texture tex_null;
     SDL_Texture *font_tex;
+    /* CURIE: the white texel Nuklear multiplies untextured geometry by.
+     *
+     * nk_font_atlas_end points tex_null at the atlas, so every draw command -
+     * shapes as much as text - arrives carrying font_tex and the two cannot be
+     * told apart by handle. Giving it a 1x1 texture of its own makes the
+     * handle mean what it says, which is what the glyph snapping in
+     * nk_sdl_render tests on. */
+    SDL_Texture *white_tex;
 };
 
 struct nk_sdl_vertex {
@@ -193,20 +203,6 @@ nk_sdl_device_upload_atlas(struct nk_context* ctx, const void *image, int width,
 
     /* CURIE: 8-bit indexed, not ARGB8888.
      *
-     * A baked glyph is coverage and nothing else - upstream's RGBA32 path runs
-     * nk_font_bake_convert, which writes ((alpha << 24) | 0x00FFFFFF) for every
-     * pixel, so three of every four bytes are the constant 0xFF. Colour comes
-     * from the vertex, not from the atlas.
-     *
-     * SDL3 has no A8 texture format, so the alpha8 bake is uploaded as INDEX8
-     * with a palette whose entry i is white at alpha i. That reproduces the
-     * RGBA32 texture exactly, at a quarter of the size. Every SDL3 render
-     * backend registers INDEX8 - D3D11, OpenGL, Metal, Vulkan, GLES2 and
-     * software - so no platform loses by it.
-     *
-     * SDL keeps its own reference to the palette, so it is freed here. */
-    /* CURIE: 8-bit indexed, not ARGB8888.
-     *
      * A baked glyph is coverage: nk_font_bake_convert writes
      * ((alpha << 24) | 0x00FFFFFF) per pixel, so three of four bytes are a
      * constant and the colour comes from the vertex. SDL3 has no A8 format,
@@ -299,8 +295,23 @@ nk_sdl_update_TextInput(struct nk_context* ctx)
 NK_API void
 nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing AA)
 {
+    nk_sdl_render_ex(ctx, AA, AA);
+}
+
+/* CURIE: Nuklear feathers fills (shape_AA) and strokes (line_AA) separately,
+ * and on a rasteriser with no partial coverage they fail differently. A fill's
+ * feather is a ring half a pixel outside a fill shrunk by half a pixel; landed
+ * whole it is a half-tone column between a panel's border and its fill, and a
+ * rule between menu items. A stroke's feather is what grades a border's curve,
+ * and it is also what covers the fill's staircase underneath. So the software
+ * renderer wants strokes feathered and fills not, which one flag cannot say. */
+NK_API void
+nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
+                 enum nk_anti_aliasing line_AA)
+{
     /* setup global state */
     struct nk_sdl* sdl;
+    int is_sw;
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
@@ -342,13 +353,42 @@ nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing AA)
         config.curve_segment_count = 22;
         config.arc_segment_count = 22;
         config.global_alpha = 1.0f;
-        config.shape_AA = AA;
-        config.line_AA = AA;
+        config.shape_AA = shape_AA;
+        config.line_AA = line_AA;
 
         /* convert shapes into vertices */
         nk_buffer_init(&vbuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
         nk_buffer_init(&ebuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
         nk_convert(&sdl->ctx, &sdl->ogl.cmds, &vbuf, &ebuf, &config);
+
+        /* CURIE: on the software renderer, every vertex goes on the grid.
+         *
+         * SDL's software backend turns each vertex into a whole pixel by
+         * truncation - SDL_render_sw.c does (int)(x * scale), and the
+         * rasteriser below it works on integer SDL_Points. There is no partial
+         * coverage anywhere in that path, which costs twice over: a rect whose
+         * edge lands on .5 covers one row more or less than a GPU would (the
+         * tab underline arriving as two lines with a gap, the top row of the
+         * window a shade dark), and Nuklear's antialiasing - geometry a
+         * fraction of a pixel wide, meant to be blended - lands whole, as a
+         * hairline around every rounded rect.
+         *
+         * Storing round(x) + 0.5 answers both. SDL's truncation then lands on
+         * round(x), which is what a hardware backend does, and the feather
+         * collapses onto the pixel it was fading towards instead of onto its
+         * neighbour. Both are the reason this is not done on hardware, where
+         * the same rounding would flatten a feather that would otherwise have
+         * blended - see the glyph snapping below. */
+        is_sw = SDL_strcmp(SDL_GetRendererName(sdl->renderer), "software") == 0;
+        if (is_sw) {
+            nk_byte *v = (nk_byte *)nk_buffer_memory(&vbuf);
+            nk_size i, n = vbuf.needed / (nk_size)vs;
+            for (i = 0; i < n; i++) {
+                float *pos = (float *)(v + i * (nk_size)vs + vp);
+                pos[0] = SDL_floorf(pos[0] + 0.5f) + 0.5f;
+                pos[1] = SDL_floorf(pos[1] + 0.5f) + 0.5f;
+            }
+        }
 
         /* iterate over and execute each draw command */
         offset = (const nk_draw_index*)nk_buffer_memory_const(&ebuf);
@@ -364,6 +404,36 @@ nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing AA)
         nk_draw_foreach(cmd, &sdl->ctx, &sdl->ogl.cmds)
         {
             if (!cmd->elem_count) continue;
+
+            /* CURIE: glyph quads land on whole pixels here too.
+             *
+             * A glyph is a quad sampling the atlas. Nuklear advances the pen
+             * by fractional widths, so a quad can start mid-pixel; hardware
+             * then samples the atlas between texels and softens the glyph,
+             * where the pass above has already put the software renderer on
+             * the grid. Left alone that is most of what separates the two
+             * backends - about twenty thousand pixels a page, all of it
+             * against text.
+             *
+             * Rounding the quad here puts both on the same texel grid. It is
+             * also what type rendering normally does: a bitmap baked for this
+             * size, drawn 1:1 on the pixel grid, is what the baker intended.
+             *
+             * Shapes have to be left out of it, which is what white_tex is
+             * for: nk_font_atlas_end points tex_null at the atlas, so without
+             * a handle of its own this test matches every draw command and
+             * rounds the feather flat - a hard stripe down the inside of
+             * every panel. */
+            if (!is_sw && cmd->texture.ptr == (void *)sdl->ogl.font_tex) {
+                nk_byte *v = (nk_byte *)nk_buffer_memory(&vbuf);
+                nk_uint k;
+                for (k = 0; k < cmd->elem_count; k++) {
+                    float *pos = (float *)(v + (nk_size)offset[k] * (nk_size)vs
+                                           + vp);
+                    pos[0] = SDL_floorf(pos[0] + 0.5f);
+                    pos[1] = SDL_floorf(pos[1] + 0.5f);
+                }
+            }
 
             {
                 SDL_Rect r;
@@ -520,6 +590,20 @@ nk_sdl_font_stash_end(struct nk_context* ctx)
     NK_ASSERT(image);
     nk_sdl_device_upload_atlas(&sdl->ctx, image, w, h);
     nk_font_atlas_end(&sdl->atlas, nk_handle_ptr(sdl->ogl.font_tex), &sdl->ogl.tex_null);
+    /* CURIE: see white_tex in struct nk_sdl_device. If it cannot be made,
+     * tex_null keeps pointing at the atlas and everything still draws - only
+     * the glyph test in nk_sdl_render loses its precision. */
+    if (!sdl->ogl.white_tex) {
+        Uint32 px = 0xFFFFFFFFu;
+        sdl->ogl.white_tex = SDL_CreateTexture(sdl->renderer,
+            SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, 1, 1);
+        if (sdl->ogl.white_tex) {
+            SDL_UpdateTexture(sdl->ogl.white_tex, NULL, &px, 4);
+            SDL_SetTextureBlendMode(sdl->ogl.white_tex, SDL_BLENDMODE_BLEND);
+            sdl->ogl.tex_null.texture = nk_handle_ptr(sdl->ogl.white_tex);
+            sdl->ogl.tex_null.uv = nk_vec2(0.5f, 0.5f);
+        }
+    }
     if (sdl->atlas.default_font) {
         nk_style_set_font(&sdl->ctx, &sdl->atlas.default_font->handle);
     }
@@ -682,6 +766,10 @@ void nk_sdl_shutdown(struct nk_context* ctx)
     if (sdl->ogl.font_tex != NULL) {
         SDL_DestroyTexture(sdl->ogl.font_tex);
         sdl->ogl.font_tex = NULL;
+    }
+    if (sdl->ogl.white_tex != NULL) {
+        SDL_DestroyTexture(sdl->ogl.white_tex);
+        sdl->ogl.white_tex = NULL;
     }
 
     nk_free(ctx);

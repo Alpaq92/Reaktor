@@ -1,8 +1,8 @@
-/* appicon.h - Ionicons SVG + Open-Color palette -> raster, at runtime.
+/* appicon.h - SVG -> raster, at runtime.
  *
  * Portable: no windows.h, no HICON. The window icon is applied through
- * SDL_SetWindowIcon, and tools/mkicon.c turns the same surface into a .ico
- * for the Windows executable resource. */
+ * SDL_SetWindowIcon; the Windows executable resource is a committed .ico that
+ * the build links, not something rendered here. */
 #ifndef CURIE_APPICON_H
 #define CURIE_APPICON_H
 
@@ -34,11 +34,5 @@ plutovg_surface_t *curie_svg_surface(const char *name, int size,
  * Both SDL surfaces and Windows icon bitmaps sample straight alpha;
  * premultiplied pixels would render too dark. */
 void curie_unpremultiply(unsigned char *px, int w, int h, int stride);
-
-/* Same pipeline, written to a PNG instead. Used by `curie --dump-icon`
- * to eyeball the recolour without launching the UI. Returns 0 on failure. */
-int curie_svg_icon_dump(const char *name, int size,
-                        const char *outline_colour, const char *inside_colour,
-                        const char *png_path);
 
 #endif /* CURIE_APPICON_H */

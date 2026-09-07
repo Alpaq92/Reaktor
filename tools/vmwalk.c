@@ -10,7 +10,7 @@
  *
  *     vmwalk <pid> [--csv]
  *
- * Windows-only host tool, excluded from the Emscripten build like mkicon.
+ * Windows-only host tool, and not part of the app.
  *
  *   MEM_PRIVATE+COMMIT  charged to private bytes in full, split by what the
  *                       pages look like.

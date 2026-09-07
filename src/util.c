@@ -19,6 +19,7 @@
 #else
 #  include <unistd.h>
 #  include <sys/stat.h>
+#  include <sys/resource.h>
 #endif
 
 #include "curie.h"
@@ -140,6 +141,29 @@ static int win_mem(PROCESS_MEMORY_COUNTERS_EX *out)
                                 sizeof(*out)) ? 1 : 0;
 }
 #endif
+
+/* CPU time this process has used, all threads, in milliseconds. It is the
+ * only honest measure of what a frame costs on a machine that rasterises in
+ * software: the work lands on threads the app never created, so wall-clock
+ * on the main thread misses nearly all of it. */
+double curie_process_cpu_ms(void)
+{
+#if defined(_WIN32)
+    FILETIME c, e, k, u;
+    ULARGE_INTEGER ku, uu;
+    if (!GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u)) return 0.0;
+    ku.LowPart = k.dwLowDateTime; ku.HighPart = k.dwHighDateTime;
+    uu.LowPart = u.dwLowDateTime; uu.HighPart = u.dwHighDateTime;
+    return (double)(ku.QuadPart + uu.QuadPart) / 10000.0;   /* 100 ns units */
+#elif defined(__EMSCRIPTEN__)
+    return 0.0;      /* no process to ask about; the browser owns the threads */
+#else
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0) return 0.0;
+    return (double)ru.ru_utime.tv_sec * 1000.0 + (double)ru.ru_utime.tv_usec / 1000.0
+         + (double)ru.ru_stime.tv_sec * 1000.0 + (double)ru.ru_stime.tv_usec / 1000.0;
+#endif
+}
 
 void curie_process_memory(size_t *rss, size_t *priv)
 {

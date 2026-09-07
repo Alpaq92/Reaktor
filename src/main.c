@@ -17,7 +17,7 @@
 #include <math.h>
 
 #include "nk_common.h"
-#include "../third_party/nuklear/demo/sdl3_renderer/nuklear_sdl3_renderer.h"
+#include "nk_sdl3_renderer.h"   /* the vendored backend nk_impl.c compiles */
 #include "appicon.h"
 #include "theme.h"
 #include "metrics.h"
@@ -154,7 +154,7 @@ struct App {
     SDL_Cursor *cur_default, *cur_pointer, *cur_text;
     int         want_cursor, cur_shown;   /* 0 default, 1 pointer, 2 text */
 
-    char render_mode[8];
+    char render_mode[32];   /* wide enough for "auto (software: no GPU)" */
     int  vsync_on, aa, redraw_always;
 
     /* How SDL paces SDL_AppIterate: "waitevent", a frame rate, or 0 for
@@ -184,6 +184,22 @@ struct App {
     struct nk_rect field_rect;
     int            field_rect_valid;
     int            drag_in_field;
+
+    /* Where the *focused* field is, in window coordinates, for the IME to put
+     * its candidate list beside rather than at the window's origin. Separate
+     * from field_rect above, which follows the pointer. */
+    SDL_Rect ime_rect;
+    int      ime_cursor;       /* caret offset from ime_rect.x */
+    int      ime_valid;
+
+    /* The platform file picker. SDL runs it on its own thread on most
+     * platforms and calls back from there, so the callback does the least it
+     * can - fill in the answer, publish it, wake the loop - and the main
+     * thread does everything else when it collects. */
+    SDL_AtomicInt file_ready;      /* 0 nothing waiting, 1 answer in place */
+    char          file_answer[SC_PATH_CAP];
+    int           file_pending;    /* a picker is up; main thread only */
+    Uint32        wake_event;      /* pushed from the callback's thread */
 
     int   theme_mode;          /* THEME_SYSTEM | THEME_LIGHT | THEME_DARK */
     struct nk_color page, card_bg, text;
@@ -216,6 +232,24 @@ struct App {
 
     int   dirty;
     int   show_contact;
+
+    /* Pointer-driven redraws are coalesced: see hover_redraw, and
+     * calibrate_hover_gap for how the gap is chosen. */
+    Uint64 last_draw_ms;
+    int    hover_pending;
+    int    renderer_is_sw;      /* SDL's software rasteriser - see the
+                                * antialiasing note in the frame body */
+    int    sw_noaa;             /* CURIE_SW_NOAA: no feathering at all there -
+                                * see the frame body */
+    int    drag_moved;          /* pointer moved since the last drawn frame */
+    int    cal_frames, cal_done;
+    double cal_cpu0;
+    float  cpu_ms_per_frame;    /* 0 until calibrated */
+
+    /* The retained description of the frame - see a11y.h. Rebuilt every frame
+     * from the widgets as they are drawn, and diffed against the previous one.
+     * Large (arenas, not pointers), so it lives here rather than on a stack. */
+    curie_a11y a11y;
 
     /* Which page is on screen, and what the showcase pages remember between
      * frames. Tab 0 is the login card this app began as. */
@@ -529,6 +563,13 @@ rebuild_font(App *app)
             if (g_font_px[i] == FONT_SIZE) font = app->faces[i];
             if (!font) font = app->faces[i];
         }
+        /* Baked at the device size for sharpness, reported at the logical one
+         * so layout never sees the scale. nk_font_text_width and the glyph
+         * quads both derive their scale from the height handed to them, not
+         * from font->scale, so this one field is the whole of it. */
+        for (i = 0; i < FONT_STEPS; i++)
+            if (app->faces[i])
+                app->faces[i]->handle.height = (float)g_font_px[i];
         if (!font)
             SDL_snprintf(app->font_status, sizeof(app->font_status),
                          "FALLBACK (ProggyClean) - could not load %s", path);
@@ -541,6 +582,7 @@ rebuild_font(App *app)
      * loaded", so the outcome is always recorded and shown in diagnostics. */
     if (!font) {
         font = nk_font_atlas_add_default(atlas, (float)curie_px(FONT_SIZE), NULL);
+        if (font) font->handle.height = (float)FONT_SIZE;
     } else {
         SDL_snprintf(app->font_status, sizeof(app->font_status),
                      "Aileron, %d sizes %d-%dpx", FONT_STEPS,
@@ -569,9 +611,23 @@ rebuild_font(App *app)
     if (font) nk_style_set_font(app->ctx, &font->handle);
 }
 
+/* The paint boundary. Everything above lays out in logical pixels; this is
+ * where they become device ones, so a HiDPI display draws the same geometry
+ * into more pixels rather than the same pixels into a corner of the window.
+ * The font atlas is baked at the device size and its faces then report their
+ * logical height, so glyph quads stay logical while sampling a sharp texture -
+ * see rebuild_font. */
+static void
+apply_render_scale(App *app)
+{
+    float s = curie_scale();
+    SDL_SetRenderScale(app->ren, s, s);
+}
+
 /* --- window icon ------------------------------------------------------- */
-/* SDL_SetWindowIcon is portable, so this replaces the Win32 HICON path. The
- * .ico resource still comes from tools/mkicon.c, via this same code. */
+/* SDL_SetWindowIcon is portable, so this replaces the Win32 HICON path. What
+ * Explorer shows is a separate thing: branding/curie-icon.ico, linked as a
+ * resource, because a file has an icon before it has a process. */
 static void
 set_window_icon(SDL_Window *win)
 {
@@ -579,7 +635,7 @@ set_window_icon(SDL_Window *win)
     SDL_Surface *ico;
     int w, h, stride;
 
-    svg = curie_svg_surface("browsers-outline", 64, CURIE_BRAND, NULL);
+    svg = curie_svg_surface_path(CURIE_MARK, 64, NULL, NULL, 0.0f);
     if (!svg) return;
 
     w      = plutovg_surface_get_width(svg);
@@ -613,6 +669,22 @@ hot_push_ex(App *app, struct nk_rect r, int cursor, int repaint, int top,
             int track)
 {
     int n = app->hot_n;
+
+    /* Clipped to the panel being built. nk_widget_bounds answers where a
+     * widget *would* go with no clip test, so a page scrolled past the top
+     * registered rects for widgets above the body - over the tab strip, where
+     * they won the hit test, showed the wrong cursor, and on the Popups page
+     * turned the strip into a pointer-following tooltip region. Found by the
+     * redraw audit; measured as frames drawn for widgets nobody could see. */
+    if (app->ctx && app->ctx->current && app->ctx->current->layout) {
+        struct nk_rect c = app->ctx->current->layout->clip;
+        float x0 = r.x > c.x ? r.x : c.x;
+        float y0 = r.y > c.y ? r.y : c.y;
+        float x1 = (r.x + r.w) < (c.x + c.w) ? (r.x + r.w) : (c.x + c.w);
+        float y1 = (r.y + r.h) < (c.y + c.h) ? (r.y + r.h) : (c.y + c.h);
+        if (x1 <= x0 || y1 <= y0) return;     /* entirely off screen */
+        r = nk_rect(x0, y0, x1 - x0, y1 - y0);
+    }
 
     if (n >= (int)(sizeof(app->hot) / sizeof(app->hot[0]))) return;
     app->hot[n].r       = r;
@@ -705,6 +777,7 @@ css_button(App *app, struct nk_context *ctx, const char *selector,
     /* tiny.css gives the button a --button-hover fill, so this one does
      * need a frame when the pointer arrives. */
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
+    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
     clicked = nk_button_label(ctx, label);
     pop_style(ctx, f);
@@ -786,6 +859,7 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     int clicked;
 
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
+    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
 
     f = push_button_style(app, ctx, selector);
 
@@ -828,6 +902,7 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     int clicked;
 
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
+    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
     clicked = nk_button_image_label(ctx, im, label, NK_TEXT_CENTERED);
     pop_style(ctx, f);
@@ -980,6 +1055,45 @@ note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds)
     }
 }
 
+/* Where the IME should put its candidate list: beside the caret of the field
+ * that has focus, in window coordinates.
+ *
+ * The SDL3 backend cannot do this itself - its own FIXME says so - because
+ * Nuklear exposes no way to ask which edit widget is active or where it is.
+ * The app can, though: it is the one laying the widget out, so it knows the
+ * rect, and ctx->text_edit is the state nk_edit_string was just working on.
+ * Without it every IME candidate window opens at the window's origin, which
+ * on a full-screen app is nowhere near what is being typed. */
+static void
+note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
+               nk_flags state, const struct nk_text_edit *edit)
+{
+    const struct nk_user_font *font = ctx->style.font;
+    float caret = 0.0f;
+
+    if (!(state & NK_EDIT_ACTIVE)) return;
+
+    /* Bytes up to the caret, which is a rune index. A NULL answer means the
+     * caret is past the end, and the whole string is the right measure. */
+    if (font && font->width) {
+        const char *txt = nk_str_get_const(&edit->string);
+        nk_rune unicode;
+        int glyph_len;
+        char *at = nk_str_at_rune((struct nk_str *)&edit->string,
+                                  edit->cursor, &unicode, &glyph_len);
+        int bytes = at ? (int)(at - txt) : nk_str_len_char(&edit->string);
+        if (bytes > 0)
+            caret = font->width(font->userdata, font->height, txt, bytes);
+    }
+
+    app->ime_rect.x = (int)bounds.x;
+    app->ime_rect.y = (int)bounds.y;
+    app->ime_rect.w = (int)bounds.w;
+    app->ime_rect.h = (int)bounds.h;
+    app->ime_cursor = (int)caret;
+    app->ime_valid  = 1;
+}
+
 static void
 css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
           const char *hint)
@@ -996,7 +1110,14 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
     hot_push(app, bounds, 2, 0);
 
     f = push_edit_style(ctx, &s);
-    nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit, nk_filter_default);
+    {
+        nk_flags st = nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit,
+                                     nk_filter_default);
+        note_ime_caret(app, ctx, bounds, st, &app->edit);
+        curie_note(app, CURIE_A11Y_TEXTBOX, hint,
+                   nk_str_get_const(&app->edit.string),
+                   st & NK_EDIT_ACTIVE ? CURIE_A11Y_FOCUSED : 0u, bounds);
+    }
     pop_style(ctx, f);
 
     /* Right-click menu. Nuklear places and dismisses it; the items act on the
@@ -1071,6 +1192,79 @@ window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
 
 /* The diagnostics page forces no frames of its own - it did briefly, and the
  * page ended up measuring the frames it made itself draw. */
+/* A frame asked for by pointer motion - a hover crossing, or a tooltip that
+ * follows the pointer - is drawn at most every HOVER_GAP_MS, and the last one
+ * is never dropped.
+ *
+ * Measured here: on a machine without a GPU every presented frame costs about
+ * 78 ms of CPU in the display stack's own threads, so a pointer swept along a
+ * row of buttons drew 41 frames in two seconds and read as 20-30% of the
+ * machine. Capping that at 20 Hz costs nothing a person can see - a hover
+ * wash arriving 50 ms late is below reaction time - and halves the worst case.
+ *
+ * The cap cannot simply drop the frame: at rest the loop is "waitevent", and
+ * the event that would have drawn the final hover state may never come. So a
+ * deferred frame pins the callback rate for one tick, draws, and hands the
+ * rate back through restore_rate, the same path a drag uses. A drag itself is
+ * never throttled - it has its own rate, and every move is a frame there. */
+#define HOVER_GAP_MS 50
+
+/* The gap in force. Starts at HOVER_GAP_MS and is then set from what a frame
+ * measurably costs this process - see calibrate_hover_gap. CURIE_HOVER_GAP_MS
+ * pins it instead, which is how the trade-off was measured in the first
+ * place. */
+static Uint64 g_hover_gap_ms = HOVER_GAP_MS;
+static int    g_hover_gap_pinned;
+
+/* What a drawn frame costs, in CPU across every thread of the process, and
+ * the hover gap that follows from it. Sampled over the first drawn frames
+ * after startup has settled, because startup frames carry the font bake and
+ * the stylesheet parse and would say the wrong thing.
+ *
+ * Why this is measured and not configured: on a GPU a frame is a few hundred
+ * microseconds and a 50 ms hover gap is already invisible; on a machine that
+ * rasterises in software - the reference VM - a frame is ~78 ms of CPU in
+ * threads this app never created, and a pointer waved across the page at the
+ * 50 ms gap reads as a fifth of four cores. The same binary has to do the
+ * right thing on both, and the only way to know which it is on is to ask. */
+#define CAL_SKIP    3      /* drawn frames ignored after startup */
+#define CAL_FRAMES  8      /* then averaged over this many */
+
+static void
+calibrate_hover_gap(App *app)
+{
+    double now;
+
+    if (g_hover_gap_pinned || app->cal_done) return;
+    if (app->cal_frames < CAL_SKIP) { app->cal_frames++; return; }
+    now = curie_process_cpu_ms();
+    if (app->cal_frames == CAL_SKIP) app->cal_cpu0 = now;
+    app->cal_frames++;
+    if (app->cal_frames < CAL_SKIP + CAL_FRAMES + 1) return;
+
+    app->cpu_ms_per_frame = (float)((now - app->cal_cpu0) / (double)CAL_FRAMES);
+    app->cal_done = 1;
+    /* Thresholds from the measurement table in docs/PERFORMANCE.md: at 78 ms
+     * a frame the 150 ms gap took sustained waving from 27% to 9% of four
+     * cores and nobody could see the difference; at 15 ms a frame 100 ms
+     * halves the cost; under that a frame is cheap and 50 ms is only there
+     * to stop a hover storm. */
+    g_hover_gap_ms = app->cpu_ms_per_frame > 40.0f ? 150
+                   : app->cpu_ms_per_frame > 15.0f ? 100
+                   : HOVER_GAP_MS;
+}
+
+static void
+hover_redraw(App *app)
+{
+    if (app->dragging || SDL_GetTicks() - app->last_draw_ms >= g_hover_gap_ms) {
+        app->dirty = 1;
+    } else if (!app->hover_pending) {
+        app->hover_pending = 1;
+        SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "20");
+    }
+}
+
 static void
 set_tab(App *app, int tab)
 {
@@ -1090,7 +1284,8 @@ static SDL_HitTestResult SDLCALL window_hit_test(SDL_Window *win,
  * rounding of half the height makes the highlight a circle, and image_padding
  * sets the glyph size; without it the icon fills the whole slot. */
 static int
-titlebar_button(App *app, struct nk_context *ctx, const char *glyph, int px)
+titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
+                const char *name, int px)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
     style_frame f = { 0, 0, 0, 0, 0 };
@@ -1103,6 +1298,10 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph, int px)
     int clicked;
 
     hot_push(app, b, 1, 1);
+    /* The glyph is the whole button, so the name is the only thing a reader
+     * would have to go on - which is why it is a parameter and not derived
+     * from the icon. */
+    curie_note(app, CURIE_A11Y_BUTTON, name, NULL, 0, b);
     if (app->ctl_n < (int)(sizeof(app->ctl) / sizeof(app->ctl[0])))
         app->ctl[app->ctl_n++] = b;
 
@@ -1151,9 +1350,15 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
 {
     unsigned char c[4];
     int maximised = (SDL_GetWindowFlags(app->win) & SDL_WINDOW_MAXIMIZED) != 0;
+    struct nk_rect bar;
 
     app->ctl_n = 0;
+    /* Before nk_group_begin: inside the group, nk_window_get_bounds answers
+     * the enclosing window's rect rather than the group's, and a node whose
+     * bounds are the whole window is one a magnifier cannot follow. */
+    bar = nk_widget_bounds(ctx);
     if (!nk_group_begin(ctx, "titlebar", NK_WINDOW_NO_SCROLLBAR)) return;
+    curie_note_push(app, CURIE_A11Y_GROUP, "Title bar", NULL, 0, bar);
 
     nk_layout_row_begin(ctx, NK_STATIC, (float)CTL_SIZE, 7);
 
@@ -1161,19 +1366,11 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
     nk_spacing(ctx, 1);
 
     /* The same mark the desktop shows for the window and the executable, so
-     * a frameless window still identifies itself. */
+     * a frameless window still identifies itself. No query string, so nothing
+     * in it is recoloured: the artwork carries its own colours, and its yellow
+     * ground keeps it legible on either theme. */
     nk_layout_row_push(ctx, (float)MARK_SIZE);
-    {
-        char src[176];
-
-        /* Outline only. Filled, it read as a solid block - the detail in a
-         * 512-unit glyph is gone at eighteen pixels. */
-        SDL_snprintf(src, sizeof(src),
-                     "third_party/ionicons/src/svg/browsers-outline.svg"
-                     "?stroke=%s&sw=%.2f", app->accent_hex,
-                     (double)GLYPH_STROKE);
-        image_centred(ctx, icon(app, src, MARK_SIZE), MARK_SIZE);
-    }
+    image_centred(ctx, icon(app, CURIE_MARK, MARK_SIZE), MARK_SIZE);
 
     nk_layout_row_push(ctx, (float)TITLE_GAP);
     nk_spacing(ctx, 1);
@@ -1189,6 +1386,7 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
             nk_style_push_color(ctx, &ctx->style.text.color, col_of(c));
         else
             nk_style_push_color(ctx, &ctx->style.text.color, app->text);
+        curie_note_here(app, ctx, CURIE_A11Y_LABEL, "Curie", 0);
         nk_label(ctx, "Curie", NK_TEXT_LEFT);
         nk_style_pop_color(ctx);
         nk_style_pop_font(ctx);
@@ -1197,22 +1395,24 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
     /* Glyph names only - titlebar_button builds the path and appends the
      * theme's stroke colour. */
     nk_layout_row_push(ctx, (float)CTL_SIZE);
-    if (titlebar_button(app, ctx, "remove-outline", GLYPH_MINIMISE))
+    if (titlebar_button(app, ctx, "remove-outline", "Minimise", GLYPH_MINIMISE))
         SDL_MinimizeWindow(app->win);
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx,
                         maximised ? "copy-outline" : "square-outline",
+                        maximised ? "Restore" : "Maximise",
                         GLYPH_MAXIMISE)) {
         if (maximised) SDL_RestoreWindow(app->win);
         else           SDL_MaximizeWindow(app->win);
     }
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
-    if (titlebar_button(app, ctx, "close-outline", GLYPH_CLOSE))
+    if (titlebar_button(app, ctx, "close-outline", "Close", GLYPH_CLOSE))
         app->want_quit = 1;
 
     nk_layout_row_end(ctx);
+    curie_note_pop(app);
     nk_group_end(ctx);
 }
 
@@ -1263,6 +1463,8 @@ text_link(App *app, struct nk_context *ctx, const char *label, int active)
         struct nk_rect b = nk_widget_bounds(ctx);
 
         hot_push(app, b, 1, 0);
+        curie_note(app, CURIE_A11Y_LINK, label, NULL,
+                   active ? CURIE_A11Y_SELECTED : 0u, b);
         /* Released inside, not pressed - the same reason the buttons use
          * NK_BUTTON_TRIGGER_ON_RELEASE. Checked against clicked_pos, so
          * letting go elsewhere does not count. */
@@ -1309,6 +1511,9 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding,
                        nk_vec2(CARD_PAD_X, CARD_PAD_Y));
     if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
+        /* The rect pushed above, which is where the card actually is. */
+        curie_note_push(app, CURIE_A11Y_GROUP, "Proceed with login", NULL, 0,
+                        nk_rect(side, top, (float)CARD_W, card_h));
         nk_style_push_vec2(ctx, &ctx->style.window.spacing,
                            nk_vec2(0, (float)ROW_GAP));
 
@@ -1328,6 +1533,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
         nk_spacing(ctx, 1);
         nk_layout_row_push(ctx, CARD_W - 2.0f * CARD_PAD_X - ROW_BRAND - 10.0f);
         nk_style_push_font(ctx, pick_font(app, 19, 1));
+        curie_note_here(app, ctx, CURIE_A11Y_LABEL, "Proceed with login", 0);
         nk_label(ctx, "Proceed with login", NK_TEXT_LEFT);
         nk_style_pop_font(ctx);
         nk_layout_row_end(ctx);
@@ -1385,12 +1591,14 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
 
             for (i = 0; i < CONTACT_ROWS; i++) {
                 nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
+                curie_note_here(app, ctx, CURIE_A11Y_LABEL, lines[i], 0);
                 nk_label(ctx, lines[i], NK_TEXT_CENTERED);
             }
         }
         nk_style_pop_font(ctx);
 
         nk_style_pop_vec2(ctx);
+        curie_note_pop(app);
         nk_group_end(ctx);
     }
     nk_style_pop_vec2(ctx);            /* group_padding */
@@ -1773,6 +1981,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
                            ? col_of(c) : nk_rgba(128, 128, 128, 40);
     struct nk_color clear  = nk_rgba(0, 0, 0, 0);
     struct nk_command_buffer *canvas;
+    struct nk_rect strip;
     struct nk_rect active_r = nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
     /* Which frame the window wears. Here rather than on the login card because
      * the card is one page of seven, and with the native frame in use there is
@@ -1785,8 +1994,12 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     int i;
 
     (void)win_w;
+    strip = nk_widget_bounds(ctx);      /* see the note in titlebar() */
     if (!nk_group_begin(ctx, "tabs", NK_WINDOW_NO_SCROLLBAR)) return;
     canvas = nk_window_get_canvas(ctx);
+    /* Two lists in one row, and a reader should not be told they are one: the
+     * pages are a tablist, the colour schemes are a group of their own. */
+    curie_note_push(app, CURIE_A11Y_TABLIST, "Pages", NULL, 0, strip);
 
     /* Measured first, because the switch at the far end needs to know what
      * is left over. */
@@ -1837,6 +2050,8 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
         nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
 
+        curie_note(app, CURIE_A11Y_TAB, name, NULL,
+                   i == app->tab ? CURIE_A11Y_SELECTED : 0u, b);
         if (nk_button_label(ctx, name)) set_tab(app, i);
         if (i == app->tab) active_r = b;
 
@@ -1851,9 +2066,11 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     }
     nk_layout_row_push(ctx, rest);
     nk_spacing(ctx, 1);
+    curie_note_pop(app);
 
     /* "system" follows SDL_GetSystemTheme(), the other two pin it. Changing it
      * reloads the stylesheets - tiny.css ships light and dark as two files. */
+    curie_note_push(app, CURIE_A11Y_GROUP, "Colour scheme", NULL, 0, strip);
     for (i = 0; i < 3; i++) {
         struct nk_color fg = (i == app->theme_mode) ? accent : muted;
         struct nk_rect b;
@@ -1874,6 +2091,8 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
         nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
 
+        curie_note(app, CURIE_A11Y_RADIO, g_theme_names[i], NULL,
+                   i == app->theme_mode ? CURIE_A11Y_CHECKED : 0u, b);
         if (nk_button_label(ctx, g_theme_names[i]) && i != app->theme_mode) {
             app->theme_mode = i;
             load_theme(app);
@@ -1891,12 +2110,16 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
 
     nk_layout_row_push(ctx, TAB_SEP);
     nk_spacing(ctx, 1);
+    curie_note_pop(app);
 
     nk_layout_row_push(ctx, sw_w);
     {
         struct nk_rect b = nk_widget_bounds(ctx);
 
         hot_push(app, b, 1, 1);
+        /* Its label says what it will switch to, so the checked state is the
+         * frame it is *not* wearing - name it by what it does. */
+        curie_note(app, CURIE_A11Y_BUTTON, swl, NULL, 0, b);
         nk_style_push_style_item(ctx, &ctx->style.button.normal,
                                  nk_style_item_color(clear));
         nk_style_push_style_item(ctx, &ctx->style.button.hover,
@@ -2015,7 +2238,12 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
          * change on hover register themselves. */
         hot_push(app, nk_rect(0, top, (float)win_w, body_h), 0, 0);
 
+        /* The page is a container, named by its tab, so a reader is told
+         * which page it is walking rather than handed a flat list. */
+        curie_note_push(app, CURIE_A11Y_GROUP, curie_tab_names[app->tab], NULL,
+                        0, nk_rect(0, top, (float)win_w, body_h));
         curie_showcase_page(app, ctx, app->tab, sz.x, sz.y);
+        curie_note_pop(app);
         nk_group_end(ctx);
     } else {
         nk_style_pop_vec2(ctx);
@@ -2173,9 +2401,135 @@ curie_field(App *app, struct nk_context *ctx, nk_flags flags,
     f = push_edit_style(ctx, &s);
     state = nk_edit_string(ctx, flags, buf, len, cap, filter);
     pop_style(ctx, f);
+    note_ime_caret(app, ctx, bounds, state, &ctx->text_edit);
+    /* The hint doubles as the label: it is the only text the field carries,
+     * and an unnamed field is unusable to a reader. A box with no hint gets
+     * its shape instead, which is at least a description. */
+    curie_note(app, CURIE_A11Y_TEXTBOX,
+               hint ? hint : ((flags & NK_EDIT_BOX) ? "Notes" : "Text"), buf,
+               state & NK_EDIT_ACTIVE ? CURIE_A11Y_FOCUSED : 0u, bounds);
 
     if (hint && *len == 0) draw_hint(ctx, bounds, hint, &s);
     return state;
+}
+
+/* --- the platform file picker ------------------------------------------
+ * SDL_ShowOpenFileDialog returns at once and calls back later, possibly from
+ * another thread. So the callback touches nothing but this struct: it fills in
+ * the answer, publishes it with an atomic store, and pushes an event to wake a
+ * main loop that may be parked in SDL_WaitEvent. Nuklear, the renderer and the
+ * style are main-thread only and are left to curie_file_taken. */
+
+static const SDL_DialogFileFilter g_file_filters[] = {
+    { "Stylesheets", "css" },
+    { "All files",   "*"   }
+};
+
+static void SDLCALL
+file_chosen(void *userdata, const char * const *filelist, int filter)
+{
+    App *app = (App *)userdata;
+    SDL_Event wake;
+
+    (void)filter;
+    if (!filelist)
+        SDL_snprintf(app->file_answer, sizeof(app->file_answer),
+                     "unavailable: %s", SDL_GetError());
+    else if (!filelist[0])
+        SDL_strlcpy(app->file_answer, "cancelled", sizeof(app->file_answer));
+    else
+        SDL_strlcpy(app->file_answer, filelist[0], sizeof(app->file_answer));
+
+    /* Release: everything written above is visible to the thread that sees
+     * this. SDL's atomics are full barriers. */
+    SDL_SetAtomicInt(&app->file_ready, 1);
+
+    SDL_zero(wake);
+    wake.type = app->wake_event;
+    SDL_PushEvent(&wake);
+}
+
+int
+curie_file_open(App *app)
+{
+    if (app->file_pending) return 0;
+    app->file_pending = 1;
+    SDL_ShowOpenFileDialog(file_chosen, app, app->win, g_file_filters,
+                           (int)NK_LEN(g_file_filters), NULL, false);
+    return 1;
+}
+
+int
+curie_file_taken(App *app, char *out, int cap)
+{
+    if (!SDL_GetAtomicInt(&app->file_ready)) return 0;
+    SDL_SetAtomicInt(&app->file_ready, 0);
+    app->file_pending = 0;
+    SDL_strlcpy(out, app->file_answer, (size_t)cap);
+    return 1;
+}
+
+/* CURIE_A11Y_DUMP=<path> writes the tree once, after the first frame is built,
+ * and is how phase 2 is checked: the instrumentation is invisible on screen, so
+ * the only way to see whether a widget reported itself is to read the tree. */
+static void
+a11y_dump_once(App *app)
+{
+    static int done;
+    const char *path;
+    FILE *f;
+
+    if (done) return;
+    path = SDL_getenv("CURIE_A11Y_DUMP");
+    if (!path) { done = 1; return; }
+    done = 1;
+    f = fopen(path, "w");
+    if (!f) return;
+    curie_a11y_dump(&app->a11y, f);
+    {
+        int n = 0;
+        curie_a11y_tree(&app->a11y, &n);
+        fprintf(f, "\n# %d of %d nodes, %d of %d string bytes, "
+                   "%d interned, struct %d bytes\n",
+                n, CURIE_A11Y_MAX_NODES, app->a11y.pool_used,
+                CURIE_A11Y_POOL, app->a11y.pool_entries,
+                (int)sizeof(curie_a11y));
+    }
+    fclose(f);
+}
+
+/* --- describing the frame ----------------------------------------------- */
+/* Thin forwards onto app->a11y, so App stays opaque to the pages and a11y.h
+ * stays free of it. */
+
+void
+curie_note(App *app, unsigned char role, const char *name, const char *value,
+           unsigned state, struct nk_rect bounds)
+{
+    curie_a11y_add(&app->a11y, role, name, value, state, bounds);
+}
+
+void
+curie_note_push(App *app, unsigned char role, const char *name,
+                const char *value, unsigned state, struct nk_rect bounds)
+{
+    curie_a11y_push(&app->a11y, role, name, value, state, bounds);
+}
+
+void
+curie_note_pop(App *app)
+{
+    curie_a11y_pop(&app->a11y);
+}
+
+/* nk_widget_bounds answers where the *next* widget goes, so this is called
+ * before drawing, not after - which is also when the caller still knows what
+ * it is about to draw. */
+void
+curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
+                const char *name, unsigned state)
+{
+    curie_a11y_add(&app->a11y, role, name, NULL, state, nk_widget_bounds(ctx));
 }
 
 /* The radius for a popup, tooltip or menu: `dialog`'s, capped, because 1rem is
@@ -2199,13 +2553,20 @@ curie_diagnostics(App *app, curie_diag *out)
     out->drag_rate  = app->drag_rate;
     out->font       = app->font_status;
     out->vsync      = app->vsync_on;
-    out->aa         = app->aa;
+    /* what the frame is drawn with, not what was asked for - see the note at
+     * nk_sdl_render_ex in the frame body */
+    out->aa = !app->aa ? "off"
+            : !app->renderer_is_sw ? "on"
+            : app->sw_noaa ? "off (software renderer)"
+            : "strokes only (software renderer)";
     out->dark       = app->dark;
     out->sheets     = SHEET_COUNT;
     out->tab        = app->tab;
     out->scale      = curie_scale();
     out->style_ms   = app->style_ms_x100 / 100.0f;
     out->frame_gap_ms = app->frame_gap_ms;
+    out->cpu_ms_per_frame = app->cpu_ms_per_frame;
+    out->hover_gap_ms     = (int)g_hover_gap_ms;
 
     /* Nuklear grows this to fit the busiest frame it has been asked to draw
      * and keeps it; `used` is what the last frame actually needed. */
@@ -2275,19 +2636,69 @@ web_on_resize(int type, const EmscriptenUiEvent *ev, void *user)
 }
 #endif
 
+/* Is the renderer we were given a hardware one, or Direct3D talking to a
+ * software rasteriser?
+ *
+ * It matters more than it sounds. Where there is no GPU, SDL's direct3d11
+ * backend still succeeds - it falls back to WARP, Microsoft's software
+ * implementation - and the app then pays for a full D3D11 pipeline and a
+ * WDDM swapchain present to draw a few hundred flat triangles. Measured on a
+ * VirtualBox VM with no 3D: 78.7 ms of CPU per frame through WARP against
+ * 13.1 ms through SDL's own software renderer, medians of four interleaved
+ * runs. Six times, for the same picture.
+ *
+ * WARP identifies itself in the adapter description, so this asks the device
+ * SDL created rather than guessing from the adapter list: VirtualBox presents
+ * a WDDM adapter that looks real until a hardware device fails to create on
+ * it. Anything other than a confident "this is software" answers 0 and the
+ * renderer is left alone. */
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+/* COBJMACROS gives the C-callable Xxx_Method() forms; dxgi.h alone, because
+ * the device is only ever handled as an IUnknown here, so d3d11.h and its
+ * dependency chain are not needed. */
+#define COBJMACROS
+#include <dxgi.h>
+static int
+renderer_is_software(SDL_Renderer *ren)
+{
+    IUnknown *dev;
+    IDXGIDevice *dxgi = NULL;
+    IDXGIAdapter *ad = NULL;
+    DXGI_ADAPTER_DESC desc;
+    int software = 0;
+
+    dev = (IUnknown *)SDL_GetPointerProperty(
+        SDL_GetRendererProperties(ren),
+        SDL_PROP_RENDERER_D3D11_DEVICE_POINTER, NULL);
+    if (!dev) return 0;
+
+    if (SUCCEEDED(IUnknown_QueryInterface(dev, &IID_IDXGIDevice,
+                                          (void **)&dxgi)) && dxgi) {
+        if (SUCCEEDED(IDXGIDevice_GetAdapter(dxgi, &ad)) && ad) {
+            if (SUCCEEDED(IDXGIAdapter_GetDesc(ad, &desc))) {
+                /* 0x1414 is Microsoft; WARP and the Basic Render Driver both
+                 * sit under it. The description is checked as well, because a
+                 * vendor id alone would also match a real Microsoft device. */
+                software = desc.VendorId == 0x1414 ||
+                           wcsstr(desc.Description, L"Basic Render") != NULL ||
+                           wcsstr(desc.Description, L"WARP") != NULL;
+            }
+            IDXGIAdapter_Release(ad);
+        }
+        IDXGIDevice_Release(dxgi);
+    }
+    return software;
+}
+#else
+static int renderer_is_software(SDL_Renderer *ren) { (void)ren; return 0; }
+#endif
+
 /* --- SDL application callbacks ----------------------------------------- */
 
 SDL_AppResult
 SDL_AppInit(void **appstate, int argc, char *argv[])
 {
     App *app;
-
-    /* Headless check of the icon pipeline: curie --dump-icon <out.png> */
-    if (argc >= 3 && strcmp(argv[1], "--dump-icon") == 0) {
-        int ok = curie_svg_icon_dump("browsers-outline", 256,
-                                     CURIE_BRAND, NULL, argv[2]);
-        return ok ? SDL_APP_SUCCESS : SDL_APP_FAILURE;
-    }
 
     /* Two SDL defaults a desktop app should not inherit, both read during
      * SDL_Init: the screensaver is disabled unless told otherwise
@@ -2311,23 +2722,49 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     *appstate = app;
 
     {
-        /* "cpu" forces SDL's software rasteriser, "gpu" pins the first
-         * hardware driver, "auto" lets SDL choose. "gpu" used to fall through
-         * to "auto" and change nothing. */
+        /* CURIE_RENDERER takes "auto" (the default), "cpu", "gpu", or the
+         * name of any driver SDL has compiled in - on Windows that is
+         * direct3d11, opengl, opengles2 or software; elsewhere whatever the
+         * platform builds. "list" prints them and exits, so the names do not
+         * have to be guessed.
+         *
+         * "auto" is not simply SDL's own choice: see the software fallback
+         * after the window is created. "gpu" pins the first non-software
+         * driver and keeps it, which is how the two were measured against
+         * each other. */
         const char *mode = SDL_getenv("CURIE_RENDERER");
+        int i, n = SDL_GetNumRenderDrivers();
+
         if (!mode || !*mode) mode = "auto";
         SDL_strlcpy(app->render_mode, mode, sizeof(app->render_mode));
 
+        if (SDL_strcmp(mode, "list") == 0) {
+            for (i = 0; i < n; i++) SDL_Log("%s", SDL_GetRenderDriver(i));
+            return SDL_APP_SUCCESS;
+        }
         if (SDL_strcmp(mode, "cpu") == 0) {
             SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
         } else if (SDL_strcmp(mode, "gpu") == 0) {
-            int i, n = SDL_GetNumRenderDrivers();
             for (i = 0; i < n; i++) {
                 const char *d = SDL_GetRenderDriver(i);
                 if (d && SDL_strcmp(d, "software") != 0) {
                     SDL_SetHint(SDL_HINT_RENDER_DRIVER, d);
                     break;
                 }
+            }
+        } else if (SDL_strcmp(mode, "auto") != 0) {
+            /* A driver by name. Checked against the list rather than passed
+             * through, so a typo says so instead of silently landing back on
+             * SDL's default and looking like the setting did nothing. */
+            int known = 0;
+            for (i = 0; i < n; i++)
+                if (SDL_strcmp(SDL_GetRenderDriver(i), mode) == 0) known = 1;
+            if (known) {
+                SDL_SetHint(SDL_HINT_RENDER_DRIVER, mode);
+            } else {
+                SDL_Log("CURIE_RENDERER=%s is not a driver this build has; "
+                        "try CURIE_RENDERER=list", mode);
+                SDL_strlcpy(app->render_mode, "auto", sizeof(app->render_mode));
             }
         }
     }
@@ -2352,7 +2789,16 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     if (app->scroll0 < 0) app->scroll0 = 0;
 
     {
-        int win_w = WINDOW_WIDTH, win_h = WINDOW_HEIGHT;
+        /* On a real HiDPI display SDL_WINDOW_HIGH_PIXEL_DENSITY gives this
+         * window scale-times as many pixels, which is exactly the room the
+         * same logical layout needs. A forced CURIE_SCALE has no such display
+         * behind it, so the window is asked for that many pixels here instead
+         * - otherwise the simulation draws a scaled UI into an unscaled window
+         * and simply clips it. curie_dpi_query_scale(NULL) is the override, or
+         * 1.0 when unset. */
+        float pre = curie_dpi_query_scale(NULL);
+        int win_w = (int)(WINDOW_WIDTH * pre + 0.5f);
+        int win_h = (int)(WINDOW_HEIGHT * pre + 0.5f);
 
 #ifdef __EMSCRIPTEN__
         /* On the web the window is the page: a fixed canvas in a blank
@@ -2360,13 +2806,48 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
          * see a size the user chose. */
         web_page_size(&win_w, &win_h);
 #endif
-        if (!SDL_CreateWindowAndRenderer("Curie", win_w, win_h,
-                SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
-                (app->borderless ? SDL_WINDOW_BORDERLESS : 0),
-                &app->win, &app->ren)) {
-            SDL_Log("CreateWindowAndRenderer failed: %s", SDL_GetError());
-            return SDL_APP_FAILURE;
+        SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE |
+                                SDL_WINDOW_HIGH_PIXEL_DENSITY |
+                                (app->borderless ? SDL_WINDOW_BORDERLESS : 0);
+
+        if (!SDL_CreateWindowAndRenderer("Curie", win_w, win_h, flags,
+                                         &app->win, &app->ren)) {
+            /* A driver can be in SDL's list and still fail here: opengl and
+             * opengles2 are both compiled in on Windows and neither creates
+             * on a VM with no 3D. A named driver that cannot run is worth a
+             * line and a retry, not a dead app. */
+            SDL_Log("renderer '%s' would not start (%s); falling back",
+                    app->render_mode, SDL_GetError());
+            if (app->win) { SDL_DestroyWindow(app->win); app->win = NULL; }
+            SDL_SetHint(SDL_HINT_RENDER_DRIVER, NULL);
+            SDL_strlcpy(app->render_mode, "auto", sizeof(app->render_mode));
+            if (!SDL_CreateWindowAndRenderer("Curie", win_w, win_h, flags,
+                                             &app->win, &app->ren)) {
+                SDL_Log("CreateWindowAndRenderer failed: %s", SDL_GetError());
+                return SDL_APP_FAILURE;
+            }
         }
+
+        /* Not swapped, only noted. Direct3D on a software adapter costs six
+         * times what SDL's own software renderer costs here - 78.7 ms of CPU
+         * a frame against 13.1 - and switching automatically was written,
+         * measured and then taken out again: SDL's software rasteriser draws
+         * this UI differently. A popup gains an outline and a rule between
+         * every item, the tab underline breaks into two lines with a gap, and
+         * the top row of the window comes out a shade darker. Those are its
+         * rasteriser, not ours, and an automatic choice that changes how the
+         * app looks is not a choice worth making for the user.
+         *
+         * So it is reported instead. CURIE_RENDERER=software takes the trade
+         * for anyone who wants it. */
+        app->renderer_is_sw =
+            SDL_strcmp(SDL_GetRendererName(app->ren), "software") == 0;
+        app->sw_noaa = env_int("CURIE_SW_NOAA", 0) != 0;
+
+        if (renderer_is_software(app->ren))
+            SDL_strlcpy(app->render_mode + SDL_strlen(app->render_mode),
+                        " (no GPU)",
+                        sizeof(app->render_mode) - SDL_strlen(app->render_mode));
     }
 
 #ifdef __EMSCRIPTEN__
@@ -2412,6 +2893,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
      * into the renderer's figure is what this table exists to prevent. */
     set_window_icon(app->win);
     curie_set_scale(curie_dpi_query_scale(app->win));   /* needs the window */
+    apply_render_scale(app);
     rss_mark(RSS_ICON);
 
     app->ctx = nk_sdl_init(app->win, app->ren, nk_sdl_allocator());
@@ -2420,6 +2902,18 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
 
     rebuild_font(app);
     rss_mark(RSS_FONT);
+
+    /* One type, for the file picker's callback to wake the loop with. Zero
+     * on failure, which the handler treats as "never matches". */
+    app->wake_event = SDL_RegisterEvents(1);
+
+    if (SDL_getenv("CURIE_HOVER_GAP_MS")) {
+        int gap = env_int("CURIE_HOVER_GAP_MS", (int)HOVER_GAP_MS);
+        if (gap >= 0 && gap <= 1000) {
+            g_hover_gap_ms   = (Uint64)gap;
+            g_hover_gap_pinned = 1;
+        }
+    }
 
     app->cur_default = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
     app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
@@ -2468,6 +2962,12 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
 
 
     if (app) {
+        /* The picker's callback pushes this from SDL's thread. Its only job is
+         * to get the loop out of SDL_WaitEvent; the answer is collected during
+         * the frame. Checked before the switch because the type is allocated
+         * at startup and so cannot be a case label. */
+        if (app->wake_event && event->type == app->wake_event) app->dirty = 1;
+
         /* Which events actually change what is on screen, named explicitly.
          *
          * This used to be the inverse - everything except mouse motion marked
@@ -2517,7 +3017,7 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
             float mx = event->motion.x, my = event->motion.y;
             int i, over = -1;
 
-            if (app->dragging) app->dirty = 1;
+            if (app->dragging) { app->drag_moved = 1; app->dirty = 1; }
 
             /* The last match, not the first: the shell pushes one region over
              * a whole showcase page before the page pushes its widgets, so the
@@ -2555,11 +3055,11 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
                     app->hot_last_r       = nr;
                     app->hot_last_repaint = has ? app->hot[over].repaint : 0;
                     app->want_cursor      = has ? app->hot[over].cursor : 0;
-                    if (was || is) app->dirty = 1;
+                    if (was || is) hover_redraw(app);
                 } else if (has && app->hot[over].track) {
                     /* Drawn at the pointer, so it has to be redrawn as the
                      * pointer moves - a crossing is not enough. */
-                    app->dirty = 1;
+                    hover_redraw(app);
                 }
             }
             break;
@@ -2596,6 +3096,17 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
             SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
             break;
 
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+            /* Whatever happens to the button now happens to another window.
+             * Without this the app keeps redrawing at the display's refresh
+             * until something else stops it. */
+            if (app->dragging) {
+                app->dragging      = 0;
+                app->drag_in_field = 0;
+                app->restore_rate  = 2;
+            }
+            break;
+
         case SDL_EVENT_MOUSE_BUTTON_UP:
             app->dragging = 0;
             app->drag_in_field = 0;
@@ -2629,13 +3140,29 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
 
         case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             curie_set_scale(curie_dpi_query_scale(app->win));
+            apply_render_scale(app);
             rebuild_font(app);
             break;
 
         case SDL_EVENT_KEY_DOWN:
             /* F1 opens the diagnostics, which are a page of their own now
              * rather than four lines squeezed into the login card. */
-            if (event->key.key == SDLK_F1) set_tab(app, TAB_DIAG);
+            if (event->key.key == SDLK_F1) { set_tab(app, TAB_DIAG); break; }
+
+            /* The tab strip, from the keyboard. It is the only navigation the
+             * app owns and it was mouse-only, which is the cheapest piece of
+             * accessibility available here: Nuklear has no focus traversal to
+             * hook into, but a page can still be reached without a pointer.
+             * Ctrl-modified so a focused text field keeps plain Tab. */
+            if (event->key.mod & SDL_KMOD_CTRL) {
+                if (event->key.key == SDLK_TAB) {
+                    int d = (event->key.mod & SDL_KMOD_SHIFT) ? -1 : 1;
+                    set_tab(app, (app->tab + d + TAB_COUNT) % TAB_COUNT);
+                } else if (event->key.key >= SDLK_1 &&
+                           event->key.key < SDLK_1 + TAB_COUNT) {
+                    set_tab(app, (int)(event->key.key - SDLK_1));
+                }
+            }
             break;
 
         default:
@@ -2679,10 +3206,72 @@ SDL_AppIterate(void *appstate)
     SDL_GetWindowSize(app->win, &win_w, &win_h);
     if (win_w != app->laid_w || win_h != app->laid_h) app->dirty = 1;
 
-    /* While a button is held every scheduled frame is drawn whether or not an
-     * event arrived, so the cadence stops depending on how the OS batched the
-     * mouse. */
-    if (app->dragging) app->dirty = 1;
+    /* A hover frame deferred by hover_redraw: draw it once the gap has passed
+     * and hand the callback rate back. Not during a drag, which owns the rate
+     * and draws every tick regardless. */
+    if (app->hover_pending &&
+        SDL_GetTicks() - app->last_draw_ms >= g_hover_gap_ms) {
+        app->hover_pending = 0;
+        app->dirty = 1;
+        if (!app->dragging) app->restore_rate = 1;
+    }
+
+    /* Self-heal a drag whose button-up never arrived. While `dragging` is set
+     * the frame is drawn unconditionally *and* the callback rate is pinned to
+     * the display's refresh, so a lost release leaves the app redrawing
+     * forever - a stuck 30-110% of a core that looks exactly like a runaway
+     * loop, because it is one. Something else can take the release: focus
+     * stolen mid-press, or a modal system dialog opening, which is a real path
+     * now that File > Open exists.
+     *
+     * It has to be SDL_GetGlobalMouseState and not SDL_GetMouseState: the
+     * latter answers from SDL's own cache, which still says the button is
+     * down for exactly the reason the app is stuck - it never saw the release.
+     * The global call asks the OS, so it turns an unrecoverable state into a
+     * one-frame hiccup. */
+    if (app->dragging &&
+        !(SDL_GetGlobalMouseState(NULL, NULL) &
+          (SDL_BUTTON_LMASK | SDL_BUTTON_MMASK | SDL_BUTTON_RMASK |
+           SDL_BUTTON_X1MASK | SDL_BUTTON_X2MASK))) {
+        app->dragging      = 0;
+        app->drag_in_field = 0;
+        app->restore_rate  = 2;
+        /* The countdown that hands the callback rate back only runs after a
+         * drawn frame, and nothing else here has asked for one - so without
+         * this the rate stayed pinned at the display's refresh, ticking empty
+         * iterates until some unrelated event drew. Found by review, not by
+         * measurement: an empty tick is cheap enough to hide. */
+        app->dirty = 1;
+    }
+
+    /* While a button is held and the pointer is moving, every scheduled frame
+     * is drawn whether or not an event arrived, so the cadence stops depending
+     * on how the OS batched the mouse - that is what makes a text selection
+     * track smoothly, and relying on motion delivery alone measured 33-45 fps
+     * with the selection advancing unevenly.
+     *
+     * A *stationary* hold is a different case and used to cost the same: the
+     * button down on blank page area, nothing moving, nothing changing, and
+     * the app drew at the display's refresh for as long as the finger was
+     * down - 167% of a core, 42% of this four-core machine. Nothing on screen
+     * differed between those frames.
+     *
+     * So a hold falls back to the pointer-redraw gap only when the pointer is
+     * over something that cannot change under it. Coalescing every stationary
+     * hold was the first attempt and it was wrong: it slowed the repeater on
+     * the Buttons page from about 60 ticks a second to 8, which is a visible
+     * change to how the app behaves in exchange for CPU. */
+    if (app->dragging) {
+        /* hot_last_repaint is the question "does what is under the pointer
+         * change when it is interacted with" - it is what the hover logic
+         * already uses to decide whether a crossing is worth a frame. A
+         * repeater, a slider, a scrollbar arrow all answer yes and keep the
+         * full rate; blank page, a label, a heading answer no, and holding a
+         * button over those cannot change anything until the pointer moves. */
+        if (app->drag_moved || app->hot_last_repaint ||
+            SDL_GetTicks() - app->last_draw_ms >= g_hover_gap_ms)
+            app->dirty = 1;
+    }
 
     /* Pointer motion only matters when it changes which widget is under the
      * cursor. Nuklear is immediate mode - a frame drawn because the mouse
@@ -2756,6 +3345,17 @@ SDL_AppIterate(void *appstate)
     nk_input_end(ctx);
     ctx->style.text.color = app->text;
 
+    /* Drained here rather than on the page that shows it, so a picker answered
+     * while some other tab is on screen still clears - otherwise the next
+     * File > Open would find one still pending and do nothing. */
+    curie_file_taken(app, app->show.file_pick,
+                     (int)sizeof(app->show.file_pick));
+
+    /* Opened around the same region nk_begin gets, so the window node's bounds
+     * are the window's. Closed after nk_end, below. */
+    curie_a11y_begin(&app->a11y, "Curie",
+                     nk_rect(0, 0, (float)win_w, (float)win_h));
+
     if (nk_begin(ctx, "page", nk_rect(0, 0, (float)win_w, (float)win_h),
                  NK_WINDOW_BACKGROUND | NK_WINDOW_NO_SCROLLBAR)) {
         /* The zero padding above is only for this panel's geometry, which
@@ -2768,11 +3368,23 @@ SDL_AppIterate(void *appstate)
     }
     nk_end(ctx);
 
+    /* Diffs against the previous frame and swaps. The change list is what a
+     * platform bridge will consume in phase 4; nothing reads it yet. */
+    curie_a11y_end(&app->a11y);
+    a11y_dump_once(app);
+
     /* SDL3 delivers SDL_EVENT_TEXT_INPUT only while text input is started for
      * the window, and the backend starts it from whether Nuklear has an active
      * edit widget - which it knows only after the frame is built. Without this
      * the field took Backspace but never a character. */
     nk_sdl_update_TextInput(ctx);
+    /* After it, because it is what starts text input; SDL_SetTextInputArea on
+     * a window with input stopped is discarded. Cleared each frame, so a field
+     * that stops being drawn stops steering the IME. */
+    if (app->ime_valid) {
+        SDL_SetTextInputArea(app->win, &app->ime_rect, app->ime_cursor);
+        app->ime_valid = 0;
+    }
 
     nk_style_pop_style_item(ctx);
     nk_style_pop_float(ctx);
@@ -2786,12 +3398,34 @@ SDL_AppIterate(void *appstate)
         SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g,
                                app->clear.b, app->clear.a);
         SDL_RenderClear(app->ren);
-        nk_sdl_render(ctx, app->aa ? NK_ANTI_ALIASING_ON
-                                   : NK_ANTI_ALIASING_OFF);
+        /* Nuklear's antialiasing is not edge coverage - it emits geometry a
+         * fraction of a pixel wide whose alpha fades to zero and lets the
+         * rasteriser blend it. SDL's software rasteriser has no partial
+         * coverage, so that geometry lands whole, and the two kinds of it
+         * land differently: a fill's feather becomes a half-tone column
+         * between a panel's border and its fill and a rule between menu
+         * items, while a stroke's feather is what grades a border's curve.
+         * Off entirely, every rounded corner steps in twos.
+         *
+         * So the software renderer keeps stroke feathering and drops fill
+         * feathering: measured across a popup's edge it then matches the
+         * hardware profile pixel for pixel, and the button corners still
+         * grade. CURIE_SW_NOAA=1 drops both, which is 6% cheaper. */
+        {
+            enum nk_anti_aliasing fill, line;
+            fill = line = app->aa ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF;
+            if (app->renderer_is_sw) {
+                fill = NK_ANTI_ALIASING_OFF;
+                if (app->sw_noaa) line = NK_ANTI_ALIASING_OFF;
+            }
+            nk_sdl_render_ex(ctx, fill, line);
+        }
         t_present0 = SDL_GetPerformanceCounter();
         SDL_RenderPresent(app->ren);
         t_end = SDL_GetPerformanceCounter();
 
+        app->last_draw_ms    = SDL_GetTicks();
+        if (app->first_frame_done) calibrate_hover_gap(app);
         app->build_ms_x100   = (int)(100000.0 * (double)(t_render0 - t_build0) / (double)f);
         app->render_ms_x100  = (int)(100000.0 * (double)(t_present0 - t_render0) / (double)f);
         app->present_ms_x100 = (int)(100000.0 * (double)(t_end - t_present0) / (double)f);
@@ -2800,6 +3434,7 @@ SDL_AppIterate(void *appstate)
     nk_input_begin(ctx);       /* collect again for the next frame */
 
     app->dirty = 0;
+    app->drag_moved = 0;
     if (app->restore_rate > 0) {
         if (--app->restore_rate > 0) app->dirty = 1;
         else SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);

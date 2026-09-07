@@ -1,0 +1,267 @@
+# Accessibility
+
+**Today:** keyboard navigation of the tab strip (Ctrl-Tab, Ctrl-Shift-Tab,
+Ctrl-1..7, F1) and text editing inside a focused field. A screen reader opening
+Curie still finds one window and no contents, because nothing serves the tree to
+a platform yet.
+
+**Phases 1 and 2 are done.** The model exists and every widget reports into it;
+phases 3, 4 and 5 are ahead.
+
+## Why it is not a small change
+
+A screen reader does not read pixels. It reads an *accessibility tree* through
+the platform's API — UI Automation on Windows, AT-SPI on Linux, NSAccessibility
+on macOS, the DOM on the web — and asks that tree questions: what are your
+children, what is your role, what is your name, are you checked, where are your
+bounds, invoke yourself.
+
+Every one of those questions assumes objects that persist between queries. An
+immediate-mode UI has none. There are no widget instances, only calls that emit
+draw commands and return a result; the button drawn last frame has no identity
+this frame, and between two frames nothing exists to answer a question about.
+Nuklear also has no focus model to borrow — `NK_KEY_TAB` inserts a tab
+character, it does not move focus — so there is no notion of "the focused
+widget" to expose or to move.
+
+The gap is therefore not a missing call. It is a missing model.
+
+## The design: a shadow tree
+
+Build a retained model *from* the immediate-mode frame, and serve the platform
+from the model rather than from Nuklear.
+
+Every widget helper reports itself as it is drawn. The reports accumulate into a
+flat array in draw order, which is also reading order. At end of frame that
+array is a complete description of the screen: roles, names, values, bounds,
+states, parents. Diff it against the previous frame to get the change events the
+platform APIs want, then swap.
+
+The immediate-mode loop stays immediate. The tree is a by-product of it.
+
+```c
+typedef struct curie_a11y_node {
+    unsigned  id;         /* stable across frames - see below */
+    unsigned  parent;
+    unsigned char role;   /* BUTTON, CHECKBOX, TAB, TABLIST, EDIT, ... */
+    unsigned char state;  /* FOCUSED | CHECKED | EXPANDED | DISABLED | ... */
+    const char *name;     /* interned; the label a reader speaks */
+    const char *value;    /* field contents, slider value as text */
+    struct nk_rect bounds;   /* window coordinates, post render scale */
+} curie_a11y_node;
+```
+
+**Identity is the one hard part.** An id must name the same button on
+consecutive frames, or the reader hears the whole screen change every frame.
+Derive it the way Nuklear derives its own widget state: hash of the enclosing
+container's id, the widget's label, and an index for unlabelled or repeated
+widgets. That makes the id a function of position-in-structure rather than of
+call order, so adding a widget above does not rename everything below it.
+
+## Phase 1 — the model — **done**
+
+Platform-independent, and testable on its own.
+
+- `src/a11y.c` / `a11y.h`: two `curie_a11y_node` arenas, front and back, sized
+  once (the busiest page draws on the order of a hundred widgets; 512 is
+  generous). Names interned into a per-frame string arena so the tree owns no
+  heap churn.
+- `curie_a11y_begin()` / `curie_a11y_node()` / `curie_a11y_push()` /
+  `curie_a11y_pop()` / `curie_a11y_end()`. Push and pop maintain the parent
+  stack for containers.
+- `curie_a11y_end()` diffs back against front and produces a change list:
+  added, removed, name/value changed, state changed, focus moved. Swap.
+- Cost control: skip the diff entirely when the frame was not dirty, which is
+  most frames — see the frame loop in [DEVELOPMENT.md](DEVELOPMENT.md).
+
+Verification is `tools/a11ytest.c`, built by default and run by hand. It asserts
+the dump format, that an identical frame produces **zero** changes, that
+switching a tab is two state changes rather than a removal and an addition, that
+inserting a node above three others leaves their ids alone, and that overflow is
+counted and survived rather than trapped. The id scheme was deliberately broken
+once to confirm the test fails when it should.
+
+## Phase 2 — instrumentation — **done**
+
+The mechanical bulk of the work, and the part that had to be got right once.
+
+The pages already funnel some widgets through shell helpers — `curie_button`,
+`curie_button_accent`, `curie_button_icon`, `curie_link`, `curie_field` — and
+those are one added call each. The rest of `src/showcase.c` calls Nuklear
+directly: roughly **190 distinct `nk_*` entry points**, of which about 60 call
+sites are interactive widgets (14 `nk_button_label`, 11 `nk_group_begin`, 7
+`nk_checkbox_label_align`, 5 each of `nk_edit_string`, `nk_edit_buffer`,
+`nk_property_float`, `nk_progress`, and so on down a long tail).
+
+Two ways to cover them, and the choice matters:
+
+1. **Wrap each in a `curie_*` helper** that draws and reports. Verbose, but the
+   report cannot be forgotten, and the showcase is already half-way there.
+2. **Report inline at each call site.** Less code to add, but a new widget added
+   later is silently absent from the tree.
+
+Both were taken, and the seam turned out to already exist. `showcase.c` had a
+`hot()` helper called before every widget drawn straight from Nuklear, to
+register the pointer cursor — 34 sites, always immediately before the widget. Its
+signature now carries role, name and state as well, so one call does both: a
+widget worth a cursor is worth a name, and they cannot drift apart. The shell's
+own `css_button`, `css_button_accent`, `css_button_icon`, `text_link`,
+`curie_field` and `css_field` report from inside, so every page gets it free.
+Static prose goes through `heading`, `caption` and `api`, which report inline.
+
+Two things came out of doing it that the plan had not foreseen:
+
+- **`nk_window_get_bounds` inside a group answers the enclosing window.** Every
+  container came out as 0,0 960x680. Containers now capture `nk_widget_bounds`
+  *before* `nk_group_begin`, which is the slot the group will fill.
+- **A page scrolls, so much of it is off-window.** Those nodes stay in the tree
+  — a reader should be able to find and scroll to them — but `curie_a11y_end`
+  marks them `offscreen` against the window node's rect, so a magnifier is not
+  sent chasing bounds nobody can see.
+
+Node counts per page run 26 (Login) to 80 (Buttons).
+
+### What describing a frame costs
+
+The first version was quadratic twice over, and neither was obvious. `emit()`
+scanned every node already emitted, with a `strcmp` on each, to count
+same-named siblings for the id; the diff scanned the old frame for every node
+in the new one. Both are tables now, and the string work that remained was cut
+down after that. `build/a11ytest --bench` is the measurement, 82 nodes:
+
+| | µs/frame |
+| --- | --- |
+| linear scans | 28–31 |
+| id and diff through hash tables | 7.6 |
+| one intern pool across frames | **3.5–4.6** |
+
+The last step is where the string work went. The pool spans frames, so a name
+that was there last frame is not copied again; equal strings share a slot, which
+turns the diff's `strcmp` into `==`; the name is hashed once and the hash reused
+for both the id and the pool lookup; and the role mixes in as an integer instead
+of hashing its own name. What is left is roughly one pass over each name.
+
+Two things worth keeping in mind if this is ever revisited:
+
+- **Generation-stamped tables must not start at generation 0.** A zeroed struct
+  already reads as generation 0, so every slot looked occupied and the first
+  probe walked a full table forever. The test caught it; nothing else would
+  have.
+- **The app cannot feel this either way.** With the tree on and off, 30 and 34
+  samples of the frame build gave medians 1.39 ms and 1.28 ms, standard
+  deviations 0.095 and 0.043 — twelve to twenty-seven times the effect. There
+  was briefly a flag to switch it off; it was removed, because a knob whose
+  effect cannot be measured is not a knob, and accessibility that can be
+  switched off gets switched off.
+
+Containers need mapping too, and this is where the roles come from:
+
+| Curie | Role |
+| --- | --- |
+| tab strip / a tab | `tablist` / `tab` |
+| `nk_group_begin` | `group` |
+| menu bar / menu / item | `menubar` / `menu` / `menuitem` |
+| popup, contextual | `dialog`, `menu` |
+| tree node | `treeitem`, with expanded state |
+| `nk_edit_*` | `textbox`, value = contents |
+
+## Phase 3 — focus and the keyboard
+
+Independently worth doing: it is real keyboard access whether or not a screen
+reader is ever attached, and it is the prerequisite for the platform bridges,
+because every one of them asks "what has focus".
+
+- The shadow tree is already in reading order, so the focusable subset of it is
+  the tab order. No separate ordering to maintain.
+- The shell holds `focus_id`. Tab and Shift-Tab move it; arrows move within a
+  composite (tablist, list, menu); Home/End jump.
+- Feed it back into Nuklear: when `focus_id` names a button, Enter and Space
+  synthesise a press; when it names a field, focus the editor. This is the
+  fiddly bit — it means the helper checks focus before drawing and reports
+  activation after.
+- Draw a focus ring. The node carries bounds, so the shell can stroke it after
+  the frame from one place, in the theme's accent, rather than every widget
+  growing a focused variant.
+
+## Phase 4 — platform bridges
+
+One thin interface, four implementations, each independently shippable:
+
+```c
+int  curie_a11y_platform_init(SDL_Window *win);
+void curie_a11y_platform_push(const curie_a11y_change *list, int n);
+void curie_a11y_platform_shutdown(void);
+```
+
+**Web first.** Emscripten draws into a canvas, and a canvas is invisible to
+assistive technology — but a hidden DOM subtree beside it is not. Mirror the
+shadow tree into `div`s with ARIA roles, names and states, absolutely positioned
+over the canvas so hit-testing and magnifier tracking follow. The browser then
+exposes it to every screen reader on every platform at once. This is what egui
+does, it is about 300 lines of JS plus a small C bridge, and it is by far the
+best reach per line of code written.
+
+**Windows, UI Automation.** A server-side provider: implement
+`IRawElementProviderSimple`, `IRawElementProviderFragment` and
+`IRawElementProviderFragmentRoot`, answer `WM_GETOBJECT` (reachable through
+`SDL_SetWindowsMessageHook`) with the fragment root, and raise
+`UiaRaiseAutomationEvent` / `UiaRaiseAutomationPropertyChangedEvent` from the
+change list. COM from C means hand-written vtables, which is ordinary if
+tedious. Budget 800–1200 lines. Text fields want `ITextProvider` for full
+support; start with value-only and add it later.
+
+**Linux, AT-SPI2.** AT-SPI is D-Bus. Two routes: link `libatspi`/ATK, which is
+LGPL and so a licence question for a project that has kept everything MIT-or-
+better (see [NOTICE.md](NOTICE.md)); or speak the `org.a11y.atspi.*` interfaces
+directly over `sd-bus` or `libdbus`. The second keeps the licence clean and is
+considerably more protocol work.
+
+**macOS, NSAccessibility.** Requires an Objective-C translation unit — the first
+one in the project. Get the `NSWindow` from
+`SDL_GetPointerProperty(SDL_GetWindowProperties(win), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL)`,
+attach a custom view implementing the `NSAccessibility` protocol, and answer
+from the shadow tree.
+
+## Phase 5 — verification
+
+None of this is verifiable by looking at it.
+
+- **Windows:** `inspect.exe` and Accessibility Insights from the Windows SDK
+  walk the tree and show exactly what a client sees. Then a real NVDA pass.
+- **Web:** Chrome DevTools' accessibility pane, then NVDA and VoiceOver.
+- **Linux:** `accerciser`.
+- **Always:** the Phase 1 golden file, in CI if there ever is one, because the
+  instrumentation is the part that rots.
+
+## Order, and what each phase pays for itself with
+
+| Phase | Pays for itself with |
+| --- | --- |
+| 1 model | Nothing visible. Prerequisite. **Done.** |
+| 2 instrumentation | Nothing visible. The bulk of the work. **Done.** |
+| 3 focus + keyboard | Full keyboard operation, visible focus ring. Useful with no reader attached. |
+| 4a web | Screen-reader support on every platform, from one implementation. |
+| 4b Windows | Native support where the app is developed. |
+| 4c/d Linux, macOS | Parity. |
+
+1 → 3 is the honest minimum before any bridge is worth writing, and 3 is the
+first phase a user would notice. 4a before 4b: the web bridge is the cheapest
+and reaches the most readers.
+
+## Risks and open questions
+
+- ~~**Per-frame cost.**~~ Measured at 3.3 µs for 80 nodes. Fixed arenas, no
+  allocation, and the frame loop only builds a tree when it draws.
+- ~~**Bounds.**~~ Window coordinates throughout, and off-window nodes are marked
+  `offscreen`. Still to check when phase 4 lands: a node clipped by a *popup*
+  rather than by the window.
+- **Identity across pages.** Switching tabs replaces the whole tree. That is
+  correct, but the diff should report it as a subtree replacement rather than
+  a hundred unrelated removals.
+- **Live regions.** The Diagnostics page changes every frame. It must not be
+  announced continuously; mark it polite, or exclude the numbers from the tree
+  and expose them on demand.
+- **Scope.** This adds a platform layer to a project that has so far had none —
+  `src/` is portable C with SDL underneath it and no `#ifdef _WIN32` in sight.
+  Phase 4 breaks that, and the per-platform files should live apart (`src/sys/`)
+  so the rest stays as it is.

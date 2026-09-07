@@ -16,12 +16,12 @@ Reproduce any of it from the **Diagnostics** tab.
 
 | Artefact | Bytes |
 | --- | --- |
-| `curie.exe` | 2,688,000 |
-| `curie.wasm` | 1,194,540 |
-| `curie.js` | 76,216 |
-| `curie.data` | 47,011 |
+| `curie.exe` | 2,406,400 |
+| `curie.wasm` | 1,205,355 |
+| `curie.js` | 76,228 |
+| `curie.data` | 47,263 |
 | `curie.html` | 1,019 |
-| **Web bundle, total** | **1,318,786** |
+| **Web bundle, total** | **1,329,865** |
 
 SDL, libcss, yutil, plutosvg and plutovg link statically and Nuklear compiles
 in, so nothing but the C runtime loads from outside the binary. Trimming SDL to
@@ -162,17 +162,66 @@ off.
 
 ## CPU
 
-| Situation | Cost |
-| --- | --- |
-| At rest, any tab | **0.00%** of one core over 8 s |
-| Pointer sweeping the Login page | ~2.8% of one core, median |
+**At rest: 0.00% of one core**, every tab, foreground or background, over
+hundreds of sampled seconds. That is not "low", it is nothing: SDL waits for
+events and `SDL_AppIterate` returns without drawing unless something changed.
+(A callback rate that is numeric rather than `waitevent` but draws nothing
+costs 1.4–2.0% — the loop itself is nearly free.)
 
-At rest that is not "low", it is nothing: SDL waits for events, and
-`SDL_AppIterate` returns immediately unless something changed. A frame is built
-when a widget changes state or the pointer crosses a region registered as hot
-in the previous frame.
+**Every drawn frame costs about 78 ms of CPU on this machine**, and almost
+none of it is Curie's — nor, strictly, Direct3D's: there is no GPU, so SDL's
+`direct3d11` backend runs on WARP and the frame is rasterised in software by
+the display stack. SDL's *own* software renderer does the same frame for
+13.1 ms, six times cheaper, but cannot draw it identically — it has no partial
+coverage, so it feathers strokes and not fills — the fill feather would land
+as a hairline. It is reachable with `CURIE_RENDERER=software`, and is not the default.
+See [DEVELOPMENT.md](DEVELOPMENT.md). Measured by forcing a redraw at fixed
+rates:
 
-Where a drawn frame's time goes:
+| Forced rate | Process CPU | Per frame |
+| --- | --- | --- |
+| 5 fps | 38% of one core | 77 ms |
+| 10 fps | 75–85% of one core | 75–85 ms |
+| 30 or 60 fps | 200–245% of one core | *saturated — it cannot draw that fast* |
+
+Linear in frames. An earlier note here read “the same with
+`CURIE_RENDERER=software`, 83 vs 85 ms, which rules the SDL renderer out”;
+that was wrong. `CURIE_RENDERER` did not accept `software` at the time, so both
+arms ran `auto` and measured the same thing twice. It is 13.1 ms against 78.7.
+Per thread, during
+a forced redraw at 10 fps: the main thread — all of Curie, Nuklear and SDL —
+is **3.6–4.7%**; the other **~83% is in four to seven threads started by
+`ntdll.dll`**, the Windows thread pool, which is the display driver's user-mode
+component presenting the frame in software *inside this process*. Anti-aliasing
+is 6% of a frame; the window's pixels are the rest.
+
+The consequence is that **CPU is a count of frames**. A pointer swept along the
+Buttons page's row of 21 symbol buttons drew 41 frames in two seconds — one
+per hover crossing, as designed — and read as 15–22% of four cores in Task
+Manager for as long as the sweep lasted. Typing is a frame a keystroke. A drag
+is a frame a tick at the display's refresh. All intended, all invisible on a
+GPU, all expensive here.
+
+Two things were found by measuring this, both fixed, both in
+[DEVELOPMENT.md](DEVELOPMENT.md):
+
+- A drag whose button-up never arrived left the app drawing at the display's
+  refresh forever — **171% of a core**, reproducible by taking focus away
+  mid-press. It had been there since the drag rate was added.
+- Pointer-driven frames are coalesced, and the gap adapts to what a frame
+  measurably costs. Sustained waving over the Buttons page went from 27% of
+  four cores to 11–16%, and over Login from 19% to 5–8%, with no change a
+  person can see. The table of gaps against CPU is in DEVELOPMENT.md.
+- A button held still over something that cannot change under it drew sixty
+  identical frames a second — 42% of four cores. Now 11–18%.
+
+Read those ranges as ranges: three runs of the same measurement on this VM
+spread by half again, so a single reading either way means nothing.
+
+Where a drawn frame's *wall-clock* time goes on the main thread — which is what
+Diagnostics has always shown, and is why the cost above stayed invisible for so
+long: build 1.8 ms, render 0.3 ms, present 0.5 ms, and none of it is where the
+62–78 ms went. Diagnostics now shows the process-wide figure beside them.
 
 | Phase | Time |
 | --- | --- |
@@ -180,11 +229,10 @@ Where a drawn frame's time goes:
 | Render (Nuklear commands to geometry) | 0.4–0.9 ms |
 | Present | 1.0–13 ms |
 
-Present is the vsync wait and dominates, which is the intended shape. While a
-button is held the callback rate is the display's refresh rather than uncapped:
-presenting faster than the display accepts fills the swapchain and present
-blocks on it — 29 ms a frame against 0.11 ms of building, holding a drag at
-35 fps.
+While a button is held the callback rate is the display's refresh rather than
+uncapped: presenting faster than the display accepts fills the swapchain and
+present blocks on it — 29 ms a frame against 0.11 ms of building, holding a
+drag at 35 fps.
 
 Parsing both stylesheets takes 1.5–4.0 ms, at startup and on each scheme change.
 
@@ -195,8 +243,10 @@ uploaded per frame, a few hundred triangles. No shader, no framebuffer of its
 own, no compute — everything goes through `SDL_Renderer`. Anti-aliasing is
 Nuklear's, on the CPU, and `CURIE_AA=0` turns it off.
 
-On hardware this should mean lower private bytes, a smaller present time and
-the texture rows leaving the memory table. An expectation, not a measurement.
+On hardware this should mean lower private bytes, a smaller present time, the
+texture rows leaving the memory table — and the 78 ms of CPU per frame above
+going to a few hundred microseconds, because a GPU presents and this machine
+rasterises. An expectation, not a measurement.
 
 ## System requirements
 

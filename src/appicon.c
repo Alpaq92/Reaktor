@@ -212,17 +212,3 @@ done:
     curie_free(svg);
     return surf;
 }
-
-int curie_svg_icon_dump(const char *name, int size,
-                        const char *outline_colour, const char *inside_colour,
-                        const char *png_path)
-{
-    plutovg_surface_t *surf;
-    int ok;
-
-    surf = curie_svg_surface(name, size, outline_colour, inside_colour);
-    if (!surf) return 0;
-    ok = plutovg_surface_write_to_png(surf, png_path) ? 1 : 0;
-    plutovg_surface_destroy(surf);
-    return ok;
-}

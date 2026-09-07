@@ -53,6 +53,7 @@ heading(App *app, struct nk_context *ctx, const char *text)
 
     nk_layout_row_dynamic(ctx, 30.0f, 1);
     nk_style_push_font(ctx, curie_font(app, 19, 1));
+    curie_note_here(app, ctx, CURIE_A11Y_LABEL, text, 0);
     nk_label_colored(ctx, text, NK_TEXT_LEFT, c);
     nk_style_pop_font(ctx);
 }
@@ -74,6 +75,7 @@ caption(App *app, struct nk_context *ctx, const char *text)
 
     nk_style_push_font(ctx, f);
     nk_layout_row_dynamic(ctx, (f->height + 3.0f) * (float)lines, 1);
+    curie_note_here(app, ctx, CURIE_A11Y_LABEL, text, 0);
     nk_label_colored_wrap(ctx, text, c);
     nk_style_pop_font(ctx);
     nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -127,6 +129,7 @@ api(App *app, struct nk_context *ctx, const char *text)
 {
     nk_style_push_font(ctx, curie_font(app, 12, 0));
     nk_layout_row_dynamic(ctx, 18.0f, 1);
+    curie_note_here(app, ctx, CURIE_A11Y_LABEL, text, 0);
     nk_label_colored(ctx, text, NK_TEXT_LEFT,
                      curie_token("--links", ctx->style.text.color));
     nk_style_pop_font(ctx);
@@ -331,6 +334,7 @@ item_with_icon(App *app, struct nk_context *ctx, const char *label,
     int hit;
 
     curie_hot_top(app, b, 1, 1);
+    curie_note(app, CURIE_A11Y_MENUITEM, label, NULL, 0, b);
     hit = contextual ? nk_contextual_item_label(ctx, label, NK_TEXT_LEFT)
                      : nk_menu_item_label(ctx, label, NK_TEXT_LEFT);
 
@@ -344,18 +348,35 @@ item_with_icon(App *app, struct nk_context *ctx, const char *label,
 static int
 menu_item(App *app, struct nk_context *ctx, const char *label, int contextual)
 {
-    curie_hot_top(app, nk_widget_bounds(ctx), 1, 1);
+    {
+        struct nk_rect b = nk_widget_bounds(ctx);
+        curie_hot_top(app, b, 1, 1);
+        curie_note(app, CURIE_A11Y_MENUITEM, label, NULL, 0, b);
+    }
     return contextual ? nk_contextual_item_label(ctx, label, NK_TEXT_LEFT)
                       : nk_menu_item_label(ctx, label, NK_TEXT_LEFT);
 }
 
-/* Marks the widget about to be emitted as wanting a pointer cursor. Buttons
- * and fields do this for themselves inside the shell; this is for the ones
- * drawn straight from Nuklear. */
+/* Marks the widget about to be emitted: the pointer cursor over it, and its
+ * entry in the accessibility tree. Buttons and fields do both for themselves
+ * inside the shell; this is for the ones drawn straight from Nuklear.
+ *
+ * One call for both on purpose. A widget worth a cursor is worth a name, and
+ * keeping them together is what stops the tree quietly falling behind the
+ * screen - see docs/ACCESSIBILITY.md. `state` carries what the tree needs and
+ * the cursor does not: checked, selected, expanded. */
 static void
-hot(App *app, struct nk_context *ctx, int cursor)
+hot(App *app, struct nk_context *ctx, unsigned char role, const char *name,
+    unsigned state)
 {
-    curie_hot(app, nk_widget_bounds(ctx), cursor, 1);
+    struct nk_rect b = nk_widget_bounds(ctx);
+
+    curie_hot(app, b, 1, 1);
+    /* CURIE_A11Y_NONE means the caller has already reported it - a widget
+     * whose value has to be formatted first reports itself, then asks for the
+     * cursor. Reporting it twice would give a reader two of it. */
+    if (role != CURIE_A11Y_NONE)
+        curie_note(app, role, name, NULL, state, b);
 }
 
 /* Checkboxes and radios sit the way the Edit menu sits them: label at the
@@ -387,7 +408,8 @@ check_row(struct nk_context *ctx, int cells)
 static void
 check_cell(App *app, struct nk_context *ctx, const char *label, nk_bool *on)
 {
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_CHECKBOX, label,
+        *on ? CURIE_A11Y_CHECKED : 0u);
     nk_checkbox_label_align(ctx, label, on, CHECK_ALIGN);
     nk_spacer(ctx);
 }
@@ -400,7 +422,7 @@ flags_cell(App *app, struct nk_context *ctx, const char *label,
 {
     nk_bool on = (*flags & value) != 0;
 
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_CHECKBOX, label, on ? CURIE_A11Y_CHECKED : 0u);
     if (nk_checkbox_label_align(ctx, label, &on, CHECK_ALIGN)) {
         if (on) *flags |= value;
         else    *flags &= ~value;
@@ -412,7 +434,8 @@ static void
 radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
            int value)
 {
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_RADIO, label,
+        *sel == value ? CURIE_A11Y_CHECKED : 0u);
     if (nk_option_label_align(ctx, label, *sel == value, CHECK_ALIGN))
         *sel = value;
     nk_spacer(ctx);
@@ -424,7 +447,7 @@ radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
 static int
 demo_button(App *app, struct nk_context *ctx, const char *label)
 {
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_BUTTON, label, 0);
     return nk_button_label(ctx, label);
 }
 
@@ -469,6 +492,7 @@ seed(showcase_state *s)
     s->list_sel = -1;
     s->tint.r = 0.34f; s->tint.g = 0.78f; s->tint.b = 1.0f; s->tint.a = 1.0f;
     SDL_strlcpy(s->menu_pick, "nothing yet", sizeof(s->menu_pick));
+    SDL_strlcpy(s->file_pick, "nothing yet", sizeof(s->file_pick));
 
     /* A fixed waveform rather than random noise: the chart then looks the
      * same in every screenshot, which is what makes a visual change to the
@@ -525,19 +549,23 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     compact_push(ctx);
     nk_layout_row_static(ctx, 34.0f, 34, 21);
     for (i = 0; i < SYMBOL_N; i++) {
-        hot(app, ctx, 1);
+        /* Twenty-one glyphs with no text anywhere. Nuklear names its
+         * symbols only by enum, so the tree gets the index - honest, and
+         * better than twenty-one identically anonymous buttons. */
+        SDL_snprintf(line, sizeof(line), "Symbol %d", i + 1);
+        hot(app, ctx, CURIE_A11Y_BUTTON, line, 0);
         if (nk_button_symbol(ctx, g_symbols[i])) s->presses++;
     }
     compact_pop(ctx);
 
     nk_layout_row_dynamic(ctx, 34.0f, 3);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_BUTTON, "Back", 0);
     if (nk_button_symbol_label(ctx, NK_SYMBOL_TRIANGLE_LEFT, "Back",
                                NK_TEXT_RIGHT)) s->presses++;
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_BUTTON, "Forward", 0);
     if (nk_button_symbol_label(ctx, NK_SYMBOL_TRIANGLE_RIGHT, "Forward",
                                NK_TEXT_LEFT)) s->presses++;
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_BUTTON, "Menu", 0);
     if (nk_button_symbol_label(ctx, NK_SYMBOL_HAMBURGER, "Menu",
                                NK_TEXT_LEFT)) s->presses++;
 
@@ -563,19 +591,23 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_template_push_dynamic(ctx);
     nk_layout_row_template_end(ctx);
     compact_push(ctx);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_BUTTON, "Tint swatch", 0);
     if (nk_button_color(ctx, nk_rgb_cf(s->tint))) s->presses++;
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_BUTTON, "Download", 0);
     if (nk_button_image(ctx, curie_ionicon(app, "cloud-download-outline", 24)))
         s->presses++;
     compact_pop(ctx);
 
     nk_button_set_behavior(ctx, NK_BUTTON_REPEATER);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_BUTTON, "Hold me", 0);
     if (nk_button_label(ctx, "Hold me")) s->repeats++;
     nk_button_set_behavior(ctx, NK_BUTTON_DEFAULT);
 
     nk_widget_disable_begin(ctx);
+    /* Not through hot(): a disabled control takes no pointer, but a reader
+     * should still find it and be told why it cannot be used. */
+    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, "Disabled",
+                    CURIE_A11Y_DISABLED);
     nk_button_label(ctx, "Disabled");
     nk_widget_disable_end(ctx);
 
@@ -635,7 +667,8 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     for (i = 0; i < 4; i++) {
         char lab[16];
         SDL_snprintf(lab, sizeof(lab), "Tile %d", i + 1);
-        hot(app, ctx, 1);
+        hot(app, ctx, CURIE_A11Y_LISTITEM, lab,
+            s->sel_tile[i] ? CURIE_A11Y_SELECTED : 0u);
         nk_selectable_label(ctx, lab, NK_TEXT_CENTERED, &s->sel_tile[i]);
     }
 
@@ -649,10 +682,12 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
      * left with the label centred is the arrangement that reads as one
      * control rather than two things at opposite ends. */
     nk_layout_row_static(ctx, 32.0f, 190, 2);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_LISTITEM, "With a symbol",
+        s->sel_row ? CURIE_A11Y_SELECTED : 0u);
     nk_selectable_symbol_label(ctx, NK_SYMBOL_CIRCLE_SOLID, "With a symbol",
                                NK_TEXT_CENTERED, &s->sel_row);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_LISTITEM, "With an image",
+        s->toggle ? CURIE_A11Y_SELECTED : 0u);
     {
         /* Selected, the row is filled with the accent and the label switches
          * to whatever reads on it; the icon has to make the same move or it
@@ -716,24 +751,34 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                   "nk_knob_float");
 
     nk_layout_row_dynamic(ctx, ROW, 2);
-    hot(app, ctx, 1);
-    nk_slider_float(ctx, 0.0f, &s->slider_f, 1.0f, 0.01f);
     SDL_snprintf(line, sizeof(line), "%.2f", (double)s->slider_f);
+    curie_note(app, CURIE_A11Y_SLIDER, "Float", line, 0,
+               nk_widget_bounds(ctx));
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+    nk_slider_float(ctx, 0.0f, &s->slider_f, 1.0f, 0.01f);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
-    hot(app, ctx, 1);
-    nk_slider_int(ctx, 0, &s->slider_i, 100, 1);
     SDL_snprintf(line, sizeof(line), "%d", s->slider_i);
+    curie_note(app, CURIE_A11Y_SLIDER, "Integer", line, 0,
+               nk_widget_bounds(ctx));
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+    nk_slider_int(ctx, 0, &s->slider_i, 100, 1);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
-    hot(app, ctx, 1);
+    SDL_snprintf(line, sizeof(line), "%d", (int)s->progress);
+    curie_note(app, CURIE_A11Y_PROGRESS, "Progress", line, 0,
+               nk_widget_bounds(ctx));
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
     nk_progress(ctx, &s->progress, 100, NK_MODIFIABLE);
     nk_label(ctx, "modifiable - drag it", NK_TEXT_LEFT);
 
     nk_layout_row_static(ctx, 62.0f, 62, 2);
-    hot(app, ctx, 1);
+    SDL_snprintf(line, sizeof(line), "%.2f", (double)s->knob);
+    curie_note(app, CURIE_A11Y_SLIDER, "Knob", line, 0,
+               nk_widget_bounds(ctx));
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
     nk_knob_float(ctx, 0.0f, &s->knob, 1.0f, 0.01f, NK_DOWN, 0.0f);
     nk_spacer(ctx);
 
@@ -745,11 +790,20 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                   "nk_property_double");
 
     nk_layout_row_dynamic(ctx, ROW, 3);
-    hot(app, ctx, 1);
+    SDL_snprintf(line, sizeof(line), "%d", s->prop_i);
+    curie_note(app, CURIE_A11Y_SPINBUTTON, "Columns:", line, 0,
+               nk_widget_bounds(ctx));
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
     nk_property_int(ctx, "Columns:", 1, &s->prop_i, 24, 1, 0.25f);
-    hot(app, ctx, 1);
+    SDL_snprintf(line, sizeof(line), "%.2f", (double)s->prop_f);
+    curie_note(app, CURIE_A11Y_SPINBUTTON, "Stroke:", line, 0,
+               nk_widget_bounds(ctx));
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
     nk_property_float(ctx, "Stroke:", 0.25f, &s->prop_f, 8.0f, 0.05f, 0.01f);
-    hot(app, ctx, 1);
+    SDL_snprintf(line, sizeof(line), "%.2f", s->prop_d);
+    curie_note(app, CURIE_A11Y_SPINBUTTON, "Ratio:", line, 0,
+               nk_widget_bounds(ctx));
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
     nk_property_double(ctx, "Ratio:", 0.0, &s->prop_d, 100.0, 0.25, 0.05f);
 
     section(app, ctx, "Combo boxes",
@@ -766,7 +820,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
      * number of pixels makes the frame even. */
     popup_style_push(ctx);
     nk_layout_row_static(ctx, ROW_TALL, 440, 2);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Size", 0);
     {
         /* The popup takes an explicit size, so "as wide as the box" has to
          * be asked for - nk_widget_width is the box that is about to be
@@ -784,7 +838,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
      * the only handle on it. */
     nk_style_push_vec2(ctx, &ctx->style.combo.content_padding,
                        nk_vec2(ctx->style.combo.content_padding.x, 9.0f));
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Size, with a symbol", 0);
     {
         struct nk_rect h = nk_widget_bounds(ctx);
 
@@ -795,7 +849,10 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
             int i;
             nk_layout_row_dynamic(ctx, 26.0f, 1);
             for (i = 0; i < 3; i++) {
-                curie_hot_top(app, nk_widget_bounds(ctx), 1, 1);
+                struct nk_rect ib = nk_widget_bounds(ctx);
+                curie_hot_top(app, ib, 1, 1);
+                curie_note(app, CURIE_A11Y_LISTITEM, sizes[i], NULL,
+                           i == s->combo_size ? CURIE_A11Y_SELECTED : 0u, ib);
                 if (nk_combo_item_label(ctx, sizes[i], NK_TEXT_LEFT))
                     s->combo_size = i;
             }
@@ -806,7 +863,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     nk_style_pop_vec2(ctx);
 
     nk_layout_row_static(ctx, ROW_TALL, 440, 2);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Tint", 0);
     {
         /* nk_combo_begin_label with an empty label, and the swatch painted
          * here.
@@ -833,7 +890,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
         combo_chrome(app, ctx, h, 2.0f);
     }
 
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Anything at all", 0);
     {
         struct nk_rect h = nk_widget_bounds(ctx);
 
@@ -857,7 +914,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_color_pick");
 
     nk_layout_row_static(ctx, 132.0f, 210, 2);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_GROUP, "Colour picker", 0);
     nk_color_pick(ctx, &s->tint, NK_RGB);
     if (nk_group_begin(ctx, "swatch", NK_WINDOW_NO_SCROLLBAR)) {
         struct nk_color c = nk_rgb_cf(s->tint);
@@ -1090,28 +1147,42 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_tree_push  /  nk_tree_element_push  /  "
                   "nk_list_view_begin");
 
-    hot(app, ctx, 1);
+    /* A tree node is a container, so it is pushed rather than added: what is
+     * drawn between the push and the pop is its children, and a reader walks
+     * them that way. Nuklear tells us it is open by returning true. */
+    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
     if (nk_tree_push(ctx, NK_TREE_TAB, "A tab-style tree", NK_MAXIMIZED)) {
+        curie_note_push(app, CURIE_A11Y_TREEITEM, "A tab-style tree", NULL,
+                        CURIE_A11Y_EXPANDED, nk_widget_bounds(ctx));
         nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
         nk_label(ctx, "Its children are indented under it.", NK_TEXT_LEFT);
-        hot(app, ctx, 1);
+        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
         if (nk_tree_push(ctx, NK_TREE_NODE, "A node inside it", NK_MINIMIZED)) {
+            curie_note_push(app, CURIE_A11Y_TREEITEM, "A node inside it",
+                            NULL, CURIE_A11Y_EXPANDED, nk_widget_bounds(ctx));
             nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
             nk_label(ctx, "Nesting is unlimited.", NK_TEXT_LEFT);
+            curie_note_pop(app);
             nk_tree_pop(ctx);
         }
         for (i = 0; i < 3; i++) {
             char lab[32];
             SDL_snprintf(lab, sizeof(lab), "Selectable branch %d", i + 1);
-            hot(app, ctx, 1);
+            hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
             if (nk_tree_element_push(ctx, NK_TREE_NODE, lab, NK_MINIMIZED,
                                      &s->tree_leaf[i])) {
+                curie_note_push(app, CURIE_A11Y_TREEITEM, lab, NULL,
+                                CURIE_A11Y_EXPANDED |
+                                (s->tree_leaf[i] ? CURIE_A11Y_CHECKED : 0u),
+                                nk_widget_bounds(ctx));
                 nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
                 nk_label(ctx, "with a checkbox in the header",
                          NK_TEXT_LEFT);
+                curie_note_pop(app);
                 nk_tree_pop(ctx);
             }
         }
+        curie_note_pop(app);
         nk_tree_pop(ctx);
     }
 
@@ -1132,7 +1203,8 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             char lab[40];
             nk_bool on = (s->list_sel == i);
             SDL_snprintf(lab, sizeof(lab), "Row %d of %d", i + 1, SC_LIST_N);
-            hot(app, ctx, 1);
+            hot(app, ctx, CURIE_A11Y_LISTITEM, lab,
+                on ? CURIE_A11Y_SELECTED : 0u);
             if (nk_selectable_label(ctx, lab, NK_TEXT_LEFT, &on) && on)
                 s->list_sel = i;
         }
@@ -1265,7 +1337,11 @@ page_layout(App *app, struct nk_context *ctx, showcase_state *s)
 static void
 page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 {
-    char line[96];
+    /* Wide enough for a whole path: the picker's answer is reported here, and
+     * a label clipped at the widget edge is better than one truncated before
+     * it gets there. */
+    char line[SC_PATH_CAP + 32];
+    struct nk_rect bar;
 
     /* Before anything else on this page. nk_menubar_begin pins the rows
      * emitted inside it to the top of the group and moves the content region
@@ -1282,30 +1358,39 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
      * belongs to. */
     popup_style_push(ctx);
     nk_layout_row_dynamic(ctx, 40.0f, 1);
+    bar = nk_widget_bounds(ctx);   /* before the group: see titlebar() */
     /* nk_group_begin answers 0 when the group is scrolled out of view, which
      * is a reason to skip the bar and nothing else - it was bailing out of
      * the whole page, so scrolling past the bar blanked everything below. */
     if (nk_group_begin(ctx, "menubar", NK_WINDOW_BORDER |
                                        NK_WINDOW_NO_SCROLLBAR)) {
+    curie_note_push(app, CURIE_A11Y_MENUBAR, "Menu bar", NULL, 0, bar);
     nk_menubar_begin(ctx);
     nk_layout_row_begin(ctx, NK_STATIC, 26.0f, 3);
     nk_layout_row_push(ctx, 60.0f);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_MENU, "File", 0);
     if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT,
                             nk_vec2(150.0f, MENU_H(3)))) {
         menu_rows_push(ctx);
         nk_layout_row_dynamic(ctx, MENU_ROW, 1);
         if (item_with_icon(app, ctx, "New", "add-outline", 0))
             SDL_strlcpy(s->menu_pick, "File > New", sizeof(s->menu_pick));
-        if (item_with_icon(app, ctx, "Open", "folder-open-outline", 0))
+        /* The one item here that does something outside the window. SDL runs
+         * the platform's own picker, so this is the OS dialog, not a drawn
+         * imitation - and the answer comes back on a later frame. */
+        if (item_with_icon(app, ctx, "Open...", "folder-open-outline", 0)) {
             SDL_strlcpy(s->menu_pick, "File > Open", sizeof(s->menu_pick));
+            if (curie_file_open(app))
+                SDL_strlcpy(s->file_pick, "waiting for the picker...",
+                            sizeof(s->file_pick));
+        }
         if (item_with_icon(app, ctx, "Close", "close-outline", 0))
             SDL_strlcpy(s->menu_pick, "File > Close", sizeof(s->menu_pick));
         menu_rows_pop(ctx);
         nk_menu_end(ctx);
     }
     nk_layout_row_push(ctx, 60.0f);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_MENU, "Edit", 0);
     if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT,
                             nk_vec2(190.0f, MENU_H(4)))) {
         menu_rows_push(ctx);
@@ -1338,7 +1423,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         nk_menu_end(ctx);
     }
     nk_layout_row_push(ctx, 60.0f);
-    hot(app, ctx, 1);
+    hot(app, ctx, CURIE_A11Y_MENU, "View", 0);
     if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT,
                             nk_vec2(170.0f, MENU_H(2)))) {
         menu_rows_push(ctx);
@@ -1351,6 +1436,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     }
     nk_layout_row_end(ctx);
     nk_menubar_end(ctx);
+    curie_note_pop(app);
     nk_group_end(ctx);
     }
     popup_style_pop(ctx);
@@ -1372,6 +1458,17 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "last chosen: %s", s->menu_pick);
     nk_style_push_font(ctx, curie_font(app, 13, 0));
+    curie_note(app, CURIE_A11Y_LABEL, "Last chosen", s->menu_pick, 0,
+               nk_widget_bounds(ctx));
+    nk_label_colored(ctx, line, NK_TEXT_LEFT,
+                     curie_token("--text-muted", ctx->style.text.color));
+
+    /* File > Open opens the platform's picker, which answers on its own
+     * schedule; the shell drains the answer into file_pick each frame. */
+    nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
+    SDL_snprintf(line, sizeof(line), "file picker: %s", s->file_pick);
+    curie_note(app, CURIE_A11Y_LABEL, "File picker", s->file_pick, 0,
+               nk_widget_bounds(ctx));
     nk_label_colored(ctx, line, NK_TEXT_LEFT,
                      curie_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
@@ -1386,7 +1483,8 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_dynamic(ctx, 54.0f, 1);
     {
         struct nk_rect trigger = nk_widget_bounds(ctx);
-        hot(app, ctx, 1);
+        hot(app, ctx, CURIE_A11Y_BUTTON,
+            "Right-click anywhere on this button", 0);
         nk_button_label(ctx, "Right-click anywhere on this button");
         /* The same width and the same three-row height as the File menu
          * above it: a context menu is the same widget, and two popups of
@@ -1574,13 +1672,17 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
     section(app, ctx, "Rendering",
             "Which backend SDL settled on, and what the app asked for. "
             "CURIE_RENDERER picks between auto, gpu and software; "
-            "CURIE_VSYNC and CURIE_AA turn the other two off.");
+            "CURIE_VSYNC and CURIE_AA turn the other two off. Anti-aliasing "
+            "reads what the frame is drawn with: the software rasteriser has "
+            "no partial coverage, so it feathers strokes, which grades a "
+            "curve, and not fills, which would only draw a hairline. "
+            "CURIE_SW_NOAA=1 drops both.");
 
     diag_row(app, ctx, "backend", d.renderer);
     SDL_snprintf(v, sizeof(v), "%s", d.mode);
     diag_row(app, ctx, "requested", v);
     diag_row(app, ctx, "vsync", d.vsync ? "on" : "off");
-    diag_row(app, ctx, "anti-aliasing", d.aa ? "on" : "off");
+    diag_row(app, ctx, "anti-aliasing", d.aa);
 
     section(app, ctx, "Pacing",
             "How often SDL calls the app back. At rest that is \"waitevent\" - "
@@ -1606,6 +1708,18 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
                      (double)d.frame_gap_ms);
     else SDL_strlcpy(v, "the first", sizeof(v));
     diag_row(app, ctx, "this frame", v);
+    /* The number that decides how pointer motion is paced. Measured across
+     * every thread of the process, because on a software renderer the frame
+     * is rasterised on threads this app never created and the main thread's
+     * clock sees almost none of it. */
+    if (d.cpu_ms_per_frame > 0.0f)
+        SDL_snprintf(v, sizeof(v), "%.1f ms of CPU, all threads",
+                     (double)d.cpu_ms_per_frame);
+    else SDL_strlcpy(v, "not yet measured", sizeof(v));
+    diag_row(app, ctx, "a drawn frame costs", v);
+    SDL_snprintf(v, sizeof(v), "one per %d ms while the pointer moves",
+                 d.hover_gap_ms);
+    diag_row(app, ctx, "hover redraws", v);
 
     section(app, ctx, "Where a frame goes",
             "Split three ways because guessing which one dominates has been "

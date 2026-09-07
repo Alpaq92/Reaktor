@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" aria-label="Curie" viewBox="0 0 512 512">
+  <path fill="#face00" stroke="#face00" stroke-linejoin="round" stroke-width="40" d="m256 40 187.06 108v216L256 472 68.94 364V148Z"/>
+  <path fill="#fcfcfc" d="M379.36 367.08a166 166 0 1 1 0-222.16l-38.64 34.8a114 114 0 1 0 0 152.56Z"/>
+  <g fill="#fcfcfc">
+    <circle cx="256" cy="256" r="21"/>
+    <path d="M271.5 282.85a31 31 0 0 1-31 0L215 327.01a82 82 0 0 0 82 0Zm-46.503-26.852a31 31 0 0 1 15.5-26.846l-25.493-44.164a82 82 0 0 0-41 71.014Zm46.506-26.846a31 31 0 0 1 15.5 26.846l50.993.004a82 82 0 0 0-41-71.014Z"/>
+  </g>
+</svg>

@@ -8,6 +8,7 @@
 #define CURIE_UI_H
 
 #include "nk_common.h"
+#include "a11y.h"
 
 typedef struct App App;
 
@@ -48,6 +49,9 @@ extern const char *const curie_rss_names[RSS_STEPS];
 #define SC_BOX_CAP   512
 #define SC_SERIES_N  32
 #define SC_LIST_N    64
+/* Long enough for a Windows extended-length path, which is where the file
+ * picker can legitimately land. */
+#define SC_PATH_CAP  520
 
 /* Everything the showcase remembers between frames. Immediate mode keeps no
  * widget state of its own for anything that holds a value, so it lives here -
@@ -86,6 +90,7 @@ typedef struct showcase_state {
     /* popups */
     int  popup_open;
     char menu_pick[40];
+    char file_pick[SC_PATH_CAP];   /* what the platform picker last answered */
 
     int seeded;
 } showcase_state;
@@ -145,6 +150,34 @@ nk_flags curie_field(App *app, struct nk_context *ctx, nk_flags flags,
  * every panel, so it cannot be set globally without rounding the window. */
 float curie_popup_rounding(void);
 
+/* --- describing the frame ----------------------------------------------
+ * What a screen reader will eventually be handed. A page reports each widget
+ * as it draws it; the shell collects the reports into a tree and diffs them.
+ * See a11y.h for the roles and states, docs/ACCESSIBILITY.md for the rest.
+ *
+ * These are the only calls a page needs. Nothing is served to a platform yet -
+ * phase 4 - so an unreported widget is not a visible bug today, which is
+ * exactly why the widgets go through helpers that report for you. */
+void curie_note(App *app, unsigned char role, const char *name,
+                const char *value, unsigned state, struct nk_rect bounds);
+/* The same, and everything until curie_note_pop is a child of it. */
+void curie_note_push(App *app, unsigned char role, const char *name,
+                     const char *value, unsigned state, struct nk_rect bounds);
+void curie_note_pop(App *app);
+/* Convenience for the common case: the widget just drawn, at the bounds the
+ * layout gave it, with no value. */
+void curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
+                     const char *name, unsigned state);
+
+/* The platform's own Open dialog. Answers 0 if one is already up. The choice
+ * arrives on SDL's thread, so it is not a return value: call curie_file_taken
+ * on a later frame, which answers non-zero once - when there is a fresh
+ * result - and writes it into `out`. A cancel and a platform with no picker
+ * both come back as text, because a page that shows the answer should show
+ * those too. */
+int curie_file_open(App *app);
+int curie_file_taken(App *app, char *out, int cap);
+
 /* What the shell knows about itself, for the page that reports it. Copied
  * out rather than reached for, so App stays opaque. */
 typedef struct curie_diag {
@@ -153,9 +186,16 @@ typedef struct curie_diag {
     const char *frame_rate;    /* SDL_HINT_MAIN_CALLBACK_RATE at rest */
     const char *drag_rate;     /* and while a button is held */
     const char *font;
-    int   vsync, aa, dark, sheets, tab;
+    int   vsync, dark, sheets, tab;
+    const char *aa;            /* what the frame is drawn with - not always
+                                * what was asked for on the software path */
     float scale, style_ms, build_ms, render_ms, present_ms;
     float frame_gap_ms;        /* since the previous drawn frame */
+    /* What a drawn frame costs this process in CPU, every thread, measured
+     * over the first frames after startup; and the pointer-redraw gap chosen
+     * from it. 0 until measured. */
+    float cpu_ms_per_frame;
+    int   hover_gap_ms;
     /* Where the memory is. nk_bytes is Nuklear's own command buffer, which
      * grows to fit the busiest frame drawn so far and is never given back;
      * icon_bytes is the rasterised SVG cache. */
