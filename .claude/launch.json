@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wasm",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "-d", "build-wasm", "8765"],
+      "port": 8765
+    }
+  ]
+}

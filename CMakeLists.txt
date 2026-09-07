@@ -186,6 +186,7 @@ endif()
 # WIN32 selects the GUI subsystem; SDL's main shim supplies the entry point.
 add_executable(curie WIN32
     src/a11y.c
+    src/a11y_web.c
     src/main.c
     src/nk_impl.c
     src/theme.c

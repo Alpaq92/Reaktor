@@ -60,6 +60,13 @@
     Module.canvas.addEventListener('mousedown', function () {
       Module.canvas.focus();
     });
+    /* Tab is the app's - it walks the widgets, see docs/ACCESSIBILITY.md -
+       and the browser's default for it is to move focus off the canvas,
+       after which no key reaches the app at all. SDL still sees the key;
+       only the browser's own use of it is stopped. */
+    Module.canvas.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') e.preventDefault();
+    });
     /* Emscripten calls setStatus('') when it is ready, but only on some
        paths; this is the one that always fires. */
     Module.onRuntimeInitialized = function () { Module.setStatus(''); };

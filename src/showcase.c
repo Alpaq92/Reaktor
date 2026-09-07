@@ -247,6 +247,60 @@ combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
     nk_draw_image(canvas, r, &im, nk_rgb(255, 255, 255));
 }
 
+/* A chevron where Nuklear would have drawn one of its own. nk_draw_symbol's
+ * chevron is two one-pixel lines corner to corner of whatever box it is
+ * handed - thin, and half the size of the combo's - so tree headers and
+ * property steppers hand Nuklear NK_SYMBOL_NONE and get the Ionicon here,
+ * centred in the slot Nuklear sized. */
+#define CHEVRON_PX 14
+
+static void
+chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
+           const char *name, struct nk_color col)
+{
+    struct nk_rect r;
+    struct nk_image im = curie_ionicon_col(app, name, CHEVRON_PX, col);
+
+    r.w = r.h = (float)CHEVRON_PX;
+    r.x = slot.x + (slot.w - r.w) * 0.5f;
+    r.y = slot.y + (slot.h - r.h) * 0.5f;
+    nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
+}
+
+/* The two steppers of a property, placed the way nk_do_property places
+ * them: a font-height square inside the border and padding at each end.
+ * `b` is the bounds captured before the property was emitted. */
+static void
+property_chevrons(App *app, struct nk_context *ctx, struct nk_rect b)
+{
+    const struct nk_style_property *st = &ctx->style.property;
+    float h = ctx->style.font->height;
+    struct nk_rect l, r;
+
+    l.w = l.h = r.w = r.h = h;
+    l.x = b.x + st->border + st->padding.x;
+    l.y = b.y + st->border + b.h * 0.5f - h * 0.5f;
+    r.x = b.x + b.w - (h + st->padding.x);
+    r.y = l.y;
+    chevron_at(app, ctx, l, "chevron-back-outline",    st->dec_button.text_normal);
+    chevron_at(app, ctx, r, "chevron-forward-outline", st->inc_button.text_normal);
+}
+
+/* A tree header's chevron, in the slot nk_tree_state_base gives its own: a
+ * font-height square at the header's padding. `b` is the header's bounds,
+ * captured before the push; `open` is what the push answered. */
+static void
+tree_chevron(App *app, struct nk_context *ctx, struct nk_rect b, int open)
+{
+    float h = ctx->style.font->height;
+    struct nk_rect s = nk_rect(b.x + ctx->style.tab.padding.x,
+                               b.y + ctx->style.tab.padding.y, h, h);
+
+    chevron_at(app, ctx, s,
+               open ? "chevron-down-outline" : "chevron-forward-outline",
+               ctx->style.tab.text);
+}
+
 /* A tooltip, drawn straight onto the canvas at the pointer.
  *
  * Nuklear's own nk_tooltip opens a NK_POPUP_DYNAMIC panel, and a dynamic
@@ -468,8 +522,9 @@ seed(showcase_state *s)
      * nothing else - there is no word wrap in nk_do_edit at any flag. */
     SDL_strlcpy(s->note,
                 "A multiline editor: NK_EDIT_BOX.\n"
-                "Tab is accepted, and the scrollbars\n"
-                "appear when they are needed.\n"
+                "Tab moves focus on, as it does\n"
+                "everywhere; the scrollbars appear\n"
+                "when they are needed.\n"
                 "\n"
                 "Cut, copy and paste work because the\n"
                 "shell pairs nk_input_begin with\n"
@@ -506,20 +561,20 @@ seed(showcase_state *s)
 
 /* --- buttons and toggles ------------------------------------------------- */
 
-static const enum nk_symbol_type g_symbols[] = {
-    NK_SYMBOL_X, NK_SYMBOL_UNDERSCORE,
-    NK_SYMBOL_CIRCLE_SOLID, NK_SYMBOL_CIRCLE_OUTLINE,
-    NK_SYMBOL_RECT_SOLID, NK_SYMBOL_RECT_OUTLINE,
-    NK_SYMBOL_TRIANGLE_UP, NK_SYMBOL_TRIANGLE_DOWN,
-    NK_SYMBOL_TRIANGLE_LEFT, NK_SYMBOL_TRIANGLE_RIGHT,
-    NK_SYMBOL_TRIANGLE_UP_OUTLINE, NK_SYMBOL_TRIANGLE_DOWN_OUTLINE,
-    NK_SYMBOL_TRIANGLE_LEFT_OUTLINE, NK_SYMBOL_TRIANGLE_RIGHT_OUTLINE,
-    NK_SYMBOL_PLUS, NK_SYMBOL_MINUS,
-    NK_SYMBOL_CHEVRON_UP, NK_SYMBOL_CHEVRON_RIGHT,
-    NK_SYMBOL_CHEVRON_DOWN, NK_SYMBOL_CHEVRON_LEFT,
-    NK_SYMBOL_HAMBURGER
+/* The icons a page reaches for: each is an Ionicon read out of the submodule
+ * and rasterised at the size it is drawn, its stroke colour substituted in
+ * before it is parsed so it follows the stylesheet. Nuklear's own vector
+ * symbols (nk_button_symbol) are still there, but they are two hairlines
+ * corner to corner of a box, and beside these they looked like it. */
+static const struct { const char *icon, *label; } g_icons[] = {
+    { "add-outline",          "Add"      }, { "remove-outline",   "Remove"   },
+    { "close-outline",        "Close"    }, { "search-outline",   "Search"   },
+    { "settings-outline",     "Settings" }, { "save-outline",     "Save"     },
+    { "trash-outline",        "Delete"   }, { "share-social-outline", "Share" },
+    { "refresh-outline",      "Refresh"  }, { "download-outline", "Download" },
+    { "star-outline",         "Star"     }, { "heart-outline",    "Favourite" }
 };
-#define SYMBOL_N ((int)(sizeof(g_symbols) / sizeof(g_symbols[0])))
+#define ICON_N ((int)(sizeof(g_icons) / sizeof(g_icons[0])))
 
 static void
 page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
@@ -540,34 +595,27 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     if (curie_button_accent(app, ctx, "Primary")) s->presses++;
     if (curie_button_icon(app, ctx, "key-outline", "With icon")) s->presses++;
 
-    section(app, ctx, "Symbols",
-            "nk_button_symbol draws Nuklear's own vector glyphs from the "
-            "button's text colour - no atlas, no SVG, no font. All "
-            "twenty-one of them.");
-    api(app, ctx, "nk_button_symbol  /  nk_button_symbol_label");
+    section(app, ctx, "Icons",
+            "Every icon is an Ionicon, read out of the submodule and "
+            "rasterised at the size it is drawn - twice over, for the "
+            "downscale. The stroke colour is substituted into the file "
+            "before it is parsed, which is how an icon follows the "
+            "stylesheet: CSS cannot reach inside an SVG. The label is the "
+            "icon's name to a reader as well as to the eye.");
+    api(app, ctx, "nk_button_image_label  /  curie_button_icon");
 
-    compact_push(ctx);
-    nk_layout_row_static(ctx, 34.0f, 34, 21);
-    for (i = 0; i < SYMBOL_N; i++) {
-        /* Twenty-one glyphs with no text anywhere. Nuklear names its
-         * symbols only by enum, so the tree gets the index - honest, and
-         * better than twenty-one identically anonymous buttons. */
-        SDL_snprintf(line, sizeof(line), "Symbol %d", i + 1);
-        hot(app, ctx, CURIE_A11Y_BUTTON, line, 0);
-        if (nk_button_symbol(ctx, g_symbols[i])) s->presses++;
-    }
-    compact_pop(ctx);
+    nk_layout_row_dynamic(ctx, 38.0f, 4);
+    for (i = 0; i < ICON_N; i++)
+        if (curie_button_icon(app, ctx, g_icons[i].icon, g_icons[i].label))
+            s->presses++;
 
-    nk_layout_row_dynamic(ctx, 34.0f, 3);
-    hot(app, ctx, CURIE_A11Y_BUTTON, "Back", 0);
-    if (nk_button_symbol_label(ctx, NK_SYMBOL_TRIANGLE_LEFT, "Back",
-                               NK_TEXT_RIGHT)) s->presses++;
-    hot(app, ctx, CURIE_A11Y_BUTTON, "Forward", 0);
-    if (nk_button_symbol_label(ctx, NK_SYMBOL_TRIANGLE_RIGHT, "Forward",
-                               NK_TEXT_LEFT)) s->presses++;
-    hot(app, ctx, CURIE_A11Y_BUTTON, "Menu", 0);
-    if (nk_button_symbol_label(ctx, NK_SYMBOL_HAMBURGER, "Menu",
-                               NK_TEXT_LEFT)) s->presses++;
+    nk_layout_row_dynamic(ctx, 38.0f, 3);
+    if (curie_button_icon(app, ctx, "chevron-back-outline", "Back"))
+        s->presses++;
+    if (curie_button_icon(app, ctx, "chevron-forward-outline", "Forward"))
+        s->presses++;
+    if (curie_button_icon(app, ctx, "menu-outline", "Menu"))
+        s->presses++;
 
     section(app, ctx, "Colour, image, repeat and disabled",
             "nk_button_color paints a swatch and nothing else. A repeater "
@@ -790,21 +838,32 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                   "nk_property_double");
 
     nk_layout_row_dynamic(ctx, ROW, 3);
-    SDL_snprintf(line, sizeof(line), "%d", s->prop_i);
-    curie_note(app, CURIE_A11Y_SPINBUTTON, "Columns:", line, 0,
-               nk_widget_bounds(ctx));
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    nk_property_int(ctx, "Columns:", 1, &s->prop_i, 24, 1, 0.25f);
-    SDL_snprintf(line, sizeof(line), "%.2f", (double)s->prop_f);
-    curie_note(app, CURIE_A11Y_SPINBUTTON, "Stroke:", line, 0,
-               nk_widget_bounds(ctx));
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    nk_property_float(ctx, "Stroke:", 0.25f, &s->prop_f, 8.0f, 0.05f, 0.01f);
-    SDL_snprintf(line, sizeof(line), "%.2f", s->prop_d);
-    curie_note(app, CURIE_A11Y_SPINBUTTON, "Ratio:", line, 0,
-               nk_widget_bounds(ctx));
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    nk_property_double(ctx, "Ratio:", 0.0, &s->prop_d, 100.0, 0.25, 0.05f);
+    {
+        struct nk_rect pb;
+
+        pb = nk_widget_bounds(ctx);
+        SDL_snprintf(line, sizeof(line), "%d", s->prop_i);
+        curie_note(app, CURIE_A11Y_SPINBUTTON, "Columns:", line, 0, pb);
+        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        nk_property_int(ctx, "Columns:", 1, &s->prop_i, 24, 1, 0.25f);
+        property_chevrons(app, ctx, pb);
+
+        pb = nk_widget_bounds(ctx);
+        SDL_snprintf(line, sizeof(line), "%.2f", (double)s->prop_f);
+        curie_note(app, CURIE_A11Y_SPINBUTTON, "Stroke:", line, 0, pb);
+        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        nk_property_float(ctx, "Stroke:", 0.25f, &s->prop_f, 8.0f, 0.05f,
+                          0.01f);
+        property_chevrons(app, ctx, pb);
+
+        pb = nk_widget_bounds(ctx);
+        SDL_snprintf(line, sizeof(line), "%.2f", s->prop_d);
+        curie_note(app, CURIE_A11Y_SPINBUTTON, "Ratio:", line, 0, pb);
+        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        nk_property_double(ctx, "Ratio:", 0.0, &s->prop_d, 100.0, 0.25,
+                           0.05f);
+        property_chevrons(app, ctx, pb);
+    }
 
     section(app, ctx, "Combo boxes",
             "nk_combo is the whole widget in one call, for the common case of "
@@ -1150,40 +1209,61 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
     /* A tree node is a container, so it is pushed rather than added: what is
      * drawn between the push and the pop is its children, and a reader walks
      * them that way. Nuklear tells us it is open by returning true. */
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    if (nk_tree_push(ctx, NK_TREE_TAB, "A tab-style tree", NK_MAXIMIZED)) {
-        curie_note_push(app, CURIE_A11Y_TREEITEM, "A tab-style tree", NULL,
-                        CURIE_A11Y_EXPANDED, nk_widget_bounds(ctx));
-        nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-        nk_label(ctx, "Its children are indented under it.", NK_TEXT_LEFT);
+    /* Each header's bounds are taken before the push - the push lays out
+     * its own row, so afterwards nk_widget_bounds is the first child's - and
+     * serve both the tree node and the chevron drawn into the slot Nuklear
+     * left empty. Closed nodes still report, and still get their chevron:
+     * a reader can reach a collapsed branch, and it points somewhere. */
+    {
+        struct nk_rect hb = nk_widget_bounds(ctx);
+        int open;
+
         hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-        if (nk_tree_push(ctx, NK_TREE_NODE, "A node inside it", NK_MINIMIZED)) {
-            curie_note_push(app, CURIE_A11Y_TREEITEM, "A node inside it",
-                            NULL, CURIE_A11Y_EXPANDED, nk_widget_bounds(ctx));
+        open = nk_tree_push(ctx, NK_TREE_TAB, "A tab-style tree", NK_MAXIMIZED);
+        tree_chevron(app, ctx, hb, open);
+        curie_note_push(app, CURIE_A11Y_TREEITEM, "A tab-style tree", NULL,
+                        open ? CURIE_A11Y_EXPANDED : 0u, hb);
+        if (open) {
             nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-            nk_label(ctx, "Nesting is unlimited.", NK_TEXT_LEFT);
-            curie_note_pop(app);
-            nk_tree_pop(ctx);
-        }
-        for (i = 0; i < 3; i++) {
-            char lab[32];
-            SDL_snprintf(lab, sizeof(lab), "Selectable branch %d", i + 1);
+            nk_label(ctx, "Its children are indented under it.", NK_TEXT_LEFT);
+
+            hb = nk_widget_bounds(ctx);
             hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-            if (nk_tree_element_push(ctx, NK_TREE_NODE, lab, NK_MINIMIZED,
-                                     &s->tree_leaf[i])) {
-                curie_note_push(app, CURIE_A11Y_TREEITEM, lab, NULL,
-                                CURIE_A11Y_EXPANDED |
-                                (s->tree_leaf[i] ? CURIE_A11Y_CHECKED : 0u),
-                                nk_widget_bounds(ctx));
+            open = nk_tree_push(ctx, NK_TREE_NODE, "A node inside it",
+                                NK_MINIMIZED);
+            tree_chevron(app, ctx, hb, open);
+            curie_note_push(app, CURIE_A11Y_TREEITEM, "A node inside it", NULL,
+                            open ? CURIE_A11Y_EXPANDED : 0u, hb);
+            if (open) {
                 nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-                nk_label(ctx, "with a checkbox in the header",
-                         NK_TEXT_LEFT);
-                curie_note_pop(app);
+                nk_label(ctx, "Nesting is unlimited.", NK_TEXT_LEFT);
                 nk_tree_pop(ctx);
             }
+            curie_note_pop(app);
+
+            for (i = 0; i < 3; i++) {
+                char lab[32];
+                SDL_snprintf(lab, sizeof(lab), "Selectable branch %d", i + 1);
+                hb = nk_widget_bounds(ctx);
+                hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+                open = nk_tree_element_push(ctx, NK_TREE_NODE, lab,
+                                            NK_MINIMIZED, &s->tree_leaf[i]);
+                tree_chevron(app, ctx, hb, open);
+                curie_note_push(app, CURIE_A11Y_TREEITEM, lab, NULL,
+                                (open ? CURIE_A11Y_EXPANDED : 0u) |
+                                (s->tree_leaf[i] ? CURIE_A11Y_CHECKED : 0u),
+                                hb);
+                if (open) {
+                    nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
+                    nk_label(ctx, "with a checkbox in the header",
+                             NK_TEXT_LEFT);
+                    nk_tree_pop(ctx);
+                }
+                curie_note_pop(app);
+            }
+            nk_tree_pop(ctx);
         }
         curie_note_pop(app);
-        nk_tree_pop(ctx);
     }
 
     nk_layout_row_dynamic(ctx, 10.0f, 1);
@@ -1342,6 +1422,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
      * it gets there. */
     char line[SC_PATH_CAP + 32];
     struct nk_rect bar;
+    int ok;
 
     /* Before anything else on this page. nk_menubar_begin pins the rows
      * emitted inside it to the top of the group and moves the content region
@@ -1362,8 +1443,18 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     /* nk_group_begin answers 0 when the group is scrolled out of view, which
      * is a reason to skip the bar and nothing else - it was bailing out of
      * the whole page, so scrolling past the bar blanked everything below. */
-    if (nk_group_begin(ctx, "menubar", NK_WINDOW_BORDER |
-                                       NK_WINDOW_NO_SCROLLBAR)) {
+    /* No NK_WINDOW_BORDER: Nuklear strokes a group's border at a literal 0
+     * rounding around a fill drawn at window.rounding, so the corners of the
+     * frame poked out past the rounded fill - crisp on the software renderer,
+     * where nothing feathers it away. The border is stroked below instead, on
+     * the fill's own footprint. The padding centres the 26px row in the 40px
+     * bar: (40 - 26) / 2, read by the panel as it begins, so it is popped the
+     * moment nk_group_begin has answered, whichever way it answered. */
+    nk_style_push_vec2(ctx, &ctx->style.window.group_padding,
+                       nk_vec2(12.0f, 7.0f));
+    ok = nk_group_begin(ctx, "menubar", NK_WINDOW_NO_SCROLLBAR);
+    nk_style_pop_vec2(ctx);
+    if (ok) {
     curie_note_push(app, CURIE_A11Y_MENUBAR, "Menu bar", NULL, 0, bar);
     nk_menubar_begin(ctx);
     nk_layout_row_begin(ctx, NK_STATIC, 26.0f, 3);
@@ -1439,6 +1530,12 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     curie_note_pop(app);
     nk_group_end(ctx);
     }
+    /* The bar's frame, at the rounding its fill was drawn with - still
+     * pushed here - inset half a pixel so the line lands inside the bar. */
+    nk_stroke_rect(nk_window_get_canvas(ctx),
+                   nk_rect(bar.x + 0.5f, bar.y + 0.5f, bar.w - 1.0f, bar.h - 1.0f),
+                   ctx->style.window.rounding, 1.0f,
+                   ctx->style.window.border_color);
     popup_style_pop(ctx);
 
     nk_layout_row_dynamic(ctx, 8.0f, 1);

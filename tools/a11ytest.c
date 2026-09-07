@@ -241,6 +241,40 @@ int main(int argc, char **argv)
         check("checkbox: restated", restated, 1);
     }
 
+    /* 4b. Keyboard focus is a state like any other: naming a node is one
+     *     state change on the next frame, moving it is two, clearing it one.
+     *     Phase 3 hangs off this. */
+    {
+        const curie_a11y_node *t = curie_a11y_tree(&a, &n);
+        unsigned btn = 0, box = 0;
+
+        for (i = 0; i < n; i++) {
+            if (t[i].name && strcmp(t[i].name, "Continue") == 0)   btn = t[i].id;
+            if (t[i].name && strcmp(t[i].name, "Wrap lines") == 0) box = t[i].id;
+        }
+        check("focus: nodes found", btn != 0 && box != 0, 1);
+
+        curie_a11y_set_focus(&a, btn);
+        build(&a, 1, 0, 1);
+        curie_a11y_changes(&a, &n);
+        check("focus: set is one change", n, 1);
+        t = curie_a11y_tree(&a, &n);
+        for (i = 0; i < n; i++)
+            if (t[i].id == btn)
+                check("focus: bit on the node",
+                      (t[i].state & CURIE_A11Y_FOCUSED) != 0, 1);
+
+        curie_a11y_set_focus(&a, box);
+        build(&a, 1, 0, 1);
+        curie_a11y_changes(&a, &n);
+        check("focus: move is two changes", n, 2);
+
+        curie_a11y_set_focus(&a, 0);
+        build(&a, 1, 0, 1);
+        curie_a11y_changes(&a, &n);
+        check("focus: clear is one change", n, 1);
+    }
+
     /* 5. Inserting a node above three others leaves their ids alone. An id
      *    derived from call order would fail this, and every widget below the
      *    insertion would be announced as new. */

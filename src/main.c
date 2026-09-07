@@ -251,6 +251,27 @@ struct App {
      * Large (arenas, not pointers), so it lives here rather than on a stack. */
     curie_a11y a11y;
 
+    /* Keyboard focus - phase 3 of docs/ACCESSIBILITY.md. The tree above is in
+     * reading order, so its focusable subset is the tab order and nothing
+     * separate is kept. focus_id names a node in it, 0 for none. */
+    unsigned       focus_id;
+    int            focus_visible;  /* the ring: a key shows it, a click hides it */
+    struct nk_rect focus_rect;     /* where the focused node landed this frame */
+    int            focus_seen;
+    /* Enter or Space on the focused node, delivered to Nuklear as a press at
+     * its centre and released on the frame after. */
+    int            key_click;
+    float          key_click_x, key_click_y;
+    /* Focus landing outside the page's visible band scrolls the page to it
+     * on the next frame. body_rect is that band, in window coordinates, as
+     * of the last frame; page_node is the tree id of the page's group, so
+     * only nodes inside the page ask for a scroll - the tab strip is
+     * outside the band too, and must not. */
+    struct nk_rect body_rect;
+    unsigned       page_node;
+    int            focus_scroll;
+    struct nk_rect focus_scroll_rect;
+
     /* Which page is on screen, and what the showcase pages remember between
      * frames. Tab 0 is the login card this app began as. */
     int            tab;
@@ -944,15 +965,44 @@ edit_paste_clipboard(struct nk_text_edit *edit)
 }
 
 /* The `input` rule pushed onto nk_style.edit, shared by the login field and
- * by the showcase's, which differ only in where the buffer lives. */
+ * by the showcase's, which differ only in where the buffer lives.
+ *
+ * Two departures from the rule as written. A field takes the button's radius
+ * rather than its own: tiny.css rounds an input tighter than a button, and
+ * beside the card's buttons that read as a different kind of thing. And with
+ * `inset`, the fill leans toward the page body - tiny.css gives an input the
+ * same colour as the card it sits on, so on the login card the field was a
+ * hairline rectangle and nothing else. Leaning toward the body puts it a
+ * step lighter than the card on the light scheme and a step darker on the
+ * dark one, which is how a field is expected to sit. The showcase's fields
+ * are on the page itself and keep the rule's fill. */
 static style_frame
-push_edit_style(struct nk_context *ctx, curie_style *out)
+push_edit_style(struct nk_context *ctx, curie_style *out, int inset)
 {
-    curie_style s, foc;
+    curie_style s, foc, btn;
     style_frame f = { 0, 0, 0, 0, 0 };
+    unsigned char body[4];
 
     curie_style_get("input", &s);
     curie_style_get("input:focus", &foc);
+    curie_style_get("button", &btn);
+    if (btn.matched) s.rounding = btn.rounding;
+    /* Nuklear insets the text by border + padding, and the border is drawn
+     * here as a stroke with Nuklear's own set to 0 - so the border's width
+     * goes back into the padding, or the text would sit two pixels further
+     * left than the rule says. Then the button's horizontal padding, if it
+     * is the larger: the text starts where a button's label would. */
+    s.pad_x += s.border;
+    if (btn.matched && btn.pad_x > s.pad_x) s.pad_x = btn.pad_x;
+    /* And never tighter than a 40px field wants: the rule's 0.6rem was
+     * written for a field on a page, and next to the card's rounding the
+     * text sat against the edge. */
+    if (s.pad_x < 16.0f) s.pad_x = 16.0f;
+    if (inset && curie_style_token("--background-body", body)) {
+        int k;
+        for (k = 0; k < 3; k++)
+            s.bg[k] = (unsigned char)((s.bg[k] * 3 + body[k] * 2) / 5);
+    }
     *out = s;
     if (!s.matched) return f;
 
@@ -990,6 +1040,9 @@ push_edit_style(struct nk_context *ctx, curie_style *out)
                      ? col_of(c) : nk_rgba(128, 128, 128, 90);
         }
         nk_style_push_color(ctx, &ctx->style.edit.border_color, line);
+        /* Handed back for stroke_edit_edge, which draws the ring. */
+        out->border_col[0] = line.r; out->border_col[1] = line.g;
+        out->border_col[2] = line.b; out->border_col[3] = line.a;
     }
     nk_style_push_color(ctx, &ctx->style.edit.text_normal, col_of(s.fg));
     nk_style_push_color(ctx, &ctx->style.edit.text_hover, col_of(s.fg));
@@ -1017,13 +1070,35 @@ push_edit_style(struct nk_context *ctx, curie_style *out)
     f.colors = 9;
 
     nk_style_push_float(ctx, &ctx->style.edit.rounding, s.rounding);
-    nk_style_push_float(ctx, &ctx->style.edit.border, s.border);
+    /* No border from Nuklear: it draws one as two fills, and the ring is
+     * stroked instead - see stroke_edit_edge. */
+    nk_style_push_float(ctx, &ctx->style.edit.border, 0.0f);
     f.floats = 2;
 
     nk_style_push_vec2(ctx, &ctx->style.edit.padding,
                        nk_vec2(s.pad_x, s.pad_y));
     f.vec2s = 1;
     return f;
+}
+
+/* Nuklear draws an edit's border as two fills - the border colour, then the
+ * background shrunk by the width. On the software renderer fills are not
+ * feathered (see the note at nk_sdl_render_ex in the frame body), so that
+ * ring came out as a staircase at a 6px radius, which reads as a square
+ * corner. Strokes are feathered there, so the ring is drawn as one, on the
+ * same footprint: a stroke of the border's width, centred half a width in,
+ * covers exactly the band the two fills did. Buttons already worked this
+ * way, which is why they kept their corners and the fields lost theirs. */
+static void
+stroke_edit_edge(struct nk_context *ctx, struct nk_rect b, const curie_style *s)
+{
+    float t = s->border, r;
+
+    if (!s->matched || t <= 0.0f) return;
+    r = s->rounding - t * 0.5f;
+    nk_stroke_rect(nk_window_get_canvas(ctx),
+                   nk_rect(b.x + t * 0.5f, b.y + t * 0.5f, b.w - t, b.h - t),
+                   r > 0.0f ? r : 0.0f, t, col_of(s->border_col));
 }
 
 static void
@@ -1035,7 +1110,9 @@ draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
     unsigned char muted[4];
     struct nk_color grey = curie_style_token("--text-muted", muted)
                          ? col_of(muted) : nk_rgb(0x9a, 0x9a, 0x9a);
-    float pad = (s->matched ? s->pad_x : 8.0f) + (s->matched ? s->border : 1.0f);
+    /* pad_x already carries the border - see push_edit_style - so this is
+     * exactly where Nuklear starts the typed text. */
+    float pad = s->matched ? s->pad_x : 9.0f;
     struct nk_rect r = nk_rect(bounds.x + pad,
                                bounds.y + (bounds.h - font->height) * 0.5f,
                                bounds.w - pad * 2.0f, font->height + 2.0f);
@@ -1109,7 +1186,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
      * changes only the cursor - which needs no frame. */
     hot_push(app, bounds, 2, 0);
 
-    f = push_edit_style(ctx, &s);
+    f = push_edit_style(ctx, &s, 1);
     {
         nk_flags st = nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit,
                                      nk_filter_default);
@@ -1119,6 +1196,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
                    st & NK_EDIT_ACTIVE ? CURIE_A11Y_FOCUSED : 0u, bounds);
     }
     pop_style(ctx, f);
+    stroke_edit_edge(ctx, bounds, &s);
 
     /* Right-click menu. Nuklear places and dismisses it; the items act on the
      * edit state directly, which is why it is ours to hold. */
@@ -1333,9 +1411,22 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
                        nk_vec2(pad_x, pad_y));
     f.vec2s = 2;
 
-    SDL_snprintf(src, sizeof(src),
-                 "third_party/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
-                 glyph, app->icon_hex, (double)GLYPH_STROKE);
+    /* Every other icon is --text-muted. On the light scheme that leaves the
+     * window controls a grey barely off the titlebar, and these three are
+     * the one set of glyphs that must never be hunted for - so on a light
+     * surface they take --text-main, as the platform's own do. Dark keeps
+     * the muted stroke, which reads fine there. */
+    if (app->dark) {
+        SDL_snprintf(src, sizeof(src),
+                     "third_party/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
+                     glyph, app->icon_hex, (double)GLYPH_STROKE);
+    } else {
+        SDL_snprintf(src, sizeof(src),
+                     "third_party/ionicons/src/svg/%s.svg"
+                     "?stroke=#%02x%02x%02x&sw=%.2f",
+                     glyph, app->text.r, app->text.g, app->text.b,
+                     (double)GLYPH_STROKE);
+    }
 
     /* nk_button_image_label with an empty label: nk_button_image draws the
      * background and then nothing at all here. */
@@ -1891,12 +1982,15 @@ apply_widget_style(App *app)
         st->tab.rounding = det.rounding;
         st->tab.padding  = nk_vec2(det.pad_x, det.pad_y);
     }
-    /* Chevrons, to match the combo's arrow. These boxes are square, so
-     * nk_draw_symbol's corner-to-corner chevron comes out at a sane angle. */
-    st->tab.sym_minimize = NK_SYMBOL_CHEVRON_RIGHT;
-    st->tab.sym_maximize = NK_SYMBOL_CHEVRON_DOWN;
-    st->property.sym_left  = NK_SYMBOL_CHEVRON_LEFT;
-    st->property.sym_right = NK_SYMBOL_CHEVRON_RIGHT;
+    /* No symbol from Nuklear on tree headers or property steppers. Its
+     * chevron is two one-pixel lines corner to corner of the box it is
+     * handed - thin, and small beside the combo's - so the slots are left
+     * empty and the showcase draws the Ionicon into them: chevron_at in
+     * showcase.c. */
+    st->tab.sym_minimize = NK_SYMBOL_NONE;
+    st->tab.sym_maximize = NK_SYMBOL_NONE;
+    st->property.sym_left  = NK_SYMBOL_NONE;
+    st->property.sym_right = NK_SYMBOL_NONE;
 
     style_flat_button(&st->tab.tab_maximize_button, hover, muted, 3.0f);
     style_flat_button(&st->tab.tab_minimize_button, hover, muted, 3.0f);
@@ -2019,6 +2113,10 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         }
         sw_w = font->width(font->userdata, font->height, swl,
                            (int)strlen(swl)) + 2.0f * (float)TAB_PAD_X;
+#ifdef __EMSCRIPTEN__
+        /* No desktop frame to switch to: the canvas is the window. */
+        sw_w = 0.0f;
+#endif
         /* The group pads either side, and Nuklear inserts 4px between each
          * column: tabs, spacer, three scheme links, separator, switch. */
         rest = (float)win_w - used - sw_w - TAB_SEP - 2.0f * 4.0f
@@ -2112,6 +2210,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     nk_spacing(ctx, 1);
     curie_note_pop(app);
 
+#ifndef __EMSCRIPTEN__
     nk_layout_row_push(ctx, sw_w);
     {
         struct nk_rect b = nk_widget_bounds(ctx);
@@ -2154,6 +2253,8 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_pop_style_item(ctx);
         nk_style_pop_style_item(ctx);
     }
+
+#endif
 
     nk_layout_row_end(ctx);
     nk_style_pop_font(ctx);
@@ -2210,6 +2311,25 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         nk_group_set_scroll(ctx, "body", 0, (nk_uint)app->scroll0);
         app->scroll0 = 0;          /* a starting position, not a lock */
     }
+    app->body_rect = nk_rect(0, top, (float)win_w, body_h);
+    /* Keyboard focus landed outside the band above: bring it in, with a
+     * little air, so the ring is not drawn against the edge. */
+    if (app->focus_scroll) {
+        const float air = 12.0f;
+        struct nk_rect r = app->focus_scroll_rect;
+        nk_uint sx, sy;
+        float dy = 0.0f;
+
+        nk_group_get_scroll(ctx, "body", &sx, &sy);
+        if (r.y < top + air)
+            dy = r.y - (top + air);
+        else if (r.y + r.h > top + body_h - air)
+            dy = r.y + r.h - (top + body_h - air);
+        if ((float)sy + dy < 0.0f) dy = -(float)sy;
+        nk_group_set_scroll(ctx, "body", sx, (nk_uint)((float)sy + dy));
+        app->focus_scroll = 0;
+        app->dirty = 1;
+    }
 
     /* A showcase page can be taller than the window. No background of its
      * own: the window was already cleared to exactly this colour. */
@@ -2240,8 +2360,9 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 
         /* The page is a container, named by its tab, so a reader is told
          * which page it is walking rather than handed a flat list. */
-        curie_note_push(app, CURIE_A11Y_GROUP, curie_tab_names[app->tab], NULL,
-                        0, nk_rect(0, top, (float)win_w, body_h));
+        app->page_node =
+            curie_note_push(app, CURIE_A11Y_GROUP, curie_tab_names[app->tab],
+                            NULL, 0, nk_rect(0, top, (float)win_w, body_h));
         curie_showcase_page(app, ctx, app->tab, sz.x, sz.y);
         curie_note_pop(app);
         nk_group_end(ctx);
@@ -2398,9 +2519,10 @@ curie_field(App *app, struct nk_context *ctx, nk_flags flags,
     note_field_rect(app, ctx, bounds);
     hot_push(app, bounds, 2, 0);
 
-    f = push_edit_style(ctx, &s);
+    f = push_edit_style(ctx, &s, 0);
     state = nk_edit_string(ctx, flags, buf, len, cap, filter);
     pop_style(ctx, f);
+    stroke_edit_edge(ctx, bounds, &s);
     note_ime_caret(app, ctx, bounds, state, &ctx->text_edit);
     /* The hint doubles as the label: it is the only text the field carries,
      * and an unnamed field is unusable to a reader. A box with no hint gets
@@ -2500,20 +2622,35 @@ a11y_dump_once(App *app)
 
 /* --- describing the frame ----------------------------------------------- */
 /* Thin forwards onto app->a11y, so App stays opaque to the pages and a11y.h
- * stays free of it. */
+ * stays free of it. Every report passes through focus_saw, which is how the
+ * frame learns where the focused node was drawn without any widget knowing
+ * that focus exists. */
+
+static void
+focus_saw(App *app, unsigned id, struct nk_rect b)
+{
+    if (id && id == app->focus_id) {
+        app->focus_rect = b;
+        app->focus_seen = 1;
+    }
+}
 
 void
 curie_note(App *app, unsigned char role, const char *name, const char *value,
            unsigned state, struct nk_rect bounds)
 {
-    curie_a11y_add(&app->a11y, role, name, value, state, bounds);
+    focus_saw(app, curie_a11y_add(&app->a11y, role, name, value, state, bounds),
+              bounds);
 }
 
-void
+unsigned
 curie_note_push(App *app, unsigned char role, const char *name,
                 const char *value, unsigned state, struct nk_rect bounds)
 {
-    curie_a11y_push(&app->a11y, role, name, value, state, bounds);
+    unsigned id = curie_a11y_push(&app->a11y, role, name, value, state, bounds);
+
+    focus_saw(app, id, bounds);
+    return id;
 }
 
 void
@@ -2529,7 +2666,229 @@ void
 curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
                 const char *name, unsigned state)
 {
-    curie_a11y_add(&app->a11y, role, name, NULL, state, nk_widget_bounds(ctx));
+    struct nk_rect b = nk_widget_bounds(ctx);
+    focus_saw(app, curie_a11y_add(&app->a11y, role, name, NULL, state, b), b);
+}
+
+/* --- keyboard focus ----------------------------------------------------- */
+/* Phase 3 of docs/ACCESSIBILITY.md. Nuklear has no focus model - NK_KEY_TAB
+ * inserts a tab - so the shell keeps one, over the tree the frame just
+ * described. */
+
+enum {
+    FOCUS_NEXT = 1, FOCUS_PREV,        /* Tab, Shift-Tab: every focusable node */
+    FOCUS_FIRST, FOCUS_LAST,           /* Home, End */
+    FOCUS_SIB_NEXT, FOCUS_SIB_PREV     /* arrows: siblings only */
+};
+
+static int
+focusable(const curie_a11y_node *n)
+{
+    switch (n->role) {
+    case CURIE_A11Y_TAB:      case CURIE_A11Y_BUTTON:   case CURIE_A11Y_LINK:
+    case CURIE_A11Y_CHECKBOX: case CURIE_A11Y_RADIO:    case CURIE_A11Y_TEXTBOX:
+    case CURIE_A11Y_SLIDER:   case CURIE_A11Y_SPINBUTTON:
+    case CURIE_A11Y_COMBOBOX: case CURIE_A11Y_LISTITEM: case CURIE_A11Y_TREEITEM:
+    case CURIE_A11Y_MENUITEM:
+        /* Off-window nodes count: the page scrolls to them - see focus_move. */
+        return !(n->state & CURIE_A11Y_DISABLED);
+    default:
+        return 0;
+    }
+}
+
+/* Applies a pending move against the tree just built, so the ring and the
+ * focused state land on the frame after - which the move marks dirty. Tab
+ * walks every focusable node in reading order and wraps; the arrows stay
+ * among siblings, which is what makes a tab strip or a menu behave as one
+ * control. A node that scrolled out of the window is skipped rather than
+ * scrolled to: nothing here can move a group's scroll yet. */
+/* Moves focus now, against the tree of the last drawn frame - which is
+ * complete, and still valid between frames. At the key rather than after
+ * the next frame, because keys arrive faster than frames and two Tabs that
+ * landed before one frame were merging into a single move. Tab walks every
+ * focusable node in reading order and wraps; the arrows stay among
+ * siblings, which is what makes a tab strip or a menu behave as one
+ * control. A node that scrolled out of the window is skipped rather than
+ * scrolled to: nothing here can move a group's scroll yet. */
+static void
+focus_move(App *app, int step)
+{
+    int n, i, cur = -1, pick = -1;
+    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+
+    for (i = 0; i < n; i++)
+        if (t[i].id == app->focus_id) { cur = i; break; }
+
+    if (step == FOCUS_FIRST || step == FOCUS_LAST) {
+        int d = step == FOCUS_FIRST ? 1 : -1;
+        for (i = d > 0 ? 0 : n - 1; i >= 0 && i < n; i += d)
+            if (focusable(&t[i])) { pick = i; break; }
+    } else {
+        int d   = (step == FOCUS_NEXT || step == FOCUS_SIB_NEXT) ? 1 : -1;
+        int sib = (step == FOCUS_SIB_NEXT || step == FOCUS_SIB_PREV) && cur >= 0;
+        int k, start = cur >= 0 ? cur : (d > 0 ? -1 : n);
+        for (k = 1; k <= n; k++) {
+            i = ((start + d * k) % n + n) % n;
+            if (i == cur) break;
+            if (!focusable(&t[i])) continue;
+            if (sib && t[i].parent != t[cur].parent) continue;
+            pick = i;
+            break;
+        }
+    }
+    if (pick < 0) return;
+
+    app->focus_id = t[pick].id;
+    curie_a11y_set_focus(&app->a11y, app->focus_id);
+    /* The rect comes with the pick, so Enter a moment later presses this
+     * node and not the one before it. The frame after draws the ring. */
+    app->focus_rect    = t[pick].bounds;
+    app->focus_seen    = 1;
+    app->focus_visible = 1;
+    app->dirty = 1;
+    /* Inside the page and outside its visible band: the page scrolls to it
+     * on the frame that follows, where the group's scroll can be set. The
+     * band and the node's bounds are both as of the last frame, which is
+     * the frame the node was measured in, so they agree. */
+    {
+        const struct nk_rect *b = &app->body_rect, *r = &t[pick].bounds;
+        int under = 0, j = pick, guard = 0;
+
+        while (t[j].parent && guard++ < CURIE_A11Y_MAX_DEPTH) {
+            int k;
+            if (t[j].parent == app->page_node) { under = 1; break; }
+            for (k = 0; k < n; k++) if (t[k].id == t[j].parent) break;
+            if (k == n) break;
+            j = k;
+        }
+        if (under && (r->y < b->y || r->y + r->h > b->y + b->h)) {
+            app->focus_scroll      = 1;
+            app->focus_scroll_rect = *r;
+        }
+    }
+    /* Tab into a field puts the caret in it, as it does everywhere else. */
+    if (t[pick].role == CURIE_A11Y_TEXTBOX) {
+        app->key_click   = 1;
+        app->key_click_x = t[pick].bounds.x + t[pick].bounds.w * 0.5f;
+        app->key_click_y = t[pick].bounds.y + t[pick].bounds.h * 0.5f;
+    }
+}
+
+/* After a frame: a focus whose node went away - another page, a closed
+ * menu, a scroll - is dropped rather than left pointing at nothing. */
+static void
+focus_resolve(App *app)
+{
+    int n, i;
+    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+
+    if (!app->focus_id) return;
+    for (i = 0; i < n; i++)
+        if (t[i].id == app->focus_id) {
+            if (focusable(&t[i])) return;
+            break;
+        }
+    app->focus_id = 0;
+    curie_a11y_set_focus(&app->a11y, 0);
+}
+
+/* Tab walks the focusable nodes, the arrows walk siblings, Home and End
+ * jump, Enter and Space press. Answers whether the key was taken, so the
+ * caller keeps it from Nuklear - otherwise Tab would still land in a field
+ * as a character. While a field is being edited the editor keeps every key
+ * but Tab, which leaves it. The keypad arrows count: with Num Lock off
+ * they are the only arrows some keyboards have. */
+static int
+focus_key(App *app, const SDL_Event *event)
+{
+    struct nk_window *pw = nk_window_find(app->ctx, "page");
+    int editing = pw && pw->edit.active;
+
+    if (event->key.key == SDLK_TAB) {
+        if (editing) pw->edit.active = nk_false;
+        focus_move(app, (event->key.mod & SDL_KMOD_SHIFT) ? FOCUS_PREV
+                                                         : FOCUS_NEXT);
+        app->dirty = 1;
+        return 1;
+    }
+    if (editing) return 0;
+
+    switch (event->key.key) {
+    case SDLK_RIGHT: case SDLK_DOWN: case SDLK_KP_6: case SDLK_KP_2:
+        focus_move(app, FOCUS_SIB_NEXT); break;
+    case SDLK_LEFT:  case SDLK_UP:   case SDLK_KP_4: case SDLK_KP_8:
+        focus_move(app, FOCUS_SIB_PREV); break;
+    case SDLK_HOME:  case SDLK_KP_7: focus_move(app, FOCUS_FIRST); break;
+    case SDLK_END:   case SDLK_KP_1: focus_move(app, FOCUS_LAST);  break;
+    case SDLK_RETURN: case SDLK_KP_ENTER: case SDLK_SPACE:
+        if (!app->focus_id || !app->focus_seen) return 0;
+        app->key_click   = 1;
+        app->key_click_x = app->focus_rect.x + app->focus_rect.w * 0.5f;
+        app->key_click_y = app->focus_rect.y + app->focus_rect.h * 0.5f;
+        app->focus_visible = 1;
+        break;
+    case SDLK_ESCAPE:
+        /* Hides the ring; Nuklear may want the key as well. */
+        app->focus_visible = 0;
+        app->dirty = 1;
+        return 0;
+    default:
+        return 0;
+    }
+    app->dirty = 1;
+    return 1;
+}
+
+/* What a reader's press and a reader's move become: the same click and the
+ * same focus a key would make, so a node reached through the platform
+ * behaves exactly as one reached through Tab - see a11y_web.c. */
+static void
+reader_focus(void *user, unsigned id)
+{
+    App *app = (App *)user;
+    int n, i;
+    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+
+    for (i = 0; i < n; i++)
+        if (t[i].id == id) {
+            app->focus_id = id;
+            curie_a11y_set_focus(&app->a11y, id);
+            app->focus_rect    = t[i].bounds;
+            app->focus_seen    = 1;
+            app->focus_visible = 1;
+            app->dirty = 1;
+            return;
+        }
+}
+
+static void
+reader_activate(void *user, unsigned id)
+{
+    App *app = (App *)user;
+
+    reader_focus(user, id);
+    if (app->focus_id != id) return;
+    app->key_click   = 1;
+    app->key_click_x = app->focus_rect.x + app->focus_rect.w * 0.5f;
+    app->key_click_y = app->focus_rect.y + app->focus_rect.h * 0.5f;
+}
+
+/* The ring, from one place once the page has drawn: 2px in --focus, a pixel
+ * outside the node so it never covers the widget's own edge. Shown once a
+ * key has moved focus and hidden by the next click - the :focus-visible
+ * rule every desktop follows. */
+static void
+focus_ring(App *app, struct nk_context *ctx)
+{
+    unsigned char c[4];
+    struct nk_color col = curie_style_token("--focus", c)
+                        ? col_of(c) : nk_rgb(0x56, 0xc7, 0xff);
+    struct nk_rect r = app->focus_rect;
+
+    nk_stroke_rect(nk_window_get_canvas(ctx),
+                   nk_rect(r.x - 2.0f, r.y - 2.0f, r.w + 4.0f, r.h + 4.0f),
+                   5.0f, 2.0f, col);
 }
 
 /* The radius for a popup, tooltip or menu: `dialog`'s, capped, because 1rem is
@@ -2828,26 +3187,42 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
             }
         }
 
-        /* Not swapped, only noted. Direct3D on a software adapter costs six
-         * times what SDL's own software renderer costs here - 78.7 ms of CPU
-         * a frame against 13.1 - and switching automatically was written,
-         * measured and then taken out again: SDL's software rasteriser draws
-         * this UI differently. A popup gains an outline and a rule between
-         * every item, the tab underline breaks into two lines with a gap, and
-         * the top row of the window comes out a shade darker. Those are its
-         * rasteriser, not ours, and an automatic choice that changes how the
-         * app looks is not a choice worth making for the user.
-         *
-         * So it is reported instead. CURIE_RENDERER=software takes the trade
-         * for anyone who wants it. */
+        /* No GPU: Direct3D has landed on WARP, Microsoft's software
+         * implementation, and costs six times what SDL's own software
+         * renderer costs here - 78.7 ms of CPU a frame against 13.1. So
+         * `auto` swaps to SDL's. That swap was written once before and taken
+         * out, because the software rasteriser drew the page differently;
+         * the renderer section in DEVELOPMENT.md is the account of closing
+         * that gap, and what remains of it is accepted. A driver asked for
+         * by name is kept, and reported as running with no GPU behind it. */
+        if (renderer_is_software(app->ren)) {
+            if (SDL_strcmp(app->render_mode, "auto") == 0) {
+                SDL_Renderer *sw;
+
+                /* SDL_CreateRenderer on a window that already has one fails
+                 * quietly, so the old one goes first. */
+                SDL_DestroyRenderer(app->ren);
+                app->ren = NULL;
+                sw = SDL_CreateRenderer(app->win, "software");
+                if (!sw) sw = SDL_CreateRenderer(app->win, NULL);
+                if (!sw) {
+                    SDL_Log("no renderer after the WARP swap: %s",
+                            SDL_GetError());
+                    return SDL_APP_FAILURE;
+                }
+                app->ren = sw;
+                SDL_strlcpy(app->render_mode, "auto: software (no GPU)",
+                            sizeof(app->render_mode));
+            } else {
+                SDL_strlcpy(app->render_mode + SDL_strlen(app->render_mode),
+                            " (no GPU)",
+                            sizeof(app->render_mode) -
+                                SDL_strlen(app->render_mode));
+            }
+        }
         app->renderer_is_sw =
             SDL_strcmp(SDL_GetRendererName(app->ren), "software") == 0;
         app->sw_noaa = env_int("CURIE_SW_NOAA", 0) != 0;
-
-        if (renderer_is_software(app->ren))
-            SDL_strlcpy(app->render_mode + SDL_strlen(app->render_mode),
-                        " (no GPU)",
-                        sizeof(app->render_mode) - SDL_strlen(app->render_mode));
     }
 
 #ifdef __EMSCRIPTEN__
@@ -2856,6 +3231,10 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, app, 0,
                                    web_on_resize);
 #endif
+    /* Phase 4: whatever platform can read the tree. The web mirrors it into
+     * the DOM; the desktop bridges are still ahead, and until then this
+     * registers the callbacks and does nothing else. */
+    curie_a11y_platform_init(reader_activate, reader_focus, app);
 
     /* Without this the loop presents as fast as the GPU allows, which was
      * half of the idle CPU cost. */
@@ -3066,6 +3445,7 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
         }
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            app->focus_visible = 0;
             /* Run a real frame loop for the duration of the gesture.
              *
              * "waitevent" is right when the app is idle and wrong while the
@@ -3162,7 +3542,16 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
                            event->key.key < SDLK_1 + TAB_COUNT) {
                     set_tab(app, (int)(event->key.key - SDLK_1));
                 }
+            } else if (focus_key(app, event)) {
+                /* Taken: it does not reach Nuklear at all. */
+                return SDL_APP_CONTINUE;
             }
+            break;
+
+        case SDL_EVENT_USER:
+            /* Pushed by the frame that pressed a key-click, so the frame
+             * that releases it is sure to follow. */
+            app->dirty = 1;
             break;
 
         default:
@@ -3342,6 +3731,29 @@ SDL_AppIterate(void *appstate)
 
     Uint64 t_build0 = SDL_GetPerformanceCounter();
 
+    /* A key on the focused node, delivered as the click it stands for.
+     * Nuklear's default button fires on the press when it lands inside the
+     * widget, so a press here and a release on the next frame is a click to
+     * everything that takes one - buttons, tabs, checkboxes, menu items, and
+     * a field, which takes the caret. The pointer Nuklear sees stays there
+     * until the next real motion; the one the OS shows never moves. */
+    if (app->key_click) {
+        int x = (int)app->key_click_x, y = (int)app->key_click_y;
+
+        if (app->key_click == 1) {
+            SDL_Event e;
+            nk_input_motion(ctx, x, y);
+            nk_input_button(ctx, NK_BUTTON_LEFT, x, y, nk_true);
+            app->key_click = 2;
+            SDL_zero(e);
+            e.type = SDL_EVENT_USER;
+            SDL_PushEvent(&e);
+        } else {
+            nk_input_button(ctx, NK_BUTTON_LEFT, x, y, nk_false);
+            app->key_click = 0;
+        }
+        app->dirty = 1;
+    }
     nk_input_end(ctx);
     ctx->style.text.color = app->text;
 
@@ -3353,6 +3765,7 @@ SDL_AppIterate(void *appstate)
 
     /* Opened around the same region nk_begin gets, so the window node's bounds
      * are the window's. Closed after nk_end, below. */
+    app->focus_seen = 0;
     curie_a11y_begin(&app->a11y, "Curie",
                      nk_rect(0, 0, (float)win_w, (float)win_h));
 
@@ -3364,6 +3777,7 @@ SDL_AppIterate(void *appstate)
          * came out as wide as its text and clipped it. */
         nk_style_pop_vec2(ctx);
         page_shell(app, ctx, win_w, win_h);
+        if (app->focus_visible && app->focus_seen) focus_ring(app, ctx);
         nk_style_push_vec2(ctx, &ctx->style.window.padding, nk_vec2(0, 0));
     }
     nk_end(ctx);
@@ -3371,6 +3785,8 @@ SDL_AppIterate(void *appstate)
     /* Diffs against the previous frame and swaps. The change list is what a
      * platform bridge will consume in phase 4; nothing reads it yet. */
     curie_a11y_end(&app->a11y);
+    focus_resolve(app);
+    curie_a11y_platform_push(&app->a11y, app->focus_id);
     a11y_dump_once(app);
 
     /* SDL3 delivers SDL_EVENT_TEXT_INPUT only while text input is started for

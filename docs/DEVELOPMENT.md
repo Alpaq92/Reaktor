@@ -265,9 +265,17 @@ uncommitted run. Typing in a CJK IME therefore shows nothing until the
 composition commits. Fixing it properly means teaching Nuklear's editor about a
 preedit span — upstream, not here.
 
-**Accessibility — keyboard, and a tree with nothing reading it yet.** Ctrl-Tab
-and Ctrl-Shift-Tab walk the tab strip, Ctrl-1..7 jump straight to a page, and F1
-opens Diagnostics; text fields keep plain Tab.
+**Accessibility — keyboard, and a tree with nothing reading it yet.** Tab and
+Shift-Tab walk every focusable widget in reading order, the arrows move among
+siblings, Home and End jump, Enter and Space press, and a 2px ring in `--focus`
+shows where focus is — shown by a key, hidden by a click. Ctrl-Tab and
+Ctrl-Shift-Tab still walk the tab strip, Ctrl-1..7 jump straight to a page, and
+F1 opens Diagnostics. Tab leaves a text field rather than typing into it, which
+is what every other toolkit does. Phase 3 of [ACCESSIBILITY.md](ACCESSIBILITY.md)
+says how: focus is a state in the shadow tree, and Enter is a click Nuklear
+receives at the focused node's centre. In the browser the tree is also served:
+`src/a11y_web.c` mirrors it into hidden DOM beside the canvas, so a screen
+reader on the web build gets every widget, its state and its position.
 
 Underneath, every widget now reports itself as it is drawn, into the shadow tree
 in `src/a11y.c` — role, name, value, state, bounds — which is diffed against the
@@ -360,13 +368,14 @@ Same sources, same `CMakeLists.txt`. The Emscripten-specific parts:
 
 ## What a frame costs, and why pointer frames are coalesced
 
-The reference machine has no GPU. Every presented frame is rasterised in
-software by the display driver's user-mode part, which runs *inside this
-process* on Windows thread-pool threads — measured at **about 78 ms of CPU per
-frame**, of which Curie, Nuklear and SDL together are 4–5 ms on the main
-thread. Anti-aliasing is 6% of it. SDL's own software renderer does the same
-frame six times cheaper but does not draw it identically — see the renderer
-section above. The numbers are in [PERFORMANCE.md](PERFORMANCE.md).
+The reference machine has no GPU. Left to Direct3D, every presented frame is
+rasterised in software by the display driver's user-mode part, which runs
+*inside this process* on Windows thread-pool threads — measured at **about 78 ms
+of CPU per frame**, of which Curie, Nuklear and SDL together are 4–5 ms on the
+main thread. `auto` now sidesteps that by taking SDL's own software renderer
+when the adapter is WARP (renderer section above), which draws the same frame
+for **7–12 ms**. That is still a frame every time the pointer crosses something,
+so the coalescing below still earns its keep — it just has less to hide. The numbers are in [PERFORMANCE.md](PERFORMANCE.md).
 
 So on this machine CPU is a count of frames, and the frames that add up are
 the ones the pointer asks for: a hover crossing is a frame, a tooltip that
@@ -500,6 +509,14 @@ hardware profile pixel for pixel — `53 53 53 53…` on both — and the profil
 between menu items is flat. Both on gives the column and the rule; both off
 gives corners that step in twos. `CURIE_SW_NOAA=1` is both off, and 6% cheaper.
 
+One consequence to know about when adding a widget: Nuklear draws most borders
+as two *fills* — the border colour, then the background shrunk by the width —
+and a fill ring at a 6px radius with no feather reads as a square corner. The
+shell's buttons stroke their border, which is why they kept their corners; the
+text fields did not, and lost theirs until `stroke_edit_edge` drew the ring as
+a stroke on the same footprint. A widget whose corners go square on the
+software path and nowhere else is almost certainly a fill ring.
+
 **Glyphs are snapped on hardware**, separately from either of those. Nuklear
 advances the pen by fractional widths, so a glyph quad can begin mid-pixel;
 hardware then samples the atlas between texels and softens the glyph, where the
@@ -548,9 +565,13 @@ noticeable, and it is not removable without partial coverage, so it is where
 the software renderer is left; the columns, rules, doubled underlines and
 stepped corners that preceded it were each real, and each is gone.
 
-Which renderer `auto` should pick on a GPU-less machine is left where it was:
-the hardware path. `CURIE_RENDERER=software` takes the trade for anyone who
-wants it. On a machine with a GPU the question does not arise.
+**`auto` now picks SDL's software renderer when there is no GPU** — that is,
+when the Direct3D device turns out to be WARP — and reports itself as
+`auto: software (no GPU)`. With the alignment fixed, glyphs on the grid and
+fills unfeathered, what separates it from hardware is the accepted stroke
+feather above, and six times the CPU is not worth that. A machine with a GPU
+keeps it: there the hardware path is both cheaper and the better picture. A
+driver named in `CURIE_RENDERER` is never swapped.
 
 ## A held button that changes nothing
 

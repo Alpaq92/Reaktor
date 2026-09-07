@@ -160,6 +160,11 @@ typedef struct curie_a11y {
     unsigned char   matched[CURIE_A11Y_MAX_NODES];
 
     int building;
+
+    /* Keyboard focus, phase 3: the id the shell says has it, 0 for none.
+     * Stamped CURIE_A11Y_FOCUSED onto that node as it is emitted, so focus
+     * moving reaches the diff as two state changes like anything else. */
+    unsigned focus_id;
 } curie_a11y;
 
 /* --- building, once per frame ------------------------------------------ */
@@ -193,6 +198,10 @@ void     curie_a11y_pop(curie_a11y *a);
  * changes it found, which is 0 for a frame that drew the same thing. */
 int curie_a11y_end(curie_a11y *a);
 
+/* Names the node with keyboard focus, by id, 0 for none. Takes effect on the
+ * next frame built. */
+void curie_a11y_set_focus(curie_a11y *a, unsigned id);
+
 /* --- reading it back --------------------------------------------------- */
 
 const curie_a11y_node *curie_a11y_tree(const curie_a11y *a, int *count);
@@ -207,5 +216,18 @@ const char *curie_a11y_role_name(unsigned char role);
  *         tab "Login" [selected] 8,40 68x34
  */
 void curie_a11y_dump(const curie_a11y *a, FILE *out);
+
+/* --- a platform bridge (phase 4) ---------------------------------------- */
+
+/* Called back when a reader presses a node, or moves to one. */
+typedef void (*curie_a11y_action)(void *user, unsigned id);
+
+/* Hands the tree to the platform after each drawn frame. On the web it is
+ * mirrored into hidden DOM beside the canvas (a11y_web.c); elsewhere it is a
+ * no-op until phases 4b-d. push is cheap when nothing changed: it looks at the
+ * change count and returns. */
+void curie_a11y_platform_init(curie_a11y_action activate,
+                              curie_a11y_action focus, void *user);
+void curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id);
 
 #endif /* CURIE_A11Y_H */

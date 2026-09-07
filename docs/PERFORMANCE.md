@@ -168,60 +168,54 @@ events and `SDL_AppIterate` returns without drawing unless something changed.
 (A callback rate that is numeric rather than `waitevent` but draws nothing
 costs 1.4–2.0% — the loop itself is nearly free.)
 
-**Every drawn frame costs about 78 ms of CPU on this machine**, and almost
-none of it is Curie's — nor, strictly, Direct3D's: there is no GPU, so SDL's
-`direct3d11` backend runs on WARP and the frame is rasterised in software by
-the display stack. SDL's *own* software renderer does the same frame for
-13.1 ms, six times cheaper, but cannot draw it identically — it has no partial
-coverage, so it feathers strokes and not fills — the fill feather would land
-as a hairline. It is reachable with `CURIE_RENDERER=software`, and is not the default.
-See [DEVELOPMENT.md](DEVELOPMENT.md). Measured by forcing a redraw at fixed
-rates:
+**A drawn frame costs 7–12 ms of CPU on this machine** — 7 on the login card,
+12 on the busiest page — now that `auto` takes SDL's software renderer when the
+adapter is WARP. Left to Direct3D it was **78 ms**, and almost none of that was
+Curie's: with no GPU, `direct3d11` runs on WARP and the frame is rasterised in
+software by the display stack, inside this process, on Windows thread-pool
+threads — the main thread was 3.6–4.7% of it and `ntdll`'s threads ~83%.
+The renderer section of [DEVELOPMENT.md](DEVELOPMENT.md) is the account of
+making the cheaper path draw the same page. Measured by forcing a redraw at
+fixed rates:
 
-| Forced rate | Process CPU | Per frame |
-| --- | --- | --- |
-| 5 fps | 38% of one core | 77 ms |
-| 10 fps | 75–85% of one core | 75–85 ms |
-| 30 or 60 fps | 200–245% of one core | *saturated — it cannot draw that fast* |
+| Forced rate | Software, Login | Software, Buttons | WARP (any page) |
+| --- | --- | --- | --- |
+| 30 fps | 20% of one core, 6.8 ms/frame | 37%, 12.2 ms/frame | 200%+, *saturated* |
+| 60 fps | 41%, 6.9 ms/frame | 69%, 11.5 ms/frame | *saturated* |
+| 5–10 fps | | | 38–85%, 75–85 ms/frame |
 
-Linear in frames. An earlier note here read “the same with
-`CURIE_RENDERER=software`, 83 vs 85 ms, which rules the SDL renderer out”;
-that was wrong. `CURIE_RENDERER` did not accept `software` at the time, so both
-arms ran `auto` and measured the same thing twice. It is 13.1 ms against 78.7.
-Per thread, during
-a forced redraw at 10 fps: the main thread — all of Curie, Nuklear and SDL —
-is **3.6–4.7%**; the other **~83% is in four to seven threads started by
-`ntdll.dll`**, the Windows thread pool, which is the display driver's user-mode
-component presenting the frame in software *inside this process*. Anti-aliasing
-is 6% of a frame; the window's pixels are the rest.
+Linear in frames either way. (An earlier note here read "the same with
+`CURIE_RENDERER=software`, 83 vs 85 ms, which rules the SDL renderer out"; that
+was wrong — `CURIE_RENDERER` did not accept `software` at the time, so both arms
+measured WARP twice.)
 
-The consequence is that **CPU is a count of frames**. A pointer swept along the
-Buttons page's row of 21 symbol buttons drew 41 frames in two seconds — one
-per hover crossing, as designed — and read as 15–22% of four cores in Task
-Manager for as long as the sweep lasted. Typing is a frame a keystroke. A drag
-is a frame a tick at the display's refresh. All intended, all invisible on a
-GPU, all expensive here.
-
-Two things were found by measuring this, both fixed, both in
-[DEVELOPMENT.md](DEVELOPMENT.md):
+The consequence is still that **CPU is a count of frames**: a pointer swept
+along a row of buttons draws a frame per hover crossing, typing is a frame a
+keystroke, a drag is a frame a tick at the display's refresh. All intended, all
+invisible on a GPU, all worth counting here. Three things were found by
+counting, all fixed, all in [DEVELOPMENT.md](DEVELOPMENT.md), and re-measured
+on the software default:
 
 - A drag whose button-up never arrived left the app drawing at the display's
-  refresh forever — **171% of a core**, reproducible by taking focus away
-  mid-press. It had been there since the drag rate was added.
+  refresh forever — **171% of a core** on WARP, reproducible by taking focus
+  away mid-press. Now every scenario measured — a sweep, clicking every tab,
+  press-in and release-outside — returns to **0.00%**.
 - Pointer-driven frames are coalesced, and the gap adapts to what a frame
-  measurably costs. Sustained waving over the Buttons page went from 27% of
-  four cores to 11–16%, and over Login from 19% to 5–8%, with no change a
-  person can see. The table of gaps against CPU is in DEVELOPMENT.md.
+  measurably costs. Sustained waving over the Buttons page: 27% of four cores
+  before the coalescing on WARP, 11–16% after, **3% on the software default**;
+  over Login, 19% → 5–8% → **0.8%**. The table of gaps against CPU is in
+  DEVELOPMENT.md.
 - A button held still over something that cannot change under it drew sixty
-  identical frames a second — 42% of four cores. Now 11–18%.
+  identical frames a second — 42% of four cores on WARP, 11–18% after
+  coalescing, **3.9% on the software default**.
 
 Read those ranges as ranges: three runs of the same measurement on this VM
 spread by half again, so a single reading either way means nothing.
 
 Where a drawn frame's *wall-clock* time goes on the main thread — which is what
-Diagnostics has always shown, and is why the cost above stayed invisible for so
-long: build 1.8 ms, render 0.3 ms, present 0.5 ms, and none of it is where the
-62–78 ms went. Diagnostics now shows the process-wide figure beside them.
+Diagnostics has always shown, and why the WARP cost stayed invisible for so
+long: build 1.8 ms, render 0.3 ms, present 0.5 ms, and none of it was where the
+62–78 ms went. Diagnostics shows the process-wide figure beside them.
 
 | Phase | Time |
 | --- | --- |

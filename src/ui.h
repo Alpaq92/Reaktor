@@ -161,7 +161,7 @@ float curie_popup_rounding(void);
 void curie_note(App *app, unsigned char role, const char *name,
                 const char *value, unsigned state, struct nk_rect bounds);
 /* The same, and everything until curie_note_pop is a child of it. */
-void curie_note_push(App *app, unsigned char role, const char *name,
+unsigned curie_note_push(App *app, unsigned char role, const char *name,
                      const char *value, unsigned state, struct nk_rect bounds);
 void curie_note_pop(App *app);
 /* Convenience for the common case: the widget just drawn, at the bounds the

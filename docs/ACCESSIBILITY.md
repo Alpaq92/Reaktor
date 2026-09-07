@@ -1,12 +1,16 @@
 # Accessibility
 
-**Today:** keyboard navigation of the tab strip (Ctrl-Tab, Ctrl-Shift-Tab,
-Ctrl-1..7, F1) and text editing inside a focused field. A screen reader opening
-Curie still finds one window and no contents, because nothing serves the tree to
-a platform yet.
+**Today:** the whole app works from the keyboard. Tab and Shift-Tab walk every
+focusable widget in reading order, the arrows move among siblings, Home and End
+jump, Enter and Space press, and a ring shows where focus is. The tab strip
+also answers Ctrl-Tab, Ctrl-Shift-Tab and Ctrl-1..7, and F1 opens Diagnostics.
+**In a browser, a screen reader gets all of it**: the tree is mirrored into
+hidden DOM beside the canvas, with ARIA roles, names, states and positions, and
+the browser exposes that to every reader on every platform. On the desktop a
+reader still finds one window and no contents — the native bridges are ahead.
 
-**Phases 1 and 2 are done.** The model exists and every widget reports into it;
-phases 3, 4 and 5 are ahead.
+**Phases 1, 2, 3 and 4a are done.** The model exists, every widget reports into
+it, focus lives in it, and the web serves it; 4b–4d and 5 are ahead.
 
 ## Why it is not a small change
 
@@ -165,7 +169,7 @@ Containers need mapping too, and this is where the roles come from:
 | tree node | `treeitem`, with expanded state |
 | `nk_edit_*` | `textbox`, value = contents |
 
-## Phase 3 — focus and the keyboard
+## Phase 3 — focus and the keyboard — **done**
 
 Independently worth doing: it is real keyboard access whether or not a screen
 reader is ever attached, and it is the prerequisite for the platform bridges,
@@ -183,6 +187,44 @@ because every one of them asks "what has focus".
   the frame from one place, in the theme's accent, rather than every widget
   growing a focused variant.
 
+How it came out, and where it differs from the sketch above:
+
+- **Focus is a field of the tree, not beside it.** `curie_a11y_set_focus`
+  names an id; the node is stamped `focused` as it is emitted, so focus moving
+  reaches the diff as two ordinary state changes, and the test checks exactly
+  that. The shell learns where the focused node landed through the same
+  reporting call every widget already makes (`focus_saw`), so no widget knows
+  focus exists.
+- **A move is applied at the key**, against the tree of the last drawn frame,
+  which is complete and still valid between frames; the frame after — which
+  the move marks dirty — draws the ring. The first version queued the move for
+  the next frame, and keys arrive faster than frames: two Tabs before one frame
+  merged into a single move, so twelve presses landed eleven nodes on, and the
+  count wandered from run to run with timing. Moving at once has no queue to
+  overwrite, and the focused node's rectangle comes with the pick, so Enter a
+  moment later presses that node and not the one before it.
+- **Activation is a click.** Enter and Space become a press at the node's centre
+  and a release the frame after. Nuklear's default button fires on the press
+  inside the widget, so this reaches every widget that takes a click — buttons,
+  tabs, checkboxes, tree nodes, menu items — and a field, which takes the caret.
+  Nothing at any call site changed. The pointer Nuklear sees sits there until
+  the next real motion; the one the OS shows never moves.
+- **Tab leaves a field.** Nuklear's `NK_KEY_TAB` inserts a character; the shell
+  takes the key before Nuklear sees it, ends the edit, and moves on. Tab into a
+  field puts the caret in it.
+- **The ring follows the `:focus-visible` rule**: a key shows it, a click hides
+  it, Escape hides it. Drawn once, from the shell, 2px in `--focus`, a pixel
+  outside the node's bounds.
+- **The page scrolls to focus.** A node outside the page's visible band is
+  still in the tab order; when focus lands on it the shell asks the page group
+  to scroll on the next frame, by the node's bounds against the band, with a
+  little air. Only nodes inside the page ask — the tab strip is outside the band
+  too and must not — which the tree answers by ancestry, since the page reports
+  itself as a group.
+- **Not done:** arrows on a focused slider move focus rather than the value. A
+  ring on a node half under a group's edge is drawn whole. Both small; neither
+  blocks 4b.
+
 ## Phase 4 — platform bridges
 
 One thin interface, four implementations, each independently shippable:
@@ -193,13 +235,45 @@ void curie_a11y_platform_push(const curie_a11y_change *list, int n);
 void curie_a11y_platform_shutdown(void);
 ```
 
-**Web first.** Emscripten draws into a canvas, and a canvas is invisible to
-assistive technology — but a hidden DOM subtree beside it is not. Mirror the
+**Web first — done.** Emscripten draws into a canvas, and a canvas is invisible
+to assistive technology — but a hidden DOM subtree beside it is not. Mirror the
 shadow tree into `div`s with ARIA roles, names and states, absolutely positioned
 over the canvas so hit-testing and magnifier tracking follow. The browser then
 exposes it to every screen reader on every platform at once. This is what egui
-does, it is about 300 lines of JS plus a small C bridge, and it is by far the
-best reach per line of code written.
+does, and it is by far the best reach per line of code written.
+
+How it came out (`src/a11y_web.c`, the JS inside `EM_JS`, about 200 lines in
+all):
+
+- **Rebuilt in tree order, not patched from the change list.** When a frame
+  reports any change, every node is visited and appended to its parent in
+  order. On an element already in the DOM `appendChild` is a move, not a
+  recreation, so identity — and a reader's place — survives, and reading order
+  is always draw order. Attributes are compared before they are set, so an
+  unchanged node makes no mutation and the reader hears nothing about it. A
+  frame with no changes costs one integer read.
+- **Focus is announced, not moved.** The canvas keeps DOM focus, or keys would
+  stop reaching the app; it carries `role="application"`, `aria-owns` the
+  mirror, and `aria-activedescendant` names the focused node. That is what the
+  ARIA application pattern is for.
+- **A reader's press is a key's press.** Every mirror node is answered by two
+  exported functions, `curie_a11y_web_activate` and `curie_a11y_web_focus`,
+  which the shell turns into exactly the click and the focus that Enter and Tab
+  make — so a node reached through the platform behaves as one reached through
+  the keyboard, and nothing at any call site knows the difference.
+- **Tab stays on the canvas.** The browser's default for Tab is to move focus
+  off the canvas, after which no key reaches the app at all; `tools/shell.html`
+  stops that default and nothing else, so SDL still sees the key and the app
+  walks its widgets as it does on the desktop. The "native titlebar" switch is
+  not drawn on the web — there is no frame to switch to.
+- **Three roles translate.** Curie's vocabulary is the one every platform
+  shares; in ARIA `progress` is `progressbar`, `listitem` is `option`, and a
+  label has no role at all — it is text.
+- **Checked in the browser, not in the pixels**: the page is served from
+  `build-wasm` (`.claude/launch.json` starts a static server for it) and the
+  mirror inspected as DOM — roles, names, states and positions. One thing to
+  know when doing that: a hidden tab gets no animation frames, so the app
+  draws nothing and the mirror stays empty until the page is visible.
 
 **Windows, UI Automation.** A server-side provider: implement
 `IRawElementProviderSimple`, `IRawElementProviderFragment` and
@@ -239,8 +313,8 @@ None of this is verifiable by looking at it.
 | --- | --- |
 | 1 model | Nothing visible. Prerequisite. **Done.** |
 | 2 instrumentation | Nothing visible. The bulk of the work. **Done.** |
-| 3 focus + keyboard | Full keyboard operation, visible focus ring. Useful with no reader attached. |
-| 4a web | Screen-reader support on every platform, from one implementation. |
+| 3 focus + keyboard | Full keyboard operation, visible focus ring. Useful with no reader attached. **Done.** |
+| 4a web | Screen-reader support on every platform, from one implementation. **Done.** |
 | 4b Windows | Native support where the app is developed. |
 | 4c/d Linux, macOS | Parity. |
 

@@ -166,6 +166,7 @@ emit(curie_a11y *a, unsigned char role, const char *name, const char *value,
     id = base ^ ((unsigned)sl->val * 0x85ebca6bu);
     sl->val++;
     if (id == 0) id = 1;   /* 0 is the window's parent, so it cannot be a node */
+    if (id == a->focus_id) state |= CURIE_A11Y_FOCUSED;
 
     n = &a->node[f][a->count[f]++];
     n->id     = id;
@@ -177,6 +178,12 @@ emit(curie_a11y *a, unsigned char role, const char *name, const char *value,
     n->value  = intern(a, value, hash_str(2166136261u, value));
     n->bounds = bounds;
     return id;
+}
+
+void
+curie_a11y_set_focus(curie_a11y *a, unsigned id)
+{
+    a->focus_id = id;
 }
 
 void
