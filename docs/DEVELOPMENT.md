@@ -142,17 +142,23 @@ change, since the colour is baked into the raster.
 
 `branding/` holds the project's own icon rather than a borrowed glyph: a C over
 a hexagon with the radiation trefoil in its counter. It is authored art, checked
-in as SVG, PNG and `.ico` in two inks — six files, none of them generated at
+in as SVG, PNG and `.ico` — three files, in one ink, none of them generated at
 build time.
 
-**The app uses one of them: `reaktor-icon.png`, the dark ink**, named once as
-`REAKTOR_MARK` in `src/reaktor.h`. The mark carries its own colours and sits on a
-yellow ground, so it reads on either theme; a title bar that swapped inks with
-the theme just made the same logo look like two logos. The light-ink files stay
-in `branding/` for whatever needs a mark on a dark ground — a slide, a README on
-a dark site — but nothing in `src/` opens them.
+**The app uses one of them: `reaktor-icon.svg`**, named once as `REAKTOR_MARK`
+in `src/reaktor.h`. The mark carries its own colours and sits on a yellow
+ground, so it reads on either theme; a title bar that swapped inks with the
+theme just made the same logo look like two logos.
 
-**Why the PNG and not the SVG.** plutovg starts a dashed stroke at the top of a
+Two paragraphs below this one used to say the app loaded the PNG instead, and
+described at length why. It does not, and has not for some time — the constant
+names the `.svg`, and the account of the three consumers further down already
+said so, so the section contradicted itself twice over. Checked at title-bar
+size: the C reads as a C, opening at three o'clock, which is the thing the PNG
+was there to guarantee. What follows is kept as the record of a survey that is
+still worth having, not as a description of what the code does.
+
+**Why the PNG was once used instead.** plutovg starts a dashed stroke at the top of a
 circle, where SVG says it starts at three o'clock. The mark's C is a ring with
 an 84° wedge left out by `stroke-dasharray`, so plutosvg renders it a quarter
 turn off — the opening lands at the top and the C reads as a U. Nothing else in
@@ -191,13 +197,21 @@ Nothing here is worth a rewrite to fix one glyph that a PNG already fixes. The
 note exists so the question is not reopened without new information: a second
 dasharray-shaped bug, or plutovg going unmaintained, would be that information.
 
-Three places consume the mark, and one constant keeps them from drifting apart:
+Four places consume the mark, and one constant keeps the first two from
+drifting apart:
 
 - the title bar, at `MARK_SIZE`;
 - `SDL_SetWindowIcon`, at 64px, for the task bar and Alt-Tab;
 - `reaktor-icon.ico`, copied into the build directory and named by a two-line
   generated `.rc` — Explorer takes the icon from a linked Win32 resource, so it
-  has to exist before the linker runs.
+  has to exist before the linker runs;
+- `reaktor-icon.png`, named by the `.desktop` entry CMake writes into the build
+  directory on the free desktops. An ELF file has no icon resource — there is
+  nowhere in the format to put one, so a file manager draws every executable
+  with the same generic glyph and no flag changes that. A desktop entry is the
+  mechanism instead: it names the binary and the icon by path, so the icon
+  belongs to the application rather than to the file. Nothing installs it;
+  `cp build/reaktor.desktop ~/.local/share/applications/` does.
 
 The first two go through the same renderer as an Ionicon — the mark is just an
 SVG under the repo root — but with NULL for both colours, which renders the
@@ -329,7 +343,7 @@ same view every time instead of being clicked into place.
 | `REAKTOR_REDRAW` | `always` draws every callback — for profiling, not for use |
 | `REAKTOR_A11Y_DUMP` | A path to write the accessibility tree to, once, after the first frame |
 | `REAKTOR_HOVER_GAP_MS` | Pins the pointer-redraw gap and skips its calibration — for measuring, not for use |
-| `REAKTOR_RENDERER` | `auto`, `cpu`, `gpu`, `list`, or a driver name — see the renderer section |
+| `REAKTOR_RENDERER` | `auto` (software, everywhere), `cpu`, `gpu`, `list`, or a driver name — see the renderer section |
 | `REAKTOR_STATS` | Logs frame timings once a second |
 
 The Diagnostics tab reports all of it, plus where each frame's milliseconds
@@ -366,6 +380,16 @@ Same sources, same `CMakeLists.txt`. The Emscripten-specific parts:
   `pointer-events: none` — without that, a full-viewport overlay swallows
   every canvas click and the app looks dead.
 - No `.ico` is linked; there is no window to give an icon to.
+- **The canvas is rounded at the top and the page is painted in both inks.**
+  On the desktop the window manager rounds the frame and the app never thinks
+  about it; in a page there is no frame, so the canvas butted flush into the
+  corner of the viewport. `border-radius` on the canvas is the whole fix, top
+  corners only — the bottom edge is the bottom of the page. It also exposed a
+  latent bug: the shell painted `html, body` with the *dark* `--background-body`
+  and nothing else, which was invisible while the canvas covered every pixel
+  and became two dark notches in a light app the moment the corners were cut.
+  It now carries both, switched on `prefers-color-scheme`, which is all the
+  page behind the canvas ever shows.
 
 ## What a frame costs, and why pointer frames are coalesced
 
@@ -466,6 +490,20 @@ of any driver this SDL build has — on Windows `direct3d11`, `opengl`,
 `opengles2`, `software`. A name that is not in the list, or one that is listed
 but will not create (both GL drivers fail on a VM with no 3D), logs a line and
 falls back rather than refusing to start.
+
+**`auto` is the software rasteriser, on every platform.** It used to be SDL's
+own first choice, with a swap to software only when the adapter turned out to
+be WARP; that swap is now the default everywhere and the detection is kept only
+to label the modes that do ask for a GPU. Three reasons, in order of weight:
+the app draws nothing at rest and builds a frame only when something changed,
+so a GPU buys it nothing it can measure; a GPU path costs unconditionally, and
+on a machine without one it costs a great deal (WARP here, Mesa's llvmpipe on a
+Linux desktop — see [PERFORMANCE.md](PERFORMANCE.md)); and one rasteriser
+everywhere is one set of pixels to reason about, which matters because the
+feathering rules in `nk_sdl_render_ex` are written against this one. Nothing is
+removed — `gpu` and a driver by name still pin what they always did. On the
+free desktops the build also compiles SDL's GL drivers out entirely, because
+X11 loads Mesa whatever the renderer is; `-DREAKTOR_SDL_GL=ON` puts them back.
 
 **The reference machine has no GPU, and Direct3D still succeeds** — SDL's
 `direct3d11` backend falls back to WARP, Microsoft's software implementation,
@@ -661,6 +699,21 @@ code, and none of them is a bug.
   axes.** A generous radius from the stylesheet can drive a small button's
   content rect negative, at which point its symbol or image silently vanishes.
   `compact_push()` in `showcase.c` exists for exactly this.
+- **…and a negative content rect moves the *label* rather than hiding it.**
+  The same arithmetic, a different symptom, and the second one took much longer
+  to see. `nk_widget_text` centres the label with
+  `label.y = b.y + b.h/2 − font->height/2`, which lands on the button's middle
+  for any padding — `content.y + content.h/2` folds back to it. But the first
+  line of that function is `b.h = NK_MAX(b.h, 2 * t->padding.y)`, and for a
+  button `t->padding` is `(0,0)`: a negative height is clamped to zero while
+  `content.y` is left where it was, below the middle. tiny.css asks for 9.6px
+  of padding on a 2px border and an 8px radius — 39.2px of inset — so on a 30px
+  row the label was drawn **4.6px low**, on every control of that height, which
+  reads as text that does not line up with anything. Taller buttons were always
+  fine: at 46px the content height stays positive and never gets clamped.
+  `reaktor_fit_label()` in `main.c` trims the vertical padding to what the row
+  can hold, per widget, so a button tall enough for the stylesheet's padding
+  keeps it and only the rows that were already degenerate change.
 - **`nk_stroke_rect` is asymmetric.** A 2px border measures 1px on the left
   and top and 2px on the right and bottom. Combos therefore set
   `combo.border = 0`, and the page strokes the frame itself, inset by half the

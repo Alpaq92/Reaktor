@@ -6,11 +6,13 @@ jump, Enter and Space press, and a ring shows where focus is. The tab strip
 also answers Ctrl-Tab, Ctrl-Shift-Tab and Ctrl-1..7, and F1 opens Diagnostics.
 **In a browser, a screen reader gets all of it**: the tree is mirrored into
 hidden DOM beside the canvas, with ARIA roles, names, states and positions, and
-the browser exposes that to every reader on every platform. On the desktop a
-reader still finds one window and no contents — the native bridges are ahead.
+the browser exposes that to every reader on every platform. **On Windows and on
+the free desktops a reader gets it natively**, through UI Automation and through
+AT-SPI; macOS is written and has never run.
 
-**Phases 1, 2, 3 and 4a are done.** The model exists, every widget reports into
-it, focus lives in it, and the web serves it; 4b–4d and 5 are ahead.
+**Phases 1, 2, 3, 4a, 4b and 4c are done.** The model exists, every widget
+reports into it, focus lives in it, the web serves it, and two native bridges
+serve it; 4d and 5 are ahead.
 
 ## Why it is not a small change
 
@@ -122,6 +124,17 @@ Two things came out of doing it that the plan had not foreseen:
   — a reader should be able to find and scroll to them — but `reaktor_a11y_end`
   marks them `offscreen` against the window node's rect, so a magnifier is not
   sent chasing bounds nobody can see.
+- **`nk_widget_bounds` answers for the row that is current, not the row the
+  widget will get.** For everything that takes the row it is given this is the
+  same sentence twice. A tree header is not: `nk_tree_push` resets the row to
+  its own height before it draws, so a peek taken before the push carries
+  whatever the last layout call set — after `api()`, a 4px spacer. Every tree
+  node went into the model 4px tall, and the focus ring drew as a thin bar
+  above the label rather than a box around it. The height is Nuklear's own
+  expression, `font->height + 2 * tab.padding.y`, taken in one helper so a
+  fourth tree cannot get it wrong. Worth keeping in mind because the bug is
+  invisible in the drawing — Nuklear laid the header out correctly — and shows
+  up only in what the model was told.
 
 Node counts per page run 26 (Login) to 80 (Buttons).
 
@@ -220,7 +233,11 @@ How it came out, and where it differs from the sketch above:
   to scroll on the next frame, by the node's bounds against the band, with a
   little air. Only nodes inside the page ask — the tab strip is outside the band
   too and must not — which the tree answers by ancestry, since the page reports
-  itself as a group.
+  itself as a group. **A reader's focus move asks for it too**, which it did
+  not at first: this lived inside the keyboard's move for long enough that UIA's
+  `SetFocus`, AT-SPI's `GrabFocus` and the web mirror's focus event all stamped
+  a node focused and left the page where it was, so the ring was drawn
+  somewhere nobody could see. It is a function both call now.
 - **The arrows are the value on a range.** Right and Up step up, Left and Down
   down, on a slider or a spinner; every other role still lets them move focus
   among siblings. The shell cannot apply the step itself — it knows a node's
@@ -239,10 +256,21 @@ How it came out, and where it differs from the sketch above:
 One thin interface, four implementations, each independently shippable:
 
 ```c
-int  reaktor_a11y_platform_init(SDL_Window *win);
-void reaktor_a11y_platform_push(const reaktor_a11y_change *list, int n);
-void reaktor_a11y_platform_shutdown(void);
+void reaktor_a11y_platform_init(reaktor_a11y_action activate,
+                                reaktor_a11y_action focus, void *user);
+void reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id);
+void reaktor_a11y_platform_drain(void);
 ```
+
+Three things about that shape, none of them what the sketch above it first
+said. `init` takes the two callbacks a client's press and a client's focus move
+turn into rather than a window — a bridge that needs the window asks SDL for
+it. `push` is handed the whole tree and the focused id, not the change list:
+every bridge but the web's wanted to re-read the model rather than replay a
+diff, and the change list is still there to be asked for. And there is no
+`shutdown`. The third call is `drain`, which runs what a client asked for on
+the thread that owns the tree; the pump threads are stopped by the process
+exiting, which on Linux is clean and takes about 200 ms.
 
 **Web first — done.** Emscripten draws into a canvas, and a canvas is invisible
 to assistive technology — but a hidden DOM subtree beside it is not. Mirror the
@@ -367,7 +395,7 @@ checkbox with the pointer parked off-window.
 field's text or a slider's value means driving Nuklear from outside, which
 belongs with `ITextProvider` and the caret.
 
-**AT-SPI — written, not yet run.** Linux *and the BSDs*: AT-SPI is a
+**AT-SPI — the tree is served.** Linux *and the BSDs*: AT-SPI is a
 freedesktop standard rather than a Linux one, `at-spi2-core` and Orca are in
 FreeBSD ports, OpenBSD ports and pkgsrc, and nothing in the bridge is
 Linux-specific. The build reaches it through `UNIX AND NOT APPLE` and the
@@ -400,18 +428,50 @@ thread, so nothing here touches the model. `Accessible`, `Component`, `Action`
 and `Value` are implemented; `Value` is read-only for the same reason
 `IValueProvider` is.
 
-**It has never been compiled, let alone run** — there is no Linux here and no
-libdbus to build against. What has been done is a syntax and warnings pass with
-clang against a stub of the libdbus API, which catches typos and shape errors
-and cannot catch a wrong signature, because the stub is this file's idea of
-libdbus and would be wrong the same way. Expect the first real build to fail;
-that is the shape of this, not a sign it is going badly. Verify in this order,
-cheapest first: `busctl --user tree` to see the object appear at all, then
-Accerciser to walk it, then Orca.
+**It has now been built and run**, on Debian 13 with libdbus 1.16.2, Cinnamon,
+and the accessibility bus already running. For a long time this paragraph said
+the opposite — that the file had never been compiled, that only a `clang
+-fsyntax-only` pass against a hand-written libdbus stub stood behind it, and
+that the first real build should be expected to fail. It did not fail. The
+first build was clean under `-Wall -Wextra`, and the first run registered.
+That is worth recording precisely because the prediction was wrong: a stub
+written from the same reading of the API as the caller catches less than it
+seems to, and it still caught enough.
 
-One thing is known wrong and waits for a machine: `GetExtents` answers in
-window coordinates whatever coordinate type is asked for, because converting to
-screen coordinates needs a platform call that X and Wayland answer differently.
+What was checked, in the order the list below prescribes:
+
+- **The handshake.** The app takes a name on the accessibility bus and answers
+  at `/org/a11y/atspi/accessible/root` — role `application`, name `Reaktor`,
+  one child. `Embed` is not refused.
+- **The signatures**, which were called the largest untested surface in the
+  file, and are correct. A client walk decodes `(so)`, `a(so)`, `{sv}` and the
+  two-word state array without a malformed reply: the whole tree comes out with
+  its roles, names and rectangles — the title bar's group, the tab list of
+  seven tabs, the colour-scheme group, and the page with its widgets, which is
+  the same walk Windows gives.
+- **`Action` and focus.** `DoAction(0)` on the Display tab switches the page.
+  `GrabFocus` on a node stamps it focused, and — since the reader's focus move
+  now asks for the same reveal the keyboard does — scrolls the page to it: a
+  tree node at y=2144 in a 680-tall window came back at y=636, with `SHOWING`
+  set where it had been clear.
+- **Shutdown**, which was the one failure predicted to be obvious rather than
+  subtle. It is not there: the process exits in about 200 ms on a TERM. The
+  pump thread is never explicitly stopped, because nothing stops it — see the
+  note on `drain` above.
+
+Two things are wrong, and both were predicted:
+
+- **`GetAll` on the Properties interface answers with an empty dictionary.**
+  That was a judgement rather than a measurement when it was written, and the
+  measurement agrees with the worry: a client that leans on `GetAll` instead of
+  asking for properties by name sees an element with nothing on it.
+- **Coordinates.** `GetExtents` answers in window coordinates whatever
+  coordinate type is asked for — confirmed by asking for screen coordinates and
+  getting window ones — because converting needs a platform call that X and
+  Wayland answer differently.
+
+Neither is fixed here. What has not been done is **Orca**, which is the only
+thing that answers whether any of this is usable rather than merely present.
 
 **macOS, NSAccessibility — written, not yet run.** `src/sys/a11y_macos.m` is
 the project's first Objective-C and the only file that is not C, because
@@ -461,25 +521,27 @@ None of this is verifiable by looking at it.
 - **Always:** the Phase 1 golden file, in CI if there ever is one, because the
   instrumentation is the part that rots.
 
-### What has to be tested on Linux, the BSDs and macOS, and why
+### What has to be tested on macOS, and why
 
-The Windows bridge and the web mirror were written on a machine that could run
-them, and every claim about them in this document was measured. **The AT-SPI
-and NSAccessibility bridges were not.** They have never been compiled against
-the real headers and have never executed an instruction. What they have had is
-a `clang -fsyntax-only -Wall -Wextra` pass against hand-written stubs of
-libdbus and Cocoa, which catches typos, unbalanced brackets and wrong argument
-counts — and cannot catch a wrong signature, because each stub is the bridge's
-own idea of the API and would be wrong in the same direction.
+The Windows bridge, the web mirror and now the AT-SPI bridge were each written
+or run on a machine that could run them, and every claim about them in this
+document was measured. **The NSAccessibility bridge was not.** It has never
+been compiled against the real headers and has never executed an instruction.
+What it has had is a `clang -fsyntax-only -Wall -Wextra` pass against a
+hand-written stub of Cocoa, which catches typos, unbalanced brackets and wrong
+argument counts — and cannot catch a wrong signature, because the stub is the
+bridge's own idea of the API and would be wrong in the same direction.
 
-So the list below is not a wishlist. It is the set of things that are unknown,
-in the order they will bite, with what makes each one worth its own check.
+The AT-SPI list is kept below with its answers, because the answers are the
+useful part: it is the record of what a bridge written blind actually got
+wrong, which is two things out of six and neither of them the one that was
+feared most. The macOS list is still a list of unknowns.
 
-**Test in this order on either platform.** Each step is cheap and tells you
-whether the next one is worth attempting; a failure at step 1 makes everything
-after it unobservable.
+**Test in this order.** Each step is cheap and tells you whether the next one
+is worth attempting; a failure at step 1 makes everything after it
+unobservable.
 
-#### Linux and the BSDs
+#### Linux and the BSDs — done, with the answers
 
 1. **The bus handshake, before anything else.** `busctl --user tree` should
    show an object under `/org/a11y/atspi/accessible`. *Why first:* the bridge
@@ -487,30 +549,45 @@ after it unobservable.
    behaviour on a desktop without one, and indistinguishable from a bug. Until
    the object appears, nothing else can be observed. Check the log for
    "no accessibility bus" and "Embed refused", which are the two ways it gives
-   up deliberately.
+   up deliberately. **Answer: it appears.** Role `application`, name `Reaktor`,
+   one child, and no "Embed refused" in the log. Note that `busctl tree` shows
+   only `/org/a11y/atspi/accessible` itself and no nodes under it — the nodes
+   are answered by a fallback handler and have nothing to introspect, which
+   looks like an empty tree and is not one. Ask for the children instead.
 2. **Message signatures, in Accerciser.** Every reply is hand-built with
    `dbus_message_iter_*`, and the type strings — `(so)`, `a(so)`, `{sv}`,
    `(sss)`, the two-word state array — are the largest untested surface in the
    file. *Why:* D-Bus rejects a malformed reply at run time and the stub
    accepted it at compile time, so this is where a mistake is most likely and
-   least visible from here.
+   least visible from here. **Answer: correct, all of them.** A client walk
+   decodes every reply, and the tree comes out matching the Windows one node
+   for node. The surface judged most likely to be wrong was not wrong
+   anywhere.
 3. **`GetAll` on the Properties interface.** It answers with an empty
    dictionary rather than an error. *Why:* that was a judgement, not a
    measurement — a client that leans on `GetAll` instead of asking for
-   properties by name would see an element with nothing on it.
+   properties by name would see an element with nothing on it. **Answer:
+   measured, and it is `{}`.** The worry was right; the behaviour is
+   unchanged, and this is the first of the two things still to fix.
 4. **Coordinates. This one is known wrong.** `GetExtents` answers in window
    coordinates whatever coordinate type was asked for, because converting to
    screen needs a platform call that X and Wayland answer differently, and
    guessing blind would have been worse than a documented gap. *Why it
    matters:* a magnifier or a touch reader will land in the wrong place, while
    a screen reader reading the tree aloud will seem fine — so it will pass a
-   casual test and fail a real user.
+   casual test and fail a real user. **Answer: still wrong, and confirmed by
+   asking.** A request for screen coordinates comes back in window
+   coordinates. The second of the two things still to fix.
 5. **Shutdown.** The pump thread blocks in `dbus_connection_read_write_dispatch`
    and is stopped by a flag plus the connection closing. *Why:* if that is
    wrong the app hangs on exit, which is the one failure here that is obvious
-   and infuriating rather than subtle.
+   and infuriating rather than subtle. **Answer: it does not hang** — about
+   200 ms on a TERM. It is also not stopped: there is no shutdown call in the
+   seam and nothing sets the flag, so what ends the thread is the process
+   ending. That is not a hang, and it is not a shutdown either.
 6. **Then Orca**, which is the only thing that answers whether any of it is
-   usable rather than merely present.
+   usable rather than merely present. **Not done.** Everything above says the
+   tree is present and well-formed; none of it says it is usable.
 
 #### macOS
 
@@ -564,7 +641,7 @@ which is what makes these cheap to debug at a distance.
 | 3 focus + keyboard | Full keyboard operation, visible focus ring. Useful with no reader attached. **Done.** |
 | 4a web | Screen-reader support on every platform, from one implementation. **Done.** |
 | 4b Windows | Native support where the app is developed. **Done:** tree, focus, values, patterns and activation. |
-| 4c Linux, BSD | Parity. **Written, unbuilt** — see above. |
+| 4c Linux, BSD | Parity. **Done:** built and run on Debian over libdbus; tree, focus, actions. |
 | 4d macOS | Parity. **Written, unbuilt** — see above. |
 
 1 → 3 is the honest minimum before any bridge is worth writing, and 3 is the

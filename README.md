@@ -62,6 +62,14 @@ on `PATH`.
 ### macOS, Linux, the BSDs
 
 ```bash
+./build.sh
+```
+
+The counterpart of `build.ps1`: it checks the submodules are there, prefers
+Ninja when it is installed, and hands everything else to CMake. `--target NAME`
+builds one target, `--debug` switches the build type. Or drive CMake yourself:
+
+```bash
 cmake -S . -B build && cmake --build build --parallel
 ```
 
@@ -71,14 +79,23 @@ cmake -S . -B build && cmake --build build --parallel
 .\build-wasm.ps1
 ```
 
-or, with an activated emsdk on any platform:
+```bash
+./build-wasm.sh
+```
+
+The shell script looks for emsdk in `$EMSDK`, then beside an `emcc` already on
+`PATH`, then in `~/emsdk`. `--serve` builds and then serves the result, which
+is worth knowing because a `file://` page cannot fetch the `.wasm`:
+
+```bash
+python3 -m http.server -d build-wasm 8000
+```
+
+Or, with an activated emsdk on any platform:
 
 ```bash
 emcmake cmake -S . -B build-wasm && cmake --build build-wasm --parallel
 ```
-
-A `file://` page cannot fetch the `.wasm`, so serve the output directory:
-`python -m http.server -d build-wasm 8000`.
 
 ## Where things are
 
@@ -93,6 +110,7 @@ A `file://` page cannot fetch the `.wasm`, so serve the output directory:
 | `src/metrics.c` | The display scale, in one place |
 | `src/theme.c` | Which colour scheme the desktop is using |
 | `src/util.c` | Paths, whole-file reads, the resident set |
+| `build.sh` / `build-wasm.sh` | The Unix side of `build.ps1` and `build-wasm.ps1`; all the build logic is in `CMakeLists.txt` either way |
 | `branding/` | The project's mark, as SVG, PNG and `.ico` |
 | `assets/fonts/` | Aileron, the CC0 typeface the UI is set in — vendored rather than submoduled, the one exception to the rule |
 

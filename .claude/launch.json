@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "-d", "build-wasm", "8765"],
       "port": 8765
+    },
+    {
+      "name": "wasm-unix",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "-d", "build-wasm", "8765"],
+      "port": 8765
     }
   ]
 }

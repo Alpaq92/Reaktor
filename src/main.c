@@ -2763,6 +2763,50 @@ reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
     return css_button_accent(app, ctx, "button", label, "--links");
 }
 
+
+/* Cut a button's vertical padding to what its row can actually hold, for the
+ * one widget about to be drawn.
+ *
+ * nk_do_button insets the content rect by padding + border + rounding and
+ * nk_widget_text then centres the label inside it. The centring is exact for
+ * any padding, because content.y + content.h/2 comes back to the button's
+ * middle - but only while content.h is what the arithmetic produced. tiny.css
+ * asks for 9.6px of padding on top of a 2px border and an 8px radius, which
+ * is 39px of inset; on a 30px row the height comes out negative, NK_MAX in
+ * nk_widget_text clamps it to zero, and the origin is left below the middle.
+ * The label is then centred on the wrong point and sits three to four pixels
+ * low - which reads as a row of buttons whose text does not line up with
+ * anything, and was reported as exactly that.
+ *
+ * It is the same arithmetic compact_push() in showcase.c already documents
+ * for glyphs, where a content rect with no area shows up as artwork that
+ * vanishes rather than as text that sags.
+ *
+ * Height-aware on purpose, and pushed per widget rather than clamped once in
+ * the CSS mapping: a button tall enough for the stylesheet's padding keeps
+ * it, and an image inside one is inset by exactly what it was before. Only
+ * the rows that were already drawing a degenerate content rect change.
+ * Answers whether it pushed; hand that to reaktor_unfit_label. */
+int
+reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b)
+{
+    float room = b.h * 0.5f
+               - (ctx->style.button.border + ctx->style.button.rounding);
+
+    (void)app;
+    if (room < 0.0f) room = 0.0f;
+    if (ctx->style.button.padding.y <= room) return 0;
+    nk_style_push_vec2(ctx, &ctx->style.button.padding,
+                       nk_vec2(ctx->style.button.padding.x, room));
+    return 1;
+}
+
+void
+reaktor_unfit_label(struct nk_context *ctx, int fitted)
+{
+    if (fitted) nk_style_pop_vec2(ctx);
+}
+
 /* A colour swatch: the button rule exactly as its neighbours draw it, with
  * the fill replaced and no label. Not nk_button_color, which draws its own
  * rect and so keeps none of the rule's geometry. */
@@ -3061,6 +3105,30 @@ focusable(const reaktor_a11y_node *n)
  * siblings, which is what makes a tab strip or a menu behave as one
  * control. A node that scrolled out of the window is skipped rather than
  * scrolled to: nothing here can move a group's scroll yet. */
+/* Inside the page and outside its visible band: the page scrolls to it on the
+ * frame that follows, where the group's scroll can be set. The band and the
+ * node's bounds are both as of the last frame, which is the frame the node was
+ * measured in, so they agree.
+ *
+ * Shared by the keyboard and by a screen reader, which is the point of it
+ * being a function. A node a reader moved to is as much "where focus is" as
+ * one Tab reached, and only the keyboard was asking: UIA's SetFocus, AT-SPI's
+ * GrabFocus and the web mirror's focus event all stamped the node focused and
+ * left the page where it was, so the ring was drawn somewhere nobody could
+ * see. Checked on Linux over AT-SPI: GrabFocus on a node scrolled out of the
+ * page reported it focused, not showing, and the page did not move. */
+static void
+focus_reveal(App *app, const reaktor_a11y_node *t, int n, int pick)
+{
+    const struct nk_rect *b = &app->body_rect, *r = &t[pick].bounds;
+
+    if (node_under(t, n, pick, app->page_node) &&
+        (r->y < b->y || r->y + r->h > b->y + b->h)) {
+        app->focus_scroll      = 1;
+        app->focus_scroll_rect = *r;
+    }
+}
+
 static void
 focus_move(App *app, int step)
 {
@@ -3097,19 +3165,7 @@ focus_move(App *app, int step)
     app->focus_seen    = 1;
     app->focus_visible = 1;
     app->dirty = 1;
-    /* Inside the page and outside its visible band: the page scrolls to it
-     * on the frame that follows, where the group's scroll can be set. The
-     * band and the node's bounds are both as of the last frame, which is
-     * the frame the node was measured in, so they agree. */
-    {
-        const struct nk_rect *b = &app->body_rect, *r = &t[pick].bounds;
-
-        if (node_under(t, n, pick, app->page_node) &&
-            (r->y < b->y || r->y + r->h > b->y + b->h)) {
-            app->focus_scroll      = 1;
-            app->focus_scroll_rect = *r;
-        }
-    }
+    focus_reveal(app, t, n, pick);
     /* Tab into a field puts the caret in it, as it does everywhere else. */
     if (t[pick].role == REAKTOR_A11Y_TEXTBOX) {
         app->key_click   = 1;
@@ -3229,6 +3285,7 @@ reader_focus(void *user, unsigned id)
             app->focus_seen    = 1;
             app->focus_visible = 1;
             app->dirty = 1;
+            focus_reveal(app, t, n, i);
             return;
         }
 }
@@ -3508,21 +3565,48 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
          * platform builds. "list" prints them and exits, so the names do not
          * have to be guessed.
          *
-         * "auto" is not simply SDL's own choice: see the software fallback
-         * after the window is created. "gpu" pins the first non-software
-         * driver and keeps it, which is how the two were measured against
-         * each other. */
+         * "auto" is SDL's software rasteriser, on every platform - Windows,
+         * macOS, Linux, the BSDs and the web alike. It is not SDL's own first
+         * choice, and deliberately not:
+         *
+         *   - This app draws nothing at rest and builds a frame only when
+         *     something changed, so a GPU buys it nothing it can measure. A
+         *     drawn frame is 7-12 ms of CPU, once, on a UI that draws a
+         *     handful of frames a second at its busiest.
+         *   - What a GPU path does cost is unconditional. On the reference
+         *     Windows machine direct3d11 lands on WARP and costs six times
+         *     SDL's software renderer - 78.7 ms a frame against 13.1 - and
+         *     on a Linux desktop with no GPU the opengl driver is Mesa's
+         *     llvmpipe, which rasterises in software anyway and maps 53 MB of
+         *     libLLVM plus 10 MB of libgallium to do it. Both were the
+         *     default here once, and both were paying a GPU's price for a
+         *     software renderer's result.
+         *   - One rasteriser on every platform is also one set of pixels to
+         *     reason about. The feathering rules in nk_sdl_render_ex are
+         *     written against the software renderer; a GPU path is the one
+         *     that draws the page differently.
+         *
+         * "gpu" pins the first non-software driver and keeps it, which is how
+         * the two were measured against each other, and a driver by name does
+         * the same for one in particular. Nothing about the GPU paths is
+         * removed - they are no longer what you get without asking. */
         const char *mode = SDL_getenv("REAKTOR_RENDERER");
         int i, n = SDL_GetNumRenderDrivers();
 
         if (!mode || !*mode) mode = "auto";
-        SDL_strlcpy(app->render_mode, mode, sizeof(app->render_mode));
+        /* What Diagnostics shows. "auto" alone said nothing about which
+         * renderer it had settled on, which is the first thing anyone asks. */
+        if (SDL_strcmp(mode, "auto") == 0)
+            SDL_strlcpy(app->render_mode, "auto: software",
+                        sizeof(app->render_mode));
+        else
+            SDL_strlcpy(app->render_mode, mode, sizeof(app->render_mode));
 
         if (SDL_strcmp(mode, "list") == 0) {
             for (i = 0; i < n; i++) SDL_Log("%s", SDL_GetRenderDriver(i));
             return SDL_APP_SUCCESS;
         }
-        if (SDL_strcmp(mode, "cpu") == 0) {
+        if (SDL_strcmp(mode, "cpu") == 0 || SDL_strcmp(mode, "auto") == 0) {
             SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
         } else if (SDL_strcmp(mode, "gpu") == 0) {
             for (i = 0; i < n; i++) {
@@ -3608,14 +3692,18 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
             }
         }
 
-        /* No GPU: Direct3D has landed on WARP, Microsoft's software
-         * implementation, and costs six times what SDL's own software
-         * renderer costs here - 78.7 ms of CPU a frame against 13.1. So
-         * `auto` swaps to SDL's. That swap was written once before and taken
-         * out, because the software rasteriser drew the page differently;
-         * the renderer section in DEVELOPMENT.md is the account of closing
-         * that gap, and what remains of it is accepted. A driver asked for
-         * by name is kept, and reported as running with no GPU behind it. */
+        /* A GPU driver that turned out to have no GPU behind it: on Windows
+         * Direct3D has landed on WARP, Microsoft's software implementation,
+         * which costs six times what SDL's own software renderer costs here -
+         * 78.7 ms of CPU a frame against 13.1.
+         *
+         * `auto` no longer reaches this: it asks for the software renderer
+         * outright, on every platform, so there is nothing to swap. What is
+         * left is the report for the two modes that do ask for a GPU - `gpu`
+         * and a driver by name - which are kept as asked for and labelled
+         * with what they actually got. The swap itself stays because `auto`
+         * can still land here if the software renderer failed to create and
+         * the fallback above picked SDL's own default. */
         if (renderer_is_software(app->ren)) {
             if (SDL_strcmp(app->render_mode, "auto") == 0) {
                 SDL_Renderer *sw;

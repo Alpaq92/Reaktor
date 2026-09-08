@@ -595,6 +595,25 @@ stepper_pop(struct nk_context *ctx)
     nk_style_pop_style_item(ctx);
 }
 
+/* The slot nk_tree_push is about to lay out for its header.
+ *
+ * nk_widget_bounds cannot be asked for it directly: it peeks the *current*
+ * row, and the current row is whatever the last layout call set - after api()
+ * that is a 4px spacer. The push then resets the row to Nuklear's own header
+ * height before it draws. So the peek gets x, y and width right and the
+ * height wrong, and the node went into the tree 4px tall: the focus ring came
+ * out as a thin bar above the label instead of a box around it, and every
+ * platform reading bounds - the ring, AT-SPI, UIA - was told the same wrong
+ * thing. The expression below is Nuklear's own, from nk_tree_state_base, and
+ * it is the one tree_chevron already assumes when it centres the chevron. */
+static struct nk_rect
+tree_header_bounds(struct nk_context *ctx)
+{
+    struct nk_rect b = nk_widget_bounds(ctx);
+    b.h = ctx->style.font->height + 2.0f * ctx->style.tab.padding.y;
+    return b;
+}
+
 /* A tree header's chevron, in the slot nk_tree_state_base gives its own: a
  * font-height square at the header's padding. `b` is the header's bounds,
  * captured before the push; `open` is what the push answered. */
@@ -875,7 +894,10 @@ static int
 demo_button(App *app, struct nk_context *ctx, const char *label)
 {
     unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
+    int fitted = reaktor_fit_label(app, ctx, nk_widget_bounds(ctx));
     int hit = nk_button_label(ctx, label);
+
+    reaktor_unfit_label(ctx, fitted);
 
     /* Both, always: `||` would short-circuit and leave the activation for the
      * frame to turn into a second press. */
@@ -1633,7 +1655,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
      * left empty. Closed nodes still report, and still get their chevron:
      * a reader can reach a collapsed branch, and it points somewhere. */
     {
-        struct nk_rect hb = nk_widget_bounds(ctx);
+        struct nk_rect hb = tree_header_bounds(ctx);
         int open;
 
         hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
@@ -1645,7 +1667,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
             nk_label(ctx, "Its children are indented under it.", NK_TEXT_LEFT);
 
-            hb = nk_widget_bounds(ctx);
+            hb = tree_header_bounds(ctx);
             hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
             open = nk_tree_push(ctx, NK_TREE_NODE, "A node inside it",
                                 NK_MINIMIZED);
@@ -1662,7 +1684,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             for (i = 0; i < 3; i++) {
                 char lab[32];
                 SDL_snprintf(lab, sizeof(lab), "Selectable branch %d", i + 1);
-                hb = nk_widget_bounds(ctx);
+                hb = tree_header_bounds(ctx);
                 hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
                 open = nk_tree_element_push(ctx, NK_TREE_NODE, lab,
                                             NK_MINIMIZED, &s->tree_leaf[i]);

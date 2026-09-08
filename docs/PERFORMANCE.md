@@ -160,6 +160,36 @@ after any change to the style or icon paths — before the libcss rule store was
 rebuilt per load, the same test climbed from 7.9 to 15.5 MB without levelling
 off.
 
+### The same app on Linux, and 112 MB of somebody else's
+
+Every figure above is Windows. The first Linux measurement was **123.6 MB
+resident** for the same binary drawing the same page, against a working set of
+29–34 MB there — and none of the difference was Reaktor's.
+
+`libLLVM.so` accounted for 53 MB and `libgallium` for 10 more, with about 30 MB
+of heap behind them. That is Mesa's **llvmpipe**: on a desktop with no GPU, the
+`opengl` driver *is* a software rasteriser, reached through a JIT. Worse, SDL's
+X11 driver initialises GL whatever renderer the app asked for, so choosing
+`software` did not avoid it — nothing under `src/` calls a GL function and the
+process was still paying for the whole stack. The isolating measurement is the
+dummy video driver, which skips X11 entirely: 9 MB.
+
+So the build turns SDL's GL drivers off on the free desktops
+(`REAKTOR_SDL_GL=ON` puts them back for a comparison). Same binary, same page,
+that flag the only difference:
+
+| | Resident | Private | Heap |
+| --- | --- | --- | --- |
+| SDL with GL | 123.6 MB | 58.7 MB | 31.1 MB |
+| SDL without GL | **11.4 MB** | **4.3 MB** | **1.1 MB** |
+
+Five runs of the second arm: resident 11.3–11.6 MB, private 4.27–4.47 MB. A
+spread of 0.24 MB against a difference of 112 makes this one of the few numbers
+here that a single reading would have got right anyway.
+
+Windows keeps `direct3d11` and macOS keeps Metal — neither loads Mesa — and
+Emscripten keeps GLES, because WebGL is the only GPU a browser has.
+
 ## CPU
 
 **At rest: 0.00% of one core**, every tab, foreground or background, over
@@ -169,8 +199,10 @@ events and `SDL_AppIterate` returns without drawing unless something changed.
 costs 1.4–2.0% — the loop itself is nearly free.)
 
 **A drawn frame costs 7–12 ms of CPU on this machine** — 7 on the login card,
-12 on the busiest page — now that `auto` takes SDL's software renderer when the
-adapter is WARP. Left to Direct3D it was **78 ms**, and almost none of that was
+12 on the busiest page — now that `auto` is SDL's software renderer. It used to
+take it only when the adapter turned out to be WARP; it takes it on every
+platform now, for the reasons in the renderer section of
+[DEVELOPMENT.md](DEVELOPMENT.md). Left to Direct3D it was **78 ms**, and almost none of that was
 Reaktor's: with no GPU, `direct3d11` runs on WARP and the frame is rasterised in
 software by the display stack, inside this process, on Windows thread-pool
 threads — the main thread was 3.6–4.7% of it and `ntdll`'s threads ~83%.

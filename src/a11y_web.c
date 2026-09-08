@@ -20,8 +20,9 @@
  * presses a node or moves to one is answered through two exported functions,
  * which the shell turns into the same click and focus a key would make.
  *
- * Off the web and off Windows every function here is a no-op; 4c and 4d are
- * the bridges that are still missing. */
+ * Off the web this file stands aside: Windows, the free desktops and macOS
+ * each have a bridge of their own under src/sys/. What is left here is the
+ * no-op for a platform with none of them - see the #elif at the foot. */
 #include "a11y.h"
 
 static reaktor_a11y_action g_activate, g_focus;
