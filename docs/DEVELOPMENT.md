@@ -39,7 +39,7 @@ somewhere else works right up until a theme change reloads the sheets and
 undoes it.
 
 **Style lookups are cached, and the rule store is rebuilt per load.** A
-resolved selector is kept in a small fixed cache; `curie_style_init()` destroys
+resolved selector is kept in a small fixed cache; `reaktor_style_init()` destroys
 and re-creates libcss's rule store on every call, because parsing adds rules to
 a global store and nothing takes the previous sheet's rules back out. Without
 that, switching schemes stacked another copy of tiny.css each time.
@@ -54,7 +54,7 @@ What sets `dirty`:
 
 - a widget the shell knows about being clicked, typed into or dragged;
 - the pointer crossing one of the **hot rectangles** registered during the
-  previous frame (`curie_hot()` and friends) — that is how hover states repaint
+  previous frame (`reaktor_hot()` and friends) — that is how hover states repaint
   without polling;
 - the window moving, resizing or changing scheme.
 
@@ -75,7 +75,7 @@ reads stale for exactly as long as the app is quiet.
 
 Five sizes are baked — 12, 13, 14, 16 and 19px — at the display scale, into a
 single Nuklear atlas texture, plus one face of `Aileron-Bold.otf` at 16px for
-the titlebar's name. `curie_font(app, px, bold)` returns the nearest baked
+the titlebar's name. `reaktor_font(app, px, bold)` returns the nearest baked
 size; `bold` is honoured only at that one size, because a bold at all five
 would put a second set of faces in the atlas and roughly double the largest
 allocation the app makes. The one extra face left the atlas where it was:
@@ -114,7 +114,7 @@ in `src/nk_sdl3_renderer.h`, which was vendored for this: the format is chosen
 inside `nk_sdl_font_stash_end`. It has since picked up the rest of what the
 renderer section below describes — a white texel of its own, vertices on the
 grid for the software path, glyph quads on the grid for hardware, and fills and
-strokes feathered separately — every hunk marked `CURIE`.
+strokes feathered separately — every hunk marked `REAKTOR`.
 
 Three things were verified before taking it, and are worth re-checking after
 any re-vendor:
@@ -125,7 +125,7 @@ any re-vendor:
   glyph would render white. Check a screen with text in several colours.
 - **Fractional display scales still look right.** D3D11 forces
   `SDL_SCALEMODE_NEAREST` for indexed textures and does linear filtering in the
-  palette shader instead. Checked at `CURIE_SCALE=1.5`.
+  palette shader instead. Checked at `REAKTOR_SCALE=1.5`.
 
 It buys about 0.4 MB on the reference machine and nothing on a GPU, where the
 atlas is VRAM.
@@ -145,8 +145,8 @@ a hexagon with the radiation trefoil in its counter. It is authored art, checked
 in as SVG, PNG and `.ico` in two inks — six files, none of them generated at
 build time.
 
-**The app uses one of them: `curie-icon.png`, the dark ink**, named once as
-`CURIE_MARK` in `src/curie.h`. The mark carries its own colours and sits on a
+**The app uses one of them: `reaktor-icon.png`, the dark ink**, named once as
+`REAKTOR_MARK` in `src/reaktor.h`. The mark carries its own colours and sits on a
 yellow ground, so it reads on either theme; a title bar that swapped inks with
 the theme just made the same logo look like two logos. The light-ink files stay
 in `branding/` for whatever needs a mark on a dark ground — a slide, a README on
@@ -157,13 +157,13 @@ circle, where SVG says it starts at three o'clock. The mark's C is a ring with
 an 84° wedge left out by `stroke-dasharray`, so plutosvg renders it a quarter
 turn off — the opening lands at the top and the C reads as a U. Nothing else in
 the app hits this, because the Ionicons draw arcs as path data rather than as
-dashes, and the PNG has no argument with any renderer. `curie_image_surface`
+dashes, and the PNG has no argument with any renderer. `reaktor_image_surface`
 loads it through plutovg's own image reader and box-filters it down: bilinear
 would sample four texels out of the 28×28 block that 1024px collapses into at
 title-bar size.
 
 The dash bug is not a reason to change renderer, and the field was surveyed
-before deciding that. What Curie needs is small — the 22 Ionicons it draws use
+before deciding that. What Reaktor needs is small — the 22 Ionicons it draws use
 `path`, `line`, `circle`, `polyline` and `rect` with stroke width, cap, join and
 miterlimit, nothing else — so the question is not features but rasteriser
 quality at 16-18px, licence, and whether anyone still maintains it.
@@ -180,7 +180,7 @@ quality at 16-18px, licence, and whether anyone still maintains it.
 
 **ThorVG is the one that would work.** MIT, actively maintained, a C API
 (`tvg_swcanvas_set_target` renders into a caller-owned buffer),
-`TVG_COLORSPACE_ARGB8888S` gives straight alpha directly so `curie_unpremultiply`
+`TVG_COLORSPACE_ARGB8888S` gives straight alpha directly so `reaktor_unpremultiply`
 could go, it loads PNG as well as SVG so it would cover the mark too, and it
 builds for WebAssembly. Its SVG Tiny 1.2 coverage is a superset of what the
 icons use. The cost is that the core is C++ — though this build already links as
@@ -195,7 +195,7 @@ Three places consume the mark, and one constant keeps them from drifting apart:
 
 - the title bar, at `MARK_SIZE`;
 - `SDL_SetWindowIcon`, at 64px, for the task bar and Alt-Tab;
-- `curie-icon.ico`, copied into the build directory and named by a two-line
+- `reaktor-icon.ico`, copied into the build directory and named by a two-line
   generated `.rc` — Explorer takes the icon from a linked Win32 resource, so it
   has to exist before the linker runs.
 
@@ -216,8 +216,8 @@ constants, CSS lengths, hit tests and mouse coordinates are all one unit;
 
 Three pieces make that hold:
 
-- `curie_scale()` (`src/metrics.c`) is the one place the scale is known. It
-  reads `SDL_GetWindowDisplayScale`, or `CURIE_SCALE` when that is set.
+- `reaktor_scale()` (`src/metrics.c`) is the one place the scale is known. It
+  reads `SDL_GetWindowDisplayScale`, or `REAKTOR_SCALE` when that is set.
 - `apply_render_scale()` pushes it into the renderer once per scale change.
   Everything drawn afterwards is in logical units.
 - Fonts are the exception that proves it. They are **baked** at the device size
@@ -228,10 +228,10 @@ Three pieces make that hold:
 
 The window is created at `WINDOW_WIDTH × scale` rather than at the logical
 size, because `SDL_WINDOW_HIGH_PIXEL_DENSITY` gives a backbuffer in device
-pixels and a forced `CURIE_SCALE` would otherwise get a window too small for
+pixels and a forced `REAKTOR_SCALE` would otherwise get a window too small for
 its own contents.
 
-Verified at `CURIE_SCALE=1`, `1.5` and `2`. What has **not** been checked is a
+Verified at `REAKTOR_SCALE=1`, `1.5` and `2`. What has **not** been checked is a
 window dragged between monitors of different scale mid-run: the event is
 handled and the font rebakes, but nobody has watched it happen — the reference
 machine is a VM with one display.
@@ -244,7 +244,7 @@ Each is done as far as it can be, and the part that is not is named.
 **File dialogs — done.** File > Open on the Popups page calls
 `SDL_ShowOpenFileDialog`, so it is the platform's own picker, not a drawn
 imitation. SDL runs it on its own thread and calls back from there, which is
-the whole shape of `curie_file_open` / `curie_file_taken`: the callback fills
+the whole shape of `reaktor_file_open` / `reaktor_file_taken`: the callback fills
 in a buffer, publishes it with an atomic store and pushes a registered event to
 wake a loop that may be parked in `SDL_WaitEvent`; the main thread collects it
 during the next frame. Nothing else in the app is touched from that thread.
@@ -280,9 +280,9 @@ reader on the web build gets every widget, its state and its position.
 
 Underneath, every widget now reports itself as it is drawn, into the shadow tree
 in `src/a11y.c` — role, name, value, state, bounds — which is diffed against the
-previous frame. `CURIE_A11Y_DUMP=<path>` writes it out, and that is how the
+previous frame. `REAKTOR_A11Y_DUMP=<path>` writes it out, and that is how the
 instrumentation is checked, because none of it shows on screen. The seam is
-`hot()` in `showcase.c` and the `curie_*` helpers in the shell: a widget that
+`hot()` in `showcase.c` and the `reaktor_*` helpers in the shell: a widget that
 takes a cursor reports a name in the same call, which is what stops the tree
 falling behind the screen.
 
@@ -317,20 +317,20 @@ same view every time instead of being clicked into place.
 
 | Variable | Effect |
 | --- | --- |
-| `CURIE_TAB` | Which tab opens (0 = Login … 6 = Diagnostics) |
-| `CURIE_SCROLL` | How far that page starts scrolled |
-| `CURIE_THEME` | 0 system, 1 light, 2 dark |
-| `CURIE_SCALE` | Overrides the display scale, in the spirit of `GDK_SCALE` |
-| `CURIE_ROOT` | Where the assets are, if not found by walking up to `.curie-root` |
-| `CURIE_VSYNC` | `0` turns vsync off |
-| `CURIE_AA` | `0` turns Nuklear's anti-aliasing off |
-| `CURIE_SW_NOAA` | `1` turns stroke feathering off too on the software renderer, which feathers no fills — see the renderer section |
-| `CURIE_FRAME_RATE` | A frame cap, or `0` for uncapped, instead of `waitevent` |
-| `CURIE_REDRAW` | `always` draws every callback — for profiling, not for use |
-| `CURIE_A11Y_DUMP` | A path to write the accessibility tree to, once, after the first frame |
-| `CURIE_HOVER_GAP_MS` | Pins the pointer-redraw gap and skips its calibration — for measuring, not for use |
-| `CURIE_RENDERER` | `auto`, `cpu`, `gpu`, `list`, or a driver name — see the renderer section |
-| `CURIE_STATS` | Logs frame timings once a second |
+| `REAKTOR_TAB` | Which tab opens (0 = Login … 6 = Diagnostics) |
+| `REAKTOR_SCROLL` | How far that page starts scrolled |
+| `REAKTOR_THEME` | 0 system, 1 light, 2 dark |
+| `REAKTOR_SCALE` | Overrides the display scale, in the spirit of `GDK_SCALE` |
+| `REAKTOR_ROOT` | Where the assets are, if not found by walking up to `.reaktor-root` |
+| `REAKTOR_VSYNC` | `0` turns vsync off |
+| `REAKTOR_AA` | `0` turns Nuklear's anti-aliasing off |
+| `REAKTOR_SW_NOAA` | `1` turns stroke feathering off too on the software renderer, which feathers no fills — see the renderer section |
+| `REAKTOR_FRAME_RATE` | A frame cap, or `0` for uncapped, instead of `waitevent` |
+| `REAKTOR_REDRAW` | `always` draws every callback — for profiling, not for use |
+| `REAKTOR_A11Y_DUMP` | A path to write the accessibility tree to, once, after the first frame |
+| `REAKTOR_HOVER_GAP_MS` | Pins the pointer-redraw gap and skips its calibration — for measuring, not for use |
+| `REAKTOR_RENDERER` | `auto`, `cpu`, `gpu`, `list`, or a driver name — see the renderer section |
+| `REAKTOR_STATS` | Logs frame timings once a second |
 
 The Diagnostics tab reports all of it, plus where each frame's milliseconds
 went and where the memory went. Prefer it to a guess: several plausible
@@ -372,7 +372,7 @@ Same sources, same `CMakeLists.txt`. The Emscripten-specific parts:
 The reference machine has no GPU. Left to Direct3D, every presented frame is
 rasterised in software by the display driver's user-mode part, which runs
 *inside this process* on Windows thread-pool threads — measured at **about 78 ms
-of CPU per frame**, of which Curie, Nuklear and SDL together are 4–5 ms on the
+of CPU per frame**, of which Reaktor, Nuklear and SDL together are 4–5 ms on the
 main thread. `auto` now sidesteps that by taking SDL's own software renderer
 when the adapter is WARP (renderer section above), which draws the same frame
 for **7–12 ms**. That is still a frame every time the pointer crosses something,
@@ -400,11 +400,11 @@ cores, this machine:
 
 `calibrate_hover_gap` skips the first three drawn frames after startup (font
 bake, stylesheet parse), then averages the process's CPU time — every thread,
-via `curie_process_cpu_ms` — over the next eight, and sets the gap from the
+via `reaktor_process_cpu_ms` — over the next eight, and sets the gap from the
 result: 150 ms above 40 ms a frame, 100 ms above 15, 50 ms otherwise. Here it
 measures ~62–78 ms and picks 150; on a GPU it will measure well under a
 millisecond and keep 50, which is there only to bound a hover storm. The
-Diagnostics page shows both numbers. `CURIE_HOVER_GAP_MS` pins the gap and
+Diagnostics page shows both numbers. `REAKTOR_HOVER_GAP_MS` pins the gap and
 skips the calibration, which is how the table above was taken.
 
 Why measure rather than detect the adapter: the same binary has to do the
@@ -461,7 +461,7 @@ getting for free from the event whitelist.
 
 ## The renderer, and the one that was six times cheaper
 
-`CURIE_RENDERER` takes `auto` (the default), `cpu`, `gpu`, `list`, or the name
+`REAKTOR_RENDERER` takes `auto` (the default), `cpu`, `gpu`, `list`, or the name
 of any driver this SDL build has — on Windows `direct3d11`, `opengl`,
 `opengles2`, `software`. A name that is not in the list, or one that is listed
 but will not create (both GL drivers fail on a VM with no 3D), logs a line and
@@ -471,7 +471,7 @@ falls back rather than refusing to start.
 `direct3d11` backend falls back to WARP, Microsoft's software implementation,
 so the app pays for a full D3D11 pipeline and a WDDM swapchain present to draw
 a few hundred flat triangles. The adapter says so plainly:
-`Microsoft Basic Render Driver`, vendor `0x1414`, 0 MB dedicated. Curie asks
+`Microsoft Basic Render Driver`, vendor `0x1414`, 0 MB dedicated. Reaktor asks
 the device SDL gave it and reports it — Diagnostics shows `auto (no GPU)` —
 because it is most of the explanation for every CPU figure in
 [PERFORMANCE.md](PERFORMANCE.md).
@@ -508,7 +508,7 @@ separately (`nk_sdl_render_ex`) and the software renderer runs **strokes
 feathered, fills not.** Measured across a popup's edge it then matches the
 hardware profile pixel for pixel — `53 53 53 53…` on both — and the profile
 between menu items is flat. Both on gives the column and the rule; both off
-gives corners that step in twos. `CURIE_SW_NOAA=1` is both off, and 6% cheaper.
+gives corners that step in twos. `REAKTOR_SW_NOAA=1` is both off, and 6% cheaper.
 
 One consequence to know about when adding a widget: Nuklear draws most borders
 as two *fills* — the border colour, then the background shrunk by the width —
@@ -523,7 +523,7 @@ rim there at the final height — anything drawn inside it earlier is painted
 over — and a 1px rim reaches only half a pixel either side of the arc, which is
 exactly where the unfeathered fill's corner steps are.
 
-A colour swatch (`curie_button_color`) is the button rule with the fill
+A colour swatch (`reaktor_button_color`) is the button rule with the fill
 replaced and the border tinted to match. The border is a *fill band* here, so
 the swatch's own arc would otherwise sit at `rounding - border` — measurably
 identical to its neighbour on the outside, and visibly tighter, because a grey
@@ -534,7 +534,7 @@ band puts the visible edge back on the button's outer arc.
 footprint is the older remedy and still what the text fields use, but it only
 grades the step by a fixed half: the snapping pass quantises the stroke's
 feather onto the same staircase the fill made, so a large radius reads as
-stairs with a halo rather than a curve. `curie_fill_round` computes the
+stairs with a halo rather than a curve. `reaktor_fill_round` computes the
 coverage instead — one white disc of 2r whose alpha is the circle sampled four
 by four, each quadrant drawn into a corner as a sub-image, three plain rects
 for the rest — so the corner is exact at any radius and identical on both
@@ -553,7 +553,7 @@ texel on both backends, so every circle on a page — a radio's rim and dot, a
 combo's leading symbol, a selectable's — is an Ionicon drawn into the slot
 Nuklear sized, with `NK_SYMBOL_NONE` handed to the widget. Two details make or
 break it. The icon is rasterised **1:1** with the rect it is drawn in
-(`curie_ionicon_exact`, against `icon`'s usual 2×): a downscale re-samples
+(`reaktor_ionicon_exact`, against `icon`'s usual 2×): a downscale re-samples
 plutovg's antialiasing, and on a rim one pixel wide that reads as a smear three
 pixels across. And `nk_draw_option` fills the whole selector with
 `border_color` before the background, without asking whether there is a border,
@@ -614,7 +614,7 @@ when the Direct3D device turns out to be WARP — and reports itself as
 fills unfeathered, what separates it from hardware is the accepted stroke
 feather above, and six times the CPU is not worth that. A machine with a GPU
 keeps it: there the hardware path is both cheaper and the better picture. A
-driver named in `CURIE_RENDERER` is never swapped.
+driver named in `REAKTOR_RENDERER` is never swapped.
 
 ## A held button that changes nothing
 

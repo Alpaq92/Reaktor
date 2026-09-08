@@ -22,9 +22,9 @@
 #  include <sys/resource.h>
 #endif
 
-#include "curie.h"
+#include "reaktor.h"
 
-#define CURIE_PATH_CAP 1024
+#define REAKTOR_PATH_CAP 1024
 
 static int copy_out(char *out, size_t cap, const char *src)
 {
@@ -34,23 +34,23 @@ static int copy_out(char *out, size_t cap, const char *src)
     return 1;
 }
 
-int curie_root(char *out, size_t cap)
+int reaktor_root(char *out, size_t cap)
 {
     /* Explicit override wins: needed for installed layouts, and for running
      * the binary from anywhere. */
-    const char *env = getenv("CURIE_ROOT");
+    const char *env = getenv("REAKTOR_ROOT");
     if (env && *env) return copy_out(out, cap, env);
 
 #if defined(__EMSCRIPTEN__)
     /* There is no executable to walk up from, and no ambiguity to resolve:
      * the assets are packaged into the virtual filesystem at exactly the
      * paths the rest of the code already asks for, so the root is its root.
-     * "" rather than "/" because curie_path inserts the separator. */
+     * "" rather than "/" because reaktor_path inserts the separator. */
     return copy_out(out, cap, "");
 #else
     {
-        char exe[CURIE_PATH_CAP];
-        char probe[CURIE_PATH_CAP];
+        char exe[REAKTOR_PATH_CAP];
+        char probe[REAKTOR_PATH_CAP];
         int i;
 
 #  if defined(_WIN32)
@@ -60,12 +60,12 @@ int curie_root(char *out, size_t cap)
         for (i = 0; exe[i]; i++) if (exe[i] == '\\') exe[i] = '/';
 #  else
         /* No executable path without a platform call; the working directory
-         * is the honest fallback, and CURIE_ROOT covers the rest. */
+         * is the honest fallback, and REAKTOR_ROOT covers the rest. */
         if (!getcwd(exe, sizeof(exe))) return 0;
         (void)i;
 #  endif
 
-        /* Walk up looking for the .curie-root sentinel.
+        /* Walk up looking for the .reaktor-root sentinel.
          *
          * This used to probe for a "third_party" directory, which broke under
          * CMake: add_subdirectory(third_party/SDL) mirrors that path into the
@@ -76,7 +76,7 @@ int curie_root(char *out, size_t cap)
             if (!slash) return 0;
             *slash = '\0';
 
-            if (snprintf(probe, sizeof(probe), "%s/.curie-root", exe) < 0)
+            if (snprintf(probe, sizeof(probe), "%s/.reaktor-root", exe) < 0)
                 return 0;
             probe[sizeof(probe) - 1] = '\0';
             {
@@ -90,17 +90,17 @@ int curie_root(char *out, size_t cap)
 #endif
 }
 
-int curie_path(char *out, size_t cap, const char *rel)
+int reaktor_path(char *out, size_t cap, const char *rel)
 {
-    char root[CURIE_PATH_CAP];
+    char root[REAKTOR_PATH_CAP];
 
-    if (!curie_root(root, sizeof(root))) return 0;
+    if (!reaktor_root(root, sizeof(root))) return 0;
     if (snprintf(out, cap, "%s/%s", root, rel) < 0) return 0;
     out[cap - 1] = '\0';
     return 1;
 }
 
-char *curie_read_file(const char *path, size_t *len)
+char *reaktor_read_file(const char *path, size_t *len)
 {
     FILE *f;
     char *buf;
@@ -126,7 +126,7 @@ char *curie_read_file(const char *path, size_t *len)
     return buf;
 }
 
-void curie_free(void *p) { free(p); }
+void reaktor_free(void *p) { free(p); }
 
 #if defined(_WIN32)
 /* Both counters come from one call. <psapi.h> maps GetProcessMemoryInfo to
@@ -146,7 +146,7 @@ static int win_mem(PROCESS_MEMORY_COUNTERS_EX *out)
  * only honest measure of what a frame costs on a machine that rasterises in
  * software: the work lands on threads the app never created, so wall-clock
  * on the main thread misses nearly all of it. */
-double curie_process_cpu_ms(void)
+double reaktor_process_cpu_ms(void)
 {
 #if defined(_WIN32)
     FILETIME c, e, k, u;
@@ -165,7 +165,7 @@ double curie_process_cpu_ms(void)
 #endif
 }
 
-void curie_process_memory(size_t *rss, size_t *priv)
+void reaktor_process_memory(size_t *rss, size_t *priv)
 {
     *rss = *priv = 0;
 

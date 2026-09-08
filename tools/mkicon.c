@@ -1,4 +1,4 @@
-/* mkicon.c - branding/curie-icon.ico, rasterised from branding/curie-icon.svg.
+/* mkicon.c - branding/reaktor-icon.ico, rasterised from branding/reaktor-icon.svg.
  *
  * The .svg is the authored mark; the .ico is derived from it, and this is what
  * derives it. It is not part of the build: Explorer reads the icon from a
@@ -19,17 +19,17 @@
  * So every entry here is 32-bit BGRA with a zeroed mask, except 256, which
  * stays a PNG because at four bytes a pixel it is a quarter-megabyte on its
  * own. plutovg renders premultiplied; Windows wants straight alpha, which is
- * what curie_unpremultiply is for. */
+ * what reaktor_unpremultiply is for. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "curie.h"
+#include "reaktor.h"
 #include "appicon.h"
 
-#define ICON_SVG "branding/curie-icon.svg"
-#define ICON_ICO "branding/curie-icon.ico"
-#define ICON_TMP "branding/curie-icon.png.tmp"
+#define ICON_SVG "branding/reaktor-icon.svg"
+#define ICON_ICO "branding/reaktor-icon.ico"
+#define ICON_TMP "branding/reaktor-icon.png.tmp"
 
 /* Every size Explorer, the taskbar and the Alt-Tab switcher ask for. */
 static const int g_sizes[] = { 16, 24, 32, 48, 64, 128, 256 };
@@ -115,8 +115,8 @@ main(void)
     int i, ok = 1;
 
     memset(e, 0, sizeof(e));
-    if (!curie_path(tmp, sizeof(tmp), ICON_TMP) ||
-        !curie_path(out_path, sizeof(out_path), ICON_ICO)) {
+    if (!reaktor_path(tmp, sizeof(tmp), ICON_TMP) ||
+        !reaktor_path(out_path, sizeof(out_path), ICON_ICO)) {
         fprintf(stderr, "mkicon: cannot resolve the repo root\n");
         return 1;
     }
@@ -124,14 +124,14 @@ main(void)
     for (i = 0; i < SIZE_N && ok; i++) {
         int n = g_sizes[i];
         plutovg_surface_t *surf =
-            curie_svg_surface_path(ICON_SVG, n, NULL, NULL, 0.0f);
+            reaktor_svg_surface_path(ICON_SVG, n, NULL, NULL, 0.0f);
 
         if (!surf) {
             fprintf(stderr, "mkicon: %s did not render at %d\n", ICON_SVG, n);
             ok = 0;
             break;
         }
-        curie_unpremultiply(plutovg_surface_get_data(surf), n, n,
+        reaktor_unpremultiply(plutovg_surface_get_data(surf), n, n,
                             plutovg_surface_get_stride(surf));
         e[i].size = n;
         if (n >= 256) {

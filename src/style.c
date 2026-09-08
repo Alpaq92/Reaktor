@@ -21,7 +21,7 @@
 
 typedef struct cache_entry {
     char        selector[64];
-    curie_style style;
+    reaktor_style style;
 } cache_entry;
 
 static struct {
@@ -29,7 +29,7 @@ static struct {
     cache_entry    cache[CACHE_MAX];
     int            cache_n;
     css_metrics_t  metrics;
-    curie_cssvars *vars;      /* the palette, kept for curie_style_token */
+    reaktor_cssvars *vars;      /* the palette, kept for reaktor_style_token */
 } g;
 
 static void rgba_of(css_color_value_t c, unsigned char out[4])
@@ -40,7 +40,7 @@ static void rgba_of(css_color_value_t c, unsigned char out[4])
     out[3] = (unsigned char)((c >> 24) & 0xff);
 }
 
-int curie_style_init(const char *const *css_paths, int count)
+int reaktor_style_init(const char *const *css_paths, int count)
 {
     char *flat;
     css_parser_t *parser;
@@ -70,12 +70,12 @@ int curie_style_init(const char *const *css_paths, int count)
      *
      * No [data-theme] block to select: tiny.css ships light and dark as two
      * :root files, so the theme is chosen by which one the caller passes. */
-    curie_cssvars_free(g.vars);
+    reaktor_cssvars_free(g.vars);
     g.vars = NULL;
-    flat = curie_css_flatten(css_paths, count, NULL, &g.vars);
+    flat = reaktor_css_flatten(css_paths, count, NULL, &g.vars);
     if (!flat) return 0;
 
-    parser = css_parser_create("curie");
+    parser = css_parser_create("reaktor");
     if (!parser) { free(flat); return 0; }
     /* css_parser_parse consumes at most its buffer per call and returns how
      * much it took, so it is driven to the end of the string. */
@@ -92,22 +92,22 @@ int curie_style_init(const char *const *css_paths, int count)
     return 1;
 }
 
-void curie_style_shutdown(void)
+void reaktor_style_shutdown(void)
 {
     if (!g.ready) return;
-    curie_cssvars_free(g.vars);
+    reaktor_cssvars_free(g.vars);
     g.vars = NULL;
     css_destroy();
     g.ready = 0;
     g.cache_n = 0;
 }
 
-int curie_style_token(const char *name, unsigned char rgba[4])
+int reaktor_style_token(const char *name, unsigned char rgba[4])
 {
-    return curie_cssvars_color(g.vars, name, rgba);
+    return reaktor_cssvars_color(g.vars, name, rgba);
 }
 
-void curie_style_darken(unsigned char rgba[4], float amount)
+void reaktor_style_darken(unsigned char rgba[4], float amount)
 {
     int i;
 
@@ -117,7 +117,7 @@ void curie_style_darken(unsigned char rgba[4], float amount)
         rgba[i] = (unsigned char)(rgba[i] * (1.0f - amount) + 0.5f);
 }
 
-static void resolve(const char *selector, curie_style *out)
+static void resolve(const char *selector, reaktor_style *out)
 {
     css_selector_t *sel;
     css_style_decl_t *decl;
@@ -170,7 +170,7 @@ static void resolve(const char *selector, curie_style *out)
     css_computed_style_destroy(&computed);
 }
 
-void curie_style_get(const char *selector, curie_style *out)
+void reaktor_style_get(const char *selector, reaktor_style *out)
 {
     int i;
 

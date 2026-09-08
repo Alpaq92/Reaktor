@@ -44,7 +44,7 @@ platform APIs want, then swap.
 The immediate-mode loop stays immediate. The tree is a by-product of it.
 
 ```c
-typedef struct curie_a11y_node {
+typedef struct reaktor_a11y_node {
     unsigned  id;         /* stable across frames - see below */
     unsigned  parent;
     unsigned char role;   /* BUTTON, CHECKBOX, TAB, TABLIST, EDIT, ... */
@@ -52,7 +52,7 @@ typedef struct curie_a11y_node {
     const char *name;     /* interned; the label a reader speaks */
     const char *value;    /* field contents, slider value as text */
     struct nk_rect bounds;   /* window coordinates, post render scale */
-} curie_a11y_node;
+} reaktor_a11y_node;
 ```
 
 **Identity is the one hard part.** An id must name the same button on
@@ -66,14 +66,14 @@ call order, so adding a widget above does not rename everything below it.
 
 Platform-independent, and testable on its own.
 
-- `src/a11y.c` / `a11y.h`: two `curie_a11y_node` arenas, front and back, sized
+- `src/a11y.c` / `a11y.h`: two `reaktor_a11y_node` arenas, front and back, sized
   once (the busiest page draws on the order of a hundred widgets; 512 is
   generous). Names interned into a per-frame string arena so the tree owns no
   heap churn.
-- `curie_a11y_begin()` / `curie_a11y_node()` / `curie_a11y_push()` /
-  `curie_a11y_pop()` / `curie_a11y_end()`. Push and pop maintain the parent
+- `reaktor_a11y_begin()` / `reaktor_a11y_node()` / `reaktor_a11y_push()` /
+  `reaktor_a11y_pop()` / `reaktor_a11y_end()`. Push and pop maintain the parent
   stack for containers.
-- `curie_a11y_end()` diffs back against front and produces a change list:
+- `reaktor_a11y_end()` diffs back against front and produces a change list:
   added, removed, name/value changed, state changed, focus moved. Swap.
 - Cost control: skip the diff entirely when the frame was not dirty, which is
   most frames — see the frame loop in [DEVELOPMENT.md](DEVELOPMENT.md).
@@ -89,8 +89,8 @@ once to confirm the test fails when it should.
 
 The mechanical bulk of the work, and the part that had to be got right once.
 
-The pages already funnel some widgets through shell helpers — `curie_button`,
-`curie_button_accent`, `curie_button_icon`, `curie_link`, `curie_field` — and
+The pages already funnel some widgets through shell helpers — `reaktor_button`,
+`reaktor_button_accent`, `reaktor_button_icon`, `reaktor_field` — and
 those are one added call each. The rest of `src/showcase.c` calls Nuklear
 directly: roughly **190 distinct `nk_*` entry points**, of which about 60 call
 sites are interactive widgets (14 `nk_button_label`, 11 `nk_group_begin`, 7
@@ -99,7 +99,7 @@ sites are interactive widgets (14 `nk_button_label`, 11 `nk_group_begin`, 7
 
 Two ways to cover them, and the choice matters:
 
-1. **Wrap each in a `curie_*` helper** that draws and reports. Verbose, but the
+1. **Wrap each in a `reaktor_*` helper** that draws and reports. Verbose, but the
    report cannot be forgotten, and the showcase is already half-way there.
 2. **Report inline at each call site.** Less code to add, but a new widget added
    later is silently absent from the tree.
@@ -110,7 +110,7 @@ register the pointer cursor — 34 sites, always immediately before the widget. 
 signature now carries role, name and state as well, so one call does both: a
 widget worth a cursor is worth a name, and they cannot drift apart. The shell's
 own `css_button`, `css_button_accent`, `css_button_icon`, `text_link`,
-`curie_field` and `css_field` report from inside, so every page gets it free.
+`reaktor_field` and `css_field` report from inside, so every page gets it free.
 Static prose goes through `heading`, `caption` and `api`, which report inline.
 
 Two things came out of doing it that the plan had not foreseen:
@@ -119,7 +119,7 @@ Two things came out of doing it that the plan had not foreseen:
   container came out as 0,0 960x680. Containers now capture `nk_widget_bounds`
   *before* `nk_group_begin`, which is the slot the group will fill.
 - **A page scrolls, so much of it is off-window.** Those nodes stay in the tree
-  — a reader should be able to find and scroll to them — but `curie_a11y_end`
+  — a reader should be able to find and scroll to them — but `reaktor_a11y_end`
   marks them `offscreen` against the window node's rect, so a magnifier is not
   sent chasing bounds nobody can see.
 
@@ -160,7 +160,7 @@ Two things worth keeping in mind if this is ever revisited:
 
 Containers need mapping too, and this is where the roles come from:
 
-| Curie | Role |
+| Reaktor | Role |
 | --- | --- |
 | tab strip / a tab | `tablist` / `tab` |
 | `nk_group_begin` | `group` |
@@ -189,7 +189,7 @@ because every one of them asks "what has focus".
 
 How it came out, and where it differs from the sketch above:
 
-- **Focus is a field of the tree, not beside it.** `curie_a11y_set_focus`
+- **Focus is a field of the tree, not beside it.** `reaktor_a11y_set_focus`
   names an id; the node is stamped `focused` as it is emitted, so focus moving
   reaches the diff as two ordinary state changes, and the test checks exactly
   that. The shell learns where the focused node landed through the same
@@ -225,7 +225,7 @@ How it came out, and where it differs from the sketch above:
   down, on a slider or a spinner; every other role still lets them move focus
   among siblings. The shell cannot apply the step itself — it knows a node's
   value as the text a reader would hear and nothing of its bounds or its grain
-  — so it counts the presses and the widget takes them (`curie_focus_step`).
+  — so it counts the presses and the widget takes them (`reaktor_focus_step`).
   They accumulate, because key repeat outruns the frame rate, and they are
   dropped at the end of a frame whether or not the range was drawn.
 - **The ring is clipped to the page's band** when the focused node is in the
@@ -239,9 +239,9 @@ How it came out, and where it differs from the sketch above:
 One thin interface, four implementations, each independently shippable:
 
 ```c
-int  curie_a11y_platform_init(SDL_Window *win);
-void curie_a11y_platform_push(const curie_a11y_change *list, int n);
-void curie_a11y_platform_shutdown(void);
+int  reaktor_a11y_platform_init(SDL_Window *win);
+void reaktor_a11y_platform_push(const reaktor_a11y_change *list, int n);
+void reaktor_a11y_platform_shutdown(void);
 ```
 
 **Web first — done.** Emscripten draws into a canvas, and a canvas is invisible
@@ -266,7 +266,7 @@ all):
   mirror, and `aria-activedescendant` names the focused node. That is what the
   ARIA application pattern is for.
 - **A reader's press is a key's press.** Every mirror node is answered by two
-  exported functions, `curie_a11y_web_activate` and `curie_a11y_web_focus`,
+  exported functions, `reaktor_a11y_web_activate` and `reaktor_a11y_web_focus`,
   which the shell turns into exactly the click and the focus that Enter and Tab
   make — so a node reached through the platform behaves as one reached through
   the keyboard, and nothing at any call site knows the difference.
@@ -275,7 +275,7 @@ all):
   stops that default and nothing else, so SDL still sees the key and the app
   walks its widgets as it does on the desktop. The "native titlebar" switch is
   not drawn on the web — there is no frame to switch to.
-- **Three roles translate.** Curie's vocabulary is the one every platform
+- **Three roles translate.** Reaktor's vocabulary is the one every platform
   shares; in ARIA `progress` is `progressbar`, `listitem` is `option`, and a
   label has no role at all — it is text.
 - **Checked in the browser, not in the pixels**: the page is served from
@@ -306,7 +306,7 @@ Three things the sketch above got wrong or did not know:
   no bridge touches the model: a drawn frame copies it — strings and all, since
   the model's arena is reused — into a snapshot under a lock, and the bridge
   answers from that. A request goes the other way by the same rule: it records
-  an id, pushes an SDL event to wake the loop, and `curie_a11y_platform_drain`
+  an id, pushes an SDL event to wake the loop, and `reaktor_a11y_platform_drain`
   runs it on the app's thread before the next frame is built.
 
   None of that is Windows's problem, so it is not in the Windows file. It is
@@ -332,7 +332,7 @@ a tab resolves to the tab.
 `IToggleProvider`, `ISelectionItemProvider` and `IRangeValueProvider` are
 there too. The range one needed the model to carry numbers: a node's `value` is
 the text a reader hears, and neither `IRangeValueProvider` nor ARIA's
-`valuemin`/`valuemax` can be got out of that, so `curie_a11y_set_range` puts
+`valuemin`/`valuemax` can be got out of that, so `reaktor_a11y_set_range` puts
 `num`, `lo`, `hi` and `step` on the node the widget just reported. The web
 bridge uses them too — it had been running `parseFloat` over the value text,
 which happened to work for "40" and would not have for "3 of 8". Verified
@@ -350,7 +350,7 @@ on, press-versus-release semantics, and routing the steps through SDL's event
 queue — that last one is *worse*, and breaks the keyboard too).
 
 Rather than keep chasing it, the shell now tells the widget directly. A press
-records an id; `curie_focus_activated` hands it to the widget that owns it,
+records an id; `reaktor_focus_activated` hands it to the widget that owns it,
 once; the widget changes its own state, which it is better placed to do than
 anything simulating a pointer. Checkboxes, radios, tabs and buttons take it.
 Anything that has not been taught to listen still gets the synthetic click, as
@@ -371,7 +371,7 @@ belongs with `ITextProvider` and the caret.
 freedesktop standard rather than a Linux one, `at-spi2-core` and Orca are in
 FreeBSD ports, OpenBSD ports and pkgsrc, and nothing in the bridge is
 Linux-specific. The build reaches it through `UNIX AND NOT APPLE` and the
-source through `CURIE_HAVE_ATSPI`, so no `__linux__` appears anywhere in it and
+source through `REAKTOR_HAVE_ATSPI`, so no `__linux__` appears anywhere in it and
 the BSDs are covered by construction rather than by luck.
 
 `src/sys/a11y_atspi.c` speaks the
@@ -515,7 +515,7 @@ after it unobservable.
 #### macOS
 
 1. **Whether the tree is grafted on at all.** Accessibility Inspector should
-   show Curie's nodes under the window. *Why first:* the whole bridge rests on
+   show Reaktor's nodes under the window. *Why first:* the whole bridge rests on
    one assumption — that setting `accessibilityChildren` on SDL's content view
    is enough, with no subclass and no swizzle. If AppKit ignores it for that
    view, nothing is exposed and there is no error to see. Everything else is
@@ -592,7 +592,7 @@ and reaches the most readers.
 - ~~**Live regions.**~~ The Diagnostics page turned out to have the opposite
   problem: its readings were not in the tree at all, so a reader got the prose
   and not one number. Each row is now a `label` node carrying the name and the
-  value and spanning both columns, marked `CURIE_A11Y_VOLATILE` — it changes on
+  value and spanning both columns, marked `REAKTOR_A11Y_VOLATILE` — it changes on
   its own and the change is not news. The web bridge writes that out as
   `aria-live="off"`, which is the default for anything that is not a live
   region and so says only what was intended; it earns its keep at 4b, where a

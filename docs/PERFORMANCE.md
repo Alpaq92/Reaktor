@@ -16,11 +16,11 @@ Reproduce any of it from the **Diagnostics** tab.
 
 | Artefact | Bytes |
 | --- | --- |
-| `curie.exe` | 2,406,400 |
-| `curie.wasm` | 1,205,355 |
-| `curie.js` | 76,228 |
-| `curie.data` | 47,263 |
-| `curie.html` | 1,019 |
+| `reaktor.exe` | 2,406,400 |
+| `reaktor.wasm` | 1,205,355 |
+| `reaktor.js` | 76,228 |
+| `reaktor.data` | 47,263 |
+| `reaktor.html` | 1,019 |
 | **Web bundle, total** | **1,329,865** |
 
 SDL, libcss, yutil, plutosvg and plutovg link statically and Nuklear compiles
@@ -29,7 +29,7 @@ the subsystems this app uses, and dropping the render backends it can never
 select, took it from 3.39 MB.
 
 The web bundle was 3.55 MB before `-Oz` with `--closure 1` and packaging only
-the asset files the sources actually name — `curie.data` alone fell from
+the asset files the sources actually name — `reaktor.data` alone fell from
 1,868,661 bytes.
 
 ## Memory
@@ -74,7 +74,7 @@ The four reasons they died:
    list inside pages that stay committed. Only allocations above the NT heap's
    ~512 KB threshold are genuinely returned.
 2. **`.text`, `.rdata`, `.rsrc` and untouched `.bss` cost zero private bytes.**
-   They are clean and file-backed. The entire writable section of `curie.exe`
+   They are clean and file-backed. The entire writable section of `reaktor.exe`
    is 53,616 bytes, which caps what any code-size change could move.
 3. **GPU allocations are not process heap** — on hardware. Here they are, per
    the note at the top, which is why the atlas work paid at all.
@@ -120,7 +120,7 @@ Three things that settles:
   window size. Not slop: it is what `PrivateUsage` counts and `VirtualQuery`
   does not expose — page tables and per-process structures.
 - **1.25 MB is copy-on-write image pages** over about fifty DLLs, 8–105 KB
-  each; `curie.exe` contributes 47 KB. Loader cost, and nothing here reduces it.
+  each; `reaktor.exe` contributes 47 KB. Loader cost, and nothing here reduces it.
 - **Twelve threads, none of them ours.** SDL, COM and the graphics stack create
   them. 0.30 MB of stack commit against 11.7 MB of reserve — the number to
   quote whenever someone proposes `/STACK`.
@@ -171,7 +171,7 @@ costs 1.4–2.0% — the loop itself is nearly free.)
 **A drawn frame costs 7–12 ms of CPU on this machine** — 7 on the login card,
 12 on the busiest page — now that `auto` takes SDL's software renderer when the
 adapter is WARP. Left to Direct3D it was **78 ms**, and almost none of that was
-Curie's: with no GPU, `direct3d11` runs on WARP and the frame is rasterised in
+Reaktor's: with no GPU, `direct3d11` runs on WARP and the frame is rasterised in
 software by the display stack, inside this process, on Windows thread-pool
 threads — the main thread was 3.6–4.7% of it and `ntdll`'s threads ~83%.
 The renderer section of [DEVELOPMENT.md](DEVELOPMENT.md) is the account of
@@ -185,8 +185,8 @@ fixed rates:
 | 5–10 fps | | | 38–85%, 75–85 ms/frame |
 
 Linear in frames either way. (An earlier note here read "the same with
-`CURIE_RENDERER=software`, 83 vs 85 ms, which rules the SDL renderer out"; that
-was wrong — `CURIE_RENDERER` did not accept `software` at the time, so both arms
+`REAKTOR_RENDERER=software`, 83 vs 85 ms, which rules the SDL renderer out"; that
+was wrong — `REAKTOR_RENDERER` did not accept `software` at the time, so both arms
 measured WARP twice.)
 
 The consequence is still that **CPU is a count of frames**: a pointer swept
@@ -235,7 +235,7 @@ Parsing both stylesheets takes 1.5–4.0 ms, at startup and on each scheme chang
 Modest by construction: one atlas texture plus one per rasterised icon, nothing
 uploaded per frame, a few hundred triangles. No shader, no framebuffer of its
 own, no compute — everything goes through `SDL_Renderer`. Anti-aliasing is
-Nuklear's, on the CPU, and `CURIE_AA=0` turns it off.
+Nuklear's, on the CPU, and `REAKTOR_AA=0` turns it off.
 
 On hardware this should mean lower private bytes, a smaller present time, the
 texture rows leaving the memory table — and the 78 ms of CPU per frame above
@@ -264,7 +264,7 @@ platform's graphics driver takes. A machine that can run a browser can run it.
 Two things a deployment needs:
 
 - **The asset files.** A native build reads tiny.css and the Ionicons SVGs from
-  disk at runtime, resolved against the `.curie-root` marker, so they ship
-  beside the binary or `CURIE_ROOT` points at them. The web build packages them
-  into `curie.data`.
+  disk at runtime, resolved against the `.reaktor-root` marker, so they ship
+  beside the binary or `REAKTOR_ROOT` points at them. The web build packages them
+  into `reaktor.data`.
 - **A served web build.** A `file://` page cannot fetch the `.wasm`.

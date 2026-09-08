@@ -7,7 +7,7 @@
  * RGBA32. It could not stay an include: the format is chosen inside
  * nk_sdl_font_stash_end, and this project does not edit submodules.
  *
- * Grep CURIE for the changed hunks. Re-vendoring means re-applying them.
+ * Grep REAKTOR for the changed hunks. Re-vendoring means re-applying them.
  */
 
 /*
@@ -48,7 +48,7 @@ NK_API void                 nk_sdl_font_stash_end(struct nk_context* ctx);
 #endif
 NK_API int                  nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt);
 NK_API void                 nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing);
-/* CURIE: fills and strokes feathered independently - see nk_sdl_render_ex. */
+/* REAKTOR: fills and strokes feathered independently - see nk_sdl_render_ex. */
 NK_API void                 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA);
 NK_API void                 nk_sdl_update_TextInput(struct nk_context* ctx);
 NK_API void                 nk_sdl_shutdown(struct nk_context* ctx);
@@ -78,7 +78,7 @@ struct nk_sdl_device {
     struct nk_buffer cmds;
     struct nk_draw_null_texture tex_null;
     SDL_Texture *font_tex;
-    /* CURIE: the white texel Nuklear multiplies untextured geometry by.
+    /* REAKTOR: the white texel Nuklear multiplies untextured geometry by.
      *
      * nk_font_atlas_end points tex_null at the atlas, so every draw command -
      * shapes as much as text - arrives carrying font_tex and the two cannot be
@@ -161,7 +161,7 @@ nk_sdl_allocator()
     return allocator;
 }
 
-/* CURIE: the palette that makes an INDEX8 atlas equal the RGBA32 one -
+/* REAKTOR: the palette that makes an INDEX8 atlas equal the RGBA32 one -
  * entry i is white at alpha i. SDL keeps its own reference, so this frees
  * ours. */
 static bool
@@ -201,7 +201,7 @@ nk_sdl_device_upload_atlas(struct nk_context* ctx, const void *image, int width,
         sdl->ogl.font_tex = NULL;
     }
 
-    /* CURIE: 8-bit indexed, not ARGB8888.
+    /* REAKTOR: 8-bit indexed, not ARGB8888.
      *
      * A baked glyph is coverage: nk_font_bake_convert writes
      * ((alpha << 24) | 0x00FFFFFF) per pixel, so three of four bytes are a
@@ -298,7 +298,7 @@ nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing AA)
     nk_sdl_render_ex(ctx, AA, AA);
 }
 
-/* CURIE: Nuklear feathers fills (shape_AA) and strokes (line_AA) separately,
+/* REAKTOR: Nuklear feathers fills (shape_AA) and strokes (line_AA) separately,
  * and on a rasteriser with no partial coverage they fail differently. A fill's
  * feather is a ring half a pixel outside a fill shrunk by half a pixel; landed
  * whole it is a half-tone column between a panel's border and its fill, and a
@@ -349,7 +349,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         config.vertex_size = sizeof(struct nk_sdl_vertex);
         config.vertex_alignment = NK_ALIGNOF(struct nk_sdl_vertex);
         config.tex_null = sdl->ogl.tex_null;
-        /* CURIE: 22 was upstream's, and at that count a small circle is a
+        /* REAKTOR: 22 was upstream's, and at that count a small circle is a
          * visible polygon on the software renderer, which cannot feather a
          * fill. The circles a page draws are Ionicons now (see showcase.c),
          * so this only reaches what Nuklear still draws itself and the
@@ -367,7 +367,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         nk_buffer_init(&ebuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
         nk_convert(&sdl->ctx, &sdl->ogl.cmds, &vbuf, &ebuf, &config);
 
-        /* CURIE: on the software renderer, every vertex goes on the grid.
+        /* REAKTOR: on the software renderer, every vertex goes on the grid.
          *
          * SDL's software backend turns each vertex into a whole pixel by
          * truncation - SDL_render_sw.c does (int)(x * scale), and the
@@ -411,7 +411,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         {
             if (!cmd->elem_count) continue;
 
-            /* CURIE: glyph quads land on whole pixels here too.
+            /* REAKTOR: glyph quads land on whole pixels here too.
              *
              * A glyph is a quad sampling the atlas. Nuklear advances the pen
              * by fractional widths, so a quad can start mid-pixel; hardware
@@ -590,13 +590,13 @@ nk_sdl_font_stash_end(struct nk_context* ctx)
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
-    /* CURIE: alpha8, to match the upload. Also keeps the 4x RGBA buffer out
+    /* REAKTOR: alpha8, to match the upload. Also keeps the 4x RGBA buffer out
      * of the startup peak - the bake holds it live alongside the alpha8 one. */
     image = nk_font_atlas_bake(&sdl->atlas, &w, &h, NK_FONT_ATLAS_ALPHA8);
     NK_ASSERT(image);
     nk_sdl_device_upload_atlas(&sdl->ctx, image, w, h);
     nk_font_atlas_end(&sdl->atlas, nk_handle_ptr(sdl->ogl.font_tex), &sdl->ogl.tex_null);
-    /* CURIE: see white_tex in struct nk_sdl_device. If it cannot be made,
+    /* REAKTOR: see white_tex in struct nk_sdl_device. If it cannot be made,
      * tex_null keeps pointing at the atlas and everything still draws - only
      * the glyph test in nk_sdl_render loses its precision. */
     if (!sdl->ogl.white_tex) {

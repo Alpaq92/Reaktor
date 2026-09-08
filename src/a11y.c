@@ -8,7 +8,7 @@
 
 #include "a11y.h"
 
-static const char *const g_role_names[CURIE_A11Y_ROLE_COUNT] = {
+static const char *const g_role_names[REAKTOR_A11Y_ROLE_COUNT] = {
     "none", "window", "group", "tablist", "tab", "button", "link",
     "checkbox", "radio", "textbox", "slider", "spinbutton", "progress",
     "combobox", "listitem", "treeitem", "menubar", "menu", "menuitem",
@@ -16,9 +16,9 @@ static const char *const g_role_names[CURIE_A11Y_ROLE_COUNT] = {
 };
 
 const char *
-curie_a11y_role_name(unsigned char role)
+reaktor_a11y_role_name(unsigned char role)
 {
-    return role < CURIE_A11Y_ROLE_COUNT ? g_role_names[role] : "?";
+    return role < REAKTOR_A11Y_ROLE_COUNT ? g_role_names[role] : "?";
 }
 
 /* FNV-1a. The id has to be stable across frames and cheap enough to run per
@@ -45,22 +45,22 @@ hash_str(unsigned h, const char *s)
  * matters - two equal strings are one pointer, which is what lets the diff
  * compare names with == instead of strcmp. */
 static const char *
-intern(curie_a11y *a, const char *s, unsigned h)
+intern(reaktor_a11y *a, const char *s, unsigned h)
 {
-    const unsigned mask = CURIE_A11Y_SLOTS * 2 - 1;
+    const unsigned mask = REAKTOR_A11Y_SLOTS * 2 - 1;
     unsigned i = h & mask;
 
     if (!s) return NULL;
     for (;;) {
-        curie_a11y_slot *sl = &a->strings[i];
+        reaktor_a11y_slot *sl = &a->strings[i];
 
         if (sl->gen != a->pool_gen) {       /* stale means empty */
             size_t n = strlen(s) + 1;
             /* Refuse rather than probe forever. The reset at the top of the
              * next frame is what actually recovers the room; this is the
              * guard for a single frame that floods it. */
-            if (a->pool_entries >= CURIE_A11Y_SLOTS ||
-                a->pool_used + (int)n > CURIE_A11Y_POOL) {
+            if (a->pool_entries >= REAKTOR_A11Y_SLOTS ||
+                a->pool_used + (int)n > REAKTOR_A11Y_POOL) {
                 a->overflow_strings++;
                 return NULL;
             }
@@ -89,13 +89,13 @@ intern(curie_a11y *a, const char *s, unsigned h)
  * without clearing anything. Load never passes half - the tables are twice the
  * node arena - so a probe is one or two slots. Answers the slot for `key`,
  * fresh if it was not there. Never NULL: the arena cannot fill. */
-static curie_a11y_slot *
-slot_of(curie_a11y_slot *tab, unsigned gen, unsigned key)
+static reaktor_a11y_slot *
+slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 {
-    unsigned i = key & (CURIE_A11Y_SLOTS - 1);
+    unsigned i = key & (REAKTOR_A11Y_SLOTS - 1);
 
     for (;;) {
-        curie_a11y_slot *sl = &tab[i];
+        reaktor_a11y_slot *sl = &tab[i];
         if (sl->gen != gen) {          /* stale means empty */
             sl->gen = gen;
             sl->key = key;
@@ -103,7 +103,7 @@ slot_of(curie_a11y_slot *tab, unsigned gen, unsigned key)
             return sl;
         }
         if (sl->key == key) return sl;
-        i = (i + 1) & (CURIE_A11Y_SLOTS - 1);
+        i = (i + 1) & (REAKTOR_A11Y_SLOTS - 1);
     }
 }
 
@@ -112,15 +112,15 @@ slot_of(curie_a11y_slot *tab, unsigned gen, unsigned key)
  * two passes over 512 nodes each fill a 1024-slot table and probe forever.
  * Answers 0 for absent, which is why the index stores i + 1. */
 static int
-slot_get(const curie_a11y_slot *tab, unsigned gen, unsigned key)
+slot_get(const reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 {
-    unsigned i = key & (CURIE_A11Y_SLOTS - 1);
+    unsigned i = key & (REAKTOR_A11Y_SLOTS - 1);
 
     for (;;) {
-        const curie_a11y_slot *sl = &tab[i];
+        const reaktor_a11y_slot *sl = &tab[i];
         if (sl->gen != gen) return 0;
         if (sl->key == key) return sl->val;
-        i = (i + 1) & (CURIE_A11Y_SLOTS - 1);
+        i = (i + 1) & (REAKTOR_A11Y_SLOTS - 1);
     }
 }
 
@@ -131,16 +131,16 @@ same_rect(struct nk_rect x, struct nk_rect y)
 }
 
 static unsigned
-emit(curie_a11y *a, unsigned char role, const char *name, const char *value,
+emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
      unsigned state, struct nk_rect bounds)
 {
     int f = a->front;
-    curie_a11y_node *n;
-    curie_a11y_slot *sl;
+    reaktor_a11y_node *n;
+    reaktor_a11y_slot *sl;
     unsigned parent, id, base, nh;
 
     if (!a->building) return 0;
-    if (a->count[f] >= CURIE_A11Y_MAX_NODES) {
+    if (a->count[f] >= REAKTOR_A11Y_MAX_NODES) {
         a->overflow_nodes++;
         return 0;
     }
@@ -166,7 +166,7 @@ emit(curie_a11y *a, unsigned char role, const char *name, const char *value,
     id = base ^ ((unsigned)sl->val * 0x85ebca6bu);
     sl->val++;
     if (id == 0) id = 1;   /* 0 is the window's parent, so it cannot be a node */
-    if (id == a->focus_id) state |= CURIE_A11Y_FOCUSED;
+    if (id == a->focus_id) state |= REAKTOR_A11Y_FOCUSED;
 
     n = &a->node[f][a->count[f]++];
     n->id     = id;
@@ -182,7 +182,7 @@ emit(curie_a11y *a, unsigned char role, const char *name, const char *value,
 }
 
 void
-curie_a11y_set_range(curie_a11y *a, unsigned id, float num, float lo, float hi,
+reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo, float hi,
                      float step)
 {
     int f = a->front, i;
@@ -191,7 +191,7 @@ curie_a11y_set_range(curie_a11y *a, unsigned id, float num, float lo, float hi,
     /* Backwards: the caller is decorating the node it has just reported, so
      * this is the last entry or close to it. */
     for (i = a->count[f] - 1; i >= 0; i--) {
-        curie_a11y_node *n = &a->node[f][i];
+        reaktor_a11y_node *n = &a->node[f][i];
 
         if (n->id != id) continue;
         n->num = num; n->lo = lo; n->hi = hi; n->step = step;
@@ -200,13 +200,13 @@ curie_a11y_set_range(curie_a11y *a, unsigned id, float num, float lo, float hi,
 }
 
 void
-curie_a11y_set_focus(curie_a11y *a, unsigned id)
+reaktor_a11y_set_focus(reaktor_a11y *a, unsigned id)
 {
     a->focus_id = id;
 }
 
 void
-curie_a11y_begin(curie_a11y *a, const char *window_name, struct nk_rect bounds)
+reaktor_a11y_begin(reaktor_a11y *a, const char *window_name, struct nk_rect bounds)
 {
     int f = a->front;
 
@@ -227,8 +227,8 @@ curie_a11y_begin(curie_a11y *a, const char *window_name, struct nk_rect bounds)
      * paid only by a page that churns thousands of distinct strings. Done here
      * rather than mid-frame, where nodes already emitted would be left holding
      * offsets about to be overwritten. */
-    if (a->pool_used > CURIE_A11Y_POOL - CURIE_A11Y_POOL / 4 ||
-        a->pool_entries >= CURIE_A11Y_SLOTS) {
+    if (a->pool_used > REAKTOR_A11Y_POOL - REAKTOR_A11Y_POOL / 4 ||
+        a->pool_entries >= REAKTOR_A11Y_SLOTS) {
         a->pool_used    = 0;
         a->pool_entries = 0;
         a->pool_gen++;
@@ -237,18 +237,18 @@ curie_a11y_begin(curie_a11y *a, const char *window_name, struct nk_rect bounds)
 
     /* The window is the root, emitted here so no caller has to remember to,
      * and pushed so everything after it has a parent. */
-    curie_a11y_push(a, CURIE_A11Y_WINDOW, window_name, NULL, 0, bounds);
+    reaktor_a11y_push(a, REAKTOR_A11Y_WINDOW, window_name, NULL, 0, bounds);
 }
 
 unsigned
-curie_a11y_add(curie_a11y *a, unsigned char role, const char *name,
+reaktor_a11y_add(reaktor_a11y *a, unsigned char role, const char *name,
                const char *value, unsigned state, struct nk_rect bounds)
 {
     return emit(a, role, name, value, state, bounds);
 }
 
 unsigned
-curie_a11y_push(curie_a11y *a, unsigned char role, const char *name,
+reaktor_a11y_push(reaktor_a11y *a, unsigned char role, const char *name,
                 const char *value, unsigned state, struct nk_rect bounds)
 {
     unsigned id = emit(a, role, name, value, state, bounds);
@@ -256,14 +256,14 @@ curie_a11y_push(curie_a11y *a, unsigned char role, const char *name,
     /* Past the limit the node is still emitted flat rather than dropped, and
      * the pop that follows is absorbed below. Nesting deeper than this means a
      * bug, not a page. */
-    if (a->depth < CURIE_A11Y_MAX_DEPTH)
+    if (a->depth < REAKTOR_A11Y_MAX_DEPTH)
         a->parent[a->depth] = id;
     a->depth++;
     return id;
 }
 
 void
-curie_a11y_pop(curie_a11y *a)
+reaktor_a11y_pop(reaktor_a11y *a)
 {
     if (a->depth > 0) a->depth--;
 }
@@ -271,9 +271,9 @@ curie_a11y_pop(curie_a11y *a)
 /* --- the diff ----------------------------------------------------------- */
 
 static void
-change(curie_a11y *a, unsigned char kind, unsigned id, int index)
+change(reaktor_a11y *a, unsigned char kind, unsigned id, int index)
 {
-    if (a->change_count >= CURIE_A11Y_MAX_CHANGES) return;
+    if (a->change_count >= REAKTOR_A11Y_MAX_CHANGES) return;
     a->change[a->change_count].kind  = kind;
     a->change[a->change_count].id    = id;
     a->change[a->change_count].index = index;
@@ -281,10 +281,10 @@ change(curie_a11y *a, unsigned char kind, unsigned id, int index)
 }
 
 int
-curie_a11y_end(curie_a11y *a)
+reaktor_a11y_end(reaktor_a11y *a)
 {
     int f = a->front, b = 1 - a->front;
-    const curie_a11y_node *cur = a->node[f], *old = a->node[b];
+    const reaktor_a11y_node *cur = a->node[f], *old = a->node[b];
     int ncur = a->count[f], nold = a->count[b];
     int i;
 
@@ -315,7 +315,7 @@ curie_a11y_end(curie_a11y *a)
         unsigned up = cur[i].parent;
         int guard = 0;
 
-        while (guard++ <= CURIE_A11Y_MAX_DEPTH) {
+        while (guard++ <= REAKTOR_A11Y_MAX_DEPTH) {
             int k = up ? slot_get(a->index, a->index_gen, up) - 1 : 0;
             struct nk_rect v;
 
@@ -323,7 +323,7 @@ curie_a11y_end(curie_a11y *a)
             v = cur[k].bounds;
             if (b.x + b.w <= v.x || b.x >= v.x + v.w ||
                 b.y + b.h <= v.y || b.y >= v.y + v.h) {
-                a->node[f][i].state |= CURIE_A11Y_OFFSCREEN;
+                a->node[f][i].state |= REAKTOR_A11Y_OFFSCREEN;
                 break;
             }
             if (!up) break;              /* reached the window */
@@ -348,19 +348,19 @@ curie_a11y_end(curie_a11y *a)
              * hundred unrelated additions where it is one. */
             if (!cur[i].parent ||
                 slot_get(a->index, a->index_gen, cur[i].parent) > 0)
-                change(a, CURIE_A11Y_ADDED, cur[i].id, i);
+                change(a, REAKTOR_A11Y_ADDED, cur[i].id, i);
             continue;
         }
         a->matched[j] = 1;
         if (!same_str(cur[i].name, old[j].name) ||
             !same_str(cur[i].value, old[j].value))
-            change(a, CURIE_A11Y_RENAMED, cur[i].id, i);
+            change(a, REAKTOR_A11Y_RENAMED, cur[i].id, i);
         if (cur[i].state != old[j].state)
-            change(a, CURIE_A11Y_RESTATED, cur[i].id, i);
+            change(a, REAKTOR_A11Y_RESTATED, cur[i].id, i);
         else if (!same_rect(cur[i].bounds, old[j].bounds))
             /* Only when nothing more interesting happened: a client that has
              * to re-read a node for its state will re-read its bounds too. */
-            change(a, CURIE_A11Y_MOVED, cur[i].id, i);
+            change(a, REAKTOR_A11Y_MOVED, cur[i].id, i);
     }
     for (i = 0; i < nold; i++) {
         if (a->matched[i]) continue;
@@ -371,7 +371,7 @@ curie_a11y_end(curie_a11y *a)
             int up = slot_get(a->index, a->index_gen, old[i].parent) - 1;
             if (up >= 0 && !a->matched[up]) continue;
         }
-        change(a, CURIE_A11Y_REMOVED, old[i].id, i);
+        change(a, REAKTOR_A11Y_REMOVED, old[i].id, i);
     }
 
     a->front = b;
@@ -380,19 +380,19 @@ curie_a11y_end(curie_a11y *a)
 
 /* --- reading it back ---------------------------------------------------- */
 
-/* After the swap in curie_a11y_end the frame just described is the back half,
+/* After the swap in reaktor_a11y_end the frame just described is the back half,
  * so both of these read 1 - front. Between begin and end they read the half
  * being filled, which is what a caller mid-frame means. */
-const curie_a11y_node *
-curie_a11y_tree(const curie_a11y *a, int *count)
+const reaktor_a11y_node *
+reaktor_a11y_tree(const reaktor_a11y *a, int *count)
 {
     int f = a->building ? a->front : 1 - a->front;
     if (count) *count = a->count[f];
     return a->node[f];
 }
 
-const curie_a11y_change *
-curie_a11y_changes(const curie_a11y *a, int *count)
+const reaktor_a11y_change *
+reaktor_a11y_changes(const reaktor_a11y *a, int *count)
 {
     if (count) *count = a->change_count;
     return a->change;
@@ -424,17 +424,17 @@ state_text(unsigned state, char *out, size_t cap)
 }
 
 void
-curie_a11y_dump(const curie_a11y *a, FILE *out)
+reaktor_a11y_dump(const reaktor_a11y *a, FILE *out)
 {
     int n = 0, i;
-    const curie_a11y_node *t = curie_a11y_tree(a, &n);
+    const reaktor_a11y_node *t = reaktor_a11y_tree(a, &n);
 
     for (i = 0; i < n; i++) {
         char st[128];
         int pad = t[i].level * 2;
 
         state_text(t[i].state, st, sizeof(st));
-        fprintf(out, "%*s%s", pad, "", curie_a11y_role_name(t[i].role));
+        fprintf(out, "%*s%s", pad, "", reaktor_a11y_role_name(t[i].role));
         if (t[i].name)  fprintf(out, " \"%s\"", t[i].name);
         if (t[i].value) fprintf(out, " = \"%s\"", t[i].value);
         if (st[0])      fprintf(out, " [%s]", st + 1);

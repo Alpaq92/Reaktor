@@ -24,32 +24,28 @@
  * rule this engine can apply - the surfaces the application paints itself, and
  * anything behind a selector dropped above - so those tokens are read straight
  * from the map instead. */
-#ifndef CURIE_CSSFLAT_H
-#define CURIE_CSSFLAT_H
+#ifndef REAKTOR_CSSFLAT_H
+#define REAKTOR_CSSFLAT_H
 
 #include <stddef.h>
 
-typedef struct curie_cssvars curie_cssvars;
+typedef struct reaktor_cssvars reaktor_cssvars;
 
 /* Reads and flattens `count` stylesheets in order. `theme` selects which
  * [data-theme="..."] block contributes its custom properties ("light" or
  * "dark"). Returns malloc'd CSS text the caller frees, or NULL on failure.
  * When `out_vars` is non-NULL it receives the resolved custom properties. */
-char *curie_css_flatten(const char *const *paths, int count,
-                        const char *theme, curie_cssvars **out_vars);
-
-/* Same, but from text already in memory. `names` is used only in messages. */
-char *curie_css_flatten_text(const char *const *texts, int count,
-                             const char *theme, curie_cssvars **out_vars);
+char *reaktor_css_flatten(const char *const *paths, int count,
+                        const char *theme, reaktor_cssvars **out_vars);
 
 /* Resolved value of a custom property, e.g. "--background-body", or NULL. */
-const char *curie_cssvars_get(const curie_cssvars *vars, const char *name);
+const char *reaktor_cssvars_get(const reaktor_cssvars *vars, const char *name);
 
 /* Resolved custom property parsed as #rgb/#rrggbb. Returns 0 if absent or
  * not a hex colour. */
-int curie_cssvars_color(const curie_cssvars *vars, const char *name,
+int reaktor_cssvars_color(const reaktor_cssvars *vars, const char *name,
                         unsigned char rgba[4]);
 
-void curie_cssvars_free(curie_cssvars *vars);
+void reaktor_cssvars_free(reaktor_cssvars *vars);
 
-#endif /* CURIE_CSSFLAT_H */
+#endif /* REAKTOR_CSSFLAT_H */

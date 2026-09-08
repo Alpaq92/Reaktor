@@ -24,20 +24,20 @@
  * the bridges that are still missing. */
 #include "a11y.h"
 
-static curie_a11y_action g_activate, g_focus;
+static reaktor_a11y_action g_activate, g_focus;
 static void *g_user;
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 
 EMSCRIPTEN_KEEPALIVE void
-curie_a11y_web_activate(unsigned id)
+reaktor_a11y_web_activate(unsigned id)
 {
     if (g_activate) g_activate(g_user, id);
 }
 
 EMSCRIPTEN_KEEPALIVE void
-curie_a11y_web_focus(unsigned id)
+reaktor_a11y_web_focus(unsigned id)
 {
     if (g_focus) g_focus(g_user, id);
 }
@@ -53,7 +53,7 @@ EM_JS(void, web_a11y_init, (void), {
         'overflow:visible;pointer-events:none;opacity:0;';
     document.body.appendChild(root);
     canvas.setAttribute('role', 'application');
-    canvas.setAttribute('aria-label', 'Curie');
+    canvas.setAttribute('aria-label', 'Reaktor');
     canvas.setAttribute('aria-owns', 'a11y');
     Module['a11y'] = { root: root, nodes: {}, gen: 0 };
 });
@@ -77,10 +77,10 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
         el.id = 'a11y-' + id;
         el.style.cssText = 'position:absolute;pointer-events:none;';
         el.addEventListener('click', function () {
-            Module['_curie_a11y_web_activate'](id);
+            Module['_reaktor_a11y_web_activate'](id);
         });
         el.addEventListener('focus', function () {
-            Module['_curie_a11y_web_focus'](id);
+            Module['_reaktor_a11y_web_focus'](id);
         });
         a.nodes[id] = el;
     }
@@ -94,7 +94,7 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
     var CHECKED = 2, EXPANDED = 4, SELECTED = 8, DISABLED = 16, READONLY = 32,
         VOLATILE = 128;
 
-    /* Curie's vocabulary is the one every platform shares; three names
+    /* Reaktor's vocabulary is the one every platform shares; three names
        differ in ARIA. A label has no role - it is text. */
     var aria = r === 'progress' ? 'progressbar'
              : r === 'listitem' ? 'option'
@@ -165,7 +165,7 @@ EM_JS(void, web_a11y_end, (unsigned focus), {
 });
 
 void
-curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
+reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                          void *user)
 {
     g_activate = activate;
@@ -175,27 +175,27 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
 }
 
 void
-curie_a11y_platform_drain(void)
+reaktor_a11y_platform_drain(void)
 {
     /* The browser calls the exported functions on the main thread, so the
      * action has already run by the time anything asks. */
 }
 
 void
-curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
+reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
     static unsigned last_focus;
     int n, m, i;
-    const curie_a11y_node *t = curie_a11y_tree(a, &n);
+    const reaktor_a11y_node *t = reaktor_a11y_tree(a, &n);
 
-    curie_a11y_changes(a, &m);
+    reaktor_a11y_changes(a, &m);
     if (m == 0 && focus_id == last_focus) return;
     last_focus = focus_id;
 
     web_a11y_begin();
     for (i = 0; i < n; i++) {
-        const curie_a11y_node *nd = &t[i];
-        web_a11y_node(nd->id, nd->parent, curie_a11y_role_name(nd->role),
+        const reaktor_a11y_node *nd = &t[i];
+        web_a11y_node(nd->id, nd->parent, reaktor_a11y_role_name(nd->role),
                       nd->name ? nd->name : "", nd->value ? nd->value : "",
                       nd->state, nd->bounds.x, nd->bounds.y, nd->bounds.w,
                       nd->bounds.h, nd->num, nd->lo, nd->hi);
@@ -208,10 +208,10 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
  * Anything else - a Linux or BSD without dbus - falls through to the no-op
  * below, which is also what a desktop with no accessibility stack running
  * amounts to. */
-#elif !defined(_WIN32) && !defined(CURIE_HAVE_ATSPI) &&       !defined(CURIE_HAVE_NSACCESSIBILITY)
+#elif !defined(_WIN32) && !defined(REAKTOR_HAVE_ATSPI) &&       !defined(REAKTOR_HAVE_NSACCESSIBILITY)
 
 void
-curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
+reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                          void *user)
 {
     g_activate = activate;
@@ -220,13 +220,13 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
 }
 
 void
-curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
+reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
     (void)a; (void)focus_id;
 }
 
 void
-curie_a11y_platform_drain(void)
+reaktor_a11y_platform_drain(void)
 {
 }
 

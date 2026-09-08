@@ -1,4 +1,4 @@
-/* main.c - Curie: pure C UI on Nuklear, rendered through SDL3, styled by CSS.
+/* main.c - Reaktor: pure C UI on Nuklear, rendered through SDL3, styled by CSS.
  *
  * The loop is SDL3's callback model (SDL_AppInit / SDL_AppIterate /
  * SDL_AppEvent / SDL_AppQuit), not a while(): a browser tab cannot be blocked,
@@ -21,7 +21,7 @@
 #include "appicon.h"
 #include "theme.h"
 #include "metrics.h"
-#include "curie.h"
+#include "reaktor.h"
 #include "style.h"
 #include "ui.h"
 
@@ -30,7 +30,7 @@
 #include <emscripten/html5.h>
 #endif
 
-#define WINDOW_WIDTH  960      /* logical px; scaled via curie_px() */
+#define WINDOW_WIDTH  960      /* logical px; scaled via reaktor_px() */
 #define WINDOW_HEIGHT 680
 #define FONT_SIZE     16
 
@@ -70,8 +70,8 @@ static size_t g_priv[RSS_STEPS];
  * and again once App exists, so it reads the environment rather than App. */
 static const char *frame_rate_wanted(void)
 {
-    const char *rate = SDL_getenv("CURIE_FRAME_RATE");
-    const char *redraw = SDL_getenv("CURIE_REDRAW");
+    const char *rate = SDL_getenv("REAKTOR_FRAME_RATE");
+    const char *redraw = SDL_getenv("REAKTOR_REDRAW");
 
     if (rate && *rate) return rate;
     return (redraw && SDL_strcmp(redraw, "always") == 0) ? "0" : "waitevent";
@@ -79,7 +79,7 @@ static const char *frame_rate_wanted(void)
 
 static void rss_mark(int step)
 {
-    curie_process_memory(&g_rss[step], &g_priv[step]);
+    reaktor_process_memory(&g_rss[step], &g_priv[step]);
 }
 
 /* Ionicons draw a 32-unit stroke on a 512 viewBox - 6.25% - so below 16px the
@@ -119,7 +119,7 @@ struct img_slot {
     int          w, h;
 };
 
-/* One disc mask per radius, for curie_fill_round. Eight is more radii than
+/* One disc mask per radius, for reaktor_fill_round. Eight is more radii than
  * any one screen asks for. */
 #define ROUND_CACHE_MAX 8
 struct round_slot {
@@ -254,7 +254,7 @@ struct App {
     int    hover_pending;
     int    renderer_is_sw;      /* SDL's software rasteriser - see the
                                 * antialiasing note in the frame body */
-    int    sw_noaa;             /* CURIE_SW_NOAA: no feathering at all there -
+    int    sw_noaa;             /* REAKTOR_SW_NOAA: no feathering at all there -
                                 * see the frame body */
     int    drag_moved;          /* pointer moved since the last drawn frame */
     int    cal_frames, cal_done;
@@ -264,7 +264,7 @@ struct App {
     /* The retained description of the frame - see a11y.h. Rebuilt every frame
      * from the widgets as they are drawn, and diffed against the previous one.
      * Large (arenas, not pointers), so it lives here rather than on a stack. */
-    curie_a11y a11y;
+    reaktor_a11y a11y;
 
     /* Keyboard focus - phase 3 of docs/ACCESSIBILITY.md. The tree above is in
      * reading order, so its focusable subset is the tab order and nothing
@@ -300,7 +300,7 @@ struct App {
     /* Which page is on screen, and what the showcase pages remember between
      * frames. Tab 0 is the login card this app began as. */
     int            tab;
-    /* Where a showcase page opens, scrolled - same reason as CURIE_TAB: a
+    /* Where a showcase page opens, scrolled - same reason as REAKTOR_TAB: a
      * screenshot should not depend on synthesised wheel events. */
     int            scroll0;
     showcase_state show;
@@ -326,14 +326,14 @@ env_int(const char *name, int fallback)
     return (v && *v) ? SDL_atoi(v) : fallback;
 }
 
-/* The effective scheme. curie_prefers_dark() returns -1 when the platform will
+/* The effective scheme. reaktor_prefers_dark() returns -1 when the platform will
  * not say, and an unknown answer is treated as light. */
 static int
 effective_dark(const App *app)
 {
     if (app->theme_mode == THEME_LIGHT) return 0;
     if (app->theme_mode == THEME_DARK)  return 1;
-    return curie_prefers_dark() > 0;
+    return reaktor_prefers_dark() > 0;
 }
 
 /* Reloads the stylesheets and re-reads the surfaces this file paints itself.
@@ -352,8 +352,8 @@ load_theme(App *app)
 
     app->dark = effective_dark(app);
 
-    if (!curie_path(pal, sizeof(pal), theme_sheet(app->dark)) ||
-        !curie_path(core, sizeof(core), CORE_SHEET)) {
+    if (!reaktor_path(pal, sizeof(pal), theme_sheet(app->dark)) ||
+        !reaktor_path(core, sizeof(core), CORE_SHEET)) {
         SDL_Log("could not resolve the tiny.css sources");
         return;
     }
@@ -361,7 +361,7 @@ load_theme(App *app)
     sheets[1] = core;
 
     t0 = SDL_GetPerformanceCounter();
-    if (!curie_style_init(sheets, SHEET_COUNT))
+    if (!reaktor_style_init(sheets, SHEET_COUNT))
         SDL_Log("stylesheets failed to load; Nuklear defaults apply");
     t1 = SDL_GetPerformanceCounter();
     app->style_ms_x100 = (int)(100000.0 * (double)(t1 - t0) /
@@ -369,27 +369,27 @@ load_theme(App *app)
 
     /* The window and the card are painted by this file, not by a widget, so
      * their colours are read from the same :root the rules use. */
-    app->page    = curie_style_token("--background-body", c)
+    app->page    = reaktor_style_token("--background-body", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(247, 247, 247);
-    app->card_bg = curie_style_token("--background", c)
+    app->card_bg = reaktor_style_token("--background", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(226, 226, 226);
-    app->text    = curie_style_token("--text-main", c)
+    app->text    = reaktor_style_token("--text-main", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(51, 51, 51);
-    if (curie_style_token("--text-muted", c))
+    if (reaktor_style_token("--text-muted", c))
         SDL_snprintf(app->icon_hex, sizeof(app->icon_hex),
                      "#%02x%02x%02x", c[0], c[1], c[2]);
     else
         SDL_strlcpy(app->icon_hex, "#6a6a6a", sizeof(app->icon_hex));
 
-    if (curie_style_token("--links", c))
+    if (reaktor_style_token("--links", c))
         SDL_snprintf(app->accent_hex, sizeof(app->accent_hex),
                      "#%02x%02x%02x", c[0], c[1], c[2]);
     else
-        SDL_strlcpy(app->accent_hex, CURIE_BRAND, sizeof(app->accent_hex));
+        SDL_strlcpy(app->accent_hex, REAKTOR_BRAND, sizeof(app->accent_hex));
 
     /* The desktop's own title bar, so a pinned scheme is not contradicted by
      * the frame around it. */
-    curie_window_set_dark(
+    reaktor_window_set_dark(
         SDL_GetPointerProperty(SDL_GetWindowProperties(app->win),
                                SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL),
         app->dark);
@@ -476,7 +476,7 @@ img_lookup(App *app, const char *src, int px)
         }
     }
 
-    surf = curie_svg_surface_path(rel, px, ocol[0] ? ocol : NULL,
+    surf = reaktor_svg_surface_path(rel, px, ocol[0] ? ocol : NULL,
                                   icol[0] ? icol : NULL, swk);
 
     /* Cache the failure too, so a bad src is not retried every frame. */
@@ -492,7 +492,7 @@ img_lookup(App *app, const char *src, int px)
     w = plutovg_surface_get_width(surf);
     h = plutovg_surface_get_height(surf);
     stride = plutovg_surface_get_stride(surf);
-    curie_unpremultiply(plutovg_surface_get_data(surf), w, h, stride);
+    reaktor_unpremultiply(plutovg_surface_get_data(surf), w, h, stride);
 
     sdlsurf = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_ARGB8888,
                                     plutovg_surface_get_data(surf), stride);
@@ -519,7 +519,7 @@ img_lookup(App *app, const char *src, int px)
 static struct nk_image
 icon_over(App *app, const char *src, int px, float over)
 {
-    int raster = (int)(px * curie_scale() * over + 0.5f);
+    int raster = (int)(px * reaktor_scale() * over + 0.5f);
     struct img_slot *slot = img_lookup(app, src, raster);
 
     if (!slot) return nk_image_id(0);
@@ -622,7 +622,7 @@ round_mask(App *app, int r)
 }
 
 void
-curie_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
                  float rounding, struct nk_color col)
 {
     struct nk_image disc;
@@ -719,7 +719,7 @@ rebuild_font(App *app)
      * glyphs unfreed, visible only on a display-scale change. The clear frees
      * the nk_font ctx->style.font points at, so the path is resolved first:
      * with nothing to bake, the working atlas is worth keeping. */
-    have_font = curie_path(path, sizeof(path), FONT_FILE);
+    have_font = reaktor_path(path, sizeof(path), FONT_FILE);
     if (app->atlas && !have_font) {
         SDL_Log("could not resolve %s; keeping the font already baked",
                 FONT_FILE);
@@ -748,7 +748,7 @@ rebuild_font(App *app)
         cfg.pixel_snap   = 1;
         for (i = 0; i < FONT_STEPS; i++) {
             app->faces[i] = nk_font_atlas_add_from_file(
-                atlas, path, (float)curie_px(g_font_px[i]), &cfg);
+                atlas, path, (float)reaktor_px(g_font_px[i]), &cfg);
             if (g_font_px[i] == FONT_SIZE) font = app->faces[i];
             if (!font) font = app->faces[i];
         }
@@ -771,7 +771,7 @@ rebuild_font(App *app)
             SDL_snprintf(bpath, sizeof(bpath), "%.*s%s",
                          slash ? (int)(slash - path + 1) : 0, path, base);
             app->face_bold = nk_font_atlas_add_from_file(
-                atlas, bpath, (float)curie_px(TITLE_PX), &cfg);
+                atlas, bpath, (float)reaktor_px(TITLE_PX), &cfg);
             if (app->face_bold)
                 app->face_bold->handle.height = (float)TITLE_PX;
         }
@@ -786,12 +786,12 @@ rebuild_font(App *app)
     /* A silent fallback would be indistinguishable from "the font never
      * loaded", so the outcome is always recorded and shown in diagnostics. */
     if (!font) {
-        font = nk_font_atlas_add_default(atlas, (float)curie_px(FONT_SIZE), NULL);
+        font = nk_font_atlas_add_default(atlas, (float)reaktor_px(FONT_SIZE), NULL);
         if (font) font->handle.height = (float)FONT_SIZE;
     } else {
         SDL_snprintf(app->font_status, sizeof(app->font_status),
                      "Aileron, %d sizes %d-%dpx%s", FONT_STEPS,
-                     curie_px(g_font_px[0]), curie_px(g_font_px[FONT_STEPS - 1]),
+                     reaktor_px(g_font_px[0]), reaktor_px(g_font_px[FONT_STEPS - 1]),
                      app->face_bold ? ", bold at one" : "");
     }
 
@@ -826,13 +826,13 @@ rebuild_font(App *app)
 static void
 apply_render_scale(App *app)
 {
-    float s = curie_scale();
+    float s = reaktor_scale();
     SDL_SetRenderScale(app->ren, s, s);
 }
 
 /* --- window icon ------------------------------------------------------- */
 /* SDL_SetWindowIcon is portable, so this replaces the Win32 HICON path. What
- * Explorer shows is a separate thing: branding/curie-icon.ico, linked as a
+ * Explorer shows is a separate thing: branding/reaktor-icon.ico, linked as a
  * resource, because a file has an icon before it has a process. */
 static void
 set_window_icon(SDL_Window *win)
@@ -841,13 +841,13 @@ set_window_icon(SDL_Window *win)
     SDL_Surface *ico;
     int w, h, stride;
 
-    svg = curie_svg_surface_path(CURIE_MARK, 64, NULL, NULL, 0.0f);
+    svg = reaktor_svg_surface_path(REAKTOR_MARK, 64, NULL, NULL, 0.0f);
     if (!svg) return;
 
     w      = plutovg_surface_get_width(svg);
     h      = plutovg_surface_get_height(svg);
     stride = plutovg_surface_get_stride(svg);
-    curie_unpremultiply(plutovg_surface_get_data(svg), w, h, stride);
+    reaktor_unpremultiply(plutovg_surface_get_data(svg), w, h, stride);
 
     /* plutovg's ARGB32 is B,G,R,A in memory on little-endian, which is what
      * SDL calls ARGB8888. */
@@ -915,22 +915,22 @@ typedef struct style_frame { int items, colors, floats, vec2s, fonts; } style_fr
 static style_frame
 push_button_style(App *app, struct nk_context *ctx, const char *selector)
 {
-    curie_style s, hov;
+    reaktor_style s, hov;
     unsigned char hover[4], active[4];
     style_frame f = { 0, 0, 0, 0, 0 };
     char hsel[80];
 
-    curie_style_get(selector, &s);
+    reaktor_style_get(selector, &s);
     if (!s.matched) return f;
 
     /* tiny.css names the hover (--button-hover), so it is read. Only :active
      * is shaded: tiny.css states that as a transform. */
     snprintf(hsel, sizeof(hsel), "%s:hover", selector);
-    curie_style_get(hsel, &hov);
+    reaktor_style_get(hsel, &hov);
 
     memcpy(hover, hov.matched && hov.bg[3] ? hov.bg : s.bg, 4);
     memcpy(active, hover, 4);
-    curie_style_darken(active, 0.10f);
+    reaktor_style_darken(active, 0.10f);
 
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
                              nk_style_item_color(col_of(s.bg)));
@@ -984,11 +984,11 @@ css_button(App *app, struct nk_context *ctx, const char *selector,
     /* tiny.css gives the button a --button-hover fill, so this one does
      * need a frame when the pointer arrives. */
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
-    id = curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
+    id = reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
     clicked = nk_button_label(ctx, label);
     pop_style(ctx, f);
-    if (curie_focus_activated(app, id)) clicked = 1;
+    if (reaktor_focus_activated(app, id)) clicked = 1;
     return clicked;
 }
 
@@ -1030,14 +1030,14 @@ readable_on(const unsigned char bg[4], const char *preferred,
 {
     unsigned char a[4], b[4];
 
-    if (curie_style_token(preferred, a)) {
+    if (reaktor_style_token(preferred, a)) {
         if (contrast_ratio(bg, a) >= READABLE_MIN) return col_of(a);
-        if (curie_style_token(fallback, b) &&
+        if (reaktor_style_token(fallback, b) &&
             contrast_ratio(bg, b) > contrast_ratio(bg, a))
             return col_of(b);
         return col_of(a);
     }
-    if (curie_style_token(fallback, b)) return col_of(b);
+    if (reaktor_style_token(fallback, b)) return col_of(b);
     return nk_rgb(255, 255, 255);
 }
 
@@ -1045,7 +1045,7 @@ readable_on(const unsigned char bg[4], const char *preferred,
  * palette sets --table to --background-body, so `thead` came out exactly the
  * surface it is drawn on; `details` too. */
 struct nk_color
-curie_visible(struct nk_color want, struct nk_color behind,
+reaktor_visible(struct nk_color want, struct nk_color behind,
               struct nk_color fallback)
 {
     unsigned char a[4], b[4];
@@ -1067,14 +1067,14 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     int clicked;
 
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
-    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
 
     f = push_button_style(app, ctx, selector);
 
-    if (curie_style_token(token, c)) {
+    if (reaktor_style_token(token, c)) {
         unsigned char hov[4];
         memcpy(hov, c, 4);
-        curie_style_darken(hov, 0.12f);
+        reaktor_style_darken(hov, 0.12f);
 
         nk_style_push_style_item(ctx, &ctx->style.button.normal,
                                  nk_style_item_color(col_of(c)));
@@ -1110,7 +1110,7 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     int clicked;
 
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
-    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
     clicked = nk_button_image_label(ctx, im, label, NK_TEXT_CENTERED);
     pop_style(ctx, f);
@@ -1164,15 +1164,15 @@ edit_paste_clipboard(struct nk_text_edit *edit)
  * dark one, which is how a field is expected to sit. The showcase's fields
  * are on the page itself and keep the rule's fill. */
 static style_frame
-push_edit_style(struct nk_context *ctx, curie_style *out, int inset)
+push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset)
 {
-    curie_style s, foc, btn;
+    reaktor_style s, foc, btn;
     style_frame f = { 0, 0, 0, 0, 0 };
     unsigned char body[4];
 
-    curie_style_get("input", &s);
-    curie_style_get("input:focus", &foc);
-    curie_style_get("button", &btn);
+    reaktor_style_get("input", &s);
+    reaktor_style_get("input:focus", &foc);
+    reaktor_style_get("button", &btn);
     if (btn.matched) s.rounding = btn.rounding;
     /* Nuklear insets the text by border + padding, and the border is drawn
      * here as a stroke with Nuklear's own set to 0 - so the border's width
@@ -1185,7 +1185,7 @@ push_edit_style(struct nk_context *ctx, curie_style *out, int inset)
      * written for a field on a page, and next to the card's rounding the
      * text sat against the edge. */
     if (s.pad_x < 16.0f) s.pad_x = 16.0f;
-    if (inset && curie_style_token("--background-body", body)) {
+    if (inset && reaktor_style_token("--background-body", body)) {
         int k;
         for (k = 0; k < 3; k++)
             s.bg[k] = (unsigned char)((s.bg[k] * 3 + body[k] * 2) / 5);
@@ -1223,7 +1223,7 @@ push_edit_style(struct nk_context *ctx, curie_style *out, int inset)
             unsigned char c[4];
             line = col_of(s.border_col);
             if (line.a == 0)
-                line = curie_style_token("--background-hover", c)
+                line = reaktor_style_token("--background-hover", c)
                      ? col_of(c) : nk_rgba(128, 128, 128, 90);
         }
         nk_style_push_color(ctx, &ctx->style.edit.border_color, line);
@@ -1242,7 +1242,7 @@ push_edit_style(struct nk_context *ctx, curie_style *out, int inset)
         unsigned char sel[4];
         struct nk_color selbg, seltx;
 
-        if (curie_style_token("--focus", sel)) {
+        if (reaktor_style_token("--focus", sel)) {
             selbg = col_of(sel);
             seltx = readable_on(sel, "--text-bright", "--background-body");
         } else {
@@ -1277,7 +1277,7 @@ push_edit_style(struct nk_context *ctx, curie_style *out, int inset)
  * covers exactly the band the two fills did. Buttons already worked this
  * way, which is why they kept their corners and the fields lost theirs. */
 static void
-stroke_edit_edge(struct nk_context *ctx, struct nk_rect b, const curie_style *s)
+stroke_edit_edge(struct nk_context *ctx, struct nk_rect b, const reaktor_style *s)
 {
     float t = s->border, r;
 
@@ -1290,12 +1290,12 @@ stroke_edit_edge(struct nk_context *ctx, struct nk_rect b, const curie_style *s)
 
 static void
 draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
-          const curie_style *s)
+          const reaktor_style *s)
 {
     struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
     const struct nk_user_font *font = ctx->style.font;
     unsigned char muted[4];
-    struct nk_color grey = curie_style_token("--text-muted", muted)
+    struct nk_color grey = reaktor_style_token("--text-muted", muted)
                          ? col_of(muted) : nk_rgb(0x9a, 0x9a, 0x9a);
     /* pad_x already carries the border - see push_edit_style - so this is
      * exactly where Nuklear starts the typed text. */
@@ -1363,7 +1363,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
           const char *hint)
 {
     struct nk_rect bounds = nk_widget_bounds(ctx);
-    curie_style s;
+    reaktor_style s;
     style_frame f;
 
     (void)buf; (void)cap;
@@ -1378,9 +1378,9 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
         nk_flags st = nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit,
                                      nk_filter_default);
         note_ime_caret(app, ctx, bounds, st, &app->edit);
-        curie_note(app, CURIE_A11Y_TEXTBOX, hint,
+        reaktor_note(app, REAKTOR_A11Y_TEXTBOX, hint,
                    nk_str_get_const(&app->edit.string),
-                   st & NK_EDIT_ACTIVE ? CURIE_A11Y_FOCUSED : 0u, bounds);
+                   st & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
     }
     pop_style(ctx, f);
     stroke_edit_edge(ctx, bounds, &s);
@@ -1396,7 +1396,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
      * the flag the fill's corners were a staircase on the software renderer,
      * where a fill is not feathered and only a stroke is. */
     nk_style_push_float(ctx, &ctx->style.window.rounding,
-                        curie_popup_rounding());
+                        reaktor_popup_rounding());
     if (nk_contextual_begin(ctx, NK_WINDOW_BORDER, nk_vec2(160, 172), bounds)) {
         int has_sel = app->edit.select_start != app->edit.select_end;
 
@@ -1486,7 +1486,7 @@ window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
 #define HOVER_GAP_MS 50
 
 /* The gap in force. Starts at HOVER_GAP_MS and is then set from what a frame
- * measurably costs this process - see calibrate_hover_gap. CURIE_HOVER_GAP_MS
+ * measurably costs this process - see calibrate_hover_gap. REAKTOR_HOVER_GAP_MS
  * pins it instead, which is how the trade-off was measured in the first
  * place. */
 static Uint64 g_hover_gap_ms = HOVER_GAP_MS;
@@ -1513,7 +1513,7 @@ calibrate_hover_gap(App *app)
 
     if (g_hover_gap_pinned || app->cal_done) return;
     if (app->cal_frames < CAL_SKIP) { app->cal_frames++; return; }
-    now = curie_process_cpu_ms();
+    now = reaktor_process_cpu_ms();
     if (app->cal_frames == CAL_SKIP) app->cal_cpu0 = now;
     app->cal_frames++;
     if (app->cal_frames < CAL_SKIP + CAL_FRAMES + 1) return;
@@ -1567,7 +1567,7 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
     style_frame f = { 0, 0, 0, 0, 0 };
     unsigned char c[4];
     struct nk_color clear = nk_rgba(0, 0, 0, 0);
-    struct nk_color wash = curie_style_token("--background-hover", c)
+    struct nk_color wash = reaktor_style_token("--background-hover", c)
                          ? col_of(c) : nk_rgba(255, 255, 255, 26);
     char src[176];
     float pad_x, pad_y;
@@ -1577,7 +1577,7 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
     /* The glyph is the whole button, so the name is the only thing a reader
      * would have to go on - which is why it is a parameter and not derived
      * from the icon. */
-    curie_note(app, CURIE_A11Y_BUTTON, name, NULL, 0, b);
+    reaktor_note(app, REAKTOR_A11Y_BUTTON, name, NULL, 0, b);
     if (app->ctl_n < (int)(sizeof(app->ctl) / sizeof(app->ctl[0])))
         app->ctl[app->ctl_n++] = b;
 
@@ -1647,7 +1647,7 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
      * bounds are the whole window is one a magnifier cannot follow. */
     bar = nk_widget_bounds(ctx);
     if (!nk_group_begin(ctx, "titlebar", NK_WINDOW_NO_SCROLLBAR)) return;
-    curie_note_push(app, CURIE_A11Y_GROUP, "Title bar", NULL, 0, bar);
+    reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Title bar", NULL, 0, bar);
 
     nk_layout_row_begin(ctx, NK_STATIC, (float)CTL_SIZE, 6);
 
@@ -1659,7 +1659,7 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
      * in it is recoloured: the artwork carries its own colours, and its yellow
      * ground keeps it legible on either theme. */
     nk_layout_row_push(ctx, (float)MARK_SIZE);
-    image_centred(ctx, icon(app, CURIE_MARK, MARK_SIZE), MARK_SIZE);
+    image_centred(ctx, icon(app, REAKTOR_MARK, MARK_SIZE), MARK_SIZE);
 
     /* No spacer between the mark and the name: the 4px Nuklear puts between
      * any two columns is the whole gap, and it read as a word-space with a
@@ -1675,7 +1675,7 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
          * it: --text-muted on the dark scheme, --text-main on the light one -
          * the rule titlebar_button follows. */
         nk_style_push_font(ctx, pick_font(app, TITLE_PX, 1));
-        if (app->dark && curie_style_token("--text-muted", c))
+        if (app->dark && reaktor_style_token("--text-muted", c))
             nk_style_push_color(ctx, &ctx->style.text.color, col_of(c));
         else
             nk_style_push_color(ctx, &ctx->style.text.color, app->text);
@@ -1683,8 +1683,8 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
          * and the mark's own margin, 4 held the name a word-space off the
          * mark and 0 put it against it. */
         nk_style_push_vec2(ctx, &ctx->style.text.padding, nk_vec2(3.0f, 0.0f));
-        curie_note_here(app, ctx, CURIE_A11Y_LABEL, "Curie", 0);
-        nk_label(ctx, "Curie", NK_TEXT_LEFT);
+        reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, "Reaktor", 0);
+        nk_label(ctx, "Reaktor", NK_TEXT_LEFT);
         nk_style_pop_vec2(ctx);
         nk_style_pop_color(ctx);
         nk_style_pop_font(ctx);
@@ -1710,7 +1710,7 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
         app->want_quit = 1;
 
     nk_layout_row_end(ctx);
-    curie_note_pop(app);
+    reaktor_note_pop(app);
     nk_group_end(ctx);
 }
 
@@ -1761,8 +1761,8 @@ text_link(App *app, struct nk_context *ctx, const char *label, int active)
         struct nk_rect b = nk_widget_bounds(ctx);
 
         hot_push(app, b, 1, 0);
-        curie_note(app, CURIE_A11Y_LINK, label, NULL,
-                   active ? CURIE_A11Y_SELECTED : 0u, b);
+        reaktor_note(app, REAKTOR_A11Y_LINK, label, NULL,
+                   active ? REAKTOR_A11Y_SELECTED : 0u, b);
         /* Released inside, not pressed - the same reason the buttons use
          * NK_BUTTON_TRIGGER_ON_RELEASE. Checked against clicked_pos, so
          * letting go elsewhere does not count. */
@@ -1770,9 +1770,9 @@ text_link(App *app, struct nk_context *ctx, const char *label, int active)
             clicked = 1;
     }
 
-    col = active && curie_style_token("--links", c)
+    col = active && reaktor_style_token("--links", c)
         ? col_of(c)
-        : (curie_style_token("--text-muted", c) ? col_of(c) : app->text);
+        : (reaktor_style_token("--text-muted", c) ? col_of(c) : app->text);
 
     nk_style_push_color(ctx, &ctx->style.text.color, col);
     nk_label(ctx, label, NK_TEXT_CENTERED);
@@ -1810,7 +1810,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
                        nk_vec2(CARD_PAD_X, CARD_PAD_Y));
     if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
         /* The rect pushed above, which is where the card actually is. */
-        curie_note_push(app, CURIE_A11Y_GROUP, "Proceed with login", NULL, 0,
+        reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Proceed with login", NULL, 0,
                         nk_rect(side, top, (float)CARD_W, card_h));
         nk_style_push_vec2(ctx, &ctx->style.window.spacing,
                            nk_vec2(0, (float)ROW_GAP));
@@ -1831,7 +1831,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
         nk_spacing(ctx, 1);
         nk_layout_row_push(ctx, CARD_W - 2.0f * CARD_PAD_X - ROW_BRAND - 10.0f);
         nk_style_push_font(ctx, pick_font(app, 19, 1));
-        curie_note_here(app, ctx, CURIE_A11Y_LABEL, "Proceed with login", 0);
+        reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, "Proceed with login", 0);
         nk_label(ctx, "Proceed with login", NK_TEXT_LEFT);
         nk_style_pop_font(ctx);
         nk_layout_row_end(ctx);
@@ -1881,7 +1881,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
             /* Stub, and obviously so: the reserved example.com domain and an
              * Ofcom drama number, which cannot reach anyone. */
             static const char *const lines[CONTACT_ROWS] = {
-                "support@curie.example",
+                "support@reaktor.example",
                 "+44 20 7946 0958",
                 "Mon-Fri, 09:00-17:00 UTC"
             };
@@ -1889,14 +1889,14 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
 
             for (i = 0; i < CONTACT_ROWS; i++) {
                 nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-                curie_note_here(app, ctx, CURIE_A11Y_LABEL, lines[i], 0);
+                reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, lines[i], 0);
                 nk_label(ctx, lines[i], NK_TEXT_CENTERED);
             }
         }
         nk_style_pop_font(ctx);
 
         nk_style_pop_vec2(ctx);
-        curie_note_pop(app);
+        reaktor_note_pop(app);
         nk_group_end(ctx);
     }
     nk_style_pop_vec2(ctx);            /* group_padding */
@@ -1957,21 +1957,21 @@ apply_widget_style(App *app)
     struct nk_color body, base, hover, text, muted, bright, accent, focus, edge;
     struct nk_color on_accent, thumb, thumb_hi;
     struct nk_style_item i_none, i_base, i_hover, i_accent;
-    curie_style btn, btn_hov, inp, sel, det, sum, dlg;
+    reaktor_style btn, btn_hov, inp, sel, det, sum, dlg;
     unsigned char c[4], ac[4];
 
     if (!app->ctx) return;
     ctx = app->ctx;
     st  = &ctx->style;
 
-    body   = curie_style_token("--background-body", c) ? col_of(c) : app->page;
-    base   = curie_style_token("--background", c)      ? col_of(c) : app->card_bg;
-    hover  = curie_style_token("--background-hover", c) ? col_of(c) : base;
-    text   = curie_style_token("--text-main", c)   ? col_of(c) : app->text;
-    muted  = curie_style_token("--text-muted", c)  ? col_of(c) : text;
-    bright = curie_style_token("--text-bright", c) ? col_of(c) : text;
-    accent = curie_style_token("--links", c)       ? col_of(c) : text;
-    focus  = curie_style_token("--focus", c)       ? col_of(c) : accent;
+    body   = reaktor_style_token("--background-body", c) ? col_of(c) : app->page;
+    base   = reaktor_style_token("--background", c)      ? col_of(c) : app->card_bg;
+    hover  = reaktor_style_token("--background-hover", c) ? col_of(c) : base;
+    text   = reaktor_style_token("--text-main", c)   ? col_of(c) : app->text;
+    muted  = reaktor_style_token("--text-muted", c)  ? col_of(c) : text;
+    bright = reaktor_style_token("--text-bright", c) ? col_of(c) : text;
+    accent = reaktor_style_token("--links", c)       ? col_of(c) : text;
+    focus  = reaktor_style_token("--focus", c)       ? col_of(c) : accent;
 
     /* tiny.css draws its borders in --background-hover; there is no --border
      * token to read, so the same value serves both. */
@@ -1980,7 +1980,7 @@ apply_widget_style(App *app)
     /* A label on a filled accent, by measured contrast: the accent is a mid
      * blue in light and a pale one in dark, and no single choice reads on
      * both. */
-    on_accent = curie_style_token("--links", ac)
+    on_accent = reaktor_style_token("--links", ac)
               ? readable_on(ac, "--text-bright", "--background-body") : bright;
 
     /* A scrollbar thumb has no colour of its own in any stylesheet. It is the
@@ -1998,13 +1998,13 @@ apply_widget_style(App *app)
     /* button and input are the two widgets tiny.css names, so they come from
      * their rules. Set globally as well as pushed per widget, so a page can
      * call nk_button_label with no ceremony. */
-    curie_style_get("button", &btn);
-    curie_style_get("button:hover", &btn_hov);
+    reaktor_style_get("button", &btn);
+    reaktor_style_get("button:hover", &btn_hov);
     if (btn.matched) {
         unsigned char act[4];
 
         memcpy(act, btn_hov.matched && btn_hov.bg[3] ? btn_hov.bg : btn.bg, 4);
-        curie_style_darken(act, 0.10f);
+        reaktor_style_darken(act, 0.10f);
 
         st->button.normal = nk_style_item_color(col_of(btn.bg));
         st->button.hover  = nk_style_item_color(
@@ -2019,9 +2019,9 @@ apply_widget_style(App *app)
         st->button.padding      = nk_vec2(btn.pad_x, btn.pad_y);
     }
 
-    curie_style_get("input", &inp);
+    reaktor_style_get("input", &inp);
     if (inp.matched) {
-        struct nk_color sel_text = curie_style_token("--focus", c)
+        struct nk_color sel_text = reaktor_style_token("--focus", c)
                                  ? readable_on(c, "--text-bright",
                                                "--background-body") : bright;
 
@@ -2119,9 +2119,9 @@ apply_widget_style(App *app)
      * few per cent would draw as a knot; progress_cell clamps the fill's
      * radius to its own width before each call. */
     {
-        curie_style bs;
+        reaktor_style bs;
 
-        curie_style_get("button", &bs);
+        reaktor_style_get("button", &bs);
         st->progress.rounding        = bs.matched ? bs.rounding : 3.0f;
         st->progress.cursor_rounding = st->progress.rounding;
     }
@@ -2148,7 +2148,7 @@ apply_widget_style(App *app)
 
     /* A combo is a select, and tiny.css has a rule for one - its own fill,
      * border, radius and padding rather than the card's background. */
-    curie_style_get("select", &sel);
+    reaktor_style_get("select", &sel);
     st->combo.normal        = sel.matched ? nk_style_item_color(col_of(sel.bg))
                                           : i_base;
     st->combo.hover         = i_hover;
@@ -2187,10 +2187,10 @@ apply_widget_style(App *app)
 
     /* A tree is a <details> and its header a <summary>; both have rules. The
      * arrow comes from summary::before, which libcss cannot reach. */
-    curie_style_get("details", &det);
-    curie_style_get("summary", &sum);
+    reaktor_style_get("details", &det);
+    reaktor_style_get("summary", &sum);
     st->tab.background   = nk_style_item_color(
-        det.matched ? curie_visible(col_of(det.bg), body, base) : base);
+        det.matched ? reaktor_visible(col_of(det.bg), body, base) : base);
     /* Nuklear fills a tab header twice: the border rect at a literal 0
      * rounding, then the background at tab.rounding. The first is square
      * whatever the style says, so painting it in the surface behind, with no
@@ -2252,7 +2252,7 @@ apply_widget_style(App *app)
     st->window.fixed_background        = i_base;
     /* A popup is a <dialog>. Only its frame is reachable - the backdrop is
      * ::backdrop, which is a pseudo-element. */
-    curie_style_get("dialog", &dlg);
+    reaktor_style_get("dialog", &dlg);
     st->window.border_color            = edge;
     st->window.popup_border_color      = dlg.matched ? col_of(dlg.border_col)
                                                      : edge;
@@ -2261,7 +2261,7 @@ apply_widget_style(App *app)
     /* Nuklear has one rounding for every panel, and the page, titlebar, tab
      * strip and body are all panels - taking it from `dialog` rounded the
      * window and then the titlebar inside it. The transient panels push their
-     * own; see curie_popup_rounding. */
+     * own; see reaktor_popup_rounding. */
     st->window.rounding = 0.0f;
     st->window.combo_border_color      = edge;
     st->window.contextual_border_color = edge;
@@ -2296,11 +2296,11 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
 {
     const struct nk_user_font *font = pick_font(app, 16, 0);
     unsigned char c[4];
-    struct nk_color accent = curie_style_token("--links", c)
+    struct nk_color accent = reaktor_style_token("--links", c)
                            ? col_of(c) : app->text;
-    struct nk_color muted  = curie_style_token("--text-muted", c)
+    struct nk_color muted  = reaktor_style_token("--text-muted", c)
                            ? col_of(c) : app->text;
-    struct nk_color wash   = curie_style_token("--background-hover", c)
+    struct nk_color wash   = reaktor_style_token("--background-hover", c)
                            ? col_of(c) : nk_rgba(128, 128, 128, 40);
     struct nk_color clear  = nk_rgba(0, 0, 0, 0);
     struct nk_command_buffer *canvas;
@@ -2322,14 +2322,14 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     canvas = nk_window_get_canvas(ctx);
     /* Two lists in one row, and a reader should not be told they are one: the
      * pages are a tablist, the colour schemes are a group of their own. */
-    curie_note_push(app, CURIE_A11Y_TABLIST, "Pages", NULL, 0, strip);
+    reaktor_note_push(app, REAKTOR_A11Y_TABLIST, "Pages", NULL, 0, strip);
 
     /* Measured first, because the switch at the far end needs to know what
      * is left over. */
     {
         float used = 0.0f;
         for (i = 0; i < TAB_COUNT; i++) {
-            const char *n = curie_tab_names[i];
+            const char *n = reaktor_tab_names[i];
             tabw[i] = font->width(font->userdata, font->height, n,
                                   (int)strlen(n)) + 2.0f * (float)TAB_PAD_X;
             used += tabw[i];
@@ -2356,7 +2356,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     nk_style_push_font(ctx, font);
     nk_layout_row_begin(ctx, NK_STATIC, (float)(TAB_H - 6), TAB_COUNT + 6);
     for (i = 0; i < TAB_COUNT; i++) {
-        const char *name = curie_tab_names[i];
+        const char *name = reaktor_tab_names[i];
         float w = tabw[i];
         struct nk_color fg = (i == app->tab) ? accent : muted;
         struct nk_rect b;
@@ -2378,15 +2378,15 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
 
         {
-            unsigned id = curie_note(app, CURIE_A11Y_TAB, name, NULL,
-                                     i == app->tab ? CURIE_A11Y_SELECTED : 0u,
+            unsigned id = reaktor_note(app, REAKTOR_A11Y_TAB, name, NULL,
+                                     i == app->tab ? REAKTOR_A11Y_SELECTED : 0u,
                                      b);
             /* Not `||`: that short-circuits, so a tab that was clicked would
              * leave the activation unconsumed and the frame would turn it
              * into a second press. */
             int hit = nk_button_label(ctx, name);
 
-            if (curie_focus_activated(app, id)) hit = 1;
+            if (reaktor_focus_activated(app, id)) hit = 1;
             if (hit) set_tab(app, i);
         }
         if (i == app->tab) active_r = b;
@@ -2402,11 +2402,11 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     }
     nk_layout_row_push(ctx, rest);
     nk_spacing(ctx, 1);
-    curie_note_pop(app);
+    reaktor_note_pop(app);
 
     /* "system" follows SDL_GetSystemTheme(), the other two pin it. Changing it
      * reloads the stylesheets - tiny.css ships light and dark as two files. */
-    curie_note_push(app, CURIE_A11Y_GROUP, "Colour scheme", NULL, 0, strip);
+    reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Colour scheme", NULL, 0, strip);
     for (i = 0; i < 3; i++) {
         struct nk_color fg = (i == app->theme_mode) ? accent : muted;
         struct nk_rect b;
@@ -2427,8 +2427,8 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
         nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
 
-        curie_note(app, CURIE_A11Y_RADIO, g_theme_names[i], NULL,
-                   i == app->theme_mode ? CURIE_A11Y_CHECKED : 0u, b);
+        reaktor_note(app, REAKTOR_A11Y_RADIO, g_theme_names[i], NULL,
+                   i == app->theme_mode ? REAKTOR_A11Y_CHECKED : 0u, b);
         if (nk_button_label(ctx, g_theme_names[i]) && i != app->theme_mode) {
             /* Not applied here: see the top of SDL_AppIterate. */
             app->theme_pending = i + 1;
@@ -2447,7 +2447,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
 
     nk_layout_row_push(ctx, TAB_SEP);
     nk_spacing(ctx, 1);
-    curie_note_pop(app);
+    reaktor_note_pop(app);
 
 #ifndef __EMSCRIPTEN__
     nk_layout_row_push(ctx, sw_w);
@@ -2457,7 +2457,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         hot_push(app, b, 1, 1);
         /* Its label says what it will switch to, so the checked state is the
          * frame it is *not* wearing - name it by what it does. */
-        curie_note(app, CURIE_A11Y_BUTTON, swl, NULL, 0, b);
+        reaktor_note(app, REAKTOR_A11Y_BUTTON, swl, NULL, 0, b);
         nk_style_push_style_item(ctx, &ctx->style.button.normal,
                                  nk_style_item_color(clear));
         nk_style_push_style_item(ctx, &ctx->style.button.hover,
@@ -2614,10 +2614,10 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         /* The page is a container, named by its tab, so a reader is told
          * which page it is walking rather than handed a flat list. */
         app->page_node =
-            curie_note_push(app, CURIE_A11Y_GROUP, curie_tab_names[app->tab],
+            reaktor_note_push(app, REAKTOR_A11Y_GROUP, reaktor_tab_names[app->tab],
                             NULL, 0, nk_rect(0, top, (float)win_w, body_h));
-        curie_showcase_page(app, ctx, app->tab, sz.x, sz.y);
-        curie_note_pop(app);
+        reaktor_showcase_page(app, ctx, app->tab, sz.x, sz.y);
+        reaktor_note_pop(app);
         nk_group_end(ctx);
     } else {
         nk_style_pop_vec2(ctx);
@@ -2633,28 +2633,22 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
  * showcase.c never sees inside App. */
 
 struct nk_color
-curie_col(const unsigned char rgba[4])
+reaktor_col(const unsigned char rgba[4])
 {
     return col_of(rgba);
 }
 
 struct nk_color
-curie_token(const char *name, struct nk_color def)
+reaktor_token(const char *name, struct nk_color def)
 {
     unsigned char c[4];
-    return curie_style_token(name, c) ? col_of(c) : def;
+    return reaktor_style_token(name, c) ? col_of(c) : def;
 }
 
 const struct nk_user_font *
-curie_font(App *app, int px, int bold)
+reaktor_font(App *app, int px, int bold)
 {
     return pick_font(app, px, bold);
-}
-
-struct nk_image
-curie_glyph(App *app, const char *rel_src, int px)
-{
-    return icon(app, rel_src, px);
 }
 
 /* Below about twenty pixels an Ionicon's stroke - a fixed 6.25% of the glyph -
@@ -2663,7 +2657,7 @@ curie_glyph(App *app, const char *rel_src, int px)
 #define ICON_HAIRLINE_BELOW 20
 
 struct nk_image
-curie_ionicon(App *app, const char *name, int px)
+reaktor_ionicon(App *app, const char *name, int px)
 {
     char src[192];
 
@@ -2681,7 +2675,7 @@ curie_ionicon(App *app, const char *name, int px)
 /* Rasterised at exactly the size it is drawn, at an explicit stroke weight:
  * both matter to a rim a pixel wide. `sw` at zero takes the hairline rule. */
 struct nk_image
-curie_ionicon_exact(App *app, const char *name, int px, struct nk_color stroke,
+reaktor_ionicon_exact(App *app, const char *name, int px, struct nk_color stroke,
                     float sw)
 {
     char src[192];
@@ -2694,7 +2688,7 @@ curie_ionicon_exact(App *app, const char *name, int px, struct nk_color stroke,
 }
 
 struct nk_image
-curie_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
+reaktor_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
 {
     char src[192];
 
@@ -2708,7 +2702,7 @@ curie_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
 /* The label colour for something drawn on `bg`: the stylesheet's own unless it
  * fails the contrast floor, as for the accent button and the selection. */
 struct nk_color
-curie_on(struct nk_color bg)
+reaktor_on(struct nk_color bg)
 {
     unsigned char c[4];
 
@@ -2717,38 +2711,38 @@ curie_on(struct nk_color bg)
 }
 
 void
-curie_image(App *app, struct nk_context *ctx, struct nk_image im, int px)
+reaktor_image(App *app, struct nk_context *ctx, struct nk_image im, int px)
 {
     (void)app;
     image_centred(ctx, im, px);
 }
 
 void
-curie_hot(App *app, struct nk_rect r, int cursor, int repaint)
+reaktor_hot(App *app, struct nk_rect r, int cursor, int repaint)
 {
     hot_push(app, r, cursor, repaint);
 }
 
 void
-curie_hot_top(App *app, struct nk_rect r, int cursor, int repaint)
+reaktor_hot_top(App *app, struct nk_rect r, int cursor, int repaint)
 {
     hot_push_ex(app, r, cursor, repaint, 1, 0);
 }
 
 void
-curie_hot_follow(App *app, struct nk_rect r, int cursor)
+reaktor_hot_follow(App *app, struct nk_rect r, int cursor)
 {
     hot_push_ex(app, r, cursor, 1, 0, 1);
 }
 
 int
-curie_button(App *app, struct nk_context *ctx, const char *label)
+reaktor_button(App *app, struct nk_context *ctx, const char *label)
 {
     return css_button(app, ctx, "button", label);
 }
 
 int
-curie_button_accent(App *app, struct nk_context *ctx, const char *label)
+reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
 {
     return css_button_accent(app, ctx, "button", label, "--links");
 }
@@ -2757,7 +2751,7 @@ curie_button_accent(App *app, struct nk_context *ctx, const char *label)
  * the fill replaced and no label. Not nk_button_color, which draws its own
  * rect and so keeps none of the rule's geometry. */
 int
-curie_button_color(App *app, struct nk_context *ctx, const char *name,
+reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
                    struct nk_color fill)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
@@ -2767,10 +2761,10 @@ curie_button_color(App *app, struct nk_context *ctx, const char *name,
 
     hot_push(app, b, 1, 1);
     SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x", fill.r, fill.g, fill.b);
-    curie_note(app, CURIE_A11Y_BUTTON, name, hex, 0, b);
+    reaktor_note(app, REAKTOR_A11Y_BUTTON, name, hex, 0, b);
 
     hov[0] = fill.r; hov[1] = fill.g; hov[2] = fill.b; hov[3] = fill.a;
-    curie_style_darken(hov, 0.12f);
+    reaktor_style_darken(hov, 0.12f);
 
     /* Only the colours are pushed. Size, radius and padding stay whatever
      * the caller has in force, which is what makes this the same button as
@@ -2804,7 +2798,7 @@ curie_button_color(App *app, struct nk_context *ctx, const char *name,
 }
 
 int
-curie_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
+reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
                   const char *label)
 {
     char src[192];
@@ -2815,22 +2809,16 @@ curie_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
     return css_button_icon(app, ctx, "button", src, label);
 }
 
-int
-curie_link(App *app, struct nk_context *ctx, const char *label, int active)
-{
-    return text_link(app, ctx, label, active);
-}
-
 /* The showcase's own fields. nk_edit_string keeps the caret and selection
  * inside Nuklear, so a page can have several; the login field uses
  * nk_edit_buffer because its context menu has to reach that state. */
 nk_flags
-curie_field(App *app, struct nk_context *ctx, nk_flags flags,
+reaktor_field(App *app, struct nk_context *ctx, nk_flags flags,
             char *buf, int *len, int cap, const char *hint,
             nk_plugin_filter filter)
 {
     struct nk_rect bounds = nk_widget_bounds(ctx);
-    curie_style s;
+    reaktor_style s;
     style_frame f;
     nk_flags state;
 
@@ -2845,9 +2833,9 @@ curie_field(App *app, struct nk_context *ctx, nk_flags flags,
     /* The hint doubles as the label: it is the only text the field carries,
      * and an unnamed field is unusable to a reader. A box with no hint gets
      * its shape instead, which is at least a description. */
-    curie_note(app, CURIE_A11Y_TEXTBOX,
+    reaktor_note(app, REAKTOR_A11Y_TEXTBOX,
                hint ? hint : ((flags & NK_EDIT_BOX) ? "Notes" : "Text"), buf,
-               state & NK_EDIT_ACTIVE ? CURIE_A11Y_FOCUSED : 0u, bounds);
+               state & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
 
     if (hint && *len == 0) draw_hint(ctx, bounds, hint, &s);
     return state;
@@ -2858,7 +2846,7 @@ curie_field(App *app, struct nk_context *ctx, nk_flags flags,
  * another thread. So the callback touches nothing but this struct: it fills in
  * the answer, publishes it with an atomic store, and pushes an event to wake a
  * main loop that may be parked in SDL_WaitEvent. Nuklear, the renderer and the
- * style are main-thread only and are left to curie_file_taken. */
+ * style are main-thread only and are left to reaktor_file_taken. */
 
 static const SDL_DialogFileFilter g_file_filters[] = {
     { "Stylesheets", "css" },
@@ -2890,7 +2878,7 @@ file_chosen(void *userdata, const char * const *filelist, int filter)
 }
 
 int
-curie_file_open(App *app)
+reaktor_file_open(App *app)
 {
     if (app->file_pending) return 0;
     app->file_pending = 1;
@@ -2900,7 +2888,7 @@ curie_file_open(App *app)
 }
 
 int
-curie_file_taken(App *app, char *out, int cap)
+reaktor_file_taken(App *app, char *out, int cap)
 {
     if (!SDL_GetAtomicInt(&app->file_ready)) return 0;
     SDL_SetAtomicInt(&app->file_ready, 0);
@@ -2909,7 +2897,7 @@ curie_file_taken(App *app, char *out, int cap)
     return 1;
 }
 
-/* CURIE_A11Y_DUMP=<path> writes the tree once, after the first frame is built,
+/* REAKTOR_A11Y_DUMP=<path> writes the tree once, after the first frame is built,
  * and is how phase 2 is checked: the instrumentation is invisible on screen, so
  * the only way to see whether a widget reported itself is to read the tree. */
 static void
@@ -2920,20 +2908,20 @@ a11y_dump_once(App *app)
     FILE *f;
 
     if (done) return;
-    path = SDL_getenv("CURIE_A11Y_DUMP");
+    path = SDL_getenv("REAKTOR_A11Y_DUMP");
     if (!path) { done = 1; return; }
     done = 1;
     f = fopen(path, "w");
     if (!f) return;
-    curie_a11y_dump(&app->a11y, f);
+    reaktor_a11y_dump(&app->a11y, f);
     {
         int n = 0;
-        curie_a11y_tree(&app->a11y, &n);
+        reaktor_a11y_tree(&app->a11y, &n);
         fprintf(f, "\n# %d of %d nodes, %d of %d string bytes, "
                    "%d interned, struct %d bytes\n",
-                n, CURIE_A11Y_MAX_NODES, app->a11y.pool_used,
-                CURIE_A11Y_POOL, app->a11y.pool_entries,
-                (int)sizeof(curie_a11y));
+                n, REAKTOR_A11Y_MAX_NODES, app->a11y.pool_used,
+                REAKTOR_A11Y_POOL, app->a11y.pool_entries,
+                (int)sizeof(reaktor_a11y));
     }
     fclose(f);
 }
@@ -2954,47 +2942,47 @@ focus_saw(App *app, unsigned id, struct nk_rect b)
 }
 
 unsigned
-curie_note(App *app, unsigned char role, const char *name, const char *value,
+reaktor_note(App *app, unsigned char role, const char *name, const char *value,
            unsigned state, struct nk_rect bounds)
 {
-    unsigned id = curie_a11y_add(&app->a11y, role, name, value, state, bounds);
+    unsigned id = reaktor_a11y_add(&app->a11y, role, name, value, state, bounds);
 
     focus_saw(app, id, bounds);
     return id;
 }
 
 unsigned
-curie_note_push(App *app, unsigned char role, const char *name,
+reaktor_note_push(App *app, unsigned char role, const char *name,
                 const char *value, unsigned state, struct nk_rect bounds)
 {
-    unsigned id = curie_a11y_push(&app->a11y, role, name, value, state, bounds);
+    unsigned id = reaktor_a11y_push(&app->a11y, role, name, value, state, bounds);
 
     focus_saw(app, id, bounds);
     return id;
 }
 
 void
-curie_note_pop(App *app)
+reaktor_note_pop(App *app)
 {
-    curie_a11y_pop(&app->a11y);
+    reaktor_a11y_pop(&app->a11y);
 }
 
 void
-curie_note_range(App *app, unsigned id, float num, float lo, float hi,
+reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
                  float step)
 {
-    curie_a11y_set_range(&app->a11y, id, num, lo, hi, step);
+    reaktor_a11y_set_range(&app->a11y, id, num, lo, hi, step);
 }
 
 /* nk_widget_bounds answers where the *next* widget goes, so this is called
  * before drawing, not after - which is also when the caller still knows what
  * it is about to draw. */
 unsigned
-curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
+reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
                 const char *name, unsigned state)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
-    unsigned id = curie_a11y_add(&app->a11y, role, name, NULL, state, b);
+    unsigned id = reaktor_a11y_add(&app->a11y, role, name, NULL, state, b);
 
     focus_saw(app, id, b);
     return id;
@@ -3015,11 +3003,11 @@ enum {
  * node names its parent by id, so this is the walk up; the guard is the
  * tree's own depth limit, which a cycle could not exceed. */
 static int
-node_under(const curie_a11y_node *t, int n, int i, unsigned ancestor)
+node_under(const reaktor_a11y_node *t, int n, int i, unsigned ancestor)
 {
     int guard = 0;
 
-    while (t[i].parent && guard++ < CURIE_A11Y_MAX_DEPTH) {
+    while (t[i].parent && guard++ < REAKTOR_A11Y_MAX_DEPTH) {
         int k;
 
         if (t[i].parent == ancestor) return 1;
@@ -3031,16 +3019,16 @@ node_under(const curie_a11y_node *t, int n, int i, unsigned ancestor)
 }
 
 static int
-focusable(const curie_a11y_node *n)
+focusable(const reaktor_a11y_node *n)
 {
     switch (n->role) {
-    case CURIE_A11Y_TAB:      case CURIE_A11Y_BUTTON:   case CURIE_A11Y_LINK:
-    case CURIE_A11Y_CHECKBOX: case CURIE_A11Y_RADIO:    case CURIE_A11Y_TEXTBOX:
-    case CURIE_A11Y_SLIDER:   case CURIE_A11Y_SPINBUTTON:
-    case CURIE_A11Y_COMBOBOX: case CURIE_A11Y_LISTITEM: case CURIE_A11Y_TREEITEM:
-    case CURIE_A11Y_MENUITEM:
+    case REAKTOR_A11Y_TAB:      case REAKTOR_A11Y_BUTTON:   case REAKTOR_A11Y_LINK:
+    case REAKTOR_A11Y_CHECKBOX: case REAKTOR_A11Y_RADIO:    case REAKTOR_A11Y_TEXTBOX:
+    case REAKTOR_A11Y_SLIDER:   case REAKTOR_A11Y_SPINBUTTON:
+    case REAKTOR_A11Y_COMBOBOX: case REAKTOR_A11Y_LISTITEM: case REAKTOR_A11Y_TREEITEM:
+    case REAKTOR_A11Y_MENUITEM:
         /* Off-window nodes count: the page scrolls to them - see focus_move. */
-        return !(n->state & CURIE_A11Y_DISABLED);
+        return !(n->state & REAKTOR_A11Y_DISABLED);
     default:
         return 0;
     }
@@ -3058,7 +3046,7 @@ static void
 focus_move(App *app, int step)
 {
     int n, i, cur = -1, pick = -1;
-    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+    const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
     for (i = 0; i < n; i++)
         if (t[i].id == app->focus_id) { cur = i; break; }
@@ -3083,7 +3071,7 @@ focus_move(App *app, int step)
     if (pick < 0) return;
 
     app->focus_id = t[pick].id;
-    curie_a11y_set_focus(&app->a11y, app->focus_id);
+    reaktor_a11y_set_focus(&app->a11y, app->focus_id);
     /* The rect comes with the pick, so Enter a moment later presses this
      * node and not the one before it. The frame after draws the ring. */
     app->focus_rect    = t[pick].bounds;
@@ -3104,7 +3092,7 @@ focus_move(App *app, int step)
         }
     }
     /* Tab into a field puts the caret in it, as it does everywhere else. */
-    if (t[pick].role == CURIE_A11Y_TEXTBOX) {
+    if (t[pick].role == REAKTOR_A11Y_TEXTBOX) {
         app->key_click   = 1;
         app->key_click_x = t[pick].bounds.x + t[pick].bounds.w * 0.5f;
         app->key_click_y = t[pick].bounds.y + t[pick].bounds.h * 0.5f;
@@ -3117,7 +3105,7 @@ static void
 focus_resolve(App *app)
 {
     int n, i;
-    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+    const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
     if (!app->focus_id) return;
     for (i = 0; i < n; i++)
@@ -3126,7 +3114,7 @@ focus_resolve(App *app)
             break;
         }
     app->focus_id = 0;
-    curie_a11y_set_focus(&app->a11y, 0);
+    reaktor_a11y_set_focus(&app->a11y, 0);
 }
 
 /* Whether what has focus takes the arrows as a value rather than as a move. */
@@ -3134,13 +3122,13 @@ static int
 focus_is_range(App *app)
 {
     int n, i;
-    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+    const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
     if (!app->focus_id) return 0;
     for (i = 0; i < n; i++)
         if (t[i].id == app->focus_id)
-            return t[i].role == CURIE_A11Y_SLIDER ||
-                   t[i].role == CURIE_A11Y_SPINBUTTON;
+            return t[i].role == REAKTOR_A11Y_SLIDER ||
+                   t[i].role == REAKTOR_A11Y_SPINBUTTON;
     return 0;
 }
 
@@ -3170,7 +3158,7 @@ focus_key(App *app, const SDL_Event *event)
      * Left and Down down, which is what every platform's slider does. The
      * shell cannot apply the step itself: it knows the node's value as the
      * text a reader would hear and nothing of its bounds or its grain, so it
-     * records the direction and the widget answers it (curie_focus_step). */
+     * records the direction and the widget answers it (reaktor_focus_step). */
     case SDLK_RIGHT: case SDLK_KP_6: case SDLK_UP: case SDLK_KP_8:
         if (focus_is_range(app)) { app->focus_step++; break; }
         focus_move(app, (event->key.key == SDLK_UP ||
@@ -3212,12 +3200,12 @@ reader_focus(void *user, unsigned id)
 {
     App *app = (App *)user;
     int n, i;
-    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+    const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
     for (i = 0; i < n; i++)
         if (t[i].id == id) {
             app->focus_id = id;
-            curie_a11y_set_focus(&app->a11y, id);
+            reaktor_a11y_set_focus(&app->a11y, id);
             app->focus_rect    = t[i].bounds;
             app->focus_seen    = 1;
             app->focus_visible = 1;
@@ -3252,7 +3240,7 @@ reader_activate(void *user, unsigned id)
  * changing it is a line - and the click stays only as the fallback for the
  * ones that have not been taught to listen. */
 int
-curie_focus_activated(App *app, unsigned id)
+reaktor_focus_activated(App *app, unsigned id)
 {
     if (!id || id != app->activate_id) return 0;
     app->activate_id = 0;
@@ -3262,7 +3250,7 @@ curie_focus_activated(App *app, unsigned id)
 /* How many steps the arrows asked this node for, taken once. Zero for every
  * node but the focused one, and for that one only until it has read it. */
 int
-curie_focus_step(App *app, unsigned id)
+reaktor_focus_step(App *app, unsigned id)
 {
     int s;
 
@@ -3285,13 +3273,13 @@ static void
 focus_ring(App *app, struct nk_context *ctx)
 {
     unsigned char c[4];
-    struct nk_color col = curie_style_token("--focus", c)
+    struct nk_color col = reaktor_style_token("--focus", c)
                         ? col_of(c) : nk_rgb(0x56, 0xc7, 0xff);
     struct nk_rect r = app->focus_rect;
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
     struct nk_rect save = cv->clip;
     int n, i, in_page = 0;
-    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+    const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
     for (i = 0; i < n; i++)
         if (t[i].id == app->focus_id) {
@@ -3308,17 +3296,17 @@ focus_ring(App *app, struct nk_context *ctx)
 /* The radius for a popup, tooltip or menu: `dialog`'s, capped, because 1rem is
  * a pill at tooltip height. Pushed around those calls, not set globally. */
 float
-curie_popup_rounding(void)
+reaktor_popup_rounding(void)
 {
-    curie_style dlg;
+    reaktor_style dlg;
 
-    curie_style_get("dialog", &dlg);
+    reaktor_style_get("dialog", &dlg);
     if (!dlg.matched) return 6.0f;
     return dlg.rounding > 8.0f ? 8.0f : dlg.rounding;
 }
 
 void
-curie_diagnostics(App *app, curie_diag *out)
+reaktor_diagnostics(App *app, reaktor_diag *out)
 {
     out->renderer   = SDL_GetRendererName(app->ren);
     out->mode       = app->render_mode;
@@ -3335,7 +3323,7 @@ curie_diagnostics(App *app, curie_diag *out)
     out->dark       = app->dark;
     out->sheets     = SHEET_COUNT;
     out->tab        = app->tab;
-    out->scale      = curie_scale();
+    out->scale      = reaktor_scale();
     out->style_ms   = app->style_ms_x100 / 100.0f;
     out->frame_gap_ms = app->frame_gap_ms;
     out->cpu_ms_per_frame = app->cpu_ms_per_frame;
@@ -3357,7 +3345,7 @@ curie_diagnostics(App *app, curie_diag *out)
 
     {
         size_t rss = 0, priv = 0;
-        curie_process_memory(&rss, &priv);
+        reaktor_process_memory(&rss, &priv);
         out->rss_bytes     = (unsigned long)rss;
         out->private_bytes = (unsigned long)priv;
     }
@@ -3377,7 +3365,7 @@ curie_diagnostics(App *app, curie_diag *out)
 }
 
 showcase_state *
-curie_showcase(App *app)
+reaktor_showcase(App *app)
 {
     return &app->show;
 }
@@ -3495,7 +3483,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     *appstate = app;
 
     {
-        /* CURIE_RENDERER takes "auto" (the default), "cpu", "gpu", or the
+        /* REAKTOR_RENDERER takes "auto" (the default), "cpu", "gpu", or the
          * name of any driver SDL has compiled in - on Windows that is
          * direct3d11, opengl, opengles2 or software; elsewhere whatever the
          * platform builds. "list" prints them and exits, so the names do not
@@ -3505,7 +3493,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
          * after the window is created. "gpu" pins the first non-software
          * driver and keeps it, which is how the two were measured against
          * each other. */
-        const char *mode = SDL_getenv("CURIE_RENDERER");
+        const char *mode = SDL_getenv("REAKTOR_RENDERER");
         int i, n = SDL_GetNumRenderDrivers();
 
         if (!mode || !*mode) mode = "auto";
@@ -3535,41 +3523,41 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
             if (known) {
                 SDL_SetHint(SDL_HINT_RENDER_DRIVER, mode);
             } else {
-                SDL_Log("CURIE_RENDERER=%s is not a driver this build has; "
-                        "try CURIE_RENDERER=list", mode);
+                SDL_Log("REAKTOR_RENDERER=%s is not a driver this build has; "
+                        "try REAKTOR_RENDERER=list", mode);
                 SDL_strlcpy(app->render_mode, "auto", sizeof(app->render_mode));
             }
         }
     }
 
     /* Borderless by default, so the titlebar follows the stylesheet like
-     * everything else. CURIE_BORDERLESS=0 restores the desktop's frame, which
+     * everything else. REAKTOR_BORDERLESS=0 restores the desktop's frame, which
      * is worth keeping - a custom titlebar gives up what the platform does
      * for free. */
     /* Off in a browser: no desktop frame to replace, the canvas is the whole
      * window, and a titlebar inside it could neither move nor resize. */
 #ifdef __EMSCRIPTEN__
-    app->borderless = env_int("CURIE_BORDERLESS", 0) != 0;
+    app->borderless = env_int("REAKTOR_BORDERLESS", 0) != 0;
 #else
-    app->borderless = env_int("CURIE_BORDERLESS", 1) != 0;
+    app->borderless = env_int("REAKTOR_BORDERLESS", 1) != 0;
 #endif
 
     /* Which page opens - the starting tab only. A screenshot of one page
      * should not depend on a click at coordinates guessed from outside. */
-    app->tab = env_int("CURIE_TAB", TAB_LOGIN);
+    app->tab = env_int("REAKTOR_TAB", TAB_LOGIN);
     if (app->tab < 0 || app->tab >= TAB_COUNT) app->tab = TAB_LOGIN;
-    app->scroll0 = env_int("CURIE_SCROLL", 0);
+    app->scroll0 = env_int("REAKTOR_SCROLL", 0);
     if (app->scroll0 < 0) app->scroll0 = 0;
 
     {
         /* On a real HiDPI display SDL_WINDOW_HIGH_PIXEL_DENSITY gives this
          * window scale-times as many pixels, which is exactly the room the
-         * same logical layout needs. A forced CURIE_SCALE has no such display
+         * same logical layout needs. A forced REAKTOR_SCALE has no such display
          * behind it, so the window is asked for that many pixels here instead
          * - otherwise the simulation draws a scaled UI into an unscaled window
-         * and simply clips it. curie_dpi_query_scale(NULL) is the override, or
+         * and simply clips it. reaktor_dpi_query_scale(NULL) is the override, or
          * 1.0 when unset. */
-        float pre = curie_dpi_query_scale(NULL);
+        float pre = reaktor_dpi_query_scale(NULL);
         int win_w = (int)(WINDOW_WIDTH * pre + 0.5f);
         int win_h = (int)(WINDOW_HEIGHT * pre + 0.5f);
 
@@ -3583,7 +3571,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
                                 SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                 (app->borderless ? SDL_WINDOW_BORDERLESS : 0);
 
-        if (!SDL_CreateWindowAndRenderer("Curie", win_w, win_h, flags,
+        if (!SDL_CreateWindowAndRenderer("Reaktor", win_w, win_h, flags,
                                          &app->win, &app->ren)) {
             /* A driver can be in SDL's list and still fail here: opengl and
              * opengles2 are both compiled in on Windows and neither creates
@@ -3594,7 +3582,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
             if (app->win) { SDL_DestroyWindow(app->win); app->win = NULL; }
             SDL_SetHint(SDL_HINT_RENDER_DRIVER, NULL);
             SDL_strlcpy(app->render_mode, "auto", sizeof(app->render_mode));
-            if (!SDL_CreateWindowAndRenderer("Curie", win_w, win_h, flags,
+            if (!SDL_CreateWindowAndRenderer("Reaktor", win_w, win_h, flags,
                                              &app->win, &app->ren)) {
                 SDL_Log("CreateWindowAndRenderer failed: %s", SDL_GetError());
                 return SDL_APP_FAILURE;
@@ -3636,7 +3624,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
         }
         app->renderer_is_sw =
             SDL_strcmp(SDL_GetRendererName(app->ren), "software") == 0;
-        app->sw_noaa = env_int("CURIE_SW_NOAA", 0) != 0;
+        app->sw_noaa = env_int("REAKTOR_SW_NOAA", 0) != 0;
     }
 
 #ifdef __EMSCRIPTEN__
@@ -3648,22 +3636,22 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     /* Phase 4: whatever platform can read the tree. The web mirrors it into
      * the DOM; the desktop bridges are still ahead, and until then this
      * registers the callbacks and does nothing else. */
-    curie_a11y_platform_init(reader_activate, reader_focus, app);
+    reaktor_a11y_platform_init(reader_activate, reader_focus, app);
 
     /* Without this the loop presents as fast as the GPU allows, which was
      * half of the idle CPU cost. */
     {
-        int want = env_int("CURIE_VSYNC", 1);
+        int want = env_int("REAKTOR_VSYNC", 1);
         app->vsync_on = SDL_SetRenderVSync(app->ren, want ? 1 : 0) ? want : 0;
     }
-    app->aa = env_int("CURIE_AA", 1);
-    app->redraw_always = SDL_getenv("CURIE_REDRAW") &&
-                         SDL_strcmp(SDL_getenv("CURIE_REDRAW"), "always") == 0;
+    app->aa = env_int("REAKTOR_AA", 1);
+    app->redraw_always = SDL_getenv("REAKTOR_REDRAW") &&
+                         SDL_strcmp(SDL_getenv("REAKTOR_REDRAW"), "always") == 0;
 
     /* How often SDL calls SDL_AppIterate. The loop used to spin and sleep 2 ms
      * whenever the frame was clean - 500 wake-ups a second to find nothing to
-     * do. "waitevent" blocks until an event arrives. CURIE_FRAME_RATE
-     * overrides with a cap, or 0 for uncapped as CURIE_REDRAW=always needs. */
+     * do. "waitevent" blocks until an event arrives. REAKTOR_FRAME_RATE
+     * overrides with a cap, or 0 for uncapped as REAKTOR_REDRAW=always needs. */
     SDL_strlcpy(app->frame_rate, frame_rate_wanted(), sizeof(app->frame_rate));
 
     /* The rate while the pointer is held: the display's refresh, one frame
@@ -3685,7 +3673,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     /* Its own milestone: the first thing to touch plutosvg, and folding that
      * into the renderer's figure is what this table exists to prevent. */
     set_window_icon(app->win);
-    curie_set_scale(curie_dpi_query_scale(app->win));   /* needs the window */
+    reaktor_set_scale(reaktor_dpi_query_scale(app->win));   /* needs the window */
     apply_render_scale(app);
     rss_mark(RSS_ICON);
 
@@ -3700,8 +3688,8 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
      * on failure, which the handler treats as "never matches". */
     app->wake_event = SDL_RegisterEvents(1);
 
-    if (SDL_getenv("CURIE_HOVER_GAP_MS")) {
-        int gap = env_int("CURIE_HOVER_GAP_MS", (int)HOVER_GAP_MS);
+    if (SDL_getenv("REAKTOR_HOVER_GAP_MS")) {
+        int gap = env_int("REAKTOR_HOVER_GAP_MS", (int)HOVER_GAP_MS);
         if (gap >= 0 && gap <= 1000) {
             g_hover_gap_ms   = (Uint64)gap;
             g_hover_gap_pinned = 1;
@@ -3712,10 +3700,10 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
     app->cur_text    = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT);
 
-    /* Pinned from the environment, same reason as CURIE_TAB: a screenshot of
+    /* Pinned from the environment, same reason as REAKTOR_TAB: a screenshot of
      * the light palette should not depend on clicking a link. The links on the
      * strip still change it. */
-    app->theme_mode = env_int("CURIE_THEME", THEME_SYSTEM);
+    app->theme_mode = env_int("REAKTOR_THEME", THEME_SYSTEM);
     if (app->theme_mode < 0 || app->theme_mode > THEME_DARK)
         app->theme_mode = THEME_SYSTEM;
 
@@ -3933,7 +3921,7 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
             break;
 
         case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-            curie_set_scale(curie_dpi_query_scale(app->win));
+            reaktor_set_scale(reaktor_dpi_query_scale(app->win));
             apply_render_scale(app);
             rebuild_font(app);
             break;
@@ -4132,7 +4120,7 @@ SDL_AppIterate(void *appstate)
 
             /* Opt-in trace. A GUI-subsystem binary has no console, and
              * reading these off a screenshot proved too fragile to trust. */
-            if (SDL_getenv("CURIE_STATS")) {
+            if (SDL_getenv("REAKTOR_STATS")) {
                 FILE *lf = fopen("build/stats.log", "a");
                 if (lf) {
                     char ln[160];
@@ -4162,7 +4150,7 @@ SDL_AppIterate(void *appstate)
      * thread touching it. Before the build, because a press records an id the
      * widget takes while it draws. On the web it is nothing; the browser
      * calls in on this thread already. */
-    curie_a11y_platform_drain();
+    reaktor_a11y_platform_drain();
 
     /* A key on the focused node, delivered as the click it stands for.
      * Nuklear's default button fires on the press when it lands inside the
@@ -4193,13 +4181,13 @@ SDL_AppIterate(void *appstate)
     /* Drained here rather than on the page that shows it, so a picker answered
      * while some other tab is on screen still clears - otherwise the next
      * File > Open would find one still pending and do nothing. */
-    curie_file_taken(app, app->show.file_pick,
+    reaktor_file_taken(app, app->show.file_pick,
                      (int)sizeof(app->show.file_pick));
 
     /* Opened around the same region nk_begin gets, so the window node's bounds
      * are the window's. Closed after nk_end, below. */
     app->focus_seen = 0;
-    curie_a11y_begin(&app->a11y, "Curie",
+    reaktor_a11y_begin(&app->a11y, "Reaktor",
                      nk_rect(0, 0, (float)win_w, (float)win_h));
 
     if (nk_begin(ctx, "page", nk_rect(0, 0, (float)win_w, (float)win_h),
@@ -4239,9 +4227,9 @@ SDL_AppIterate(void *appstate)
 
     /* Diffs against the previous frame and swaps. The change list is what a
      * platform bridge will consume in phase 4; nothing reads it yet. */
-    curie_a11y_end(&app->a11y);
+    reaktor_a11y_end(&app->a11y);
     focus_resolve(app);
-    curie_a11y_platform_push(&app->a11y, app->focus_id);
+    reaktor_a11y_platform_push(&app->a11y, app->focus_id);
     a11y_dump_once(app);
 
     /* SDL3 delivers SDL_EVENT_TEXT_INPUT only while text input is started for
@@ -4281,7 +4269,7 @@ SDL_AppIterate(void *appstate)
          * So the software renderer keeps stroke feathering and drops fill
          * feathering: measured across a popup's edge it then matches the
          * hardware profile pixel for pixel, and the button corners still
-         * grade. CURIE_SW_NOAA=1 drops both, which is 6% cheaper. */
+         * grade. REAKTOR_SW_NOAA=1 drops both, which is 6% cheaper. */
         {
             enum nk_anti_aliasing fill, line;
             fill = line = app->aa ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF;
@@ -4332,7 +4320,7 @@ SDL_AppQuit(void *appstate, SDL_AppResult result)
     if (!app) return;
 
     if (app->ctx) nk_input_end(app->ctx);
-    curie_style_shutdown();
+    reaktor_style_shutdown();
     {
         int i;
         for (i = 0; i < app->img_count; i++)

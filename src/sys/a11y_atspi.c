@@ -33,7 +33,7 @@
  * out of a vendored header. */
 #include "a11y.h"
 
-#ifdef CURIE_HAVE_ATSPI
+#ifdef REAKTOR_HAVE_ATSPI
 
 #include "a11y_snapshot.h"
 
@@ -140,26 +140,26 @@ static unsigned
 role_of(unsigned char role)
 {
     switch (role) {
-    case CURIE_A11Y_WINDOW:     return ATSPI_ROLE_FRAME;
-    case CURIE_A11Y_GROUP:      return ATSPI_ROLE_PANEL;
-    case CURIE_A11Y_TABLIST:    return ATSPI_ROLE_PAGE_TAB_LIST;
-    case CURIE_A11Y_TAB:        return ATSPI_ROLE_PAGE_TAB;
-    case CURIE_A11Y_BUTTON:     return ATSPI_ROLE_PUSH_BUTTON;
-    case CURIE_A11Y_LINK:       return ATSPI_ROLE_LINK;
-    case CURIE_A11Y_CHECKBOX:   return ATSPI_ROLE_CHECK_BOX;
-    case CURIE_A11Y_RADIO:      return ATSPI_ROLE_RADIO_BUTTON;
-    case CURIE_A11Y_TEXTBOX:    return ATSPI_ROLE_TEXT;
-    case CURIE_A11Y_SLIDER:     return ATSPI_ROLE_SLIDER;
-    case CURIE_A11Y_SPINBUTTON: return ATSPI_ROLE_SPIN_BUTTON;
-    case CURIE_A11Y_PROGRESS:   return ATSPI_ROLE_PROGRESS_BAR;
-    case CURIE_A11Y_COMBOBOX:   return ATSPI_ROLE_COMBO_BOX;
-    case CURIE_A11Y_LISTITEM:   return ATSPI_ROLE_LIST_ITEM;
-    case CURIE_A11Y_TREEITEM:   return ATSPI_ROLE_TREE_ITEM;
-    case CURIE_A11Y_MENUBAR:    return ATSPI_ROLE_MENU_BAR;
-    case CURIE_A11Y_MENU:       return ATSPI_ROLE_MENU;
-    case CURIE_A11Y_MENUITEM:   return ATSPI_ROLE_MENU_ITEM;
-    case CURIE_A11Y_DIALOG:     return ATSPI_ROLE_DIALOG;
-    case CURIE_A11Y_LABEL:      return ATSPI_ROLE_LABEL;
+    case REAKTOR_A11Y_WINDOW:     return ATSPI_ROLE_FRAME;
+    case REAKTOR_A11Y_GROUP:      return ATSPI_ROLE_PANEL;
+    case REAKTOR_A11Y_TABLIST:    return ATSPI_ROLE_PAGE_TAB_LIST;
+    case REAKTOR_A11Y_TAB:        return ATSPI_ROLE_PAGE_TAB;
+    case REAKTOR_A11Y_BUTTON:     return ATSPI_ROLE_PUSH_BUTTON;
+    case REAKTOR_A11Y_LINK:       return ATSPI_ROLE_LINK;
+    case REAKTOR_A11Y_CHECKBOX:   return ATSPI_ROLE_CHECK_BOX;
+    case REAKTOR_A11Y_RADIO:      return ATSPI_ROLE_RADIO_BUTTON;
+    case REAKTOR_A11Y_TEXTBOX:    return ATSPI_ROLE_TEXT;
+    case REAKTOR_A11Y_SLIDER:     return ATSPI_ROLE_SLIDER;
+    case REAKTOR_A11Y_SPINBUTTON: return ATSPI_ROLE_SPIN_BUTTON;
+    case REAKTOR_A11Y_PROGRESS:   return ATSPI_ROLE_PROGRESS_BAR;
+    case REAKTOR_A11Y_COMBOBOX:   return ATSPI_ROLE_COMBO_BOX;
+    case REAKTOR_A11Y_LISTITEM:   return ATSPI_ROLE_LIST_ITEM;
+    case REAKTOR_A11Y_TREEITEM:   return ATSPI_ROLE_TREE_ITEM;
+    case REAKTOR_A11Y_MENUBAR:    return ATSPI_ROLE_MENU_BAR;
+    case REAKTOR_A11Y_MENU:       return ATSPI_ROLE_MENU;
+    case REAKTOR_A11Y_MENUITEM:   return ATSPI_ROLE_MENU_ITEM;
+    case REAKTOR_A11Y_DIALOG:     return ATSPI_ROLE_DIALOG;
+    case REAKTOR_A11Y_LABEL:      return ATSPI_ROLE_LABEL;
     default:                    return ATSPI_ROLE_FILLER;
     }
 }
@@ -168,26 +168,26 @@ static const char *
 role_name(unsigned char role)
 {
     switch (role) {
-    case CURIE_A11Y_WINDOW:     return "frame";
-    case CURIE_A11Y_GROUP:      return "panel";
-    case CURIE_A11Y_TABLIST:    return "page tab list";
-    case CURIE_A11Y_TAB:        return "page tab";
-    case CURIE_A11Y_BUTTON:     return "push button";
-    case CURIE_A11Y_LINK:       return "link";
-    case CURIE_A11Y_CHECKBOX:   return "check box";
-    case CURIE_A11Y_RADIO:      return "radio button";
-    case CURIE_A11Y_TEXTBOX:    return "text";
-    case CURIE_A11Y_SLIDER:     return "slider";
-    case CURIE_A11Y_SPINBUTTON: return "spin button";
-    case CURIE_A11Y_PROGRESS:   return "progress bar";
-    case CURIE_A11Y_COMBOBOX:   return "combo box";
-    case CURIE_A11Y_LISTITEM:   return "list item";
-    case CURIE_A11Y_TREEITEM:   return "tree item";
-    case CURIE_A11Y_MENUBAR:    return "menu bar";
-    case CURIE_A11Y_MENU:       return "menu";
-    case CURIE_A11Y_MENUITEM:   return "menu item";
-    case CURIE_A11Y_DIALOG:     return "dialog";
-    case CURIE_A11Y_LABEL:      return "label";
+    case REAKTOR_A11Y_WINDOW:     return "frame";
+    case REAKTOR_A11Y_GROUP:      return "panel";
+    case REAKTOR_A11Y_TABLIST:    return "page tab list";
+    case REAKTOR_A11Y_TAB:        return "page tab";
+    case REAKTOR_A11Y_BUTTON:     return "push button";
+    case REAKTOR_A11Y_LINK:       return "link";
+    case REAKTOR_A11Y_CHECKBOX:   return "check box";
+    case REAKTOR_A11Y_RADIO:      return "radio button";
+    case REAKTOR_A11Y_TEXTBOX:    return "text";
+    case REAKTOR_A11Y_SLIDER:     return "slider";
+    case REAKTOR_A11Y_SPINBUTTON: return "spin button";
+    case REAKTOR_A11Y_PROGRESS:   return "progress bar";
+    case REAKTOR_A11Y_COMBOBOX:   return "combo box";
+    case REAKTOR_A11Y_LISTITEM:   return "list item";
+    case REAKTOR_A11Y_TREEITEM:   return "tree item";
+    case REAKTOR_A11Y_MENUBAR:    return "menu bar";
+    case REAKTOR_A11Y_MENU:       return "menu";
+    case REAKTOR_A11Y_MENUITEM:   return "menu item";
+    case REAKTOR_A11Y_DIALOG:     return "dialog";
+    case REAKTOR_A11Y_LABEL:      return "label";
     default:                    return "filler";
     }
 }
@@ -198,10 +198,10 @@ role_name(unsigned char role)
 static int
 has_action(unsigned char role)
 {
-    return role == CURIE_A11Y_BUTTON || role == CURIE_A11Y_LINK ||
-           role == CURIE_A11Y_TAB    || role == CURIE_A11Y_MENUITEM ||
-           role == CURIE_A11Y_CHECKBOX || role == CURIE_A11Y_RADIO ||
-           role == CURIE_A11Y_LISTITEM;
+    return role == REAKTOR_A11Y_BUTTON || role == REAKTOR_A11Y_LINK ||
+           role == REAKTOR_A11Y_TAB    || role == REAKTOR_A11Y_MENUITEM ||
+           role == REAKTOR_A11Y_CHECKBOX || role == REAKTOR_A11Y_RADIO ||
+           role == REAKTOR_A11Y_LISTITEM;
 }
 
 /* --- writing the little types AT-SPI uses -------------------------------- */
@@ -278,7 +278,7 @@ append_variant_ref(DBusMessageIter *it, unsigned id)
 
 /* The state set: two 32-bit words of bit flags, sent as an array. */
 static void
-append_state(DBusMessageIter *it, const curie_snap_node *n)
+append_state(DBusMessageIter *it, const reaktor_snap_node *n)
 {
     DBusMessageIter arr;
     dbus_uint32_t w[2];
@@ -287,18 +287,18 @@ append_state(DBusMessageIter *it, const curie_snap_node *n)
     w[0] = w[1] = 0;
 #define SET(bit) (w[(bit) / 32] |= 1u << ((bit) % 32))
     SET(ATSPI_STATE_VISIBLE);
-    if (!(n->state & CURIE_A11Y_OFFSCREEN)) SET(ATSPI_STATE_SHOWING);
-    if (!(n->state & CURIE_A11Y_DISABLED)) {
+    if (!(n->state & REAKTOR_A11Y_OFFSCREEN)) SET(ATSPI_STATE_SHOWING);
+    if (!(n->state & REAKTOR_A11Y_DISABLED)) {
         SET(ATSPI_STATE_ENABLED);
         SET(ATSPI_STATE_SENSITIVE);
     }
-    if (curie_snap_focusable(n->role, n->state)) SET(ATSPI_STATE_FOCUSABLE);
-    if (n->state & CURIE_A11Y_FOCUSED)  SET(ATSPI_STATE_FOCUSED);
-    if (n->state & CURIE_A11Y_CHECKED)  SET(ATSPI_STATE_CHECKED);
-    if (n->state & CURIE_A11Y_EXPANDED) SET(ATSPI_STATE_EXPANDED);
-    if (n->role == CURIE_A11Y_TAB || n->role == CURIE_A11Y_LISTITEM) {
+    if (reaktor_snap_focusable(n->role, n->state)) SET(ATSPI_STATE_FOCUSABLE);
+    if (n->state & REAKTOR_A11Y_FOCUSED)  SET(ATSPI_STATE_FOCUSED);
+    if (n->state & REAKTOR_A11Y_CHECKED)  SET(ATSPI_STATE_CHECKED);
+    if (n->state & REAKTOR_A11Y_EXPANDED) SET(ATSPI_STATE_EXPANDED);
+    if (n->role == REAKTOR_A11Y_TAB || n->role == REAKTOR_A11Y_LISTITEM) {
         SET(ATSPI_STATE_SELECTABLE);
-        if (n->state & CURIE_A11Y_SELECTED) SET(ATSPI_STATE_SELECTED);
+        if (n->state & REAKTOR_A11Y_SELECTED) SET(ATSPI_STATE_SELECTED);
     }
 #undef SET
 
@@ -309,7 +309,7 @@ append_state(DBusMessageIter *it, const curie_snap_node *n)
 }
 
 static void
-append_interfaces(DBusMessageIter *it, const curie_snap_node *n, int is_root)
+append_interfaces(DBusMessageIter *it, const reaktor_snap_node *n, int is_root)
 {
     DBusMessageIter arr;
     const char *s;
@@ -343,11 +343,11 @@ append_interfaces(DBusMessageIter *it, const curie_snap_node *n, int is_root)
 static unsigned
 child_at(unsigned parent, int index)
 {
-    unsigned id = curie_snap_child(parent, 0);
+    unsigned id = reaktor_snap_child(parent, 0);
     int i = 0;
 
     while (id && i < index) {
-        id = curie_snap_sibling(id, 0);
+        id = reaktor_snap_sibling(id, 0);
         i++;
     }
     return i == index ? id : 0;
@@ -356,12 +356,12 @@ child_at(unsigned parent, int index)
 static int
 child_count(unsigned parent)
 {
-    unsigned id = curie_snap_child(parent, 0);
+    unsigned id = reaktor_snap_child(parent, 0);
     int n = 0;
 
     while (id) {
         n++;
-        id = curie_snap_sibling(id, 0);
+        id = reaktor_snap_sibling(id, 0);
     }
     return n;
 }
@@ -369,13 +369,13 @@ child_count(unsigned parent)
 static int
 index_in_parent(unsigned id)
 {
-    unsigned parent = curie_snap_parent(id);
-    unsigned it = curie_snap_child(parent, 0);
+    unsigned parent = reaktor_snap_parent(id);
+    unsigned it = reaktor_snap_child(parent, 0);
     int i = 0;
 
     while (it) {
         if (it == id) return i;
-        it = curie_snap_sibling(it, 0);
+        it = reaktor_snap_sibling(it, 0);
         i++;
     }
     return -1;
@@ -406,7 +406,7 @@ reply_unknown(DBusConnection *c, DBusMessage *m)
 
 static DBusHandlerResult
 handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
-                  const curie_snap_node *n)
+                  const reaktor_snap_node *n)
 {
     const char *iface = NULL, *prop = NULL;
     DBusMessage *r;
@@ -440,7 +440,7 @@ handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
 
     if (strcmp(iface, IF_ACCESSIBLE) == 0) {
         if (strcmp(prop, "Name") == 0)
-            append_variant_string(&it, is_root ? "Curie"
+            append_variant_string(&it, is_root ? "Reaktor"
                                                : (n->name ? n->name : ""));
         else if (strcmp(prop, "Description") == 0)
             append_variant_string(&it, "");
@@ -463,7 +463,7 @@ handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
                     append_null_ref(&v);
                 dbus_message_iter_close_container(&it, &v);
             } else {
-                append_variant_ref(&it, curie_snap_parent(id));
+                append_variant_ref(&it, reaktor_snap_parent(id));
             }
         } else {
             dbus_message_unref(r);
@@ -471,7 +471,7 @@ handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
         }
     } else if (strcmp(iface, IF_APPLICATION) == 0) {
         if (strcmp(prop, "ToolkitName") == 0)
-            append_variant_string(&it, "Curie");
+            append_variant_string(&it, "Reaktor");
         else if (strcmp(prop, "Version") == 0)
             append_variant_string(&it, "1");
         else if (strcmp(prop, "AtspiVersion") == 0)
@@ -513,7 +513,7 @@ handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
 
 static DBusHandlerResult
 handle_accessible(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
-                  const curie_snap_node *n)
+                  const reaktor_snap_node *n)
 {
     DBusMessage *r = dbus_message_new_method_return(m);
     DBusMessageIter it;
@@ -556,12 +556,12 @@ handle_accessible(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
         }
     } else if (dbus_message_has_member(m, "GetChildren")) {
         DBusMessageIter arr;
-        unsigned kid = curie_snap_child(id, 0);
+        unsigned kid = reaktor_snap_child(id, 0);
 
         dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "(so)", &arr);
         while (kid) {
             append_node_ref(&arr, kid);
-            kid = curie_snap_sibling(kid, 0);
+            kid = reaktor_snap_sibling(kid, 0);
         }
         dbus_message_iter_close_container(&it, &arr);
     } else if (dbus_message_has_member(m, "GetIndexInParent")) {
@@ -591,7 +591,7 @@ handle_accessible(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
 
 static DBusHandlerResult
 handle_component(DBusConnection *c, DBusMessage *m, unsigned id,
-                 const curie_snap_node *n)
+                 const reaktor_snap_node *n)
 {
     DBusMessage *r = dbus_message_new_method_return(m);
     DBusMessageIter it;
@@ -640,13 +640,13 @@ handle_component(DBusConnection *c, DBusMessage *m, unsigned id,
 
         dbus_message_get_args(m, NULL, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32,
                               &y, DBUS_TYPE_UINT32, &coord, DBUS_TYPE_INVALID);
-        hit = curie_snap_hit((float)x, (float)y);
+        hit = reaktor_snap_hit((float)x, (float)y);
         if (hit) append_node_ref(&it, hit);
         else     append_null_ref(&it);
     } else if (dbus_message_has_member(m, "GrabFocus")) {
         dbus_bool_t ok = TRUE;
 
-        curie_snap_request_focus(id);
+        reaktor_snap_request_focus(id);
         dbus_message_iter_append_basic(&it, DBUS_TYPE_BOOLEAN, &ok);
     } else if (dbus_message_has_member(m, "GetLayer")) {
         dbus_uint32_t layer = 3;    /* ATSPI_LAYER_WIDGET */
@@ -668,7 +668,7 @@ handle_component(DBusConnection *c, DBusMessage *m, unsigned id,
 
 static DBusHandlerResult
 handle_action(DBusConnection *c, DBusMessage *m, unsigned id,
-              const curie_snap_node *n)
+              const reaktor_snap_node *n)
 {
     DBusMessage *r = dbus_message_new_method_return(m);
     DBusMessageIter it;
@@ -684,7 +684,7 @@ handle_action(DBusConnection *c, DBusMessage *m, unsigned id,
 
         /* The same request a reader's press makes everywhere else: recorded,
          * the loop woken, and the widget takes it on the app's own thread. */
-        if (ok) curie_snap_request_activate(id);
+        if (ok) reaktor_snap_request_activate(id);
         dbus_message_iter_append_basic(&it, DBUS_TYPE_BOOLEAN, &ok);
     } else if (dbus_message_has_member(m, "GetName") ||
                dbus_message_has_member(m, "GetLocalizedName")) {
@@ -736,8 +736,8 @@ on_message(DBusConnection *c, DBusMessage *m, void *user)
 {
     const char *iface = dbus_message_get_interface(m);
     long id = id_of(dbus_message_get_path(m));
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
     int is_root;
 
     (void)user;
@@ -745,7 +745,7 @@ on_message(DBusConnection *c, DBusMessage *m, void *user)
     is_root = id == 0;
 
     memset(&n, 0, sizeof(n));
-    if (!is_root && !curie_snap_get((unsigned)id, &n, buf, sizeof(buf))) {
+    if (!is_root && !reaktor_snap_get((unsigned)id, &n, buf, sizeof(buf))) {
         /* A node a client is still holding after the page it was on went
          * away. An error is the honest answer; a stale one is not. */
         DBusMessage *r = dbus_message_new_error(m, DBUS_ERROR_UNKNOWN_OBJECT,
@@ -889,7 +889,7 @@ embed(void)
 /* --- the seam ------------------------------------------------------------ */
 
 void
-curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
+reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                          void *user)
 {
     static const DBusObjectPathVTable vtable = { NULL, on_message,
@@ -898,7 +898,7 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
     char *addr;
     const char *unique;
 
-    if (!curie_snap_init(activate, focus, user)) return;
+    if (!reaktor_snap_init(activate, focus, user)) return;
 
     /* libdbus is used from the pump thread and from the frame, so it has to
      * be told there is more than one. */
@@ -945,7 +945,7 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
 
     g.running = 1;
     g.ready   = 1;
-    g.pump    = SDL_CreateThread(pump, "curie-atspi", NULL);
+    g.pump    = SDL_CreateThread(pump, "reaktor-atspi", NULL);
     if (!g.pump) {
         g.running = 0;
         g.ready   = 0;
@@ -954,31 +954,31 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
 }
 
 void
-curie_a11y_platform_drain(void)
+reaktor_a11y_platform_drain(void)
 {
-    curie_snap_drain();
+    reaktor_snap_drain();
 }
 
 void
-curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
+reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
     int m;
 
-    if (!curie_snap_update(a, focus_id)) return;
+    if (!reaktor_snap_update(a, focus_id)) return;
     if (!g.ready) return;
 
     /* Structure first, for the same reason as on Windows: a client that has
      * not re-walked cannot be told which element took focus. AT-SPI has no
      * "children invalidated", so a change is announced on the root and the
      * client re-reads from there. */
-    curie_a11y_changes(a, &m);
+    reaktor_a11y_changes(a, &m);
     {
         int i, structural = 0;
-        const curie_a11y_change *c = curie_a11y_changes(a, &m);
+        const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);
 
         for (i = 0; i < m; i++)
-            if (c[i].kind == CURIE_A11Y_ADDED ||
-                c[i].kind == CURIE_A11Y_REMOVED) {
+            if (c[i].kind == REAKTOR_A11Y_ADDED ||
+                c[i].kind == REAKTOR_A11Y_REMOVED) {
                 structural = 1;
                 break;
             }
@@ -996,4 +996,4 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
     }
 }
 
-#endif /* CURIE_HAVE_ATSPI */
+#endif /* REAKTOR_HAVE_ATSPI */

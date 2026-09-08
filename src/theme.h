@@ -5,14 +5,14 @@
  * calls below are the whole portable surface; `native_window` is an opaque
  * handle (HWND on Windows, NSWindow* on macOS, an X11 Window on Unix), which
  * keeps this header free of platform includes. */
-#ifndef CURIE_THEME_H
-#define CURIE_THEME_H
+#ifndef REAKTOR_THEME_H
+#define REAKTOR_THEME_H
 
 /* 1 = system is in dark mode, 0 = light, -1 = could not determine. */
-int curie_prefers_dark(void);
+int reaktor_prefers_dark(void);
 
 /* Applies a dark or light window frame. Returns 1 if the platform applied it,
  * 0 if unsupported or it failed. */
-int curie_window_set_dark(void *native_window, int dark);
+int reaktor_window_set_dark(void *native_window, int dark);
 
-#endif /* CURIE_THEME_H */
+#endif /* REAKTOR_THEME_H */

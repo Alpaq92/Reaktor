@@ -4,8 +4,8 @@
  * CSS -> nk_style translation. A page needs none of those directly, only the
  * handful of calls below, so App stays an opaque pointer and a page stays
  * about layout. */
-#ifndef CURIE_UI_H
-#define CURIE_UI_H
+#ifndef REAKTOR_UI_H
+#define REAKTOR_UI_H
 
 #include "nk_common.h"
 #include "a11y.h"
@@ -27,9 +27,9 @@ enum {
     TAB_DIAG,
     TAB_COUNT
 };
-extern const char *const curie_tab_names[TAB_COUNT];
+extern const char *const reaktor_tab_names[TAB_COUNT];
 
-/* Startup milestones, sampled into curie_diag::rss_at so the diagnostics page
+/* Startup milestones, sampled into reaktor_diag::rss_at so the diagnostics page
  * can report what each step of the startup cost. They live here rather than
  * in the shell because the page indexes the same list: adding a milestone is
  * one edit, and the array below sizes itself from it. */
@@ -43,7 +43,7 @@ enum {
     RSS_STYLE,
     RSS_STEPS
 };
-extern const char *const curie_rss_names[RSS_STEPS];
+extern const char *const reaktor_rss_names[RSS_STEPS];
 
 #define SC_TEXT_CAP  64
 #define SC_BOX_CAP   512
@@ -97,69 +97,67 @@ typedef struct showcase_state {
 
 /* --- what a page may ask of the shell ---------------------------------- */
 
-struct nk_color            curie_col(const unsigned char rgba[4]);
+struct nk_color            reaktor_col(const unsigned char rgba[4]);
 /* A palette token as a colour, falling back to `def` when the stylesheet has
  * no such custom property. */
-struct nk_color            curie_token(const char *name, struct nk_color def);
+struct nk_color            reaktor_token(const char *name, struct nk_color def);
 /* A colour, unless it is indistinguishable from `behind` - then `fallback`.
  * tiny.css's dark palette gives thead and details the page's own background,
  * which makes them invisible. */
-struct nk_color            curie_visible(struct nk_color want,
+struct nk_color            reaktor_visible(struct nk_color want,
                                          struct nk_color behind,
                                          struct nk_color fallback);
-const struct nk_user_font *curie_font(App *app, int px, int bold);
+const struct nk_user_font *reaktor_font(App *app, int px, int bold);
 
-/* An SVG from the repo, and the common case: an Ionicon stroked in the
- * theme's muted text colour, so a page never spells out a path. */
-struct nk_image curie_glyph(App *app, const char *rel_src, int px);
-struct nk_image curie_ionicon(App *app, const char *name, int px);
+/* The common case: an Ionicon stroked in the theme's muted text colour, so a
+ * page never spells out a path. */
+struct nk_image reaktor_ionicon(App *app, const char *name, int px);
 /* The same, stroked in a colour of the caller's choosing - for an icon that
  * sits on something other than the page, such as a row filled with the
- * accent. curie_on gives the colour that reads on a given background. */
-struct nk_image curie_ionicon_exact(App *app, const char *name, int px,
+ * accent. reaktor_on gives the colour that reads on a given background. */
+struct nk_image reaktor_ionicon_exact(App *app, const char *name, int px,
                                     struct nk_color stroke, float sw);
 
 /* A filled rounded rect whose corners are anti-aliased on every backend -
  * nk_fill_rect's are not, on the software one. See the definition. */
-void curie_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+void reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
                       float rounding, struct nk_color col);
-struct nk_image curie_ionicon_col(App *app, const char *name, int px,
+struct nk_image reaktor_ionicon_col(App *app, const char *name, int px,
                                   struct nk_color stroke);
-struct nk_color curie_on(struct nk_color bg);
+struct nk_color reaktor_on(struct nk_color bg);
 
 /* Records what the pointer is over: the cursor it wants, and whether hovering
  * it changes anything on screen. See the hot-region note in main.c. */
 /* Draws an image at exactly px, centred in the current widget slot. nk_image
  * stretches to fill its slot instead, so the size asked for is ignored. */
-void curie_image(App *app, struct nk_context *ctx, struct nk_image im, int px);
+void reaktor_image(App *app, struct nk_context *ctx, struct nk_image im, int px);
 
-void curie_hot(App *app, struct nk_rect r, int cursor, int repaint);
+void reaktor_hot(App *app, struct nk_rect r, int cursor, int repaint);
 /* The same, for something emitted inside a popup: it is drawn over the page,
  * so it outranks whatever it covers however the two were recorded. */
-void curie_hot_top(App *app, struct nk_rect r, int cursor, int repaint);
+void reaktor_hot_top(App *app, struct nk_rect r, int cursor, int repaint);
 /* The same, but redrawing on every move inside it rather than only on
  * crossing into it - for anything drawn at the pointer. */
-void curie_hot_follow(App *app, struct nk_rect r, int cursor);
+void reaktor_hot_follow(App *app, struct nk_rect r, int cursor);
 
-int curie_button(App *app, struct nk_context *ctx, const char *label);
-int curie_button_accent(App *app, struct nk_context *ctx, const char *label);
-int curie_button_icon(App *app, struct nk_context *ctx,
+int reaktor_button(App *app, struct nk_context *ctx, const char *label);
+int reaktor_button_accent(App *app, struct nk_context *ctx, const char *label);
+int reaktor_button_icon(App *app, struct nk_context *ctx,
                       const char *ionicon, const char *label);
 /* The button rule with no label and the given fill: a colour swatch that is
  * otherwise a button. `name` is what a reader is told it is. */
-int curie_button_color(App *app, struct nk_context *ctx, const char *name,
+int reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
                        struct nk_color fill);
-int curie_link(App *app, struct nk_context *ctx, const char *label, int active);
 
 /* A text field styled from tiny.css's `input` rule, with `hint` painted into
  * it while it is empty. Nuklear has no placeholder of its own. */
-nk_flags curie_field(App *app, struct nk_context *ctx, nk_flags flags,
+nk_flags reaktor_field(App *app, struct nk_context *ctx, nk_flags flags,
                      char *buf, int *len, int cap, const char *hint,
                      nk_plugin_filter filter);
 
 /* The radius for a popup, tooltip or menu. Nuklear has a single rounding for
  * every panel, so it cannot be set globally without rounding the window. */
-float curie_popup_rounding(void);
+float reaktor_popup_rounding(void);
 
 /* --- describing the frame ----------------------------------------------
  * What a screen reader will eventually be handed. A page reports each widget
@@ -170,50 +168,50 @@ float curie_popup_rounding(void);
  * phase 4 - so an unreported widget is not a visible bug today, which is
  * exactly why the widgets go through helpers that report for you. */
 /* Answers the node's id, which a widget that takes the keyboard needs -
- * see curie_focus_step. Most callers ignore it. */
-unsigned curie_note(App *app, unsigned char role, const char *name,
+ * see reaktor_focus_step. Most callers ignore it. */
+unsigned reaktor_note(App *app, unsigned char role, const char *name,
                     const char *value, unsigned state, struct nk_rect bounds);
-/* The same, and everything until curie_note_pop is a child of it. */
-unsigned curie_note_push(App *app, unsigned char role, const char *name,
+/* The same, and everything until reaktor_note_pop is a child of it. */
+unsigned reaktor_note_push(App *app, unsigned char role, const char *name,
                      const char *value, unsigned state, struct nk_rect bounds);
-void curie_note_pop(App *app);
+void reaktor_note_pop(App *app);
 
 /* How many steps the arrows asked this node for, taken once and only while it
  * has focus. A range answers its own arrows: the shell knows a node's value
  * only as the text a reader would hear, and nothing of its bounds or its
  * grain. Every other role lets the arrows move focus instead. */
-int curie_focus_step(App *app, unsigned id);
+int reaktor_focus_step(App *app, unsigned id);
 
 /* Whether this node was asked to activate - by Enter, or by a screen reader
  * pressing it - taken once. A widget that answers it acts on itself, which is
  * the reliable path; one that does not still gets the synthetic click the
  * shell falls back to. See the definition. */
-int curie_focus_activated(App *app, unsigned id);
+int reaktor_focus_activated(App *app, unsigned id);
 
 /* The numbers behind a range's value text, for the node `id` names - what a
  * platform needs to offer a slider as something to set rather than only to
- * read. See curie_a11y_set_range. */
-void curie_note_range(App *app, unsigned id, float num, float lo, float hi,
+ * read. See reaktor_a11y_set_range. */
+void reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
                       float step);
 /* Convenience for the common case: the widget just drawn, at the bounds the
  * layout gave it, with no value. */
-unsigned curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
+unsigned reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
                          const char *name, unsigned state);
 
 /* The platform's own Open dialog. Answers 0 if one is already up. The choice
- * arrives on SDL's thread, so it is not a return value: call curie_file_taken
+ * arrives on SDL's thread, so it is not a return value: call reaktor_file_taken
  * on a later frame, which answers non-zero once - when there is a fresh
  * result - and writes it into `out`. A cancel and a platform with no picker
  * both come back as text, because a page that shows the answer should show
  * those too. */
-int curie_file_open(App *app);
-int curie_file_taken(App *app, char *out, int cap);
+int reaktor_file_open(App *app);
+int reaktor_file_taken(App *app, char *out, int cap);
 
 /* What the shell knows about itself, for the page that reports it. Copied
  * out rather than reached for, so App stays opaque. */
-typedef struct curie_diag {
+typedef struct reaktor_diag {
     const char *renderer;      /* SDL's name for the backend in use */
-    const char *mode;          /* what CURIE_RENDERER asked for */
+    const char *mode;          /* what REAKTOR_RENDERER asked for */
     const char *frame_rate;    /* SDL_HINT_MAIN_CALLBACK_RATE at rest */
     const char *drag_rate;     /* and while a button is held */
     const char *font;
@@ -241,15 +239,15 @@ typedef struct curie_diag {
     int atlas_w, atlas_h, atlas_bpp;
     unsigned long rss_at[RSS_STEPS];   /* working set, one per milestone */
     unsigned long priv_at[RSS_STEPS];  /* private commit, the same milestones */
-} curie_diag;
+} reaktor_diag;
 
-void curie_diagnostics(App *app, curie_diag *out);
+void reaktor_diagnostics(App *app, reaktor_diag *out);
 
-showcase_state *curie_showcase(App *app);
+showcase_state *reaktor_showcase(App *app);
 
 /* Drawn by showcase.c, one page per tab above TAB_LOGIN. w and h are the
  * content region of the group it is being drawn into. */
-void curie_showcase_page(App *app, struct nk_context *ctx, int tab,
+void reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
                          float w, float h);
 
-#endif /* CURIE_UI_H */
+#endif /* REAKTOR_UI_H */

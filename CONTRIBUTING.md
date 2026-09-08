@@ -1,4 +1,4 @@
-# Contributing to Curie
+# Contributing to Reaktor
 
 Pull requests are welcome, and so is an issue that just says "this looks
 wrong" with a screenshot — a good half of the work in this repository has come
@@ -39,7 +39,7 @@ like, and expect a conversation rather than a checklist.
 - **Comments say why, not what.** The code already says what it does. A
   comment earns its place by recording the reason, the measurement, or the
   thing that was tried first and failed.
-- **`curie_` prefixes** anything crossing a translation unit. Anything that
+- **`reaktor_` prefixes** anything crossing a translation unit. Anything that
   does not cross one is `static`.
 - **No new dependency without a licence check.** See below.
 
@@ -84,11 +84,11 @@ case for changing one.
 
 ## Security
 
-Curie reads files at startup and while running: stylesheets through libcss,
+Reaktor reads files at startup and while running: stylesheets through libcss,
 SVG through plutosvg, fonts through Nuklear's baker. All of them are parsers,
 and all of them are pointed at paths derived from the application root.
 
-- Keep every path going through `curie_path()`. It resolves against the root
+- Keep every path going through `reaktor_path()`. It resolves against the root
   marker, which is what stops a relative path escaping the install.
 - Do not add a code path that loads a stylesheet, font or image from a
   location the user has not chosen, and do not add a network fetch.
@@ -107,8 +107,8 @@ For a change of any size, say in the pull request:
 - which tabs you drove, and what you clicked;
 - what the Diagnostics tab said before and after, if you touched anything that
   could affect frame time or memory;
-- a screenshot, if the change is visible. Set `CURIE_TAB`, `CURIE_SCROLL` and
-  `CURIE_THEME` to land on the same view every time rather than clicking your
+- a screenshot, if the change is visible. Set `REAKTOR_TAB`, `REAKTOR_SCROLL` and
+  `REAKTOR_THEME` to land on the same view every time rather than clicking your
   way there — see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 Claims about performance want a number from the Diagnostics tab or from the

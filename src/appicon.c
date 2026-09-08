@@ -9,12 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "curie.h"
+#include "reaktor.h"
 #include "appicon.h"
 #include "plutosvg.h"
 
 /* Was MAX_PATH; kept local so this file needs no platform header. */
-#define CURIE_PATH_MAX 1024
+#define REAKTOR_PATH_MAX 1024
 
 /* Appends src to dst, respecting cap. Returns 0 if it would overflow. */
 static int str_append(char *dst, size_t cap, size_t *len, const char *src,
@@ -86,7 +86,7 @@ static int str_scale_stroke(const char *in, char *out, size_t cap, float k)
 
 /* Un-premultiplies plutovg's ARGB32 output. Windows icon bitmaps are sampled
  * as straight alpha, so premultiplied pixels would render too dark. */
-void curie_unpremultiply(unsigned char *px, int w, int h, int stride)
+void reaktor_unpremultiply(unsigned char *px, int w, int h, int stride)
 {
     int x, y;
     for (y = 0; y < h; y++) {
@@ -105,30 +105,15 @@ void curie_unpremultiply(unsigned char *px, int w, int h, int stride)
     }
 }
 
-/* Convenience wrapper: turns an Ionicons glyph name into a path. */
-plutovg_surface_t *curie_svg_surface(const char *name, int size,
-                                     const char *outline_colour,
-                                     const char *inside_colour)
-{
-    char rel[CURIE_PATH_MAX];
-
-    if (snprintf(rel, sizeof(rel),
-                 "third_party/ionicons/src/svg/%s.svg", name) < 0)
-        return NULL;
-    rel[sizeof(rel) - 1] = '\0';
-    return curie_svg_surface_path(rel, size, outline_colour, inside_colour,
-                                  0.0f);
-}
-
 /* Loads any SVG under the repo root, optionally recolours it from
  * Open-Color, and rasterises to a surface the caller owns. A NULL family
  * leaves that channel as the artwork has it. */
-plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
+plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
                                           const char *outline_colour,
                                           const char *inside_colour,
                                           float stroke_scale)
 {
-    char path[CURIE_PATH_MAX];
+    char path[REAKTOR_PATH_MAX];
     char outline_hex[16] = "#000000", inside_hex[16] = "none";
     char fill_decl[32], stroke_decl[32], path_open[48];
     char *svg;
@@ -138,12 +123,12 @@ plutovg_surface_t *curie_svg_surface_path(const char *rel_path, int size,
     plutosvg_document_t *doc = NULL;
     plutovg_surface_t *surf = NULL;
 
-    if (!curie_path(path, sizeof(path), rel_path)) {
-        fprintf(stderr, "svg: curie_path failed for %s\n", rel_path);
+    if (!reaktor_path(path, sizeof(path), rel_path)) {
+        fprintf(stderr, "svg: reaktor_path failed for %s\n", rel_path);
         return NULL;
     }
 
-    svg = curie_read_file(path, NULL);
+    svg = reaktor_read_file(path, NULL);
     if (!svg) { fprintf(stderr, "svg: cannot read %s\n", path); return NULL; }
 
     /* A channel is a literal "#rrggbb", which is what lets an icon follow the
@@ -209,6 +194,6 @@ done:
     free(stage2);
     free(stage1);
     free(stage0);
-    curie_free(svg);
+    reaktor_free(svg);
     return surf;
 }

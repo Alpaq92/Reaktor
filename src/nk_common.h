@@ -1,7 +1,7 @@
 /* nk_common.h - shared Nuklear configuration.
  * Included by every TU. The implementation lives in nk_impl.c only. */
-#ifndef CURIE_NK_COMMON_H
-#define CURIE_NK_COMMON_H
+#ifndef REAKTOR_NK_COMMON_H
+#define REAKTOR_NK_COMMON_H
 
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO
@@ -29,4 +29,4 @@
 
 #include "../third_party/nuklear/nuklear.h"
 
-#endif /* CURIE_NK_COMMON_H */
+#endif /* REAKTOR_NK_COMMON_H */

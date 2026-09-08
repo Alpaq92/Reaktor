@@ -1,6 +1,6 @@
 # Third-party notices
 
-Curie itself is MIT (see [LICENSE](../LICENSE)). Everything it is built on is
+Reaktor itself is MIT (see [LICENSE](../LICENSE)). Everything it is built on is
 a git submodule under `third_party/`, used as it ships. Each licence below was
 read from that project's own licence file in the pinned revision, not from its
 README or its website.
@@ -43,7 +43,7 @@ same way.
 `src/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
 `third_party/nuklear/demo/sdl3_renderer/` and covered by Nuklear's licence
 above — MIT or public domain, at your option. It differs from upstream in a
-handful of hunks, each marked `CURIE`: the font atlas is baked and uploaded
+handful of hunks, each marked `REAKTOR`: the font atlas is baked and uploaded
 8-bit indexed rather than RGBA32; untextured geometry samples a 1x1 white
 texture of its own instead of a texel in the atlas; on the software renderer
 every vertex is put on the pixel grid; on hardware, glyph quads are; and
@@ -103,7 +103,7 @@ MIT terms above, all of which are satisfied by shipping this file with it.
 
 The application does **not** embed the stylesheet, the icons, the mark or the
 font: it opens them at runtime from the submodule checkout, resolved relative to the
-`.curie-root` marker. A distributable build has to ship those files alongside
+`.reaktor-root` marker. A distributable build has to ship those files alongside
 the binary. The WebAssembly build is the exception — Emscripten packages the
-handful of files actually referenced into `curie.data`, which is why that
+handful of files actually referenced into `reaktor.data`, which is why that
 bundle needs no checkout beside it.

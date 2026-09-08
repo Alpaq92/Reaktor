@@ -12,7 +12,7 @@
 #include <windows.h>
 #endif
 
-int curie_prefers_dark(void)
+int reaktor_prefers_dark(void)
 {
     switch (SDL_GetSystemTheme()) {
     case SDL_SYSTEM_THEME_DARK:  return 1;
@@ -35,7 +35,7 @@ int curie_prefers_dark(void)
  * Elsewhere this stays a no-op: macOS themes the frame from NSAppearance,
  * which SDL already follows, and on Linux and the BSDs the frame belongs to
  * the window manager. */
-int curie_window_set_dark(void *native_window, int dark)
+int reaktor_window_set_dark(void *native_window, int dark)
 {
 #ifdef _WIN32
     typedef long(__stdcall * set_attr_fn)(void *, unsigned long, void *,

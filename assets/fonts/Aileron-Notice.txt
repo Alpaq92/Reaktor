@@ -20,7 +20,7 @@ terms come from. Two independent sources, both from the designer:
 
      It is also listed as CC-0 at https://fontlibrary.org/en/font/aileron
 
-This file was assembled by the Curie project from those sources. It is not a
+This file was assembled by the Reaktor project from those sources. It is not a
 document supplied by the designer. The CC0 1.0 Universal legal code that the
 declaration above refers to is reproduced in full below, from
 https://creativecommons.org/publicdomain/zero/1.0/legalcode

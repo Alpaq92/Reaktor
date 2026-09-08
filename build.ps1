@@ -32,7 +32,7 @@ if (-not (Test-Path (Join-Path $root "third_party\SDL\CMakeLists.txt"))) {
 
 # A temp .bat keeps vcvars and cmake in one cmd session, and avoids PowerShell
 # mangling the quoting of paths that contain spaces.
-$bat = Join-Path $env:TEMP "curie_build.bat"
+$bat = Join-Path $env:TEMP "reaktor_build.bat"
 @(
   '@echo off',
   ('call "' + $vcvars + '" >nul 2>&1'),
@@ -55,4 +55,4 @@ $ErrorActionPreference = $prev
 if ($rc -ne 0) { throw "build failed ($rc)" }
 Write-Host ""
 if ($Target) { Write-Host "built target: $Target" }
-else { Write-Host "built: $outDir\curie.exe" }
+else { Write-Host "built: $outDir\reaktor.exe" }

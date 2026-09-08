@@ -19,13 +19,13 @@ typedef struct snap_node {
 /* Twice the model's own arena: the same strings, and the model interns while
  * this does not - two nodes with the same name cost it twice. Overflowing
  * loses a name rather than a node, which is the right way round. */
-#define SNAP_POOL (CURIE_A11Y_POOL * 2)
+#define SNAP_POOL (REAKTOR_A11Y_POOL * 2)
 
 static struct {
     SDL_Mutex *lock;
     int        ready;
 
-    snap_node  node[CURIE_A11Y_MAX_NODES];
+    snap_node  node[REAKTOR_A11Y_MAX_NODES];
     int        count;
     char       str[SNAP_POOL];
     int        str_used;
@@ -34,7 +34,7 @@ static struct {
     unsigned   want_focus, want_activate;
     Uint32     wake;
 
-    curie_a11y_action activate, focus_action;
+    reaktor_a11y_action activate, focus_action;
     void             *user;
 } g;
 
@@ -66,7 +66,7 @@ find(unsigned id)
 }
 
 int
-curie_snap_init(curie_a11y_action activate, curie_a11y_action focus,
+reaktor_snap_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                 void *user)
 {
     g.activate     = activate;
@@ -81,29 +81,21 @@ curie_snap_init(curie_a11y_action activate, curie_a11y_action focus,
     return g.ready;
 }
 
-void
-curie_snap_shutdown(void)
-{
-    if (g.lock) SDL_DestroyMutex(g.lock);
-    g.lock  = NULL;
-    g.ready = 0;
-}
-
 int
-curie_snap_update(const curie_a11y *a, unsigned focus_id)
+reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id)
 {
     int n, m, i;
-    const curie_a11y_node *t;
+    const reaktor_a11y_node *t;
 
     if (!g.ready) return 0;
-    curie_a11y_changes(a, &m);
-    t = curie_a11y_tree(a, &n);
+    reaktor_a11y_changes(a, &m);
+    t = reaktor_a11y_tree(a, &n);
     if (m == 0 && focus_id == g.focus) return 0;
 
     SDL_LockMutex(g.lock);
     g.str_used = 0;
     g.count    = 0;
-    for (i = 0; i < n && i < CURIE_A11Y_MAX_NODES; i++) {
+    for (i = 0; i < n && i < REAKTOR_A11Y_MAX_NODES; i++) {
         snap_node *s = &g.node[g.count++];
 
         s->id     = t[i].id;
@@ -145,7 +137,7 @@ copy_text(int at, char **buf, size_t *left)
 }
 
 int
-curie_snap_get(unsigned id, curie_snap_node *out, char *buf, size_t cap)
+reaktor_snap_get(unsigned id, reaktor_snap_node *out, char *buf, size_t cap)
 {
     int i, ok = 0;
 
@@ -173,7 +165,7 @@ curie_snap_get(unsigned id, curie_snap_node *out, char *buf, size_t cap)
 }
 
 unsigned
-curie_snap_child(unsigned parent, int last)
+reaktor_snap_child(unsigned parent, int last)
 {
     unsigned found = 0;
     int i;
@@ -190,7 +182,7 @@ curie_snap_child(unsigned parent, int last)
 }
 
 unsigned
-curie_snap_sibling(unsigned id, int back)
+reaktor_snap_sibling(unsigned id, int back)
 {
     unsigned parent, prev = 0, found = 0;
     int i, k, seen = 0;
@@ -218,7 +210,7 @@ curie_snap_sibling(unsigned id, int back)
 }
 
 unsigned
-curie_snap_parent(unsigned id)
+reaktor_snap_parent(unsigned id)
 {
     unsigned found = 0;
     int i;
@@ -232,7 +224,7 @@ curie_snap_parent(unsigned id)
 }
 
 unsigned
-curie_snap_hit(float x, float y)
+reaktor_snap_hit(float x, float y)
 {
     unsigned hit = 0;
     unsigned char best = 0;
@@ -243,7 +235,7 @@ curie_snap_hit(float x, float y)
     for (i = 0; i < g.count; i++) {
         const snap_node *n = &g.node[i];
 
-        if (n->state & CURIE_A11Y_OFFSCREEN) continue;
+        if (n->state & REAKTOR_A11Y_OFFSCREEN) continue;
         if (x < n->x || x >= n->x + n->w) continue;
         if (y < n->y || y >= n->y + n->h) continue;
         if (!hit || n->level >= best) { hit = n->id; best = n->level; }
@@ -253,7 +245,7 @@ curie_snap_hit(float x, float y)
 }
 
 unsigned
-curie_snap_focus(void)
+reaktor_snap_focus(void)
 {
     unsigned id = 0;
 
@@ -265,15 +257,15 @@ curie_snap_focus(void)
 }
 
 int
-curie_snap_focusable(unsigned char role, unsigned state)
+reaktor_snap_focusable(unsigned char role, unsigned state)
 {
-    if (state & CURIE_A11Y_DISABLED) return 0;
+    if (state & REAKTOR_A11Y_DISABLED) return 0;
     switch (role) {
-    case CURIE_A11Y_TAB:      case CURIE_A11Y_BUTTON:   case CURIE_A11Y_LINK:
-    case CURIE_A11Y_CHECKBOX: case CURIE_A11Y_RADIO:    case CURIE_A11Y_TEXTBOX:
-    case CURIE_A11Y_SLIDER:   case CURIE_A11Y_SPINBUTTON:
-    case CURIE_A11Y_COMBOBOX: case CURIE_A11Y_LISTITEM: case CURIE_A11Y_TREEITEM:
-    case CURIE_A11Y_MENUITEM:
+    case REAKTOR_A11Y_TAB:      case REAKTOR_A11Y_BUTTON:   case REAKTOR_A11Y_LINK:
+    case REAKTOR_A11Y_CHECKBOX: case REAKTOR_A11Y_RADIO:    case REAKTOR_A11Y_TEXTBOX:
+    case REAKTOR_A11Y_SLIDER:   case REAKTOR_A11Y_SPINBUTTON:
+    case REAKTOR_A11Y_COMBOBOX: case REAKTOR_A11Y_LISTITEM: case REAKTOR_A11Y_TREEITEM:
+    case REAKTOR_A11Y_MENUITEM:
         return 1;
     default:
         return 0;
@@ -298,11 +290,11 @@ request(unsigned *slot, unsigned id)
     SDL_PushEvent(&e);
 }
 
-void curie_snap_request_focus(unsigned id)    { request(&g.want_focus, id); }
-void curie_snap_request_activate(unsigned id) { request(&g.want_activate, id); }
+void reaktor_snap_request_focus(unsigned id)    { request(&g.want_focus, id); }
+void reaktor_snap_request_activate(unsigned id) { request(&g.want_activate, id); }
 
 void
-curie_snap_drain(void)
+reaktor_snap_drain(void)
 {
     unsigned focus, activate;
 

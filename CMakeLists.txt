@@ -1,10 +1,10 @@
-# Curie - one build for Windows, macOS, Linux, the BSDs and (via emcmake) WASM.
+# Reaktor - one build for Windows, macOS, Linux, the BSDs and (via emcmake) WASM.
 #
 # This replaces the hand-rolled cl.exe command lines that build.ps1 used to
 # assemble. Everything is built from the vendored submodules; nothing is
 # expected to be installed on the system.
 cmake_minimum_required(VERSION 3.16)
-project(curie C CXX)
+project(reaktor C CXX)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
@@ -135,11 +135,11 @@ target_link_libraries(plutosvg PUBLIC plutovg)
 # ------------------------------------------------------------- shared -------
 # Asset loading and the SVG->raster path, used by both the app and the icon
 # generator. Deliberately free of SDL and Nuklear so the tool stays small.
-add_library(curie_core STATIC
+add_library(reaktor_core STATIC
     src/util.c
     src/appicon.c)
-target_include_directories(curie_core PUBLIC src)
-target_link_libraries(curie_core PUBLIC plutosvg)
+target_include_directories(reaktor_core PUBLIC src)
+target_link_libraries(reaktor_core PUBLIC plutosvg)
 
 # ------------------------------------------------------------ icon ----------
 # Explorer reads the icon from a linked Win32 resource, so it has to exist
@@ -147,11 +147,11 @@ target_link_libraries(curie_core PUBLIC plutosvg)
 # .svg beside it is the authored mark and the .ico is derived from it, by a
 # tool that is not part of the build.
 #     cmake --build build --target mkicon && build/mkicon
-set(APP_ICON branding/curie-icon.ico)
+set(APP_ICON branding/reaktor-icon.ico)
 set(APP_RESOURCES "")
 
 add_executable(mkicon EXCLUDE_FROM_ALL tools/mkicon.c)
-target_link_libraries(mkicon PRIVATE curie_core)
+target_link_libraries(mkicon PRIVATE reaktor_core)
 set_target_properties(mkicon PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
@@ -183,10 +183,10 @@ if(WIN32)
     set(GEN "${CMAKE_BINARY_DIR}/gen")
     file(MAKE_DIRECTORY "${GEN}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/${APP_ICON}"
-                   "${GEN}/curie.ico" COPYONLY)
-    file(WRITE "${GEN}/curie.rc" "1 ICON \"curie.ico\"
+                   "${GEN}/reaktor.ico" COPYONLY)
+    file(WRITE "${GEN}/reaktor.rc" "1 ICON \"reaktor.ico\"
 ")
-    set(APP_RESOURCES "${GEN}/curie.rc")
+    set(APP_RESOURCES "${GEN}/reaktor.rc")
 endif()
 
 # ---------------------------------------------------------------- app -------
@@ -219,7 +219,7 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     if(DBUS_FOUND)
         list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_atspi.c)
         list(APPEND SYS_LIBS ${DBUS_LIBRARIES})
-        list(APPEND SYS_DEFS CURIE_HAVE_ATSPI)
+        list(APPEND SYS_DEFS REAKTOR_HAVE_ATSPI)
         message(STATUS "a11y: AT-SPI over libdbus ${DBUS_VERSION}")
     else()
         message(STATUS "a11y: no dbus-1; the AT-SPI bridge is not built")
@@ -232,13 +232,13 @@ elseif(APPLE AND NOT EMSCRIPTEN)
     # not worth the retain counting.
     enable_language(OBJC)
     list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_macos.m)
-    list(APPEND SYS_DEFS CURIE_HAVE_NSACCESSIBILITY)
+    list(APPEND SYS_DEFS REAKTOR_HAVE_NSACCESSIBILITY)
     set_source_files_properties(src/sys/a11y_macos.m PROPERTIES
         COMPILE_OPTIONS "-fobjc-arc")
     list(APPEND SYS_LIBS "-framework Cocoa")
 endif()
 
-add_executable(curie WIN32
+add_executable(reaktor WIN32
     src/a11y.c
     src/a11y_web.c
     ${SYS_SRC}
@@ -251,34 +251,34 @@ add_executable(curie WIN32
     src/showcase.c
     ${APP_RESOURCES})
 
-target_include_directories(curie PRIVATE
+target_include_directories(reaktor PRIVATE
     "${TP}/nuklear"
     "${TP}/nuklear/demo/sdl3_renderer")
 
-target_link_libraries(curie PRIVATE
-    curie_core
+target_link_libraries(reaktor PRIVATE
+    reaktor_core
     SDL3::SDL3-static
     lcui)
 # uiautomationcore is the UIA provider API (phase 4b); ole32 and oleaut32 are
 # the COM and BSTR halves of it.
 if(WIN32 AND NOT EMSCRIPTEN)
-    target_link_libraries(curie PRIVATE uiautomationcore ole32 oleaut32)
+    target_link_libraries(reaktor PRIVATE uiautomationcore ole32 oleaut32)
 endif()
 if(SYS_LIBS)
-    target_link_libraries(curie PRIVATE ${SYS_LIBS})
+    target_link_libraries(reaktor PRIVATE ${SYS_LIBS})
 endif()
 if(DBUS_FOUND)
-    target_include_directories(curie PRIVATE ${DBUS_INCLUDE_DIRS})
+    target_include_directories(reaktor PRIVATE ${DBUS_INCLUDE_DIRS})
 endif()
 if(SYS_DEFS)
-    target_compile_definitions(curie PRIVATE ${SYS_DEFS})
+    target_compile_definitions(reaktor PRIVATE ${SYS_DEFS})
 endif()
 
 # dxguid supplies IID_IDXGIDevice, which is how the app asks the renderer SDL
 # gave it whether Direct3D is talking to a real GPU - see renderer_is_software
 # in src/main.c. Nothing else in the tree touches Direct3D.
 if(WIN32 AND NOT EMSCRIPTEN)
-    target_link_libraries(curie PRIVATE dxguid)
+    target_link_libraries(reaktor PRIVATE dxguid)
 endif()
 
 # ------------------------------------------------------------- wasm --------
@@ -287,9 +287,9 @@ endif()
 # Two things have to change and only two. The assets are read from the
 # submodules at runtime by path, so they are packaged into Emscripten's
 # virtual filesystem at exactly the paths the code already asks for - see
-# curie_root() in src/util.c, which answers "" here for that reason. And the
+# reaktor_root() in src/util.c, which answers "" here for that reason. And the
 # window is a canvas, so there is no frame to remove and no frame to draw:
-# main.c defaults CURIE_BORDERLESS off under __EMSCRIPTEN__.
+# main.c defaults REAKTOR_BORDERLESS off under __EMSCRIPTEN__.
 #
 # Everything else - SDL3, libcss, plutovg, Nuklear, the CSS seam - is portable
 # C and comes across untouched, which was the point of the callback main loop
@@ -297,11 +297,11 @@ endif()
 if(EMSCRIPTEN)
     # -Oz on the compile side too; CMAKE_BUILD_TYPE=Release would otherwise
     # hand every translation unit -O3, which optimises for speed.
-    target_compile_options(curie PRIVATE -Oz)
+    target_compile_options(reaktor PRIVATE -Oz)
     target_compile_options(lcui PRIVATE -Oz)
     target_compile_options(plutovg PRIVATE -Oz)
     target_compile_options(plutosvg PRIVATE -Oz)
-    target_compile_options(curie_core PRIVATE -Oz)
+    target_compile_options(reaktor_core PRIVATE -Oz)
 
     # Every asset the app opens is named by a string literal in src/, so
     # the package is built from those rather than from a directory: assets/fonts
@@ -309,9 +309,9 @@ if(EMSCRIPTEN)
     # list would go stale the first time a path changed. The branding SVG comes
     # along the same way - it is the window icon.
     set(WASM_ASSETS "")
-    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+    file(GLOB _reaktor_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
                       "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
-    foreach(_s IN LISTS _curie_srcs)
+    foreach(_s IN LISTS _reaktor_srcs)
         # \. and not \. : CMake unescapes a quoted argument before the regex
         # engine sees it, so \. arrives as a bare dot, which matches anything.
         # That was harmless while the extensions were css|ttf|otf, and stopped
@@ -342,10 +342,10 @@ if(EMSCRIPTEN)
     # nothing, which is what one pattern alone cost. The second picks up a few
     # literals that happen to share a name with an icon - "list", "menu",
     # "card" - about two kilobytes of glyphs nobody draws.
-    file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+    file(GLOB _reaktor_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
                       "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
     set(WASM_ICONS "")
-    foreach(_s IN LISTS _curie_srcs)
+    foreach(_s IN LISTS _reaktor_srcs)
         file(STRINGS "${_s}" _lines REGEX "[a-z0-9-]+-outline")
         foreach(_l IN LISTS _lines)
             string(REGEX MATCHALL "[a-z0-9]+(-[a-z0-9]+)*-outline" _n "${_l}")
@@ -384,8 +384,8 @@ if(EMSCRIPTEN)
     endforeach()
     message(STATUS "wasm: packaging ${_asset_count} assets and ${_icon_count} icons")
 
-    set_target_properties(curie PROPERTIES SUFFIX ".html")
-    target_link_options(curie PRIVATE
+    set_target_properties(reaktor PROPERTIES SUFFIX ".html")
+    target_link_options(reaktor PRIVATE
         ${WASM_PRELOAD}
         # The font atlas and the SVG rasters are allocated as the UI is first
         # drawn, so the heap has to be able to grow past whatever is reserved.
@@ -402,19 +402,19 @@ if(EMSCRIPTEN)
         -Oz
         --closure 1
         "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.html")
-    set_property(TARGET curie APPEND PROPERTY LINK_DEPENDS
+    set_property(TARGET reaktor APPEND PROPERTY LINK_DEPENDS
                  "${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.html")
 endif()
 
 if(MSVC)
     # C5287/C4101 are Nuklear's; C4244/C4267 are plutovg's narrowing warnings.
-    target_compile_options(curie PRIVATE /wd5287 /wd4101)
+    target_compile_options(reaktor PRIVATE /wd5287 /wd4101)
     target_compile_options(plutovg PRIVATE /wd4244 /wd4267 /wd4018)
-    target_compile_definitions(curie PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_definitions(curie_core PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(reaktor PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(reaktor_core PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # The app finds assets by walking up from the executable to the directory
 # containing third_party/, so keep the binary inside the tree.
-set_target_properties(curie PROPERTIES
+set_target_properties(reaktor PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

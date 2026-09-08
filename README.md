@@ -1,8 +1,8 @@
-# Curie
+# Reaktor - a Nuklear-powered (graphical) engine
 
 A desktop application in C where none of the styling is compiled in.
 
-![The Curie login screen: a centred card on a dark page, with a tab strip
+![The Reaktor login screen: a centred card on a dark page, with a tab strip
 across the top and a scheme switch beside the window
 controls](docs/screenshot.png)
 
@@ -12,7 +12,7 @@ controls](docs/screenshot.png)
 - **SDL3** supplies the window, the input and the renderer.
 
 The stylesheet is [tiny.css](https://github.com/ihsan6133/tiny.css), which is
-classless and written for HTML. Curie reads the rules that have a counterpart
+classless and written for HTML. Reaktor reads the rules that have a counterpart
 in Nuklear — `button`, `input`, `select`, `details`, `summary`, `dialog` — and
 the palette in `:root`, and maps them onto the widget styles. Edit a colour in
 `third_party/tinycss/src/`, restart, and the app follows: nothing under `src/`
@@ -92,7 +92,7 @@ A `file://` page cannot fetch the `.wasm`, so serve the output directory:
 | `src/metrics.c` | The display scale, in one place |
 | `src/theme.c` | Which colour scheme the desktop is using |
 | `src/util.c` | Paths, whole-file reads, the resident set |
-| `branding/` | The project's mark: two inks, each as SVG, PNG and `.ico` |
+| `branding/` | The project's mark, as SVG, PNG and `.ico` |
 | `assets/fonts/` | Aileron, the CC0 typeface the UI is set in — vendored rather than submoduled, the one exception to the rule |
 
 ## Documentation

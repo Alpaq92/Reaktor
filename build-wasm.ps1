@@ -7,7 +7,7 @@
 #     source /path/to/emsdk/emsdk_env.sh
 #     emcmake cmake -S . -B build-wasm && cmake --build build-wasm --parallel
 #
-# Output: build-wasm/curie.html plus its .js, .wasm and .data.
+# Output: build-wasm/reaktor.html plus its .js, .wasm and .data.
 param([switch]$Serve)
 
 $ErrorActionPreference = "Stop"
@@ -55,7 +55,7 @@ $ErrorActionPreference = $prev
 if ($rc -ne 0) { throw "wasm build failed ($rc)" }
 
 Write-Host ""
-Write-Host "built: $outDir\curie.html"
+Write-Host "built: $outDir\reaktor.html"
 Write-Host "a file:// page cannot fetch the .wasm, so serve it:"
 Write-Host "  python -m http.server -d build-wasm 8000"
 

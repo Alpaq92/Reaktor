@@ -4,7 +4,7 @@
  * rules for `button`, `input`, `select`, `textarea`, `table` and little else,
  * so a slider, a knob, a chart or a tree has no rule to read and must be
  * styled from the palette tokens instead. Drawing all of them is what shows
- * where that line falls - see curie_style_widgets() in main.c, which is the
+ * where that line falls - see reaktor_style_widgets() in main.c, which is the
  * whole of the token half of the seam.
  *
  * Layout is Nuklear's. Every page here is rows and groups; nothing computes a
@@ -29,12 +29,12 @@
 #define ROW_TALL  34.0f    /* one control with a label inside it */
 #define ROW_SMALL 22.0f
 
-const char *const curie_rss_names[RSS_STEPS] = {
+const char *const reaktor_rss_names[RSS_STEPS] = {
     "before any of it", "SDL_Init(VIDEO)", "window and renderer",
     "window icon", "Nuklear context", "font atlas", "stylesheets"
 };
 
-const char *const curie_tab_names[TAB_COUNT] = {
+const char *const reaktor_tab_names[TAB_COUNT] = {
     "Login", "Buttons", "Inputs", "Display", "Layout", "Popups", "Diagnostics"
 };
 
@@ -49,11 +49,11 @@ content_w(struct nk_context *ctx)
 static void
 heading(App *app, struct nk_context *ctx, const char *text)
 {
-    struct nk_color c = curie_token("--text-bright", ctx->style.text.color);
+    struct nk_color c = reaktor_token("--text-bright", ctx->style.text.color);
 
     nk_layout_row_dynamic(ctx, 30.0f, 1);
-    nk_style_push_font(ctx, curie_font(app, 19, 1));
-    curie_note_here(app, ctx, CURIE_A11Y_LABEL, text, 0);
+    nk_style_push_font(ctx, reaktor_font(app, 19, 1));
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, text, 0);
     nk_label_colored(ctx, text, NK_TEXT_LEFT, c);
     nk_style_pop_font(ctx);
 }
@@ -65,8 +65,8 @@ heading(App *app, struct nk_context *ctx, const char *text)
 static void
 caption(App *app, struct nk_context *ctx, const char *text)
 {
-    const struct nk_user_font *f = curie_font(app, 16, 0);
-    struct nk_color c = curie_token("--text-muted", ctx->style.text.color);
+    const struct nk_user_font *f = reaktor_font(app, 16, 0);
+    struct nk_color c = reaktor_token("--text-muted", ctx->style.text.color);
     float avail = content_w(ctx) - 4.0f;
     float tw    = f->width(f->userdata, f->height, text, (int)strlen(text));
     int   lines = 1;
@@ -75,7 +75,7 @@ caption(App *app, struct nk_context *ctx, const char *text)
 
     nk_style_push_font(ctx, f);
     nk_layout_row_dynamic(ctx, (f->height + 3.0f) * (float)lines, 1);
-    curie_note_here(app, ctx, CURIE_A11Y_LABEL, text, 0);
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, text, 0);
     nk_label_colored_wrap(ctx, text, c);
     nk_style_pop_font(ctx);
     nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -91,7 +91,7 @@ rule(struct nk_context *ctx)
     nk_layout_row_dynamic(ctx, 14.0f, 1);
     nk_spacer(ctx);
     nk_layout_row_dynamic(ctx, 1.0f, 1);
-    nk_rule_horizontal(ctx, curie_token("--background-hover",
+    nk_rule_horizontal(ctx, reaktor_token("--background-hover",
                                         nk_rgba(128, 128, 128, 90)), nk_false);
     nk_layout_row_dynamic(ctx, 6.0f, 1);
     nk_spacer(ctx);
@@ -130,11 +130,11 @@ compact_pop(struct nk_context *ctx)
 static void
 api(App *app, struct nk_context *ctx, const char *text)
 {
-    nk_style_push_font(ctx, curie_font(app, 12, 0));
+    nk_style_push_font(ctx, reaktor_font(app, 12, 0));
     nk_layout_row_dynamic(ctx, 18.0f, 1);
-    curie_note_here(app, ctx, CURIE_A11Y_LABEL, text, 0);
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, text, 0);
     nk_label_colored(ctx, text, NK_TEXT_LEFT,
-                     curie_token("--links", ctx->style.text.color));
+                     reaktor_token("--links", ctx->style.text.color));
     nk_style_pop_font(ctx);
     nk_layout_row_dynamic(ctx, 4.0f, 1);
     nk_spacer(ctx);
@@ -159,10 +159,10 @@ popup_style_push(struct nk_context *ctx)
 {
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(
-                                 curie_token("--background",
+                                 reaktor_token("--background",
                                              nk_rgb(53, 53, 53))));
     nk_style_push_float(ctx, &ctx->style.window.rounding,
-                        curie_popup_rounding());
+                        reaktor_popup_rounding());
     /* Nuklear's default leaves a dialog's text hard against its own frame. */
     nk_style_push_vec2(ctx, &ctx->style.window.popup_padding,
                        nk_vec2(16.0f, 12.0f));
@@ -246,7 +246,7 @@ combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
     r.x = h.x + h.w - COMBO_MARGIN - px;
     r.y = h.y + (h.h - px) * 0.5f;
     r.w = r.h = px;
-    im = curie_ionicon(app, "chevron-down-outline", (int)px);
+    im = reaktor_ionicon(app, "chevron-down-outline", (int)px);
     nk_draw_image(canvas, r, &im, nk_rgb(255, 255, 255));
 }
 
@@ -269,7 +269,7 @@ glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
     struct nk_image im;
 
     if (px < 1) return;
-    im = curie_ionicon_exact(app, name, px, col, sw);
+    im = reaktor_ionicon_exact(app, name, px, col, sw);
     /* A glyph the cache could not load has no handle, and nk_draw_image would
      * paint the null texture - a white quad, which is worse than nothing. */
     if (!im.handle.ptr) return;
@@ -284,7 +284,7 @@ chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
            const char *name, struct nk_color col)
 {
     struct nk_rect r;
-    struct nk_image im = curie_ionicon_col(app, name, CHEVRON_PX, col);
+    struct nk_image im = reaktor_ionicon_col(app, name, CHEVRON_PX, col);
 
     r.w = r.h = (float)CHEVRON_PX;
     r.x = slot.x + (slot.w - r.w) * 0.5f;
@@ -318,7 +318,7 @@ shaded(struct nk_color c, float amount)
     unsigned char rgba[4];
 
     rgba[0] = c.r; rgba[1] = c.g; rgba[2] = c.b; rgba[3] = c.a;
-    curie_style_darken(rgba, amount);
+    reaktor_style_darken(rgba, amount);
     return nk_rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
 }
 
@@ -369,7 +369,7 @@ slider_cell(App *app, struct nk_context *ctx, unsigned id, float *val,
     /* The arrows, if this is what has focus: applied here rather than in the
      * shell, which knows neither the bounds nor the grain of the value. */
     {
-        int steps = curie_focus_step(app, id);
+        int steps = reaktor_focus_step(app, id);
 
         if (steps) {
             *val += step * (float)steps;
@@ -379,7 +379,7 @@ slider_cell(App *app, struct nk_context *ctx, unsigned id, float *val,
     }
     /* And the same three numbers to the tree, after the arrows rather than
      * before, so a client reads the value it has just been given. */
-    curie_note_range(app, id, *val, lo, hi, step);
+    reaktor_note_range(app, id, *val, lo, hi, step);
 
     in  = nk_rect(b.x + st->padding.x, b.y + st->padding.y,
                   b.w - 2.0f * st->padding.x, b.h - 2.0f * st->padding.y);
@@ -392,8 +392,8 @@ slider_cell(App *app, struct nk_context *ctx, unsigned id, float *val,
                   in.y + in.h * 0.5f - st->cursor_size.y * 0.5f,
                   st->cursor_size.x, st->cursor_size.y);
 
-    curie_fill_round(app, cv, bar, cap, track);
-    if (fl.w >= 1.0f) curie_fill_round(app, cv, fl, cap, filled);
+    reaktor_fill_round(app, cv, bar, cap, track);
+    if (fl.w >= 1.0f) reaktor_fill_round(app, cv, fl, cap, filled);
     glyph_at(app, ctx, kn, DISC_ROUND, knob,
              (int)(st->cursor_size.x < st->cursor_size.y ? st->cursor_size.x
                                                          : st->cursor_size.y),
@@ -413,7 +413,7 @@ slider_cell_int(App *app, struct nk_context *ctx, unsigned id, int *val,
 }
 
 /* Nuklear draws neither of the bar's two rounded rects: they are the shape
- * curie_fill_round exists for, and its corners are the only ones on the page
+ * reaktor_fill_round exists for, and its corners are the only ones on the page
  * that are actually curves rather than stairs. So the style items go
  * transparent for the call - which keeps the geometry, the drag and the
  * value - and the track and the fill are drawn here.
@@ -459,9 +459,9 @@ progress_cell(App *app, struct nk_context *ctx, nk_size *cur, nk_size max,
     nk_style_pop_style_item(ctx);
 
     if (track_it.type == NK_STYLE_ITEM_COLOR)
-        curie_fill_round(app, cv, b, track_r, track_it.data.color);
+        reaktor_fill_round(app, cv, b, track_r, track_it.data.color);
     if (fill.w >= 1.0f && fill_it.type == NK_STYLE_ITEM_COLOR)
-        curie_fill_round(app, cv, fill, r, fill_it.data.color);
+        reaktor_fill_round(app, cv, fill, r, fill_it.data.color);
 }
 
 /* The knob is the same again, and the widget the stylesheet reaches least:
@@ -533,7 +533,7 @@ knob_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
 
 /* A stepper's hover wash, round rather than the square Nuklear draws: the
  * slot is a square the height of the font, so half of it is a circle, and
- * curie_fill_round makes it one that is actually round. Nuklear draws none -
+ * reaktor_fill_round makes it one that is actually round. Nuklear draws none -
  * see stepper_push. */
 static void
 stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
@@ -541,11 +541,11 @@ stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
     struct nk_color wash;
 
     if (!nk_input_is_mouse_hovering_rect(&ctx->input, sq)) return;
-    wash = curie_token("--background-hover", ctx->style.property.hover.type
+    wash = reaktor_token("--background-hover", ctx->style.property.hover.type
                        == NK_STYLE_ITEM_COLOR
                        ? ctx->style.property.hover.data.color
                        : ctx->style.text.color);
-    curie_fill_round(app, nk_window_get_canvas(ctx), sq, sq.w * 0.5f, wash);
+    reaktor_fill_round(app, nk_window_get_canvas(ctx), sq, sq.w * 0.5f, wash);
 }
 
 /* The two steppers of a property, placed the way nk_do_property places
@@ -624,17 +624,17 @@ static void
 draw_tooltip(App *app, struct nk_context *ctx, const char *const *lines,
              int n, float bar)
 {
-    const struct nk_user_font *f = curie_font(app, 13, 0);
+    const struct nk_user_font *f = reaktor_font(app, 13, 0);
     struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
     /* --background-hover, not --background: a tooltip floats above whatever
      * it is describing, and against a panel of the very same colour it read
      * as though it were half transparent. This is the palette's next step up
      * and sits clear of both the page and a panel. */
-    struct nk_color fill = curie_token("--background-hover",
+    struct nk_color fill = reaktor_token("--background-hover",
                                        nk_rgb(69, 69, 69));
-    struct nk_color ink  = curie_token("--text-main", nk_rgb(247, 247, 247));
-    struct nk_color edge = curie_token("--text-muted", nk_rgb(192, 192, 192));
-    struct nk_color acc  = curie_token("--links", nk_rgb(86, 199, 255));
+    struct nk_color ink  = reaktor_token("--text-main", nk_rgb(247, 247, 247));
+    struct nk_color edge = reaktor_token("--text-muted", nk_rgb(192, 192, 192));
+    struct nk_color acc  = reaktor_token("--links", nk_rgb(86, 199, 255));
     float pad = 10.0f, line = f->height + 6.0f;
     float w = 0.0f, h = 2.0f * pad + (float)n * line;
     struct nk_rect r;
@@ -667,7 +667,7 @@ draw_tooltip(App *app, struct nk_context *ctx, const char *const *lines,
         struct nk_rect track = nk_rect(r.x + pad, r.y + h - pad - 6.0f,
                                        r.w - 2.0f * pad, 6.0f);
         nk_fill_rect(canvas, track, 3.0f,
-                     curie_token("--background-body", nk_rgb(37, 37, 37)));
+                     reaktor_token("--background-body", nk_rgb(37, 37, 37)));
         track.w *= bar;
         nk_fill_rect(canvas, track, 3.0f, acc);
     }
@@ -695,13 +695,13 @@ item_with_icon(App *app, struct nk_context *ctx, const char *label,
     struct nk_image im;
     int hit;
 
-    curie_hot_top(app, b, 1, 1);
-    curie_note(app, CURIE_A11Y_MENUITEM, label, NULL, 0, b);
+    reaktor_hot_top(app, b, 1, 1);
+    reaktor_note(app, REAKTOR_A11Y_MENUITEM, label, NULL, 0, b);
     hit = contextual ? nk_contextual_item_label(ctx, label, NK_TEXT_LEFT)
                      : nk_menu_item_label(ctx, label, NK_TEXT_LEFT);
 
     r = nk_rect(b.x + b.w - px - 8.0f, b.y + (b.h - px) * 0.5f, px, px);
-    im = curie_ionicon(app, ionicon, (int)px);
+    im = reaktor_ionicon(app, ionicon, (int)px);
     nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
     return hit;
 }
@@ -712,8 +712,8 @@ menu_item(App *app, struct nk_context *ctx, const char *label, int contextual)
 {
     {
         struct nk_rect b = nk_widget_bounds(ctx);
-        curie_hot_top(app, b, 1, 1);
-        curie_note(app, CURIE_A11Y_MENUITEM, label, NULL, 0, b);
+        reaktor_hot_top(app, b, 1, 1);
+        reaktor_note(app, REAKTOR_A11Y_MENUITEM, label, NULL, 0, b);
     }
     return contextual ? nk_contextual_item_label(ctx, label, NK_TEXT_LEFT)
                       : nk_menu_item_label(ctx, label, NK_TEXT_LEFT);
@@ -733,14 +733,14 @@ hot(App *app, struct nk_context *ctx, unsigned char role, const char *name,
 {
     struct nk_rect b = nk_widget_bounds(ctx);
 
-    curie_hot(app, b, 1, 1);
-    /* CURIE_A11Y_NONE means the caller has already reported it - a widget
+    reaktor_hot(app, b, 1, 1);
+    /* REAKTOR_A11Y_NONE means the caller has already reported it - a widget
      * whose value has to be formatted first reports itself, then asks for the
      * cursor. Reporting it twice would give a reader two of it. Answers with
      * the node's id, which a widget that takes its own activation needs and
      * every other caller ignores. */
-    if (role == CURIE_A11Y_NONE) return 0;
-    return curie_note(app, role, name, NULL, state, b);
+    if (role == REAKTOR_A11Y_NONE) return 0;
+    return reaktor_note(app, role, name, NULL, state, b);
 }
 
 /* Checkboxes and radios sit the way the Edit menu sits them: label at the
@@ -772,12 +772,12 @@ check_row(struct nk_context *ctx, int cells)
 static void
 check_cell(App *app, struct nk_context *ctx, const char *label, nk_bool *on)
 {
-    unsigned id = hot(app, ctx, CURIE_A11Y_CHECKBOX, label,
-                      *on ? CURIE_A11Y_CHECKED : 0u);
+    unsigned id = hot(app, ctx, REAKTOR_A11Y_CHECKBOX, label,
+                      *on ? REAKTOR_A11Y_CHECKED : 0u);
 
     /* Enter, or a screen reader's press, taken here rather than delivered as
-     * a click on the box - see curie_focus_activated. */
-    if (curie_focus_activated(app, id)) *on = !*on;
+     * a click on the box - see reaktor_focus_activated. */
+    if (reaktor_focus_activated(app, id)) *on = !*on;
     nk_checkbox_label_align(ctx, label, on, CHECK_ALIGN);
     nk_spacer(ctx);
 }
@@ -789,10 +789,10 @@ flags_cell(App *app, struct nk_context *ctx, const char *label,
            unsigned *flags, unsigned value)
 {
     nk_bool on = (*flags & value) != 0;
-    unsigned id = hot(app, ctx, CURIE_A11Y_CHECKBOX, label,
-                      on ? CURIE_A11Y_CHECKED : 0u);
+    unsigned id = hot(app, ctx, REAKTOR_A11Y_CHECKBOX, label,
+                      on ? REAKTOR_A11Y_CHECKED : 0u);
 
-    if (curie_focus_activated(app, id)) on = !on;
+    if (reaktor_focus_activated(app, id)) on = !on;
     if (nk_checkbox_label_align(ctx, label, &on, CHECK_ALIGN) ||
         (*flags & value) != (on ? value : 0u)) {
         if (on) *flags |= value;
@@ -821,10 +821,10 @@ radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
     int on = *sel == value;
 
     {
-        unsigned id = hot(app, ctx, CURIE_A11Y_RADIO, label,
-                          on ? CURIE_A11Y_CHECKED : 0u);
+        unsigned id = hot(app, ctx, REAKTOR_A11Y_RADIO, label,
+                          on ? REAKTOR_A11Y_CHECKED : 0u);
 
-        if (curie_focus_activated(app, id)) { *sel = value; on = 1; }
+        if (reaktor_focus_activated(app, id)) { *sel = value; on = 1; }
     }
 
     /* Nuklear draws nothing for the circle: its fills are pushed transparent
@@ -872,12 +872,12 @@ radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
 static int
 demo_button(App *app, struct nk_context *ctx, const char *label)
 {
-    unsigned id = hot(app, ctx, CURIE_A11Y_BUTTON, label, 0);
+    unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     int hit = nk_button_label(ctx, label);
 
     /* Both, always: `||` would short-circuit and leave the activation for the
      * frame to turn into a second press. */
-    if (curie_focus_activated(app, id)) hit = 1;
+    if (reaktor_focus_activated(app, id)) hit = 1;
     return hit;
 }
 
@@ -967,9 +967,9 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_button_label  /  nk_button_image_label");
 
     nk_layout_row_dynamic(ctx, 38.0f, 3);
-    if (curie_button(app, ctx, "Default")) s->presses++;
-    if (curie_button_accent(app, ctx, "Primary")) s->presses++;
-    if (curie_button_icon(app, ctx, "key-outline", "With icon")) s->presses++;
+    if (reaktor_button(app, ctx, "Default")) s->presses++;
+    if (reaktor_button_accent(app, ctx, "Primary")) s->presses++;
+    if (reaktor_button_icon(app, ctx, "key-outline", "With icon")) s->presses++;
 
     section(app, ctx, "Icons",
             "Every icon is an Ionicon, read out of the submodule and "
@@ -978,19 +978,19 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
             "before it is parsed, which is how an icon follows the "
             "stylesheet: CSS cannot reach inside an SVG. The label is the "
             "icon's name to a reader as well as to the eye.");
-    api(app, ctx, "nk_button_image_label  /  curie_button_icon");
+    api(app, ctx, "nk_button_image_label  /  reaktor_button_icon");
 
     nk_layout_row_dynamic(ctx, 38.0f, 4);
     for (i = 0; i < ICON_N; i++)
-        if (curie_button_icon(app, ctx, g_icons[i].icon, g_icons[i].label))
+        if (reaktor_button_icon(app, ctx, g_icons[i].icon, g_icons[i].label))
             s->presses++;
 
     nk_layout_row_dynamic(ctx, 38.0f, 3);
-    if (curie_button_icon(app, ctx, "chevron-back-outline", "Back"))
+    if (reaktor_button_icon(app, ctx, "chevron-back-outline", "Back"))
         s->presses++;
-    if (curie_button_icon(app, ctx, "chevron-forward-outline", "Forward"))
+    if (reaktor_button_icon(app, ctx, "chevron-forward-outline", "Forward"))
         s->presses++;
-    if (curie_button_icon(app, ctx, "menu-outline", "Menu"))
+    if (reaktor_button_icon(app, ctx, "menu-outline", "Menu"))
         s->presses++;
 
     section(app, ctx, "Colour, image, repeat and disabled",
@@ -1015,32 +1015,32 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_template_push_dynamic(ctx);
     nk_layout_row_template_end(ctx);
     compact_push(ctx);
-    if (curie_button_color(app, ctx, "Tint swatch", nk_rgb_cf(s->tint)))
+    if (reaktor_button_color(app, ctx, "Tint swatch", nk_rgb_cf(s->tint)))
         s->presses++;
-    hot(app, ctx, CURIE_A11Y_BUTTON, "Download", 0);
-    if (nk_button_image(ctx, curie_ionicon(app, "cloud-download-outline", 24)))
+    hot(app, ctx, REAKTOR_A11Y_BUTTON, "Download", 0);
+    if (nk_button_image(ctx, reaktor_ionicon(app, "cloud-download-outline", 24)))
         s->presses++;
     compact_pop(ctx);
 
     nk_button_set_behavior(ctx, NK_BUTTON_REPEATER);
-    hot(app, ctx, CURIE_A11Y_BUTTON, "Hold me", 0);
+    hot(app, ctx, REAKTOR_A11Y_BUTTON, "Hold me", 0);
     if (nk_button_label(ctx, "Hold me")) s->repeats++;
     nk_button_set_behavior(ctx, NK_BUTTON_DEFAULT);
 
     nk_widget_disable_begin(ctx);
     /* Not through hot(): a disabled control takes no pointer, but a reader
      * should still find it and be told why it cannot be used. */
-    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, "Disabled",
-                    CURIE_A11Y_DISABLED);
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, "Disabled",
+                    REAKTOR_A11Y_DISABLED);
     nk_button_label(ctx, "Disabled");
     nk_widget_disable_end(ctx);
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "%d presses, %d repeat ticks",
                  s->presses, s->repeats);
-    nk_style_push_font(ctx, curie_font(app, 13, 0));
+    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
     nk_label_colored(ctx, line, NK_TEXT_LEFT,
-                     curie_token("--text-muted", ctx->style.text.color));
+                     reaktor_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
 
     section(app, ctx, "Checkboxes and radios",
@@ -1068,9 +1068,9 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "flags = 0x%02x", s->flags);
-    nk_style_push_font(ctx, curie_font(app, 13, 0));
+    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
     nk_label_colored(ctx, line, NK_TEXT_LEFT,
-                     curie_token("--text-muted", ctx->style.text.color));
+                     reaktor_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
 
     check_row(ctx, 3);
@@ -1091,8 +1091,8 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     for (i = 0; i < 4; i++) {
         char lab[16];
         SDL_snprintf(lab, sizeof(lab), "Tile %d", i + 1);
-        hot(app, ctx, CURIE_A11Y_LISTITEM, lab,
-            s->sel_tile[i] ? CURIE_A11Y_SELECTED : 0u);
+        hot(app, ctx, REAKTOR_A11Y_LISTITEM, lab,
+            s->sel_tile[i] ? REAKTOR_A11Y_SELECTED : 0u);
         nk_selectable_label(ctx, lab, NK_TEXT_CENTERED, &s->sel_tile[i]);
     }
 
@@ -1106,8 +1106,8 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
      * left with the label centred is the arrangement that reads as one
      * control rather than two things at opposite ends. */
     nk_layout_row_static(ctx, 32.0f, 190, 2);
-    hot(app, ctx, CURIE_A11Y_LISTITEM, "With a symbol",
-        s->sel_row ? CURIE_A11Y_SELECTED : 0u);
+    hot(app, ctx, REAKTOR_A11Y_LISTITEM, "With a symbol",
+        s->sel_row ? REAKTOR_A11Y_SELECTED : 0u);
     {
         /* NK_SYMBOL_NONE and the disc drawn into the slot Nuklear sized for
          * it - nk_do_selectable_symbol's icon rect, which for any alignment
@@ -1129,19 +1129,19 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
                  s->sel_row ? st->text_pressed : st->text_normal,
                  (int)(icon.w < icon.h ? icon.w : icon.h), 0.0f);
     }
-    hot(app, ctx, CURIE_A11Y_LISTITEM, "With an image",
-        s->toggle ? CURIE_A11Y_SELECTED : 0u);
+    hot(app, ctx, REAKTOR_A11Y_LISTITEM, "With an image",
+        s->toggle ? REAKTOR_A11Y_SELECTED : 0u);
     {
         /* Selected, the row is filled with the accent and the label switches
          * to whatever reads on it; the icon has to make the same move or it
          * is the one thing on the row that does not. */
-        struct nk_color accent = curie_token("--links", ctx->style.text.color);
+        struct nk_color accent = reaktor_token("--links", ctx->style.text.color);
         struct nk_color ink = s->toggle
-            ? curie_on(accent)
-            : curie_token("--text-muted", ctx->style.text.color);
+            ? reaktor_on(accent)
+            : reaktor_token("--text-muted", ctx->style.text.color);
 
         nk_selectable_image_label(ctx,
-            curie_ionicon_col(app, "star-outline", 16, ink),
+            reaktor_ionicon_col(app, "star-outline", 16, ink),
             "With an image", NK_TEXT_CENTERED, &s->toggle);
     }
 
@@ -1170,19 +1170,19 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_edit_string with nk_filter_default / _decimal / _hex");
 
     nk_layout_row_dynamic(ctx, 36.0f, 1);
-    curie_field(app, ctx, NK_EDIT_FIELD, s->name, &s->name_len,
+    reaktor_field(app, ctx, NK_EDIT_FIELD, s->name, &s->name_len,
                 SC_TEXT_CAP, "Full name", nk_filter_default);
 
     nk_layout_row_dynamic(ctx, 36.0f, 2);
-    curie_field(app, ctx, NK_EDIT_FIELD, s->digits, &s->digits_len,
+    reaktor_field(app, ctx, NK_EDIT_FIELD, s->digits, &s->digits_len,
                 SC_TEXT_CAP, "Digits only", nk_filter_decimal);
-    curie_field(app, ctx, NK_EDIT_FIELD, s->hex, &s->hex_len,
+    reaktor_field(app, ctx, NK_EDIT_FIELD, s->hex, &s->hex_len,
                 SC_TEXT_CAP, "Hex only", nk_filter_hex);
 
     api(app, ctx, "nk_edit_string with NK_EDIT_BOX "
                   "(Nuklear breaks lines on newlines only - there is no wrap)");
     nk_layout_row_dynamic(ctx, 92.0f, 1);
-    curie_field(app, ctx, NK_EDIT_BOX, s->note, &s->note_len,
+    reaktor_field(app, ctx, NK_EDIT_BOX, s->note, &s->note_len,
                 SC_BOX_CAP, NULL, nk_filter_default);
 
     section(app, ctx, "Ranges",
@@ -1196,33 +1196,33 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
 
     nk_layout_row_dynamic(ctx, ROW, 2);
     SDL_snprintf(line, sizeof(line), "%.2f", (double)s->slider_f);
-    id = curie_note(app, CURIE_A11Y_SLIDER, "Float", line, 0,
+    id = reaktor_note(app, REAKTOR_A11Y_SLIDER, "Float", line, 0,
                     nk_widget_bounds(ctx));
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
     slider_cell(app, ctx, id, &s->slider_f, 0.0f, 1.0f, 0.01f);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
     SDL_snprintf(line, sizeof(line), "%d", s->slider_i);
-    id = curie_note(app, CURIE_A11Y_SLIDER, "Integer", line, 0,
+    id = reaktor_note(app, REAKTOR_A11Y_SLIDER, "Integer", line, 0,
                     nk_widget_bounds(ctx));
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
     slider_cell_int(app, ctx, id, &s->slider_i, 0, 100, 1);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
     SDL_snprintf(line, sizeof(line), "%d", (int)s->progress);
-    curie_note(app, CURIE_A11Y_PROGRESS, "Progress", line, 0,
+    reaktor_note(app, REAKTOR_A11Y_PROGRESS, "Progress", line, 0,
                nk_widget_bounds(ctx));
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
     progress_cell(app, ctx, &s->progress, 100, NK_MODIFIABLE);
     nk_label(ctx, "modifiable - drag it", NK_TEXT_LEFT);
 
     nk_layout_row_static(ctx, 62.0f, 62, 2);
     SDL_snprintf(line, sizeof(line), "%.2f", (double)s->knob);
-    curie_note(app, CURIE_A11Y_SLIDER, "Knob", line, 0,
+    reaktor_note(app, REAKTOR_A11Y_SLIDER, "Knob", line, 0,
                nk_widget_bounds(ctx));
-    hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
     knob_cell(app, ctx, &s->knob, 0.0f, 1.0f, NK_DOWN);
     nk_spacer(ctx);
 
@@ -1239,8 +1239,8 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
 
         pb = nk_widget_bounds(ctx);
         SDL_snprintf(line, sizeof(line), "%d", s->prop_i);
-        curie_note(app, CURIE_A11Y_SPINBUTTON, "Columns:", line, 0, pb);
-        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        reaktor_note(app, REAKTOR_A11Y_SPINBUTTON, "Columns:", line, 0, pb);
+        hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
         stepper_push(ctx);
         nk_property_int(ctx, "Columns:", 1, &s->prop_i, 24, 1, 0.25f);
         stepper_pop(ctx);
@@ -1248,8 +1248,8 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
 
         pb = nk_widget_bounds(ctx);
         SDL_snprintf(line, sizeof(line), "%.2f", (double)s->prop_f);
-        curie_note(app, CURIE_A11Y_SPINBUTTON, "Stroke:", line, 0, pb);
-        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        reaktor_note(app, REAKTOR_A11Y_SPINBUTTON, "Stroke:", line, 0, pb);
+        hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
         stepper_push(ctx);
         nk_property_float(ctx, "Stroke:", 0.25f, &s->prop_f, 8.0f, 0.05f,
                           0.01f);
@@ -1258,8 +1258,8 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
 
         pb = nk_widget_bounds(ctx);
         SDL_snprintf(line, sizeof(line), "%.2f", s->prop_d);
-        curie_note(app, CURIE_A11Y_SPINBUTTON, "Ratio:", line, 0, pb);
-        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        reaktor_note(app, REAKTOR_A11Y_SPINBUTTON, "Ratio:", line, 0, pb);
+        hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
         stepper_push(ctx);
         nk_property_double(ctx, "Ratio:", 0.0, &s->prop_d, 100.0, 0.25,
                            0.05f);
@@ -1281,7 +1281,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
      * number of pixels makes the frame even. */
     popup_style_push(ctx);
     nk_layout_row_static(ctx, ROW_TALL, 440, 2);
-    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Size", 0);
+    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Size", 0);
     {
         /* The popup takes an explicit size, so "as wide as the box" has to
          * be asked for - nk_widget_width is the box that is about to be
@@ -1299,7 +1299,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
      * the only handle on it. */
     nk_style_push_vec2(ctx, &ctx->style.combo.content_padding,
                        nk_vec2(ctx->style.combo.content_padding.x, 9.0f));
-    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Size, with a symbol", 0);
+    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Size, with a symbol", 0);
     {
         struct nk_rect h = nk_widget_bounds(ctx);
 
@@ -1319,9 +1319,9 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
             nk_layout_row_dynamic(ctx, 26.0f, 1);
             for (i = 0; i < 3; i++) {
                 struct nk_rect ib = nk_widget_bounds(ctx);
-                curie_hot_top(app, ib, 1, 1);
-                curie_note(app, CURIE_A11Y_LISTITEM, sizes[i], NULL,
-                           i == s->combo_size ? CURIE_A11Y_SELECTED : 0u, ib);
+                reaktor_hot_top(app, ib, 1, 1);
+                reaktor_note(app, REAKTOR_A11Y_LISTITEM, sizes[i], NULL,
+                           i == s->combo_size ? REAKTOR_A11Y_SELECTED : 0u, ib);
                 if (nk_combo_item_label(ctx, sizes[i], NK_TEXT_LEFT))
                     s->combo_size = i;
             }
@@ -1334,7 +1334,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     nk_style_pop_vec2(ctx);
 
     nk_layout_row_static(ctx, ROW_TALL, 440, 2);
-    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Tint", 0);
+    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Tint", 0);
     {
         /* nk_combo_begin_label with an empty label, and the swatch painted
          * here.
@@ -1361,7 +1361,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
         combo_chrome(app, ctx, h, 2.0f);
     }
 
-    hot(app, ctx, CURIE_A11Y_COMBOBOX, "Anything at all", 0);
+    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Anything at all", 0);
     {
         struct nk_rect h = nk_widget_bounds(ctx);
 
@@ -1385,7 +1385,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_color_pick");
 
     nk_layout_row_static(ctx, 132.0f, 210, 2);
-    hot(app, ctx, CURIE_A11Y_GROUP, "Colour picker", 0);
+    hot(app, ctx, REAKTOR_A11Y_GROUP, "Colour picker", 0);
     nk_color_pick(ctx, &s->tint, NK_RGB);
     if (nk_group_begin(ctx, "swatch", NK_WINDOW_NO_SCROLLBAR)) {
         struct nk_color c = nk_rgb_cf(s->tint);
@@ -1431,7 +1431,7 @@ grid_row(App *app, struct nk_context *ctx, const char *const *cells, int n,
                      0.0f, bg);
     }
 
-    nk_style_push_font(ctx, curie_font(app, 13, header));
+    nk_style_push_font(ctx, reaktor_font(app, 13, header));
     nk_style_push_color(ctx, &ctx->style.text.color, fg);
     nk_style_push_vec2(ctx, &ctx->style.text.padding, nk_vec2(pad, 0.0f));
     for (i = 0; i < n; i++) {
@@ -1461,7 +1461,7 @@ section_grid(App *app, struct nk_context *ctx)
     };
     static const float weights[3] = { 0.24f, 0.16f, 0.60f };
 
-    curie_style tbl, head_s, cell;
+    reaktor_style tbl, head_s, cell;
     struct nk_color odd, even, head_bg, head_fg;
     float pad;
     int i;
@@ -1474,12 +1474,12 @@ section_grid(App *app, struct nk_context *ctx)
             "read straight out of tiny.css.");
     api(app, ctx, "nk_layout_row_begin(NK_DYNAMIC) + nk_fill_rect per row");
 
-    curie_style_get("table", &tbl);
-    curie_style_get("thead", &head_s);
-    curie_style_get("th", &cell);
+    reaktor_style_get("table", &tbl);
+    reaktor_style_get("thead", &head_s);
+    reaktor_style_get("th", &cell);
 
-    odd     = curie_token("--table-bg", nk_rgb(53, 53, 53));
-    even    = curie_token("--table-bg-alt", nk_rgb(37, 37, 37));
+    odd     = reaktor_token("--table-bg", nk_rgb(53, 53, 53));
+    even    = reaktor_token("--table-bg-alt", nk_rgb(37, 37, 37));
 
     {
         /* thead asks for --table, and in the light palette that is #0070E0 -
@@ -1492,15 +1492,15 @@ section_grid(App *app, struct nk_context *ctx)
          * colour the stylesheet itself uses for this in the theme where the
          * chain resolves, which makes it the sheet's own intent rather than
          * ours. */
-        struct nk_color page = curie_token("--background-body", nk_rgb(37, 37, 37));
-        struct nk_color accent = curie_token("--links", nk_rgb(0, 112, 224));
+        struct nk_color page = reaktor_token("--background-body", nk_rgb(37, 37, 37));
+        struct nk_color accent = reaktor_token("--links", nk_rgb(0, 112, 224));
         struct nk_color want = head_s.matched && head_s.bg[3]
-                             ? curie_col(head_s.bg)
-                             : curie_token("--table", accent);
+                             ? reaktor_col(head_s.bg)
+                             : reaktor_token("--table", accent);
 
-        head_bg = curie_visible(want, page, accent);
-        head_bg = curie_visible(head_bg, odd, accent);
-        head_fg = curie_on(head_bg);
+        head_bg = reaktor_visible(want, page, accent);
+        head_bg = reaktor_visible(head_bg, odd, accent);
+        head_fg = reaktor_on(head_bg);
     }
     pad     = cell.matched && cell.pad_x > 0.0f ? cell.pad_x : 8.0f;
 
@@ -1534,11 +1534,11 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 3);
     nk_label_colored(ctx, "--text-main", NK_TEXT_LEFT,
-                     curie_token("--text-main", ctx->style.text.color));
+                     reaktor_token("--text-main", ctx->style.text.color));
     nk_label_colored(ctx, "--text-muted", NK_TEXT_CENTERED,
-                     curie_token("--text-muted", ctx->style.text.color));
+                     reaktor_token("--text-muted", ctx->style.text.color));
     nk_label_colored(ctx, "--links", NK_TEXT_RIGHT,
-                     curie_token("--links", ctx->style.text.color));
+                     reaktor_token("--links", ctx->style.text.color));
 
     nk_layout_row_dynamic(ctx, 40.0f, 1);
     nk_label_wrap(ctx, "nk_label_wrap breaks on words inside the row it was "
@@ -1563,7 +1563,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
 
         nk_layout_row_static(ctx, 30.0f, 30, 8);
         for (k = 0; k < 8; k++)
-            curie_image(app, ctx, curie_ionicon(app, names[k], 22), 22);
+            reaktor_image(app, ctx, reaktor_ionicon(app, names[k], 22), 22);
     }
 
     section(app, ctx, "Charts",
@@ -1630,40 +1630,40 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
         struct nk_rect hb = nk_widget_bounds(ctx);
         int open;
 
-        hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
         open = nk_tree_push(ctx, NK_TREE_TAB, "A tab-style tree", NK_MAXIMIZED);
         tree_chevron(app, ctx, hb, open);
-        curie_note_push(app, CURIE_A11Y_TREEITEM, "A tab-style tree", NULL,
-                        open ? CURIE_A11Y_EXPANDED : 0u, hb);
+        reaktor_note_push(app, REAKTOR_A11Y_TREEITEM, "A tab-style tree", NULL,
+                        open ? REAKTOR_A11Y_EXPANDED : 0u, hb);
         if (open) {
             nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
             nk_label(ctx, "Its children are indented under it.", NK_TEXT_LEFT);
 
             hb = nk_widget_bounds(ctx);
-            hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+            hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
             open = nk_tree_push(ctx, NK_TREE_NODE, "A node inside it",
                                 NK_MINIMIZED);
             tree_chevron(app, ctx, hb, open);
-            curie_note_push(app, CURIE_A11Y_TREEITEM, "A node inside it", NULL,
-                            open ? CURIE_A11Y_EXPANDED : 0u, hb);
+            reaktor_note_push(app, REAKTOR_A11Y_TREEITEM, "A node inside it", NULL,
+                            open ? REAKTOR_A11Y_EXPANDED : 0u, hb);
             if (open) {
                 nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
                 nk_label(ctx, "Nesting is unlimited.", NK_TEXT_LEFT);
                 nk_tree_pop(ctx);
             }
-            curie_note_pop(app);
+            reaktor_note_pop(app);
 
             for (i = 0; i < 3; i++) {
                 char lab[32];
                 SDL_snprintf(lab, sizeof(lab), "Selectable branch %d", i + 1);
                 hb = nk_widget_bounds(ctx);
-                hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+                hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
                 open = nk_tree_element_push(ctx, NK_TREE_NODE, lab,
                                             NK_MINIMIZED, &s->tree_leaf[i]);
                 tree_chevron(app, ctx, hb, open);
-                curie_note_push(app, CURIE_A11Y_TREEITEM, lab, NULL,
-                                (open ? CURIE_A11Y_EXPANDED : 0u) |
-                                (s->tree_leaf[i] ? CURIE_A11Y_CHECKED : 0u),
+                reaktor_note_push(app, REAKTOR_A11Y_TREEITEM, lab, NULL,
+                                (open ? REAKTOR_A11Y_EXPANDED : 0u) |
+                                (s->tree_leaf[i] ? REAKTOR_A11Y_CHECKED : 0u),
                                 hb);
                 if (open) {
                     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
@@ -1671,11 +1671,11 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
                              NK_TEXT_LEFT);
                     nk_tree_pop(ctx);
                 }
-                curie_note_pop(app);
+                reaktor_note_pop(app);
             }
             nk_tree_pop(ctx);
         }
-        curie_note_pop(app);
+        reaktor_note_pop(app);
     }
 
     nk_layout_row_dynamic(ctx, 10.0f, 1);
@@ -1695,8 +1695,8 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             char lab[40];
             nk_bool on = (s->list_sel == i);
             SDL_snprintf(lab, sizeof(lab), "Row %d of %d", i + 1, SC_LIST_N);
-            hot(app, ctx, CURIE_A11Y_LISTITEM, lab,
-                on ? CURIE_A11Y_SELECTED : 0u);
+            hot(app, ctx, REAKTOR_A11Y_LISTITEM, lab,
+                on ? REAKTOR_A11Y_SELECTED : 0u);
             if (nk_selectable_label(ctx, lab, NK_TEXT_LEFT, &on) && on)
                 s->list_sel = i;
         }
@@ -1872,11 +1872,11 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     ok = nk_group_begin(ctx, "menubar", NK_WINDOW_NO_SCROLLBAR);
     nk_style_pop_vec2(ctx);
     if (ok) {
-    curie_note_push(app, CURIE_A11Y_MENUBAR, "Menu bar", NULL, 0, bar);
+    reaktor_note_push(app, REAKTOR_A11Y_MENUBAR, "Menu bar", NULL, 0, bar);
     nk_menubar_begin(ctx);
     nk_layout_row_begin(ctx, NK_STATIC, 26.0f, 3);
     nk_layout_row_push(ctx, 60.0f);
-    hot(app, ctx, CURIE_A11Y_MENU, "File", 0);
+    hot(app, ctx, REAKTOR_A11Y_MENU, "File", 0);
     if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT,
                             nk_vec2(150.0f, MENU_H(3)))) {
         menu_rows_push(ctx);
@@ -1888,7 +1888,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
          * imitation - and the answer comes back on a later frame. */
         if (item_with_icon(app, ctx, "Open...", "folder-open-outline", 0)) {
             SDL_strlcpy(s->menu_pick, "File > Open", sizeof(s->menu_pick));
-            if (curie_file_open(app))
+            if (reaktor_file_open(app))
                 SDL_strlcpy(s->file_pick, "waiting for the picker...",
                             sizeof(s->file_pick));
         }
@@ -1898,7 +1898,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         nk_menu_end(ctx);
     }
     nk_layout_row_push(ctx, 60.0f);
-    hot(app, ctx, CURIE_A11Y_MENU, "Edit", 0);
+    hot(app, ctx, REAKTOR_A11Y_MENU, "Edit", 0);
     if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT,
                             nk_vec2(190.0f, MENU_H(4)))) {
         menu_rows_push(ctx);
@@ -1931,7 +1931,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         nk_menu_end(ctx);
     }
     nk_layout_row_push(ctx, 60.0f);
-    hot(app, ctx, CURIE_A11Y_MENU, "View", 0);
+    hot(app, ctx, REAKTOR_A11Y_MENU, "View", 0);
     if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT,
                             nk_vec2(170.0f, MENU_H(2)))) {
         menu_rows_push(ctx);
@@ -1944,7 +1944,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     }
     nk_layout_row_end(ctx);
     nk_menubar_end(ctx);
-    curie_note_pop(app);
+    reaktor_note_pop(app);
     nk_group_end(ctx);
     }
     /* The bar's frame, at the rounding its fill was drawn with - still
@@ -1971,20 +1971,20 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "last chosen: %s", s->menu_pick);
-    nk_style_push_font(ctx, curie_font(app, 13, 0));
-    curie_note(app, CURIE_A11Y_LABEL, "Last chosen", s->menu_pick, 0,
+    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+    reaktor_note(app, REAKTOR_A11Y_LABEL, "Last chosen", s->menu_pick, 0,
                nk_widget_bounds(ctx));
     nk_label_colored(ctx, line, NK_TEXT_LEFT,
-                     curie_token("--text-muted", ctx->style.text.color));
+                     reaktor_token("--text-muted", ctx->style.text.color));
 
     /* File > Open opens the platform's picker, which answers on its own
      * schedule; the shell drains the answer into file_pick each frame. */
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "file picker: %s", s->file_pick);
-    curie_note(app, CURIE_A11Y_LABEL, "File picker", s->file_pick, 0,
+    reaktor_note(app, REAKTOR_A11Y_LABEL, "File picker", s->file_pick, 0,
                nk_widget_bounds(ctx));
     nk_label_colored(ctx, line, NK_TEXT_LEFT,
-                     curie_token("--text-muted", ctx->style.text.color));
+                     reaktor_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
 
     section(app, ctx, "Context menu",
@@ -1997,7 +1997,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_dynamic(ctx, 54.0f, 1);
     {
         struct nk_rect trigger = nk_widget_bounds(ctx);
-        hot(app, ctx, CURIE_A11Y_BUTTON,
+        hot(app, ctx, REAKTOR_A11Y_BUTTON,
             "Right-click anywhere on this button", 0);
         nk_button_label(ctx, "Right-click anywhere on this button");
         /* The same width and the same three-row height as the File menu
@@ -2047,7 +2047,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         static const char *const one[1] = { "A one-line tooltip." };
         struct nk_rect b = nk_widget_bounds(ctx);
 
-        curie_hot_follow(app, b, 1);
+        reaktor_hot_follow(app, b, 1);
         nk_button_label(ctx, "Hover for a plain tooltip");
         if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
             draw_tooltip(app, ctx, one, 1, -1.0f);
@@ -2060,7 +2060,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         };
         struct nk_rect b = nk_widget_bounds(ctx);
 
-        curie_hot_follow(app, b, 1);
+        reaktor_hot_follow(app, b, 1);
         nk_button_label(ctx, "Hover for a laid-out one");
         if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
             draw_tooltip(app, ctx, many, 2, (float)s->progress / 100.0f);
@@ -2079,7 +2079,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_template_push_static(ctx, 14.0f);
     nk_layout_row_template_push_dynamic(ctx);
     nk_layout_row_template_end(ctx);
-    if (curie_button(app, ctx, "Open a dialog")) s->popup_open = 1;
+    if (reaktor_button(app, ctx, "Open a dialog")) s->popup_open = 1;
     nk_spacer(ctx);
     nk_label(ctx, s->popup_open ? "open" : "closed", NK_TEXT_LEFT);
 
@@ -2109,9 +2109,9 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                            NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR, at)) {
             menu_rows_push(ctx);
             nk_layout_row_dynamic(ctx, 22.0f, 1);
-            nk_style_push_font(ctx, curie_font(app, 16, 1));
+            nk_style_push_font(ctx, reaktor_font(app, 16, 1));
             nk_label_colored(ctx, "Close without saving?", NK_TEXT_LEFT,
-                             curie_token("--text-bright",
+                             reaktor_token("--text-bright",
                                          ctx->style.text.color));
             nk_style_pop_font(ctx);
 
@@ -2119,11 +2119,11 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
             nk_spacer(ctx);
 
             nk_layout_row_dynamic(ctx, 44.0f, 1);
-            nk_style_push_font(ctx, curie_font(app, 13, 0));
+            nk_style_push_font(ctx, reaktor_font(app, 13, 0));
             nk_label_colored_wrap(ctx,
                 "Everything behind this is inert until the popup is closed - "
                 "which is what makes it modal, with no modality machinery.",
-                curie_token("--text-muted", ctx->style.text.color));
+                reaktor_token("--text-muted", ctx->style.text.color));
             nk_style_pop_font(ctx);
 
             nk_layout_row_dynamic(ctx, 12.0f, 1);
@@ -2137,11 +2137,11 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
             nk_layout_row_template_push_static(ctx, 96.0f);
             nk_layout_row_template_end(ctx);
             nk_spacer(ctx);
-            if (curie_button(app, ctx, "Cancel")) {
+            if (reaktor_button(app, ctx, "Cancel")) {
                 s->popup_open = 0;
                 nk_popup_close(ctx);
             }
-            if (curie_button_accent(app, ctx, "OK")) {
+            if (reaktor_button_accent(app, ctx, "OK")) {
                 s->popup_open = 0;
                 nk_popup_close(ctx);
             }
@@ -2166,7 +2166,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
  * reader would otherwise meet as unrelated runs of text: a reading is a name
  * and a value, which is what the tree is shaped to say. Marked volatile,
  * because every one of them moves as the pointer does and none of that is
- * worth announcing - see CURIE_A11Y_VOLATILE. */
+ * worth announcing - see REAKTOR_A11Y_VOLATILE. */
 static void
 diag_row(App *app, struct nk_context *ctx, const char *name, const char *value)
 {
@@ -2178,9 +2178,9 @@ diag_row(App *app, struct nk_context *ctx, const char *name, const char *value)
     nk_layout_row_template_end(ctx);
 
     a = nk_widget_bounds(ctx);
-    nk_style_push_font(ctx, curie_font(app, 13, 0));
+    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
     nk_label_colored(ctx, name, NK_TEXT_LEFT,
-                     curie_token("--text-muted", ctx->style.text.color));
+                     reaktor_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
     b = nk_widget_bounds(ctx);
     nk_label(ctx, value, NK_TEXT_LEFT);
@@ -2188,27 +2188,27 @@ diag_row(App *app, struct nk_context *ctx, const char *name, const char *value)
      * after them because the second column's bounds are only known once the
      * first is drawn; the node still falls between its neighbours, which is
      * what reading order is. */
-    curie_note(app, CURIE_A11Y_LABEL, name, value, CURIE_A11Y_VOLATILE,
+    reaktor_note(app, REAKTOR_A11Y_LABEL, name, value, REAKTOR_A11Y_VOLATILE,
                nk_rect(a.x, a.y, (b.x + b.w) - a.x, a.h));
 }
 
 static void
 page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
 {
-    curie_diag d;
+    reaktor_diag d;
     char v[192];
 
     (void)st;
-    curie_diagnostics(app, &d);
+    reaktor_diagnostics(app, &d);
 
     section(app, ctx, "Rendering",
             "Which backend SDL settled on, and what the app asked for. "
-            "CURIE_RENDERER picks between auto, gpu and software; "
-            "CURIE_VSYNC and CURIE_AA turn the other two off. Anti-aliasing "
+            "REAKTOR_RENDERER picks between auto, gpu and software; "
+            "REAKTOR_VSYNC and REAKTOR_AA turn the other two off. Anti-aliasing "
             "reads what the frame is drawn with: the software rasteriser has "
             "no partial coverage, so it feathers strokes, which grades a "
             "curve, and not fills, which would only draw a hairline. "
-            "CURIE_SW_NOAA=1 drops both.");
+            "REAKTOR_SW_NOAA=1 drops both.");
 
     diag_row(app, ctx, "backend", d.renderer);
     SDL_snprintf(v, sizeof(v), "%s", d.mode);
@@ -2324,13 +2324,13 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
         SDL_snprintf(v, sizeof(v), "%.1f MB private, %.1f MB resident",
                      d.priv_at[RSS_ENTRY] / 1048576.0,
                      d.rss_at[RSS_ENTRY] / 1048576.0);
-        diag_row(app, ctx, curie_rss_names[RSS_ENTRY], v);
+        diag_row(app, ctx, reaktor_rss_names[RSS_ENTRY], v);
         for (i = RSS_ENTRY + 1; i < RSS_STEPS; i++) {
             double dp = (d.priv_at[i] - (double)d.priv_at[i - 1]) / 1048576.0;
             double dr = (d.rss_at[i] - (double)d.rss_at[i - 1]) / 1048576.0;
             SDL_snprintf(v, sizeof(v), "%+.1f MB private   %+.1f MB resident",
                          dp, dr);
-            diag_row(app, ctx, curie_rss_names[i], v);
+            diag_row(app, ctx, reaktor_rss_names[i], v);
         }
     }
 
@@ -2341,10 +2341,10 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
 /* --- dispatch ------------------------------------------------------------ */
 
 void
-curie_showcase_page(App *app, struct nk_context *ctx, int tab,
+reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
                     float w, float h)
 {
-    showcase_state *s = curie_showcase(app);
+    showcase_state *s = reaktor_showcase(app);
 
     (void)w; (void)h;
     if (!s->seeded) seed(s);

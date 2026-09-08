@@ -45,12 +45,12 @@ typedef struct var_entry {
     char *value;
 } var_entry;
 
-struct curie_cssvars {
+struct reaktor_cssvars {
     var_entry *v;
     size_t     n, cap;
 };
 
-static var_entry *vars_find(curie_cssvars *m, const char *name, size_t nlen)
+static var_entry *vars_find(reaktor_cssvars *m, const char *name, size_t nlen)
 {
     size_t i;
 
@@ -62,7 +62,7 @@ static var_entry *vars_find(curie_cssvars *m, const char *name, size_t nlen)
 
 /* Later declarations replace earlier ones, which is what makes the theme block
  * override :root simply by appearing after it in the file. */
-static int vars_set(curie_cssvars *m, const char *name, size_t nlen,
+static int vars_set(reaktor_cssvars *m, const char *name, size_t nlen,
                     const char *value, size_t vlen)
 {
     var_entry *e = vars_find(m, name, nlen);
@@ -95,7 +95,7 @@ static int vars_set(curie_cssvars *m, const char *name, size_t nlen,
     return 1;
 }
 
-const char *curie_cssvars_get(const curie_cssvars *m, const char *name)
+const char *reaktor_cssvars_get(const reaktor_cssvars *m, const char *name)
 {
     size_t i;
 
@@ -113,10 +113,10 @@ static int hex1(int c)
     return -1;
 }
 
-int curie_cssvars_color(const curie_cssvars *m, const char *name,
+int reaktor_cssvars_color(const reaktor_cssvars *m, const char *name,
                         unsigned char rgba[4])
 {
-    const char *v = curie_cssvars_get(m, name);
+    const char *v = reaktor_cssvars_get(m, name);
     int h[8], i, n;
 
     if (!v) return 0;
@@ -141,7 +141,7 @@ int curie_cssvars_color(const curie_cssvars *m, const char *name,
     return 0;
 }
 
-void curie_cssvars_free(curie_cssvars *m)
+void reaktor_cssvars_free(reaktor_cssvars *m)
 {
     size_t i;
 
@@ -157,7 +157,7 @@ void curie_cssvars_free(curie_cssvars *m)
  * Returns 0 if a reference resolves to nothing and has no fallback, which is
  * the caller's cue to drop the declaration entirely - the same thing a browser
  * does with an unresolvable var, and better than emitting a broken value. */
-static int subst_vars(const curie_cssvars *m, const char *src, size_t len,
+static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
                       buf *out)
 {
     size_t i = 0;
@@ -200,7 +200,7 @@ static int subst_vars(const curie_cssvars *m, const char *src, size_t len,
 
         val = NULL;
         if (name_e > name_s) {
-            const var_entry *e = vars_find((curie_cssvars *)m,
+            const var_entry *e = vars_find((reaktor_cssvars *)m,
                                            src + name_s, name_e - name_s);
             if (e) val = e->value;
         }
@@ -396,7 +396,7 @@ static void each_decl(const char *s, size_t start, size_t end,
     }
 }
 
-typedef struct collect_ctx { curie_cssvars *m; } collect_ctx;
+typedef struct collect_ctx { reaktor_cssvars *m; } collect_ctx;
 
 static void collect_one(void *c, const char *p, size_t plen,
                         const char *v, size_t vlen)
@@ -426,7 +426,7 @@ static void root_one(void *c, const char *p, size_t plen,
 }
 
 typedef struct emit_ctx {
-    const curie_cssvars *m;
+    const reaktor_cssvars *m;
     buf                 *out;
     int                  wrote;
     float                root_px;
@@ -468,9 +468,9 @@ static void emit_one(void *c, const char *p, size_t plen,
 
 /* --- the pass ------------------------------------------------------------- */
 
-static char *flatten(char *src, const char *theme, curie_cssvars **out_vars)
+static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
 {
-    curie_cssvars *m = (curie_cssvars *)calloc(1, sizeof(*m));
+    reaktor_cssvars *m = (reaktor_cssvars *)calloc(1, sizeof(*m));
     buf out;
     size_t i, len, pass;
     root_ctx root;
@@ -613,30 +613,12 @@ static char *flatten(char *src, const char *theme, curie_cssvars **out_vars)
     }
 
     free(src);
-    if (out_vars) *out_vars = m; else curie_cssvars_free(m);
+    if (out_vars) *out_vars = m; else reaktor_cssvars_free(m);
     return out.p;
 }
 
-char *curie_css_flatten_text(const char *const *texts, int count,
-                             const char *theme, curie_cssvars **out_vars)
-{
-    buf all;
-    int i;
-
-    memset(&all, 0, sizeof(all));
-    for (i = 0; i < count; i++) {
-        if (!texts[i]) continue;
-        if (!buf_str(&all, texts[i]) || !buf_str(&all, "\n")) {
-            free(all.p);
-            return NULL;
-        }
-    }
-    if (!all.p) all.p = (char *)calloc(1, 1);
-    return flatten(all.p, theme, out_vars);
-}
-
-char *curie_css_flatten(const char *const *paths, int count,
-                        const char *theme, curie_cssvars **out_vars)
+char *reaktor_css_flatten(const char *const *paths, int count,
+                        const char *theme, reaktor_cssvars **out_vars)
 {
     buf all;
     int i;

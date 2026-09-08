@@ -31,20 +31,20 @@
  * answer, and post what a client asks for back to the app's own thread. */
 #include "a11y.h"
 
-#ifdef CURIE_HAVE_NSACCESSIBILITY
+#ifdef REAKTOR_HAVE_NSACCESSIBILITY
 
 #include "a11y_snapshot.h"
 
 #import <Cocoa/Cocoa.h>
 #include <SDL3/SDL.h>
 
-@class CurieElement;
+@class ReaktorElement;
 
 static struct {
     int ready;
-    __strong NSMutableDictionary<NSNumber *, CurieElement *> *cache;
+    __strong NSMutableDictionary<NSNumber *, ReaktorElement *> *cache;
     __weak   NSView *view;
-    __strong CurieElement *root;
+    __strong ReaktorElement *root;
     unsigned shape;          /* bumped when the tree's structure changed */
 } g;
 
@@ -54,28 +54,28 @@ static NSAccessibilityRole
 role_of(unsigned char role)
 {
     switch (role) {
-    case CURIE_A11Y_WINDOW:     return NSAccessibilityWindowRole;
-    case CURIE_A11Y_GROUP:      return NSAccessibilityGroupRole;
-    case CURIE_A11Y_TABLIST:    return NSAccessibilityTabGroupRole;
+    case REAKTOR_A11Y_WINDOW:     return NSAccessibilityWindowRole;
+    case REAKTOR_A11Y_GROUP:      return NSAccessibilityGroupRole;
+    case REAKTOR_A11Y_TABLIST:    return NSAccessibilityTabGroupRole;
     /* A tab is a radio button in a tab group, which is what AppKit's own tab
      * views report and what VoiceOver's tab wording keys off. */
-    case CURIE_A11Y_TAB:        return NSAccessibilityRadioButtonRole;
-    case CURIE_A11Y_BUTTON:     return NSAccessibilityButtonRole;
-    case CURIE_A11Y_LINK:       return NSAccessibilityLinkRole;
-    case CURIE_A11Y_CHECKBOX:   return NSAccessibilityCheckBoxRole;
-    case CURIE_A11Y_RADIO:      return NSAccessibilityRadioButtonRole;
-    case CURIE_A11Y_TEXTBOX:    return NSAccessibilityTextFieldRole;
-    case CURIE_A11Y_SLIDER:     return NSAccessibilitySliderRole;
-    case CURIE_A11Y_SPINBUTTON: return NSAccessibilityIncrementorRole;
-    case CURIE_A11Y_PROGRESS:   return NSAccessibilityProgressIndicatorRole;
-    case CURIE_A11Y_COMBOBOX:   return NSAccessibilityPopUpButtonRole;
-    case CURIE_A11Y_LISTITEM:   return NSAccessibilityRowRole;
-    case CURIE_A11Y_TREEITEM:   return NSAccessibilityRowRole;
-    case CURIE_A11Y_MENUBAR:    return NSAccessibilityMenuBarRole;
-    case CURIE_A11Y_MENU:       return NSAccessibilityMenuRole;
-    case CURIE_A11Y_MENUITEM:   return NSAccessibilityMenuItemRole;
-    case CURIE_A11Y_DIALOG:     return NSAccessibilityWindowRole;
-    case CURIE_A11Y_LABEL:      return NSAccessibilityStaticTextRole;
+    case REAKTOR_A11Y_TAB:        return NSAccessibilityRadioButtonRole;
+    case REAKTOR_A11Y_BUTTON:     return NSAccessibilityButtonRole;
+    case REAKTOR_A11Y_LINK:       return NSAccessibilityLinkRole;
+    case REAKTOR_A11Y_CHECKBOX:   return NSAccessibilityCheckBoxRole;
+    case REAKTOR_A11Y_RADIO:      return NSAccessibilityRadioButtonRole;
+    case REAKTOR_A11Y_TEXTBOX:    return NSAccessibilityTextFieldRole;
+    case REAKTOR_A11Y_SLIDER:     return NSAccessibilitySliderRole;
+    case REAKTOR_A11Y_SPINBUTTON: return NSAccessibilityIncrementorRole;
+    case REAKTOR_A11Y_PROGRESS:   return NSAccessibilityProgressIndicatorRole;
+    case REAKTOR_A11Y_COMBOBOX:   return NSAccessibilityPopUpButtonRole;
+    case REAKTOR_A11Y_LISTITEM:   return NSAccessibilityRowRole;
+    case REAKTOR_A11Y_TREEITEM:   return NSAccessibilityRowRole;
+    case REAKTOR_A11Y_MENUBAR:    return NSAccessibilityMenuBarRole;
+    case REAKTOR_A11Y_MENU:       return NSAccessibilityMenuRole;
+    case REAKTOR_A11Y_MENUITEM:   return NSAccessibilityMenuItemRole;
+    case REAKTOR_A11Y_DIALOG:     return NSAccessibilityWindowRole;
+    case REAKTOR_A11Y_LABEL:      return NSAccessibilityStaticTextRole;
     default:                    return NSAccessibilityUnknownRole;
     }
 }
@@ -83,27 +83,27 @@ role_of(unsigned char role)
 static BOOL
 takes_press(unsigned char role)
 {
-    return role == CURIE_A11Y_BUTTON   || role == CURIE_A11Y_LINK ||
-           role == CURIE_A11Y_TAB      || role == CURIE_A11Y_MENUITEM ||
-           role == CURIE_A11Y_CHECKBOX || role == CURIE_A11Y_RADIO ||
-           role == CURIE_A11Y_LISTITEM;
+    return role == REAKTOR_A11Y_BUTTON   || role == REAKTOR_A11Y_LINK ||
+           role == REAKTOR_A11Y_TAB      || role == REAKTOR_A11Y_MENUITEM ||
+           role == REAKTOR_A11Y_CHECKBOX || role == REAKTOR_A11Y_RADIO ||
+           role == REAKTOR_A11Y_LISTITEM;
 }
 
 /* --- one node ------------------------------------------------------------ */
 
-@interface CurieElement : NSAccessibilityElement
+@interface ReaktorElement : NSAccessibilityElement
 @property (nonatomic) unsigned nodeId;
 @end
 
-static CurieElement *element_for(unsigned id);
+static ReaktorElement *element_for(unsigned id);
 
-@implementation CurieElement
+@implementation ReaktorElement
 
 /* Every answer starts here: the node as of the last drawn frame, copied out
  * of the snapshot. NO means it has gone, and the caller answers emptily. */
-- (BOOL)node:(curie_snap_node *)out buffer:(char *)buf
+- (BOOL)node:(reaktor_snap_node *)out buffer:(char *)buf
 {
-    return curie_snap_get(self.nodeId, out, buf, CURIE_SNAP_TEXT) ? YES : NO;
+    return reaktor_snap_get(self.nodeId, out, buf, REAKTOR_SNAP_TEXT) ? YES : NO;
 }
 
 - (BOOL)isAccessibilityElement
@@ -113,8 +113,8 @@ static CurieElement *element_for(unsigned id);
 
 - (NSAccessibilityRole)accessibilityRole
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (![self node:&n buffer:buf]) return NSAccessibilityGroupRole;
     return role_of(n.role);
@@ -122,8 +122,8 @@ static CurieElement *element_for(unsigned id);
 
 - (NSString *)accessibilityLabel
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (![self node:&n buffer:buf] || !n.name) return nil;
     return [NSString stringWithUTF8String:n.name];
@@ -131,25 +131,25 @@ static CurieElement *element_for(unsigned id);
 
 - (id)accessibilityValue
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (![self node:&n buffer:buf]) return nil;
     /* A range answers with a number, which is what the slider and the
      * progress bar are asked for; anything else answers with its text. A
      * checkbox and a radio answer with their state, which AppKit wants as
      * 0 or 1 rather than as words. */
-    if (n.role == CURIE_A11Y_CHECKBOX || n.role == CURIE_A11Y_RADIO ||
-        n.role == CURIE_A11Y_TAB)
-        return @((n.state & (CURIE_A11Y_CHECKED | CURIE_A11Y_SELECTED)) ? 1 : 0);
+    if (n.role == REAKTOR_A11Y_CHECKBOX || n.role == REAKTOR_A11Y_RADIO ||
+        n.role == REAKTOR_A11Y_TAB)
+        return @((n.state & (REAKTOR_A11Y_CHECKED | REAKTOR_A11Y_SELECTED)) ? 1 : 0);
     if (n.hi > n.lo) return @(n.num);
     return n.value ? [NSString stringWithUTF8String:n.value] : nil;
 }
 
 - (id)accessibilityMinValue
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (![self node:&n buffer:buf] || n.hi <= n.lo) return nil;
     return @(n.lo);
@@ -157,8 +157,8 @@ static CurieElement *element_for(unsigned id);
 
 - (id)accessibilityMaxValue
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (![self node:&n buffer:buf] || n.hi <= n.lo) return nil;
     return @(n.hi);
@@ -167,19 +167,19 @@ static CurieElement *element_for(unsigned id);
 - (NSArray *)accessibilityChildren
 {
     NSMutableArray *kids = [NSMutableArray array];
-    unsigned kid = curie_snap_child(self.nodeId, 0);
+    unsigned kid = reaktor_snap_child(self.nodeId, 0);
 
     while (kid) {
-        CurieElement *e = element_for(kid);
+        ReaktorElement *e = element_for(kid);
         if (e) [kids addObject:e];
-        kid = curie_snap_sibling(kid, 0);
+        kid = reaktor_snap_sibling(kid, 0);
     }
     return kids;
 }
 
 - (id)accessibilityParent
 {
-    unsigned up = curie_snap_parent(self.nodeId);
+    unsigned up = reaktor_snap_parent(self.nodeId);
 
     /* A node with no parent hangs off the view, which is what grafts the
      * whole tree onto the window. */
@@ -192,8 +192,8 @@ static CurieElement *element_for(unsigned id);
  * main display. View, then window, then screen. */
 - (NSRect)accessibilityFrame
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
     NSView *v = g.view;
     NSRect r;
 
@@ -206,32 +206,32 @@ static CurieElement *element_for(unsigned id);
 
 - (BOOL)isAccessibilityFocused
 {
-    return curie_snap_focus() == self.nodeId;
+    return reaktor_snap_focus() == self.nodeId;
 }
 
 - (void)setAccessibilityFocused:(BOOL)focused
 {
-    if (focused) curie_snap_request_focus(self.nodeId);
+    if (focused) reaktor_snap_request_focus(self.nodeId);
 }
 
 - (BOOL)isAccessibilityEnabled
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (![self node:&n buffer:buf]) return NO;
-    return (n.state & CURIE_A11Y_DISABLED) ? NO : YES;
+    return (n.state & REAKTOR_A11Y_DISABLED) ? NO : YES;
 }
 
 - (BOOL)accessibilityPerformPress
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (![self node:&n buffer:buf] || !takes_press(n.role)) return NO;
     /* The same request every other bridge makes: recorded here, run on the
      * app's own thread, taken by the widget itself. */
-    curie_snap_request_activate(self.nodeId);
+    reaktor_snap_request_activate(self.nodeId);
     return YES;
 }
 
@@ -250,7 +250,7 @@ static CurieElement *element_for(unsigned id);
     inView = [v convertPoint:inWindow fromView:nil];
     if (!v.isFlipped) inView.y = v.bounds.size.height - inView.y;
 
-    hit = curie_snap_hit((float)inView.x, (float)inView.y);
+    hit = reaktor_snap_hit((float)inView.x, (float)inView.y);
     if (!hit) return self;
     return element_for(hit);
 }
@@ -260,16 +260,16 @@ static CurieElement *element_for(unsigned id);
 /* One element per live node, made when a client first asks for it. AppKit
  * keeps what it is handed, so identity has to hold across frames or a reader
  * loses its place - which the model's ids already guarantee. */
-static CurieElement *
+static ReaktorElement *
 element_for(unsigned id)
 {
     NSNumber *key = @(id);
-    CurieElement *e;
+    ReaktorElement *e;
 
     if (!g.cache) return nil;
     e = g.cache[key];
     if (!e) {
-        e = [[CurieElement alloc] init];
+        e = [[ReaktorElement alloc] init];
         e.nodeId = id;
         g.cache[key] = e;
     }
@@ -279,14 +279,14 @@ element_for(unsigned id)
 /* --- the seam ------------------------------------------------------------ */
 
 void
-curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
+reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                          void *user)
 {
     SDL_Window **wins;
     int count = 0;
     NSWindow *window = nil;
 
-    if (!curie_snap_init(activate, focus, user)) return;
+    if (!reaktor_snap_init(activate, focus, user)) return;
 
     wins = SDL_GetWindows(&count);
     if (wins && count > 0)
@@ -308,31 +308,31 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
      * subclass, no category, nothing of SDL's overridden. */
     g.view.accessibilityElement  = YES;
     g.view.accessibilityRole     = NSAccessibilityGroupRole;
-    g.view.accessibilityLabel    = @"Curie";
+    g.view.accessibilityLabel    = @"Reaktor";
     g.view.accessibilityChildren = @[ g.root ];
 
     g.ready = 1;
 }
 
 void
-curie_a11y_platform_drain(void)
+reaktor_a11y_platform_drain(void)
 {
-    curie_snap_drain();
+    reaktor_snap_drain();
 }
 
 void
-curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
+reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
     static unsigned last_focus;
     int m, i, structural = 0;
-    const curie_a11y_change *c;
+    const reaktor_a11y_change *c;
 
-    if (!curie_snap_update(a, focus_id)) return;
+    if (!reaktor_snap_update(a, focus_id)) return;
     if (!g.ready) return;
 
-    c = curie_a11y_changes(a, &m);
+    c = reaktor_a11y_changes(a, &m);
     for (i = 0; i < m; i++)
-        if (c[i].kind == CURIE_A11Y_ADDED || c[i].kind == CURIE_A11Y_REMOVED) {
+        if (c[i].kind == REAKTOR_A11Y_ADDED || c[i].kind == REAKTOR_A11Y_REMOVED) {
             structural = 1;
             break;
         }
@@ -352,7 +352,7 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
     if (focus_id != last_focus) {
         last_focus = focus_id;
         if (focus_id) {
-            CurieElement *e = element_for(focus_id);
+            ReaktorElement *e = element_for(focus_id);
             if (e)
                 NSAccessibilityPostNotification(
                     e, NSAccessibilityFocusedUIElementChangedNotification);
@@ -360,4 +360,4 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
     }
 }
 
-#endif /* CURIE_HAVE_NSACCESSIBILITY */
+#endif /* REAKTOR_HAVE_NSACCESSIBILITY */

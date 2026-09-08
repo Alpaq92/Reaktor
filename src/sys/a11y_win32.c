@@ -54,32 +54,32 @@ static struct {
 } g;
 
 /* --- roles ---------------------------------------------------------------
- * Curie's vocabulary onto UIA's. Every one of these is a control type UIA has
+ * Reaktor's vocabulary onto UIA's. Every one of these is a control type UIA has
  * had since Windows 7; nothing here needs a newer client. */
 static long
 control_type(unsigned char role)
 {
     switch (role) {
-    case CURIE_A11Y_WINDOW:     return UIA_WindowControlTypeId;
-    case CURIE_A11Y_GROUP:      return UIA_GroupControlTypeId;
-    case CURIE_A11Y_TABLIST:    return UIA_TabControlTypeId;
-    case CURIE_A11Y_TAB:        return UIA_TabItemControlTypeId;
-    case CURIE_A11Y_BUTTON:     return UIA_ButtonControlTypeId;
-    case CURIE_A11Y_LINK:       return UIA_HyperlinkControlTypeId;
-    case CURIE_A11Y_CHECKBOX:   return UIA_CheckBoxControlTypeId;
-    case CURIE_A11Y_RADIO:      return UIA_RadioButtonControlTypeId;
-    case CURIE_A11Y_TEXTBOX:    return UIA_EditControlTypeId;
-    case CURIE_A11Y_SLIDER:     return UIA_SliderControlTypeId;
-    case CURIE_A11Y_SPINBUTTON: return UIA_SpinnerControlTypeId;
-    case CURIE_A11Y_PROGRESS:   return UIA_ProgressBarControlTypeId;
-    case CURIE_A11Y_COMBOBOX:   return UIA_ComboBoxControlTypeId;
-    case CURIE_A11Y_LISTITEM:   return UIA_ListItemControlTypeId;
-    case CURIE_A11Y_TREEITEM:   return UIA_TreeItemControlTypeId;
-    case CURIE_A11Y_MENUBAR:    return UIA_MenuBarControlTypeId;
-    case CURIE_A11Y_MENU:       return UIA_MenuControlTypeId;
-    case CURIE_A11Y_MENUITEM:   return UIA_MenuItemControlTypeId;
-    case CURIE_A11Y_DIALOG:     return UIA_WindowControlTypeId;
-    case CURIE_A11Y_LABEL:      return UIA_TextControlTypeId;
+    case REAKTOR_A11Y_WINDOW:     return UIA_WindowControlTypeId;
+    case REAKTOR_A11Y_GROUP:      return UIA_GroupControlTypeId;
+    case REAKTOR_A11Y_TABLIST:    return UIA_TabControlTypeId;
+    case REAKTOR_A11Y_TAB:        return UIA_TabItemControlTypeId;
+    case REAKTOR_A11Y_BUTTON:     return UIA_ButtonControlTypeId;
+    case REAKTOR_A11Y_LINK:       return UIA_HyperlinkControlTypeId;
+    case REAKTOR_A11Y_CHECKBOX:   return UIA_CheckBoxControlTypeId;
+    case REAKTOR_A11Y_RADIO:      return UIA_RadioButtonControlTypeId;
+    case REAKTOR_A11Y_TEXTBOX:    return UIA_EditControlTypeId;
+    case REAKTOR_A11Y_SLIDER:     return UIA_SliderControlTypeId;
+    case REAKTOR_A11Y_SPINBUTTON: return UIA_SpinnerControlTypeId;
+    case REAKTOR_A11Y_PROGRESS:   return UIA_ProgressBarControlTypeId;
+    case REAKTOR_A11Y_COMBOBOX:   return UIA_ComboBoxControlTypeId;
+    case REAKTOR_A11Y_LISTITEM:   return UIA_ListItemControlTypeId;
+    case REAKTOR_A11Y_TREEITEM:   return UIA_TreeItemControlTypeId;
+    case REAKTOR_A11Y_MENUBAR:    return UIA_MenuBarControlTypeId;
+    case REAKTOR_A11Y_MENU:       return UIA_MenuControlTypeId;
+    case REAKTOR_A11Y_MENUITEM:   return UIA_MenuItemControlTypeId;
+    case REAKTOR_A11Y_DIALOG:     return UIA_WindowControlTypeId;
+    case REAKTOR_A11Y_LABEL:      return UIA_TextControlTypeId;
     default:                    return UIA_CustomControlTypeId;
     }
 }
@@ -132,16 +132,16 @@ provider_is_root(const Provider *p)
  * object, which would go stale the moment a page changed under a client that
  * was still holding it. */
 static int
-node_of(unsigned id, curie_snap_node *out, char *buf, size_t cap)
+node_of(unsigned id, reaktor_snap_node *out, char *buf, size_t cap)
 {
-    return curie_snap_get(id, out, buf, cap);
+    return reaktor_snap_get(id, out, buf, cap);
 }
 
 static int
 node_role_is(unsigned id, unsigned char a, unsigned char b, unsigned char c)
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     if (!node_of(id, &n, buf, sizeof(buf))) return 0;
     return n.role == a || (b && n.role == b) || (c && n.role == c);
@@ -150,8 +150,8 @@ node_role_is(unsigned id, unsigned char a, unsigned char b, unsigned char c)
 static int
 node_is_range(unsigned id)
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     return node_of(id, &n, buf, sizeof(buf)) && n.hi > n.lo;
 }
@@ -169,25 +169,25 @@ provider_qi(Provider *p, REFIID iid, void **out)
              provider_is_root(p))
         *out = &p->root;
     else if (IsEqualIID(iid, &IID_IInvokeProvider)) {
-        if (!node_role_is(p->id, CURIE_A11Y_BUTTON, CURIE_A11Y_LINK,
-                          CURIE_A11Y_MENUITEM) &&
-            !node_role_is(p->id, CURIE_A11Y_TAB, 0, 0))
+        if (!node_role_is(p->id, REAKTOR_A11Y_BUTTON, REAKTOR_A11Y_LINK,
+                          REAKTOR_A11Y_MENUITEM) &&
+            !node_role_is(p->id, REAKTOR_A11Y_TAB, 0, 0))
             return E_NOINTERFACE;
         *out = &p->invoke;
     } else if (IsEqualIID(iid, &IID_IValueProvider)) {
-        curie_snap_node n;
-        char buf[CURIE_SNAP_TEXT];
+        reaktor_snap_node n;
+        char buf[REAKTOR_SNAP_TEXT];
 
         if (!node_of(p->id, &n, buf, sizeof(buf)) || !n.value)
             return E_NOINTERFACE;
         *out = &p->value;
     } else if (IsEqualIID(iid, &IID_IToggleProvider)) {
-        if (!node_role_is(p->id, CURIE_A11Y_CHECKBOX, 0, 0))
+        if (!node_role_is(p->id, REAKTOR_A11Y_CHECKBOX, 0, 0))
             return E_NOINTERFACE;
         *out = &p->toggle;
     } else if (IsEqualIID(iid, &IID_ISelectionItemProvider)) {
-        if (!node_role_is(p->id, CURIE_A11Y_TAB, CURIE_A11Y_LISTITEM,
-                          CURIE_A11Y_RADIO))
+        if (!node_role_is(p->id, REAKTOR_A11Y_TAB, REAKTOR_A11Y_LISTITEM,
+                          REAKTOR_A11Y_RADIO))
             return E_NOINTERFACE;
         *out = &p->selection;
     } else if (IsEqualIID(iid, &IID_IRangeValueProvider)) {
@@ -299,15 +299,15 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
                         VARIANT *out)
 {
     Provider *p = FROM_SIMPLE(self);
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     VariantInit(out);
     if (provider_is_root(p)) {
         /* if rather than switch throughout: the SDK spells a property id
          * `const long`, which C does not accept as a case label. */
         if (prop == UIA_NamePropertyId) {
-            str_variant(out, "Curie");
+            str_variant(out, "Reaktor");
         } else if (prop == UIA_ControlTypePropertyId) {
             out->vt = VT_I4;
             out->lVal = UIA_WindowControlTypeId;
@@ -331,13 +331,13 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
             sprintf(id, "%u", n.id);
             str_variant(out, id);
         } else if (prop == UIA_IsEnabledPropertyId) {
-            bool_variant(out, !(n.state & CURIE_A11Y_DISABLED));
+            bool_variant(out, !(n.state & REAKTOR_A11Y_DISABLED));
         } else if (prop == UIA_IsKeyboardFocusablePropertyId) {
-            bool_variant(out, curie_snap_focusable(n.role, n.state));
+            bool_variant(out, reaktor_snap_focusable(n.role, n.state));
         } else if (prop == UIA_HasKeyboardFocusPropertyId) {
-            bool_variant(out, (n.state & CURIE_A11Y_FOCUSED) != 0);
+            bool_variant(out, (n.state & REAKTOR_A11Y_FOCUSED) != 0);
         } else if (prop == UIA_IsOffscreenPropertyId) {
-            bool_variant(out, (n.state & CURIE_A11Y_OFFSCREEN) != 0);
+            bool_variant(out, (n.state & REAKTOR_A11Y_OFFSCREEN) != 0);
         } else if (prop == UIA_IsControlElementPropertyId ||
                    prop == UIA_IsContentElementPropertyId) {
             bool_variant(out, 1);
@@ -348,14 +348,14 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
          * there; one that asks for the property directly, which several do,
          * gets the same answer here. */
         } else if (prop == UIA_ToggleToggleStatePropertyId) {
-            if (n.role == CURIE_A11Y_CHECKBOX || n.role == CURIE_A11Y_RADIO) {
+            if (n.role == REAKTOR_A11Y_CHECKBOX || n.role == REAKTOR_A11Y_RADIO) {
                 out->vt = VT_I4;
-                out->lVal = (n.state & CURIE_A11Y_CHECKED) ? ToggleState_On
+                out->lVal = (n.state & REAKTOR_A11Y_CHECKED) ? ToggleState_On
                                                            : ToggleState_Off;
             }
         } else if (prop == UIA_SelectionItemIsSelectedPropertyId) {
-            if (n.role == CURIE_A11Y_TAB || n.role == CURIE_A11Y_LISTITEM)
-                bool_variant(out, (n.state & CURIE_A11Y_SELECTED) != 0);
+            if (n.role == REAKTOR_A11Y_TAB || n.role == REAKTOR_A11Y_LISTITEM)
+                bool_variant(out, (n.state & REAKTOR_A11Y_SELECTED) != 0);
         }
     }
     return S_OK;
@@ -393,14 +393,14 @@ fragment_Navigate(IRawElementProviderFragment *self,
     *out = NULL;
     if (provider_is_root(p)) {
         /* The root's children are the model's roots - nodes with no parent. */
-        if (dir == NavigateDirection_FirstChild) to = curie_snap_child(0, 0);
-        else if (dir == NavigateDirection_LastChild) to = curie_snap_child(0, 1);
+        if (dir == NavigateDirection_FirstChild) to = reaktor_snap_child(0, 0);
+        else if (dir == NavigateDirection_LastChild) to = reaktor_snap_child(0, 1);
     } else {
         switch (dir) {
         case NavigateDirection_Parent:
             /* A node whose parent is 0 is a child of the fragment root, and
              * the root is what Parent has to answer with - not nothing. */
-            to = curie_snap_parent(p->id);
+            to = reaktor_snap_parent(p->id);
             if (!to) {
                 Provider *r = provider_new(0);
                 if (!r) return E_OUTOFMEMORY;
@@ -408,11 +408,11 @@ fragment_Navigate(IRawElementProviderFragment *self,
                 return S_OK;
             }
             break;
-        case NavigateDirection_FirstChild:  to = curie_snap_child(p->id, 0); break;
-        case NavigateDirection_LastChild:   to = curie_snap_child(p->id, 1); break;
-        case NavigateDirection_NextSibling: to = curie_snap_sibling(p->id, 0); break;
+        case NavigateDirection_FirstChild:  to = reaktor_snap_child(p->id, 0); break;
+        case NavigateDirection_LastChild:   to = reaktor_snap_child(p->id, 1); break;
+        case NavigateDirection_NextSibling: to = reaktor_snap_sibling(p->id, 0); break;
         case NavigateDirection_PreviousSibling:
-            to = curie_snap_sibling(p->id, 1);
+            to = reaktor_snap_sibling(p->id, 1);
             break;
         default: break;
         }
@@ -453,8 +453,8 @@ fragment_get_BoundingRectangle(IRawElementProviderFragment *self,
                                struct UiaRect *out)
 {
     Provider *p = FROM_FRAGMENT(self);
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
     POINT origin;
 
     out->left = out->top = out->width = out->height = 0.0;
@@ -488,7 +488,7 @@ fragment_SetFocus(IRawElementProviderFragment *self)
 {
     Provider *p = FROM_FRAGMENT(self);
 
-    if (!provider_is_root(p)) curie_snap_request_focus(p->id);
+    if (!provider_is_root(p)) reaktor_snap_request_focus(p->id);
     return S_OK;
 }
 
@@ -527,7 +527,7 @@ root_ElementProviderFromPoint(IRawElementProviderFragmentRoot *self,
     *out = NULL;
     origin.x = origin.y = 0;
     if (!ClientToScreen(g.hwnd, &origin)) return S_OK;
-    hit = curie_snap_hit((float)(x - origin.x), (float)(y - origin.y));
+    hit = reaktor_snap_hit((float)(x - origin.x), (float)(y - origin.y));
     if (!hit) return S_OK;
     {
         Provider *q = provider_new(hit);
@@ -545,7 +545,7 @@ root_GetFocus(IRawElementProviderFragmentRoot *self,
 
     (void)self;
     *out = NULL;
-    id = curie_snap_focus();
+    id = reaktor_snap_focus();
     if (!id) return S_OK;
     {
         Provider *q = provider_new(id);
@@ -565,7 +565,7 @@ static IRawElementProviderFragmentRootVtbl g_root_vtbl = {
 static HRESULT STDMETHODCALLTYPE
 invoke_Invoke(IInvokeProvider *self)
 {
-    curie_snap_request_activate(FROM_INVOKE(self)->id);
+    reaktor_snap_request_activate(FROM_INVOKE(self)->id);
     return S_OK;
 }
 
@@ -623,19 +623,19 @@ static IValueProviderVtbl g_value_vtbl = {
 static HRESULT STDMETHODCALLTYPE
 toggle_Toggle(IToggleProvider *self)
 {
-    curie_snap_request_activate(FROM_TOGGLE(self)->id);
+    reaktor_snap_request_activate(FROM_TOGGLE(self)->id);
     return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE
 toggle_get_ToggleState(IToggleProvider *self, enum ToggleState *out)
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     *out = ToggleState_Indeterminate;
     if (node_of(FROM_TOGGLE(self)->id, &n, buf, sizeof(buf)))
-        *out = (n.state & CURIE_A11Y_CHECKED) ? ToggleState_On
+        *out = (n.state & REAKTOR_A11Y_CHECKED) ? ToggleState_On
                                               : ToggleState_Off;
     return S_OK;
 }
@@ -648,7 +648,7 @@ static IToggleProviderVtbl g_toggle_vtbl = {
 static HRESULT STDMETHODCALLTYPE
 select_Select(ISelectionItemProvider *self)
 {
-    curie_snap_request_activate(FROM_SELECT(self)->id);
+    reaktor_snap_request_activate(FROM_SELECT(self)->id);
     return S_OK;
 }
 
@@ -671,12 +671,12 @@ select_RemoveFromSelection(ISelectionItemProvider *self)
 static HRESULT STDMETHODCALLTYPE
 select_get_IsSelected(ISelectionItemProvider *self, BOOL *out)
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     *out = FALSE;
     if (node_of(FROM_SELECT(self)->id, &n, buf, sizeof(buf)))
-        *out = (n.state & (CURIE_A11Y_SELECTED | CURIE_A11Y_CHECKED))
+        *out = (n.state & (REAKTOR_A11Y_SELECTED | REAKTOR_A11Y_CHECKED))
              ? TRUE : FALSE;
     return S_OK;
 }
@@ -685,7 +685,7 @@ static HRESULT STDMETHODCALLTYPE
 select_get_SelectionContainer(ISelectionItemProvider *self,
                               IRawElementProviderSimple **out)
 {
-    unsigned parent = curie_snap_parent(FROM_SELECT(self)->id);
+    unsigned parent = reaktor_snap_parent(FROM_SELECT(self)->id);
 
     *out = NULL;
     if (!parent) return S_OK;
@@ -704,7 +704,7 @@ static ISelectionItemProviderVtbl g_select_vtbl = {
 };
 
 /* The range is the one of the three that can be set without a press: the
- * widget takes steps from the shell already (curie_focus_step), so a client
+ * widget takes steps from the shell already (reaktor_focus_step), so a client
  * asking for a value becomes focus plus that many steps. */
 static HRESULT STDMETHODCALLTYPE
 range_SetValue(IRangeValueProvider *self, double val)
@@ -719,8 +719,8 @@ range_SetValue(IRangeValueProvider *self, double val)
 static HRESULT
 range_field(IRangeValueProvider *self, size_t off, double *out)
 {
-    curie_snap_node n;
-    char buf[CURIE_SNAP_TEXT];
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
 
     *out = 0.0;
     if (node_of(FROM_RANGE(self)->id, &n, buf, sizeof(buf)))
@@ -730,24 +730,24 @@ range_field(IRangeValueProvider *self, size_t off, double *out)
 
 static HRESULT STDMETHODCALLTYPE
 range_get_Value(IRangeValueProvider *self, double *out)
-{ return range_field(self, offsetof(curie_snap_node, num), out); }
+{ return range_field(self, offsetof(reaktor_snap_node, num), out); }
 
 static HRESULT STDMETHODCALLTYPE
 range_get_Maximum(IRangeValueProvider *self, double *out)
-{ return range_field(self, offsetof(curie_snap_node, hi), out); }
+{ return range_field(self, offsetof(reaktor_snap_node, hi), out); }
 
 static HRESULT STDMETHODCALLTYPE
 range_get_Minimum(IRangeValueProvider *self, double *out)
-{ return range_field(self, offsetof(curie_snap_node, lo), out); }
+{ return range_field(self, offsetof(reaktor_snap_node, lo), out); }
 
 static HRESULT STDMETHODCALLTYPE
 range_get_SmallChange(IRangeValueProvider *self, double *out)
-{ return range_field(self, offsetof(curie_snap_node, step), out); }
+{ return range_field(self, offsetof(reaktor_snap_node, step), out); }
 
 static HRESULT STDMETHODCALLTYPE
 range_get_LargeChange(IRangeValueProvider *self, double *out)
 {
-    HRESULT hr = range_field(self, offsetof(curie_snap_node, step), out);
+    HRESULT hr = range_field(self, offsetof(reaktor_snap_node, step), out);
 
     *out *= 10.0;   /* what Page Up would be worth, if it were bound */
     return hr;
@@ -814,13 +814,13 @@ wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 /* --- the seam ----------------------------------------------------------- */
 
 void
-curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
+reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                          void *user)
 {
     SDL_Window **wins;
     int count = 0;
 
-    if (!curie_snap_init(activate, focus, user)) return;
+    if (!reaktor_snap_init(activate, focus, user)) return;
 
     /* Asked for rather than guessed: the shell has exactly one window by the
      * time this runs, but its id is SDL's business. */
@@ -842,15 +842,15 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
 }
 
 void
-curie_a11y_platform_drain(void)
+reaktor_a11y_platform_drain(void)
 {
-    curie_snap_drain();
+    reaktor_snap_drain();
 }
 
 void
-curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
+reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
-    if (!curie_snap_update(a, focus_id)) return;
+    if (!reaktor_snap_update(a, focus_id)) return;
 
     /* Events only once a client has asked for the tree, and only while one is
      * listening. Structure first, because a client that has not walked the
@@ -858,11 +858,11 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
     if (!g.wanted || !UiaClientsAreListening()) return;
     {
         int m, i, structural = 0;
-        const curie_a11y_change *c = curie_a11y_changes(a, &m);
+        const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);
 
         for (i = 0; i < m; i++)
-            if (c[i].kind == CURIE_A11Y_ADDED ||
-                c[i].kind == CURIE_A11Y_REMOVED) {
+            if (c[i].kind == REAKTOR_A11Y_ADDED ||
+                c[i].kind == REAKTOR_A11Y_REMOVED) {
                 structural = 1;
                 break;
             }
