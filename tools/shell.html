@@ -12,8 +12,17 @@
   html, body {
     margin: 0;
     height: 100%;
-    background: #252525;      /* tiny.css --background-body, dark */
+    /* tiny.css --background-body. Both inks, and not the dark one alone:
+       this used to be hardcoded to #252525, which was invisible while the
+       canvas covered every pixel of the page and stopped being invisible the
+       moment its corners were rounded - a light app with two dark notches cut
+       out of the top. The app has its own switch, so this only has to be
+       right for "system", which is what it defaults to. */
+    background: #f7f7f7;
     overflow: hidden;
+  }
+  @media (prefers-color-scheme: dark) {
+    html, body { background: #252525; }
   }
   /* No width or height on the canvas: SDL sizes it to the window it asks
      for, and the app asks for the page's size. A CSS size here would stretch
@@ -21,6 +30,12 @@
   #canvas {
     display: block;
     outline: none;
+    /* Rounded at the top, square at the bottom. On the desktop the window
+       manager rounds the frame and the app never thinks about it; in a page
+       there is no frame, so the canvas was a flush rectangle butting into the
+       corner of the viewport. Top only - the bottom edge is the bottom of the
+       page, and rounding it would cut a notch out of nothing. */
+    border-radius: 10px 10px 0 0;
   }
   #status {
     position: fixed;

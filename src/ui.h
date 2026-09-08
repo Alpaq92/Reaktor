@@ -142,6 +142,13 @@ void reaktor_hot_top(App *app, struct nk_rect r, int cursor, int repaint);
  * crossing into it - for anything drawn at the pointer. */
 void reaktor_hot_follow(App *app, struct nk_rect r, int cursor);
 
+/* Cuts a button's vertical padding to what its row can hold, for the one
+ * widget about to be drawn, and puts it back. Without it a label on a row
+ * shorter than padding + border + rounding is centred on a clamped content
+ * rect and rides low - see the note on the definition in main.c. */
+int  reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b);
+void reaktor_unfit_label(struct nk_context *ctx, int fitted);
+
 int reaktor_button(App *app, struct nk_context *ctx, const char *label);
 int reaktor_button_accent(App *app, struct nk_context *ctx, const char *label);
 int reaktor_button_icon(App *app, struct nk_context *ctx,

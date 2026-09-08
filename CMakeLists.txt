@@ -46,6 +46,45 @@ endforeach()
 foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
+
+# And OpenGL, on the free desktops only, which is the largest single thing in
+# this process's memory and buys it nothing.
+#
+# Nothing under src/ calls a GL function or asks for an SDL_WINDOW_OPENGL
+# window; the renderer is SDL's software rasteriser by default (see the
+# REAKTOR_RENDERER block in src/main.c). But SDL's X11 driver initialises GL
+# whatever the renderer is, and on a desktop without a GPU that GL is Mesa's
+# llvmpipe - which is itself a software rasteriser, reached the expensive way.
+# Measured here, same binary, same page, only this flag between them:
+#
+#     SDL with GL      RSS 123.6 MB   private 58.7 MB   heap 31.1 MB
+#     SDL without GL   RSS  11.4 MB   private  4.3 MB   heap  1.1 MB
+#
+# 53 MB of that is libLLVM and 10 MB libgallium; the 30 MB of heap is what
+# llvmpipe allocates on the way up. The figure without it is finally the one
+# docs/PERFORMANCE.md reports for Windows, where there is no Mesa to load.
+#
+# The cost is Mesa's, so the switch is scoped to where Mesa is: Windows keeps
+# direct3d11 and macOS keeps Metal, neither of which is affected, and
+# Emscripten keeps GLES because WebGL is the only GPU it has. What it costs
+# here is REAKTOR_RENDERER=gpu, which on a free desktop now has no driver to
+# pin - configure with -DREAKTOR_SDL_GL=ON to get it back for a measurement.
+option(REAKTOR_SDL_GL "Build SDL's OpenGL/GLES drivers on Linux and the BSDs" OFF)
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT REAKTOR_SDL_GL)
+    set(SDL_OPENGL   OFF CACHE BOOL "" FORCE)
+    set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
+endif()
+
+# And the one X11 extension whose absence stopped the build outright. SDL wants
+# XScreenSaver's *headers* at configure time and fails hard without them, while
+# the only thing behind them is SDL_DisableScreenSaver - which this app never
+# reaches, because main.c sets SDL_HINT_VIDEO_ALLOW_SCREENSAVER on purpose: an
+# app that draws nothing at rest has no business holding the display awake.
+# So the dependency was being paid for a code path that is already dead here,
+# and libxss-dev is not installed by default on a Debian desktop. Inert on
+# Windows, macOS and Emscripten, where SDL never looks at the variable.
+set(SDL_X11_XSCRNSAVER OFF CACHE BOOL "" FORCE)
+
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)
 
 # --------------------------------------------------------- LCUI libcss -----
@@ -187,6 +226,38 @@ if(WIN32)
     file(WRITE "${GEN}/reaktor.rc" "1 ICON \"reaktor.ico\"
 ")
     set(APP_RESOURCES "${GEN}/reaktor.rc")
+elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+    # The same job as the .rc above, done the way the free desktops do it.
+    #
+    # An ELF file has no icon resource. There is nowhere in the format to put
+    # one, so a file manager draws every executable with the same generic glyph
+    # and no flag on this build changes that - the .ico above is a Windows
+    # resource and reaches nothing here. What a free desktop reads instead is a
+    # .desktop entry, which names the binary and the icon by path: the icon
+    # belongs to the *application* rather than to the file, and turns up in the
+    # menu, in the switcher and beside the window. StartupWMClass is what ties
+    # a running window back to the entry - SDL sets WM_CLASS from argv[0],
+    # which makes it "reaktor".
+    #
+    # Absolute paths, because the binary stays in the build tree (see the note
+    # on reaktor_root at the foot of this file), and generated rather than
+    # committed for the same reason the .rc is: it is boilerplate, and a
+    # committed copy would name whoever built it last. Nothing installs it -
+    # that is the user's directory, not the build's:
+    #
+    #     cp build/reaktor.desktop ~/.local/share/applications/
+    file(WRITE "${CMAKE_BINARY_DIR}/reaktor.desktop"
+"[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Reaktor
+Comment=A Nuklear-powered engine where none of the styling is compiled in
+Exec=${CMAKE_BINARY_DIR}/reaktor
+Icon=${CMAKE_CURRENT_SOURCE_DIR}/branding/reaktor-icon.png
+Terminal=false
+Categories=Development;
+StartupWMClass=reaktor
+")
 endif()
 
 # ---------------------------------------------------------------- app -------

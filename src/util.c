@@ -70,11 +70,20 @@ int reaktor_root(char *out, size_t cap)
          * This used to probe for a "third_party" directory, which broke under
          * CMake: add_subdirectory(third_party/SDL) mirrors that path into the
          * build tree, so build/third_party existed and the walk stopped one
-         * level too early. A dedicated marker cannot be shadowed that way. */
+         * level too early. A dedicated marker cannot be shadowed that way.
+         *
+         * Probe first, strip second - and not the other way round, which cost
+         * the starting directory its turn. That is invisible on Windows, where
+         * the walk starts at reaktor.exe and the first strip is what turns a
+         * file into the directory holding it. It is the whole of the bug
+         * everywhere else, where the walk starts at the working directory: run
+         * from the repository root, the one directory that carries the marker
+         * was the one directory never tested, and the app came up with no
+         * stylesheet and no icons. Probing the start costs Windows one fopen
+         * of "...reaktor.exe/.reaktor-root", which cannot succeed, and every
+         * probe after it is the one it always made. */
         for (;;) {
-            char *slash = strrchr(exe, '/');
-            if (!slash) return 0;
-            *slash = '\0';
+            char *slash;
 
             if (snprintf(probe, sizeof(probe), "%s/.reaktor-root", exe) < 0)
                 return 0;
@@ -83,8 +92,11 @@ int reaktor_root(char *out, size_t cap)
                 FILE *f = fopen(probe, "rb");
                 if (f) { fclose(f); return copy_out(out, cap, exe); }
             }
-            /* Stop once we have chewed back to the root. */
-            if (strchr(exe, '/') == NULL) return 0;
+
+            /* Stop once we have chewed back past the root. */
+            slash = strrchr(exe, '/');
+            if (!slash) return 0;
+            *slash = '\0';
         }
     }
 #endif

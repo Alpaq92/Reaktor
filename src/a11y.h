@@ -244,9 +244,11 @@ void reaktor_a11y_dump(const reaktor_a11y *a, FILE *out);
 typedef void (*reaktor_a11y_action)(void *user, unsigned id);
 
 /* Hands the tree to the platform after each drawn frame. On the web it is
- * mirrored into hidden DOM beside the canvas (a11y_web.c); elsewhere it is a
- * no-op until phases 4b-d. push is cheap when nothing changed: it looks at the
- * change count and returns. */
+ * mirrored into hidden DOM beside the canvas (a11y_web.c); on Windows it is
+ * served to UI Automation and on the free desktops to AT-SPI (src/sys/); on
+ * macOS the bridge is written and has never run. Anywhere else this is a
+ * no-op. push is cheap when nothing changed: it looks at the change count and
+ * returns. */
 void reaktor_a11y_platform_init(reaktor_a11y_action activate,
                                 reaktor_a11y_action focus, void *user);
 void reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id);
