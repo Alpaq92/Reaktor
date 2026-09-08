@@ -54,8 +54,8 @@ static struct {
 } g;
 
 /* --- roles ---------------------------------------------------------------
- * Reaktor's vocabulary onto UIA's. Every one of these is a control type UIA has
- * had since Windows 7; nothing here needs a newer client. */
+ * Reaktor's vocabulary onto UIA's. Every one of these is a control type UIA
+ * has had since Windows 7; nothing here needs a newer client. */
 static long
 control_type(unsigned char role)
 {
@@ -348,7 +348,8 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
          * there; one that asks for the property directly, which several do,
          * gets the same answer here. */
         } else if (prop == UIA_ToggleToggleStatePropertyId) {
-            if (n.role == REAKTOR_A11Y_CHECKBOX || n.role == REAKTOR_A11Y_RADIO) {
+                if (n.role == REAKTOR_A11Y_CHECKBOX ||
+                    n.role == REAKTOR_A11Y_RADIO) {
                 out->vt = VT_I4;
                 out->lVal = (n.state & REAKTOR_A11Y_CHECKED) ? ToggleState_On
                                                            : ToggleState_Off;
@@ -814,8 +815,8 @@ wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 /* --- the seam ----------------------------------------------------------- */
 
 void
-reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
-                         void *user)
+reaktor_a11y_platform_init(reaktor_a11y_action activate,
+                           reaktor_a11y_action focus, void *user)
 {
     SDL_Window **wins;
     int count = 0;

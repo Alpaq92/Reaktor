@@ -165,8 +165,8 @@ EM_JS(void, web_a11y_end, (unsigned focus), {
 });
 
 void
-reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
-                         void *user)
+reaktor_a11y_platform_init(reaktor_a11y_action activate,
+                           reaktor_a11y_action focus, void *user)
 {
     g_activate = activate;
     g_focus    = focus;
@@ -211,8 +211,8 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 #elif !defined(_WIN32) && !defined(REAKTOR_HAVE_ATSPI) &&       !defined(REAKTOR_HAVE_NSACCESSIBILITY)
 
 void
-reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
-                         void *user)
+reaktor_a11y_platform_init(reaktor_a11y_action activate,
+                           reaktor_a11y_action focus, void *user)
 {
     g_activate = activate;
     g_focus    = focus;

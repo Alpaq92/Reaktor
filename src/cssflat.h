@@ -36,7 +36,7 @@ typedef struct reaktor_cssvars reaktor_cssvars;
  * "dark"). Returns malloc'd CSS text the caller frees, or NULL on failure.
  * When `out_vars` is non-NULL it receives the resolved custom properties. */
 char *reaktor_css_flatten(const char *const *paths, int count,
-                        const char *theme, reaktor_cssvars **out_vars);
+                          const char *theme, reaktor_cssvars **out_vars);
 
 /* Resolved value of a custom property, e.g. "--background-body", or NULL. */
 const char *reaktor_cssvars_get(const reaktor_cssvars *vars, const char *name);
@@ -44,7 +44,7 @@ const char *reaktor_cssvars_get(const reaktor_cssvars *vars, const char *name);
 /* Resolved custom property parsed as #rgb/#rrggbb. Returns 0 if absent or
  * not a hex colour. */
 int reaktor_cssvars_color(const reaktor_cssvars *vars, const char *name,
-                        unsigned char rgba[4]);
+                          unsigned char rgba[4]);
 
 void reaktor_cssvars_free(reaktor_cssvars *vars);
 

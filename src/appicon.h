@@ -21,9 +21,9 @@
  * about 20px is a hairline that anti-aliases to grey, so a glyph drawn small
  * needs a heavier line to read as solid. */
 plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
-                                          const char *outline_colour,
-                                          const char *inside_colour,
-                                          float stroke_scale);
+                                            const char *outline_colour,
+                                            const char *inside_colour,
+                                            float stroke_scale);
 
 /* Converts plutovg's premultiplied ARGB32 to straight alpha in place.
  * Both SDL surfaces and Windows icon bitmaps sample straight alpha;

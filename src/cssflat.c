@@ -114,7 +114,7 @@ static int hex1(int c)
 }
 
 int reaktor_cssvars_color(const reaktor_cssvars *m, const char *name,
-                        unsigned char rgba[4])
+                          unsigned char rgba[4])
 {
     const char *v = reaktor_cssvars_get(m, name);
     int h[8], i, n;
@@ -618,7 +618,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
 }
 
 char *reaktor_css_flatten(const char *const *paths, int count,
-                        const char *theme, reaktor_cssvars **out_vars)
+                          const char *theme, reaktor_cssvars **out_vars)
 {
     buf all;
     int i;

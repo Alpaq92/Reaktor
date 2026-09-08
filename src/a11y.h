@@ -186,7 +186,7 @@ typedef struct reaktor_a11y {
 /* Starts a frame. The window node is emitted here, so every later node has a
  * parent without the caller pushing one. */
 void reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
-                      struct nk_rect bounds);
+                        struct nk_rect bounds);
 
 /* Reports one element. `name` may be NULL for something unlabelled - a group,
  * an icon-only button whose meaning comes from its position. `value` may be
@@ -196,16 +196,16 @@ void reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
  * The id is a hash of the parent's id, the role, the name and an occurrence
  * counter, so it names the same element on consecutive frames: adding a widget
  * above does not renumber everything below it. */
-unsigned reaktor_a11y_add(reaktor_a11y *a, unsigned char role, const char *name,
-                        const char *value, unsigned state,
-                        struct nk_rect bounds);
+unsigned reaktor_a11y_add(reaktor_a11y *a, unsigned char role,
+                          const char *name, const char *value, unsigned state,
+                          struct nk_rect bounds);
 
 /* The same, and then makes it the parent of everything up to the matching pop.
  * Unbalanced pushes are clamped rather than trapped: an accessibility tree that
  * is slightly wrong is better than a frame that does not draw. */
-unsigned reaktor_a11y_push(reaktor_a11y *a, unsigned char role, const char *name,
-                         const char *value, unsigned state,
-                         struct nk_rect bounds);
+unsigned reaktor_a11y_push(reaktor_a11y *a, unsigned char role,
+                           const char *name, const char *value, unsigned state,
+                           struct nk_rect bounds);
 void     reaktor_a11y_pop(reaktor_a11y *a);
 
 /* Ends the frame: diffs against the previous one and swaps. Answers how many
@@ -220,12 +220,13 @@ void reaktor_a11y_set_focus(reaktor_a11y *a, unsigned id);
  * report answered with. Separate from the report because three roles want it
  * and the rest would carry four arguments they have no use for. */
 void reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
-                          float hi, float step);
+                            float hi, float step);
 
 /* --- reading it back --------------------------------------------------- */
 
 const reaktor_a11y_node *reaktor_a11y_tree(const reaktor_a11y *a, int *count);
-const reaktor_a11y_change *reaktor_a11y_changes(const reaktor_a11y *a, int *count);
+const reaktor_a11y_change *reaktor_a11y_changes(const reaktor_a11y *a,
+                                                int *count);
 const char *reaktor_a11y_role_name(unsigned char role);
 
 /* The tree as text, one line per node, indented by depth. This is what the
@@ -247,7 +248,7 @@ typedef void (*reaktor_a11y_action)(void *user, unsigned id);
  * no-op until phases 4b-d. push is cheap when nothing changed: it looks at the
  * change count and returns. */
 void reaktor_a11y_platform_init(reaktor_a11y_action activate,
-                              reaktor_a11y_action focus, void *user);
+                                reaktor_a11y_action focus, void *user);
 void reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id);
 
 /* Runs whatever a client asked for since the last call, on the thread that

@@ -182,8 +182,8 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
 }
 
 void
-reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo, float hi,
-                     float step)
+reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
+                       float hi, float step)
 {
     int f = a->front, i;
 
@@ -206,7 +206,8 @@ reaktor_a11y_set_focus(reaktor_a11y *a, unsigned id)
 }
 
 void
-reaktor_a11y_begin(reaktor_a11y *a, const char *window_name, struct nk_rect bounds)
+reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
+                   struct nk_rect bounds)
 {
     int f = a->front;
 
@@ -242,14 +243,14 @@ reaktor_a11y_begin(reaktor_a11y *a, const char *window_name, struct nk_rect boun
 
 unsigned
 reaktor_a11y_add(reaktor_a11y *a, unsigned char role, const char *name,
-               const char *value, unsigned state, struct nk_rect bounds)
+                 const char *value, unsigned state, struct nk_rect bounds)
 {
     return emit(a, role, name, value, state, bounds);
 }
 
 unsigned
 reaktor_a11y_push(reaktor_a11y *a, unsigned char role, const char *name,
-                const char *value, unsigned state, struct nk_rect bounds)
+                  const char *value, unsigned state, struct nk_rect bounds)
 {
     unsigned id = emit(a, role, name, value, state, bounds);
 
@@ -380,9 +381,9 @@ reaktor_a11y_end(reaktor_a11y *a)
 
 /* --- reading it back ---------------------------------------------------- */
 
-/* After the swap in reaktor_a11y_end the frame just described is the back half,
- * so both of these read 1 - front. Between begin and end they read the half
- * being filled, which is what a caller mid-frame means. */
+/* After the swap in reaktor_a11y_end the frame just described is the back
+ * half, so both of these read 1 - front. Between begin and end they read the
+ * half being filled, which is what a caller mid-frame means. */
 const reaktor_a11y_node *
 reaktor_a11y_tree(const reaktor_a11y *a, int *count)
 {

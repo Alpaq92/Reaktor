@@ -2,8 +2,9 @@
 
 A desktop application in C where none of the styling is compiled in.
 
-![The Reaktor login screen: a centred card on a dark page, with a tab strip
-across the top and a scheme switch beside the window
+![The Reaktor login screen, split along the diagonal: the same window in the
+light scheme above the line and the dark scheme below it, showing a centred
+card, a tab strip across the top and a scheme switch beside the window
 controls](docs/screenshot.png)
 
 - **Nuklear** draws every widget and lays out every row.

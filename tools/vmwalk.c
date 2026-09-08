@@ -1,12 +1,11 @@
 /* vmwalk.c - what a running process's private bytes are actually made of.
  *
- * A memory audit of Reaktor accounted for 0.45 MB of a 9.6 MB process, and runs
- * of the same binary vary by ~2 MB - so nothing under a megabyte is
+ * A memory audit of Reaktor accounted for 0.45 MB of a 9.6 MB process, and
+ * runs of the same binary vary by ~2 MB - so nothing under a megabyte is
  * measurable by launching and reading a counter. This walks another process's
  * address space and buckets every committed region. Read-only and
- * out-of-process: VirtualQueryEx and QueryWorkingSetEx allocate nothing in
- * the target and fault nothing in, so measuring does not move what is
- * measured.
+ * out-of-process: VirtualQueryEx and QueryWorkingSetEx allocate nothing in the
+ * target and fault nothing in, so measuring does not move what is measured.
  *
  *     vmwalk <pid> [--csv]
  *

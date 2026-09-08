@@ -79,24 +79,25 @@ build(reaktor_a11y *a, int tab, int with_link, int checked)
 
     reaktor_a11y_begin(a, "Reaktor", r(0, 0, 960, 680));
 
-    reaktor_a11y_push(a, REAKTOR_A11Y_TABLIST, NULL, NULL, 0, r(0, 40, 960, 34));
+    reaktor_a11y_push(a, REAKTOR_A11Y_TABLIST, NULL, NULL, 0,
+                      r(0, 40, 960, 34));
     for (i = 0; i < 3; i++)
         reaktor_a11y_add(a, REAKTOR_A11Y_TAB, names[i], NULL,
-                       i == tab ? REAKTOR_A11Y_SELECTED : 0u,
-                       r((float)(8 + i * 72), 40, 68, 34));
+                         i == tab ? REAKTOR_A11Y_SELECTED : 0u,
+                         r((float)(8 + i * 72), 40, 68, 34));
     reaktor_a11y_pop(a);
 
     reaktor_a11y_push(a, REAKTOR_A11Y_GROUP, "Buttons", NULL, 0,
-                    r(0, 74, 960, 606));
+                      r(0, 74, 960, 606));
     if (with_link)
         reaktor_a11y_add(a, REAKTOR_A11Y_LINK, "contact", NULL, 0,
-                       r(16, 82, 60, 20));
+                         r(16, 82, 60, 20));
     reaktor_a11y_add(a, REAKTOR_A11Y_BUTTON, "Continue", NULL, 0,
-                   r(16, 110, 200, 38));
+                     r(16, 110, 200, 38));
     reaktor_a11y_add(a, REAKTOR_A11Y_CHECKBOX, "Wrap lines", NULL,
-                   checked ? REAKTOR_A11Y_CHECKED : 0u, r(16, 158, 160, 24));
+                     checked ? REAKTOR_A11Y_CHECKED : 0u, r(16, 158, 160, 24));
     reaktor_a11y_add(a, REAKTOR_A11Y_TEXTBOX, "E-mail", "you@example.com",
-                   REAKTOR_A11Y_FOCUSED, r(16, 190, 380, 38));
+                     REAKTOR_A11Y_FOCUSED, r(16, 190, 380, 38));
     reaktor_a11y_pop(a);
 
     reaktor_a11y_end(a);
@@ -110,11 +111,12 @@ static void
 build_page(reaktor_a11y *a, const char *group)
 {
     reaktor_a11y_begin(a, "Reaktor", r(0, 0, 960, 680));
-    reaktor_a11y_push(a, REAKTOR_A11Y_GROUP, group, NULL, 0, r(0, 74, 960, 606));
+    reaktor_a11y_push(a, REAKTOR_A11Y_GROUP, group, NULL, 0,
+                      r(0, 74, 960, 606));
     reaktor_a11y_add(a, REAKTOR_A11Y_BUTTON, "Continue", NULL, 0,
-                   r(16, 110, 200, 38));
+                     r(16, 110, 200, 38));
     reaktor_a11y_add(a, REAKTOR_A11Y_CHECKBOX, "Wrap lines", NULL, 0,
-                   r(16, 158, 160, 24));
+                     r(16, 158, 160, 24));
     reaktor_a11y_pop(a);
     reaktor_a11y_end(a);
 }
@@ -160,25 +162,25 @@ bench(void)
     for (f = 0; f < frames; f++) {
         reaktor_a11y_begin(&a, "Reaktor", r(0, 0, 960, 680));
         reaktor_a11y_push(&a, REAKTOR_A11Y_TABLIST, "Pages", NULL, 0,
-                        r(0, 36, 960, 34));
+                          r(0, 36, 960, 34));
         for (i = 0; i < 7; i++)
             reaktor_a11y_add(&a, REAKTOR_A11Y_TAB, labels[i % 8], NULL,
-                           i == (f & 3) ? REAKTOR_A11Y_SELECTED : 0u,
-                           r((float)(i * 72), 40, 68, 28));
+                             i == (f & 3) ? REAKTOR_A11Y_SELECTED : 0u,
+                             r((float)(i * 72), 40, 68, 28));
         reaktor_a11y_pop(&a);
         reaktor_a11y_push(&a, REAKTOR_A11Y_GROUP, "Buttons", NULL, 0,
-                        r(0, 70, 960, 610));
+                          r(0, 70, 960, 610));
         for (i = 0; i < 24; i++)
             reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, labels[i % 8], NULL, 0,
-                           r(20, (float)(100 + i * 40), 298, 38));
+                             r(20, (float)(100 + i * 40), 298, 38));
         /* Twenty-one identically-roled, differently-named buttons and a run of
          * unnamed ones: the two shapes the id scheme has to tell apart. */
         for (i = 0; i < 21; i++)
             reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, NULL, NULL, 0,
-                           r((float)(20 + i * 42), 507, 34, 34));
+                             r((float)(20 + i * 42), 507, 34, 34));
         for (i = 0; i < 27; i++)
             reaktor_a11y_add(&a, REAKTOR_A11Y_LABEL, labels[i % 8], "v", 0,
-                           r(20, (float)(600 + i * 30), 910, 30));
+                             r(20, (float)(600 + i * 30), 910, 30));
         reaktor_a11y_pop(&a);
         reaktor_a11y_end(&a);
     }
@@ -350,7 +352,8 @@ int main(int argc, char **argv)
      *    rest. Asserted so the limit is known rather than discovered. */
     reaktor_a11y_begin(&a, "w", r(0, 0, 10, 10));
     for (i = 0; i < 4; i++)
-        reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, NULL, NULL, 0, r(0, 0, 1, 1));
+        reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, NULL, NULL, 0,
+                         r(0, 0, 1, 1));
     reaktor_a11y_end(&a);
     {
         int m = 0, j, dup = 0;

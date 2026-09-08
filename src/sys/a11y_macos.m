@@ -103,7 +103,8 @@ static ReaktorElement *element_for(unsigned id);
  * of the snapshot. NO means it has gone, and the caller answers emptily. */
 - (BOOL)node:(reaktor_snap_node *)out buffer:(char *)buf
 {
-    return reaktor_snap_get(self.nodeId, out, buf, REAKTOR_SNAP_TEXT) ? YES : NO;
+    return reaktor_snap_get(self.nodeId, out, buf, REAKTOR_SNAP_TEXT)
+               ? YES : NO;
 }
 
 - (BOOL)isAccessibilityElement
@@ -279,8 +280,8 @@ element_for(unsigned id)
 /* --- the seam ------------------------------------------------------------ */
 
 void
-reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
-                         void *user)
+reaktor_a11y_platform_init(reaktor_a11y_action activate,
+                           reaktor_a11y_action focus, void *user)
 {
     SDL_Window **wins;
     int count = 0;
@@ -332,7 +333,8 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 
     c = reaktor_a11y_changes(a, &m);
     for (i = 0; i < m; i++)
-        if (c[i].kind == REAKTOR_A11Y_ADDED || c[i].kind == REAKTOR_A11Y_REMOVED) {
+        if (c[i].kind == REAKTOR_A11Y_ADDED ||
+            c[i].kind == REAKTOR_A11Y_REMOVED) {
             structural = 1;
             break;
         }

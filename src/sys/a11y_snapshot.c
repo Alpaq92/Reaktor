@@ -67,7 +67,7 @@ find(unsigned id)
 
 int
 reaktor_snap_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
-                void *user)
+                  void *user)
 {
     g.activate     = activate;
     g.focus_action = focus;
@@ -261,11 +261,12 @@ reaktor_snap_focusable(unsigned char role, unsigned state)
 {
     if (state & REAKTOR_A11Y_DISABLED) return 0;
     switch (role) {
-    case REAKTOR_A11Y_TAB:      case REAKTOR_A11Y_BUTTON:   case REAKTOR_A11Y_LINK:
-    case REAKTOR_A11Y_CHECKBOX: case REAKTOR_A11Y_RADIO:    case REAKTOR_A11Y_TEXTBOX:
-    case REAKTOR_A11Y_SLIDER:   case REAKTOR_A11Y_SPINBUTTON:
-    case REAKTOR_A11Y_COMBOBOX: case REAKTOR_A11Y_LISTITEM: case REAKTOR_A11Y_TREEITEM:
-    case REAKTOR_A11Y_MENUITEM:
+    case REAKTOR_A11Y_TAB:       case REAKTOR_A11Y_BUTTON:
+    case REAKTOR_A11Y_LINK:      case REAKTOR_A11Y_CHECKBOX:
+    case REAKTOR_A11Y_RADIO:     case REAKTOR_A11Y_TEXTBOX:
+    case REAKTOR_A11Y_SLIDER:    case REAKTOR_A11Y_SPINBUTTON:
+    case REAKTOR_A11Y_COMBOBOX:  case REAKTOR_A11Y_LISTITEM:
+    case REAKTOR_A11Y_TREEITEM:  case REAKTOR_A11Y_MENUITEM:
         return 1;
     default:
         return 0;

@@ -1,4 +1,5 @@
-/* mkicon.c - branding/reaktor-icon.ico, rasterised from branding/reaktor-icon.svg.
+/* mkicon.c - branding/reaktor-icon.ico, rasterised from
+ * branding/reaktor-icon.svg.
  *
  * The .svg is the authored mark; the .ico is derived from it, and this is what
  * derives it. It is not part of the build: Explorer reads the icon from a
@@ -132,7 +133,7 @@ main(void)
             break;
         }
         reaktor_unpremultiply(plutovg_surface_get_data(surf), n, n,
-                            plutovg_surface_get_stride(surf));
+                              plutovg_surface_get_stride(surf));
         e[i].size = n;
         if (n >= 256) {
             /* plutovg writes PNG to a file and nothing else, so it goes out

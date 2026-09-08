@@ -1,4 +1,5 @@
-/* main.c - Reaktor: pure C UI on Nuklear, rendered through SDL3, styled by CSS.
+/* main.c - Reaktor: pure C UI on Nuklear, rendered through SDL3,
+ * styled by CSS.
  *
  * The loop is SDL3's callback model (SDL_AppInit / SDL_AppIterate /
  * SDL_AppEvent / SDL_AppQuit), not a while(): a browser tab cannot be blocked,
@@ -254,8 +255,8 @@ struct App {
     int    hover_pending;
     int    renderer_is_sw;      /* SDL's software rasteriser - see the
                                 * antialiasing note in the frame body */
-    int    sw_noaa;             /* REAKTOR_SW_NOAA: no feathering at all there -
-                                * see the frame body */
+    int    sw_noaa;             /* REAKTOR_SW_NOAA: no feathering at all
+                                * there - see the frame body */
     int    drag_moved;          /* pointer moved since the last drawn frame */
     int    cal_frames, cal_done;
     double cal_cpu0;
@@ -326,8 +327,8 @@ env_int(const char *name, int fallback)
     return (v && *v) ? SDL_atoi(v) : fallback;
 }
 
-/* The effective scheme. reaktor_prefers_dark() returns -1 when the platform will
- * not say, and an unknown answer is treated as light. */
+/* The effective scheme. reaktor_prefers_dark() returns -1 when the platform
+ * will not say, and an unknown answer is treated as light. */
 static int
 effective_dark(const App *app)
 {
@@ -477,7 +478,7 @@ img_lookup(App *app, const char *src, int px)
     }
 
     surf = reaktor_svg_surface_path(rel, px, ocol[0] ? ocol : NULL,
-                                  icol[0] ? icol : NULL, swk);
+                                    icol[0] ? icol : NULL, swk);
 
     /* Cache the failure too, so a bad src is not retried every frame. */
     SDL_strlcpy(app->img[app->img_count].src, src,
@@ -623,7 +624,7 @@ round_mask(App *app, int r)
 
 void
 reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
-                 float rounding, struct nk_color col)
+                   float rounding, struct nk_color col)
 {
     struct nk_image disc;
     nk_handle h;
@@ -1046,7 +1047,7 @@ readable_on(const unsigned char bg[4], const char *preferred,
  * surface it is drawn on; `details` too. */
 struct nk_color
 reaktor_visible(struct nk_color want, struct nk_color behind,
-              struct nk_color fallback)
+                struct nk_color fallback)
 {
     unsigned char a[4], b[4];
 
@@ -1379,8 +1380,8 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
                                      nk_filter_default);
         note_ime_caret(app, ctx, bounds, st, &app->edit);
         reaktor_note(app, REAKTOR_A11Y_TEXTBOX, hint,
-                   nk_str_get_const(&app->edit.string),
-                   st & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
+                     nk_str_get_const(&app->edit.string),
+                     st & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
     }
     pop_style(ctx, f);
     stroke_edit_edge(ctx, bounds, &s);
@@ -1486,9 +1487,9 @@ window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
 #define HOVER_GAP_MS 50
 
 /* The gap in force. Starts at HOVER_GAP_MS and is then set from what a frame
- * measurably costs this process - see calibrate_hover_gap. REAKTOR_HOVER_GAP_MS
- * pins it instead, which is how the trade-off was measured in the first
- * place. */
+ * measurably costs this process - see calibrate_hover_gap.
+ * REAKTOR_HOVER_GAP_MS pins it instead, which is how the trade-off was
+ * measured in the first place. */
 static Uint64 g_hover_gap_ms = HOVER_GAP_MS;
 static int    g_hover_gap_pinned;
 
@@ -1762,7 +1763,7 @@ text_link(App *app, struct nk_context *ctx, const char *label, int active)
 
         hot_push(app, b, 1, 0);
         reaktor_note(app, REAKTOR_A11Y_LINK, label, NULL,
-                   active ? REAKTOR_A11Y_SELECTED : 0u, b);
+                     active ? REAKTOR_A11Y_SELECTED : 0u, b);
         /* Released inside, not pressed - the same reason the buttons use
          * NK_BUTTON_TRIGGER_ON_RELEASE. Checked against clicked_pos, so
          * letting go elsewhere does not count. */
@@ -1810,8 +1811,9 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
                        nk_vec2(CARD_PAD_X, CARD_PAD_Y));
     if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
         /* The rect pushed above, which is where the card actually is. */
-        reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Proceed with login", NULL, 0,
-                        nk_rect(side, top, (float)CARD_W, card_h));
+            reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Proceed with login",
+                              NULL, 0,
+                          nk_rect(side, top, (float)CARD_W, card_h));
         nk_style_push_vec2(ctx, &ctx->style.window.spacing,
                            nk_vec2(0, (float)ROW_GAP));
 
@@ -1831,7 +1833,8 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
         nk_spacing(ctx, 1);
         nk_layout_row_push(ctx, CARD_W - 2.0f * CARD_PAD_X - ROW_BRAND - 10.0f);
         nk_style_push_font(ctx, pick_font(app, 19, 1));
-        reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, "Proceed with login", 0);
+            reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL,
+                              "Proceed with login", 0);
         nk_label(ctx, "Proceed with login", NK_TEXT_LEFT);
         nk_style_pop_font(ctx);
         nk_layout_row_end(ctx);
@@ -1964,8 +1967,10 @@ apply_widget_style(App *app)
     ctx = app->ctx;
     st  = &ctx->style;
 
-    body   = reaktor_style_token("--background-body", c) ? col_of(c) : app->page;
-    base   = reaktor_style_token("--background", c)      ? col_of(c) : app->card_bg;
+    body   = reaktor_style_token("--background-body", c) ? col_of(c)
+                                                         : app->page;
+    base   = reaktor_style_token("--background", c)      ? col_of(c)
+                                                         : app->card_bg;
     hover  = reaktor_style_token("--background-hover", c) ? col_of(c) : base;
     text   = reaktor_style_token("--text-main", c)   ? col_of(c) : app->text;
     muted  = reaktor_style_token("--text-muted", c)  ? col_of(c) : text;
@@ -2379,8 +2384,9 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
 
         {
             unsigned id = reaktor_note(app, REAKTOR_A11Y_TAB, name, NULL,
-                                     i == app->tab ? REAKTOR_A11Y_SELECTED : 0u,
-                                     b);
+                                       i == app->tab ? REAKTOR_A11Y_SELECTED
+                                                     : 0u,
+                                       b);
             /* Not `||`: that short-circuits, so a tab that was clicked would
              * leave the activation unconsumed and the frame would turn it
              * into a second press. */
@@ -2406,7 +2412,8 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
 
     /* "system" follows SDL_GetSystemTheme(), the other two pin it. Changing it
      * reloads the stylesheets - tiny.css ships light and dark as two files. */
-    reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Colour scheme", NULL, 0, strip);
+    reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Colour scheme", NULL, 0,
+                      strip);
     for (i = 0; i < 3; i++) {
         struct nk_color fg = (i == app->theme_mode) ? accent : muted;
         struct nk_rect b;
@@ -2428,7 +2435,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
 
         reaktor_note(app, REAKTOR_A11Y_RADIO, g_theme_names[i], NULL,
-                   i == app->theme_mode ? REAKTOR_A11Y_CHECKED : 0u, b);
+                     i == app->theme_mode ? REAKTOR_A11Y_CHECKED : 0u, b);
         if (nk_button_label(ctx, g_theme_names[i]) && i != app->theme_mode) {
             /* Not applied here: see the top of SDL_AppIterate. */
             app->theme_pending = i + 1;
@@ -2614,8 +2621,9 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         /* The page is a container, named by its tab, so a reader is told
          * which page it is walking rather than handed a flat list. */
         app->page_node =
-            reaktor_note_push(app, REAKTOR_A11Y_GROUP, reaktor_tab_names[app->tab],
-                            NULL, 0, nk_rect(0, top, (float)win_w, body_h));
+            reaktor_note_push(app, REAKTOR_A11Y_GROUP,
+                              reaktor_tab_names[app->tab], NULL, 0,
+                              nk_rect(0, top, (float)win_w, body_h));
         reaktor_showcase_page(app, ctx, app->tab, sz.x, sz.y);
         reaktor_note_pop(app);
         nk_group_end(ctx);
@@ -2675,8 +2683,8 @@ reaktor_ionicon(App *app, const char *name, int px)
 /* Rasterised at exactly the size it is drawn, at an explicit stroke weight:
  * both matter to a rim a pixel wide. `sw` at zero takes the hairline rule. */
 struct nk_image
-reaktor_ionicon_exact(App *app, const char *name, int px, struct nk_color stroke,
-                    float sw)
+reaktor_ionicon_exact(App *app, const char *name, int px,
+                      struct nk_color stroke, float sw)
 {
     char src[192];
 
@@ -2752,7 +2760,7 @@ reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
  * rect and so keeps none of the rule's geometry. */
 int
 reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
-                   struct nk_color fill)
+                     struct nk_color fill)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
     unsigned char hov[4];
@@ -2799,7 +2807,7 @@ reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
 
 int
 reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
-                  const char *label)
+                    const char *label)
 {
     char src[192];
 
@@ -2814,8 +2822,8 @@ reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
  * nk_edit_buffer because its context menu has to reach that state. */
 nk_flags
 reaktor_field(App *app, struct nk_context *ctx, nk_flags flags,
-            char *buf, int *len, int cap, const char *hint,
-            nk_plugin_filter filter)
+              char *buf, int *len, int cap, const char *hint,
+              nk_plugin_filter filter)
 {
     struct nk_rect bounds = nk_widget_bounds(ctx);
     reaktor_style s;
@@ -2834,8 +2842,8 @@ reaktor_field(App *app, struct nk_context *ctx, nk_flags flags,
      * and an unnamed field is unusable to a reader. A box with no hint gets
      * its shape instead, which is at least a description. */
     reaktor_note(app, REAKTOR_A11Y_TEXTBOX,
-               hint ? hint : ((flags & NK_EDIT_BOX) ? "Notes" : "Text"), buf,
-               state & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
+                 hint ? hint : ((flags & NK_EDIT_BOX) ? "Notes" : "Text"), buf,
+                 state & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
 
     if (hint && *len == 0) draw_hint(ctx, bounds, hint, &s);
     return state;
@@ -2897,9 +2905,10 @@ reaktor_file_taken(App *app, char *out, int cap)
     return 1;
 }
 
-/* REAKTOR_A11Y_DUMP=<path> writes the tree once, after the first frame is built,
- * and is how phase 2 is checked: the instrumentation is invisible on screen, so
- * the only way to see whether a widget reported itself is to read the tree. */
+/* REAKTOR_A11Y_DUMP=<path> writes the tree once, after the first frame is
+ * built, and is how phase 2 is checked: the instrumentation is invisible on
+ * screen, so the only way to see whether a widget reported itself is to read
+ * the tree. */
 static void
 a11y_dump_once(App *app)
 {
@@ -2943,9 +2952,10 @@ focus_saw(App *app, unsigned id, struct nk_rect b)
 
 unsigned
 reaktor_note(App *app, unsigned char role, const char *name, const char *value,
-           unsigned state, struct nk_rect bounds)
+             unsigned state, struct nk_rect bounds)
 {
-    unsigned id = reaktor_a11y_add(&app->a11y, role, name, value, state, bounds);
+    unsigned id = reaktor_a11y_add(&app->a11y, role, name, value, state,
+                                   bounds);
 
     focus_saw(app, id, bounds);
     return id;
@@ -2953,7 +2963,7 @@ reaktor_note(App *app, unsigned char role, const char *name, const char *value,
 
 unsigned
 reaktor_note_push(App *app, unsigned char role, const char *name,
-                const char *value, unsigned state, struct nk_rect bounds)
+                  const char *value, unsigned state, struct nk_rect bounds)
 {
     unsigned id = reaktor_a11y_push(&app->a11y, role, name, value, state, bounds);
 
@@ -2969,7 +2979,7 @@ reaktor_note_pop(App *app)
 
 void
 reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
-                 float step)
+                   float step)
 {
     reaktor_a11y_set_range(&app->a11y, id, num, lo, hi, step);
 }
@@ -2979,7 +2989,7 @@ reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
  * it is about to draw. */
 unsigned
 reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
-                const char *name, unsigned state)
+                  const char *name, unsigned state)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
     unsigned id = reaktor_a11y_add(&app->a11y, role, name, NULL, state, b);
@@ -3022,11 +3032,12 @@ static int
 focusable(const reaktor_a11y_node *n)
 {
     switch (n->role) {
-    case REAKTOR_A11Y_TAB:      case REAKTOR_A11Y_BUTTON:   case REAKTOR_A11Y_LINK:
-    case REAKTOR_A11Y_CHECKBOX: case REAKTOR_A11Y_RADIO:    case REAKTOR_A11Y_TEXTBOX:
-    case REAKTOR_A11Y_SLIDER:   case REAKTOR_A11Y_SPINBUTTON:
-    case REAKTOR_A11Y_COMBOBOX: case REAKTOR_A11Y_LISTITEM: case REAKTOR_A11Y_TREEITEM:
-    case REAKTOR_A11Y_MENUITEM:
+    case REAKTOR_A11Y_TAB:       case REAKTOR_A11Y_BUTTON:
+    case REAKTOR_A11Y_LINK:      case REAKTOR_A11Y_CHECKBOX:
+    case REAKTOR_A11Y_RADIO:     case REAKTOR_A11Y_TEXTBOX:
+    case REAKTOR_A11Y_SLIDER:    case REAKTOR_A11Y_SPINBUTTON:
+    case REAKTOR_A11Y_COMBOBOX:  case REAKTOR_A11Y_LISTITEM:
+    case REAKTOR_A11Y_TREEITEM:  case REAKTOR_A11Y_MENUITEM:
         /* Off-window nodes count: the page scrolls to them - see focus_move. */
         return !(n->state & REAKTOR_A11Y_DISABLED);
     default:
@@ -3531,9 +3542,9 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     }
 
     /* Borderless by default, so the titlebar follows the stylesheet like
-     * everything else. REAKTOR_BORDERLESS=0 restores the desktop's frame, which
-     * is worth keeping - a custom titlebar gives up what the platform does
-     * for free. */
+     * everything else. REAKTOR_BORDERLESS=0 restores the desktop's frame,
+     * which is worth keeping - a custom titlebar gives up what the platform
+     * does for free. */
     /* Off in a browser: no desktop frame to replace, the canvas is the whole
      * window, and a titlebar inside it could neither move nor resize. */
 #ifdef __EMSCRIPTEN__
@@ -3552,11 +3563,11 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     {
         /* On a real HiDPI display SDL_WINDOW_HIGH_PIXEL_DENSITY gives this
          * window scale-times as many pixels, which is exactly the room the
-         * same logical layout needs. A forced REAKTOR_SCALE has no such display
-         * behind it, so the window is asked for that many pixels here instead
-         * - otherwise the simulation draws a scaled UI into an unscaled window
-         * and simply clips it. reaktor_dpi_query_scale(NULL) is the override, or
-         * 1.0 when unset. */
+         * same logical layout needs. A forced REAKTOR_SCALE has no such
+         * display behind it, so the window is asked for that many pixels here
+         * instead - otherwise the simulation draws a scaled UI into an
+         * unscaled window and simply clips it. reaktor_dpi_query_scale(NULL)
+         * is the override, or 1.0 when unset. */
         float pre = reaktor_dpi_query_scale(NULL);
         int win_w = (int)(WINDOW_WIDTH * pre + 0.5f);
         int win_h = (int)(WINDOW_HEIGHT * pre + 0.5f);
@@ -3646,12 +3657,14 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     }
     app->aa = env_int("REAKTOR_AA", 1);
     app->redraw_always = SDL_getenv("REAKTOR_REDRAW") &&
-                         SDL_strcmp(SDL_getenv("REAKTOR_REDRAW"), "always") == 0;
+                         SDL_strcmp(SDL_getenv("REAKTOR_REDRAW"),
+                                    "always") == 0;
 
     /* How often SDL calls SDL_AppIterate. The loop used to spin and sleep 2 ms
      * whenever the frame was clean - 500 wake-ups a second to find nothing to
      * do. "waitevent" blocks until an event arrives. REAKTOR_FRAME_RATE
-     * overrides with a cap, or 0 for uncapped as REAKTOR_REDRAW=always needs. */
+     * overrides with a cap, or 0 for uncapped as REAKTOR_REDRAW=always
+     * needs. */
     SDL_strlcpy(app->frame_rate, frame_rate_wanted(), sizeof(app->frame_rate));
 
     /* The rate while the pointer is held: the display's refresh, one frame
@@ -3673,7 +3686,8 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     /* Its own milestone: the first thing to touch plutosvg, and folding that
      * into the renderer's figure is what this table exists to prevent. */
     set_window_icon(app->win);
-    reaktor_set_scale(reaktor_dpi_query_scale(app->win));   /* needs the window */
+    /* needs the window */
+    reaktor_set_scale(reaktor_dpi_query_scale(app->win));
     apply_render_scale(app);
     rss_mark(RSS_ICON);
 
@@ -4182,13 +4196,13 @@ SDL_AppIterate(void *appstate)
      * while some other tab is on screen still clears - otherwise the next
      * File > Open would find one still pending and do nothing. */
     reaktor_file_taken(app, app->show.file_pick,
-                     (int)sizeof(app->show.file_pick));
+                       (int)sizeof(app->show.file_pick));
 
     /* Opened around the same region nk_begin gets, so the window node's bounds
      * are the window's. Closed after nk_end, below. */
     app->focus_seen = 0;
     reaktor_a11y_begin(&app->a11y, "Reaktor",
-                     nk_rect(0, 0, (float)win_w, (float)win_h));
+                       nk_rect(0, 0, (float)win_w, (float)win_h));
 
     if (nk_begin(ctx, "page", nk_rect(0, 0, (float)win_w, (float)win_h),
                  NK_WINDOW_BACKGROUND | NK_WINDOW_NO_SCROLLBAR)) {

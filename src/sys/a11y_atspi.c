@@ -889,8 +889,8 @@ embed(void)
 /* --- the seam ------------------------------------------------------------ */
 
 void
-reaktor_a11y_platform_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
-                         void *user)
+reaktor_a11y_platform_init(reaktor_a11y_action activate,
+                           reaktor_a11y_action focus, void *user)
 {
     static const DBusObjectPathVTable vtable = { NULL, on_message,
                                                  NULL, NULL, NULL, NULL };

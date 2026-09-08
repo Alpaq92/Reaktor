@@ -42,7 +42,7 @@ typedef struct reaktor_snap_node {
  * a client's focus move turn into. Answers 0 if the lock could not be made,
  * in which case every call below is a no-op and the bridge should stand down. */
 int  reaktor_snap_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
-                     void *user);
+                       void *user);
 
 /* Takes the copy. From the app's thread, after each drawn frame. Cheap when
  * nothing changed: it looks at the change count and returns. Answers whether
@@ -51,7 +51,8 @@ int  reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id);
 
 /* Copies the node `id` names. Answers 0 if it is not in the snapshot - a node
  * a client is still holding after the page it was on went away. */
-int  reaktor_snap_get(unsigned id, reaktor_snap_node *out, char *buf, size_t cap);
+int  reaktor_snap_get(unsigned id, reaktor_snap_node *out, char *buf,
+                      size_t cap);
 
 /* Navigation, in the tree's own order, which is draw order and so reading
  * order. `parent` of 0 means the roots. All answer an id, or 0. */

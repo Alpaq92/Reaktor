@@ -109,9 +109,9 @@ void reaktor_unpremultiply(unsigned char *px, int w, int h, int stride)
  * Open-Color, and rasterises to a surface the caller owns. A NULL family
  * leaves that channel as the artwork has it. */
 plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
-                                          const char *outline_colour,
-                                          const char *inside_colour,
-                                          float stroke_scale)
+                                            const char *outline_colour,
+                                            const char *inside_colour,
+                                            float stroke_scale)
 {
     char path[REAKTOR_PATH_MAX];
     char outline_hex[16] = "#000000", inside_hex[16] = "none";
