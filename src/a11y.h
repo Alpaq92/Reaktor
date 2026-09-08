@@ -83,6 +83,11 @@ typedef struct curie_a11y_node {
     const char    *name;
     const char    *value;
     struct nk_rect bounds;     /* window coordinates */
+    /* A range in numbers, for a client that computes rather than reads: ARIA
+     * asks for valuemin and valuemax, UIA for IRangeValueProvider, and
+     * neither can get them out of the text a reader hears. `lo == hi` means
+     * the node is not a range, which is every node nothing reports one for. */
+    float          num, lo, hi, step;
 } curie_a11y_node;
 
 enum {
@@ -210,6 +215,12 @@ int curie_a11y_end(curie_a11y *a);
 /* Names the node with keyboard focus, by id, 0 for none. Takes effect on the
  * next frame built. */
 void curie_a11y_set_focus(curie_a11y *a, unsigned id);
+
+/* Puts numbers on a node already emitted this frame, named by the id its own
+ * report answered with. Separate from the report because three roles want it
+ * and the rest would carry four arguments they have no use for. */
+void curie_a11y_set_range(curie_a11y *a, unsigned id, float num, float lo,
+                          float hi, float step);
 
 /* --- reading it back --------------------------------------------------- */
 

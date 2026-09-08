@@ -301,16 +301,22 @@ Three things the sketch above got wrong or did not know:
   procedure's *return value*, which is what `UiaReturnRawElementProvider` has
   to be handed. So the window is subclassed — `SetWindowLongPtrW`, everything
   else passed to the previous procedure.
-- **UIA calls in on its own thread**, while this one may be asleep in
+- **A client calls in on its own thread**, while this one may be asleep in
   `SDL_WaitEvent`, and the tree it would read is rewritten by every frame. So
-  the provider never touches the model: a drawn frame copies it — strings and
-  all, since the model's arena is reused — into a snapshot under a lock, and
-  the provider answers from that. A client's request goes the other way by the
-  same rule: `SetFocus` and `Invoke` record an id, push an SDL event to wake
-  the loop, and `curie_a11y_platform_drain` runs them on the app's thread
-  before the next frame is built. It runs *before* the synthetic click is
-  injected, because a press that misses this frame's input would be cleared
-  with the dirty flag and never delivered.
+  no bridge touches the model: a drawn frame copies it — strings and all, since
+  the model's arena is reused — into a snapshot under a lock, and the bridge
+  answers from that. A request goes the other way by the same rule: it records
+  an id, pushes an SDL event to wake the loop, and `curie_a11y_platform_drain`
+  runs it on the app's thread before the next frame is built.
+
+  None of that is Windows's problem, so it is not in the Windows file. It is
+  `src/sys/a11y_snapshot.c` — portable C, SDL for the lock and the wake — and
+  the bridges for 4c and 4d will share it unchanged. **No call in it hands out
+  anything that outlives the lock:** a node is copied into the caller's buffer,
+  navigation and hit testing answer with an id. A bridge never takes the lock,
+  never holds a pointer into the snapshot, and so cannot get either wrong —
+  which matters most for the two bridges that will be written on one platform
+  and run on another.
 - **Hit testing wants the innermost element, not the last drawn.** The tab
   strip has two groups over the same band, so taking the last node containing
   the point answered with the group beside the tabs. Depth first, draw order
@@ -323,12 +329,43 @@ screen-space rectangles. Invoking the Popups tab through UIA switches the page;
 `SetFocus` on a tab makes it `AutomationElement.FocusedElement`; a point inside
 a tab resolves to the tab.
 
-Still to do here: `IToggleProvider`, `ISelectionItemProvider` and
-`IRangeValueProvider`, so a checkbox, a tab and a slider are operable and not
-only readable — their properties are already answered directly, which some
-clients read and others will not. `IValueProvider` is read-only; setting a
-field's text means driving Nuklear's editor, which belongs with `ITextProvider`
-and the caret.
+`IToggleProvider`, `ISelectionItemProvider` and `IRangeValueProvider` are
+there too. The range one needed the model to carry numbers: a node's `value` is
+the text a reader hears, and neither `IRangeValueProvider` nor ARIA's
+`valuemin`/`valuemax` can be got out of that, so `curie_a11y_set_range` puts
+`num`, `lo`, `hi` and `step` on the node the widget just reported. The web
+bridge uses them too — it had been running `parseFloat` over the value text,
+which happened to work for "40" and would not have for "3 of 8". Verified
+through UIA: the Float slider reads 0.65 across 0–1 with a small change of
+0.01, the Integer one 40 across 0–100 stepping by 1.
+
+**Activation does not go through a synthetic click any more.** It used to:
+Enter, and a screen reader's press, both became a mouse press and release at
+the node's centre. That worked on the tab strip and was unreliable for widgets
+inside the page group — the click reached Nuklear's input, at the right
+coordinates, over the right frames, and the widget did not act on it, while
+the identical injection driven by a key did. Five hypotheses were eliminated
+(the real pointer's position, window foreground, which frame the click starts
+on, press-versus-release semantics, and routing the steps through SDL's event
+queue — that last one is *worse*, and breaks the keyboard too).
+
+Rather than keep chasing it, the shell now tells the widget directly. A press
+records an id; `curie_focus_activated` hands it to the widget that owns it,
+once; the widget changes its own state, which it is better placed to do than
+anything simulating a pointer. Checkboxes, radios, tabs and buttons take it.
+Anything that has not been taught to listen still gets the synthetic click, as
+a fallback the frame applies if nobody claimed the activation — so teaching one
+more widget is a line, not a migration, and nothing regressed while they were
+taught one at a time.
+
+Verified through UIA: `TogglePattern.Toggle()` takes a checkbox from On to Off,
+`SelectionItemPattern.Select()` moves a radio group's selection, `Invoke` on a
+tab still switches the page, and Enter from the keyboard still toggles a
+checkbox with the pointer parked off-window.
+
+`IValueProvider` and `IRangeValueProvider` are both read-only: setting a
+field's text or a slider's value means driving Nuklear from outside, which
+belongs with `ITextProvider` and the caret.
 
 **Linux, AT-SPI2.** AT-SPI is D-Bus. Two routes: link `libatspi`/ATK, which is
 LGPL and so a licence question for a project that has kept everything MIT-or-
@@ -361,7 +398,7 @@ None of this is verifiable by looking at it.
 | 2 instrumentation | Nothing visible. The bulk of the work. **Done.** |
 | 3 focus + keyboard | Full keyboard operation, visible focus ring. Useful with no reader attached. **Done.** |
 | 4a web | Screen-reader support on every platform, from one implementation. **Done.** |
-| 4b Windows | Native support where the app is developed. **Tree, focus, invoke and values done;** the remaining patterns are listed above. |
+| 4b Windows | Native support where the app is developed. **Done:** tree, focus, values, patterns and activation. |
 | 4c/d Linux, macOS | Parity. |
 
 1 → 3 is the honest minimum before any bridge is worth writing, and 3 is the
@@ -372,12 +409,20 @@ and reaches the most readers.
 
 - ~~**Per-frame cost.**~~ Measured at 3.3 µs for 80 nodes. Fixed arenas, no
   allocation, and the frame loop only builds a tree when it draws.
-- ~~**Bounds.**~~ Window coordinates throughout, and off-window nodes are marked
-  `offscreen`. Still to check when phase 4 lands: a node clipped by a *popup*
-  rather than by the window.
-- **Identity across pages.** Switching tabs replaces the whole tree. That is
-  correct, but the diff should report it as a subtree replacement rather than
-  a hundred unrelated removals.
+- ~~**Bounds.**~~ Window coordinates throughout, and a node out of sight is
+  marked `offscreen` — measured against every ancestor, not only the window. A
+  container's bounds are what it clips its children to, so a node scrolled out
+  of a list inside a popup is out of sight even though it is well inside the
+  window, which is what measuring against the root alone missed.
+- ~~**Identity across pages.**~~ A subtree is reported by its root: a node
+  whose parent is arriving is part of that arrival, and one whose parent is
+  going is part of that departure, so neither is reported on its own. Switching
+  tabs is now one addition and one removal — the two page groups — where it was
+  a hundred unrelated changes, and the first frame is one addition rather than
+  one per node. A client re-reads a subtree when its root changes, which is
+  what every platform's structure event means; the Windows bridge accordingly
+  raises `ChildrenInvalidated` rather than `ChildrenBulkAdded`, which had been
+  claiming additions on a frame that only removed something.
 - ~~**Live regions.**~~ The Diagnostics page turned out to have the opposite
   problem: its readings were not in the tree at all, so a reader got the prose
   and not one number. Each row is now a `label` node carrying the name and the

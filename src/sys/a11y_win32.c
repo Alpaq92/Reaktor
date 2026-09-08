@@ -6,30 +6,24 @@
  * - and raises events when they change. Narrator, Magnifier, Voice Access and
  * every automation tool are clients of it.
  *
- * Three things make this different from the web bridge:
- *
- * **It is pulled, not pushed.** The DOM mirror is written once per changed
- * frame and the browser reads it whenever it likes. UIA instead calls back
- * into this process, and it does so **on another thread** - an RPC thread the
- * app never created and cannot block - while the main thread may be asleep in
- * SDL_WaitEvent. So the tree cannot be read where it lives: the frame rewrites
- * it, and a client walking it mid-frame would see half of one page and half of
- * another. The snapshot below is the answer. A drawn frame copies the tree
- * into it under a lock, strings and all, because the model's own strings live
- * in an arena that the next frame reuses.
+ * Two things make this different from the web bridge, and only one of them
+ * is Windows's:
  *
  * **COM from C.** An interface is a struct whose first member is a pointer to
- * a table of function pointers, and an object that implements three of them
- * embeds three such structs so QueryInterface can hand out an interior pointer
- * for each. Every method recovers the object from the interface pointer it was
- * called on. It is mechanical, and it is all this file's bulk.
+ * a table of function pointers, and an object that implements several of them
+ * embeds one such struct each, so QueryInterface can hand out an interior
+ * pointer per interface. Every method recovers the object from the interface
+ * pointer it was called on. It is mechanical, and it is this file's bulk.
  *
  * **Identity has to be stable.** A client holds a provider across frames and
  * compares elements by runtime id. The model already gives every node an id
- * that survives a redraw (see a11y.c), so a provider is a wrapper around one
- * of those numbers and nothing else; it reads the snapshot afresh on every
- * call, and a node that has gone answers with nothing rather than with stale
- * geometry.
+ * that survives a redraw (see a11y.c), so a provider wraps one of those
+ * numbers and nothing else; it asks the snapshot afresh on every call, and a
+ * node that has gone answers with nothing rather than with stale geometry.
+ *
+ * The other half - the snapshot itself, and getting a client's request from
+ * its thread to the app's - is not Windows's problem at all, and lives in
+ * a11y_snapshot.c where the other bridges share it.
  *
  * Value-only to start, as ACCESSIBILITY.md suggests: a text field reports its
  * text through IValueProvider, and ITextProvider - which is what a client
@@ -37,6 +31,8 @@
 #include "a11y.h"
 
 #ifdef _WIN32
+
+#include "a11y_snapshot.h"
 
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
@@ -48,85 +44,14 @@
 
 #include <SDL3/SDL.h>
 
-/* --- the snapshot -------------------------------------------------------
- *
- * A copy of the last drawn frame's tree, taken under the lock the provider
- * reads it under. Fixed arrays for the same reason the model uses them: this
- * runs in the frame, and a frame does not allocate. */
-
-typedef struct snap_node {
-    unsigned      id, parent;
-    unsigned char role;
-    unsigned char level;            /* depth; the tie-break when hit testing */
-    unsigned      state;
-    int           name, value;      /* offsets into `str`, -1 for none */
-    float         x, y, w, h;       /* window coordinates */
-} snap_node;
-
-#define SNAP_POOL (CURIE_A11Y_POOL * 2)
-
+/* What the window needs to remember for itself: the rest is shared. */
 static struct {
-    CRITICAL_SECTION lock;
-    int              ready;
-
-    snap_node        node[CURIE_A11Y_MAX_NODES];
-    int              count;
-    char             str[SNAP_POOL];
-    int              str_used;
-    unsigned         focus;
-
-    HWND             hwnd;
-    WNDPROC          prev_proc;
-    /* Whether a client has ever asked for the tree. Until one has, the frame
-     * still fills the snapshot - it is a few microseconds and it keeps the
-     * first answer instant - but no event is raised, because raising one with
-     * no client listening walks the whole tree for nothing. */
-    int              wanted;
-
-    curie_a11y_action activate, focus_action;
-    void             *user;
-
-    /* What a client asked for, waiting for the thread that owns the tree.
-     * Written under the lock from UIA's RPC thread, read and cleared by
-     * curie_a11y_platform_drain on the main one. One of each is enough: a
-     * second request before the first is served is the client changing its
-     * mind, and the last one is what it wants. */
-    unsigned          want_focus, want_activate;
-    Uint32            wake;        /* the event that gets the loop looking */
+    HWND    hwnd;
+    WNDPROC prev_proc;
+    /* Whether a client has ever asked for the tree. Until one has, no event is
+     * raised, because raising one with nobody listening walks it for nothing. */
+    int     wanted;
 } g;
-
-static int
-snap_intern(const char *s)
-{
-    int at, n;
-
-    if (!s || !*s) return -1;
-    n = (int)strlen(s) + 1;
-    if (g.str_used + n > SNAP_POOL) return -1;
-    at = g.str_used;
-    memcpy(g.str + at, s, (size_t)n);
-    g.str_used += n;
-    return at;
-}
-
-static const char *
-snap_str(int at)
-{
-    return at < 0 ? NULL : g.str + at;
-}
-
-/* Index of a node by id, or -1. Linear, because a client asks about one
- * element at a time and the tree is under three hundred entries; the model's
- * own hash is for the per-frame diff, which is quadratic without it. */
-static int
-snap_find(unsigned id)
-{
-    int i;
-
-    for (i = 0; i < g.count; i++)
-        if (g.node[i].id == id) return i;
-    return -1;
-}
 
 /* --- roles ---------------------------------------------------------------
  * Curie's vocabulary onto UIA's. Every one of these is a control type UIA has
@@ -159,25 +84,6 @@ control_type(unsigned char role)
     }
 }
 
-/* Which nodes a client can reach with the keyboard - the same set the shell
- * tabs through, which is the point: what UIA reports focusable is what
- * Tab actually reaches. */
-static int
-keyboard_focusable(unsigned char role, unsigned state)
-{
-    if (state & CURIE_A11Y_DISABLED) return 0;
-    switch (role) {
-    case CURIE_A11Y_TAB:      case CURIE_A11Y_BUTTON:   case CURIE_A11Y_LINK:
-    case CURIE_A11Y_CHECKBOX: case CURIE_A11Y_RADIO:    case CURIE_A11Y_TEXTBOX:
-    case CURIE_A11Y_SLIDER:   case CURIE_A11Y_SPINBUTTON:
-    case CURIE_A11Y_COMBOBOX: case CURIE_A11Y_LISTITEM: case CURIE_A11Y_TREEITEM:
-    case CURIE_A11Y_MENUITEM:
-        return 1;
-    default:
-        return 0;
-    }
-}
-
 /* --- the provider object -------------------------------------------------
  *
  * One object per element a client is holding. Three interfaces are embedded
@@ -192,6 +98,9 @@ typedef struct Provider {
     IRawElementProviderFragmentRoot root;
     IInvokeProvider                 invoke;
     IValueProvider                  value;
+    IToggleProvider                 toggle;
+    ISelectionItemProvider          selection;
+    IRangeValueProvider             range;
     LONG                            ref;
     /* The node this stands for. Zero is the fragment root: the window itself,
      * which is the one element that exists whether or not a frame has been
@@ -206,6 +115,9 @@ static Provider *provider_new(unsigned id);
 #define FROM_ROOT(p)     ((Provider *)((char *)(p) - offsetof(Provider, root)))
 #define FROM_INVOKE(p)   ((Provider *)((char *)(p) - offsetof(Provider, invoke)))
 #define FROM_VALUE(p)    ((Provider *)((char *)(p) - offsetof(Provider, value)))
+#define FROM_TOGGLE(p)   ((Provider *)((char *)(p) - offsetof(Provider, toggle)))
+#define FROM_SELECT(p)   ((Provider *)((char *)(p) - offsetof(Provider, selection)))
+#define FROM_RANGE(p)    ((Provider *)((char *)(p) - offsetof(Provider, range)))
 
 /* The root stands for the window and answers even before the first frame; any
  * other id has to be in the snapshot to answer at all. */
@@ -213,6 +125,35 @@ static int
 provider_is_root(const Provider *p)
 {
     return p->id == 0;
+}
+
+/* A pattern belongs to a role, and the snapshot is what says which role a
+ * node has - so support is asked of the tree rather than remembered on the
+ * object, which would go stale the moment a page changed under a client that
+ * was still holding it. */
+static int
+node_of(unsigned id, curie_snap_node *out, char *buf, size_t cap)
+{
+    return curie_snap_get(id, out, buf, cap);
+}
+
+static int
+node_role_is(unsigned id, unsigned char a, unsigned char b, unsigned char c)
+{
+    curie_snap_node n;
+    char buf[CURIE_SNAP_TEXT];
+
+    if (!node_of(id, &n, buf, sizeof(buf))) return 0;
+    return n.role == a || (b && n.role == b) || (c && n.role == c);
+}
+
+static int
+node_is_range(unsigned id)
+{
+    curie_snap_node n;
+    char buf[CURIE_SNAP_TEXT];
+
+    return node_of(id, &n, buf, sizeof(buf)) && n.hi > n.lo;
 }
 
 static HRESULT
@@ -228,17 +169,30 @@ provider_qi(Provider *p, REFIID iid, void **out)
              provider_is_root(p))
         *out = &p->root;
     else if (IsEqualIID(iid, &IID_IInvokeProvider)) {
-        int i = snap_find(p->id);
-        if (i < 0 || !(g.node[i].role == CURIE_A11Y_BUTTON ||
-                       g.node[i].role == CURIE_A11Y_LINK ||
-                       g.node[i].role == CURIE_A11Y_MENUITEM ||
-                       g.node[i].role == CURIE_A11Y_TAB))
+        if (!node_role_is(p->id, CURIE_A11Y_BUTTON, CURIE_A11Y_LINK,
+                          CURIE_A11Y_MENUITEM) &&
+            !node_role_is(p->id, CURIE_A11Y_TAB, 0, 0))
             return E_NOINTERFACE;
         *out = &p->invoke;
     } else if (IsEqualIID(iid, &IID_IValueProvider)) {
-        int i = snap_find(p->id);
-        if (i < 0 || g.node[i].value < 0) return E_NOINTERFACE;
+        curie_snap_node n;
+        char buf[CURIE_SNAP_TEXT];
+
+        if (!node_of(p->id, &n, buf, sizeof(buf)) || !n.value)
+            return E_NOINTERFACE;
         *out = &p->value;
+    } else if (IsEqualIID(iid, &IID_IToggleProvider)) {
+        if (!node_role_is(p->id, CURIE_A11Y_CHECKBOX, 0, 0))
+            return E_NOINTERFACE;
+        *out = &p->toggle;
+    } else if (IsEqualIID(iid, &IID_ISelectionItemProvider)) {
+        if (!node_role_is(p->id, CURIE_A11Y_TAB, CURIE_A11Y_LISTITEM,
+                          CURIE_A11Y_RADIO))
+            return E_NOINTERFACE;
+        *out = &p->selection;
+    } else if (IsEqualIID(iid, &IID_IRangeValueProvider)) {
+        if (!node_is_range(p->id)) return E_NOINTERFACE;
+        *out = &p->range;
     } else {
         return E_NOINTERFACE;
     }
@@ -273,6 +227,9 @@ IUNKNOWN_FOR(fragment, IRawElementProviderFragment,     FROM_FRAGMENT)
 IUNKNOWN_FOR(root,     IRawElementProviderFragmentRoot, FROM_ROOT)
 IUNKNOWN_FOR(invoke,   IInvokeProvider,                 FROM_INVOKE)
 IUNKNOWN_FOR(value,    IValueProvider,                  FROM_VALUE)
+IUNKNOWN_FOR(toggle,   IToggleProvider,                 FROM_TOGGLE)
+IUNKNOWN_FOR(select,   ISelectionItemProvider,          FROM_SELECT)
+IUNKNOWN_FOR(range,    IRangeValueProvider,             FROM_RANGE)
 
 /* --- IRawElementProviderSimple ------------------------------------------ */
 
@@ -294,8 +251,12 @@ simple_GetPatternProvider(IRawElementProviderSimple *self, PATTERNID pattern,
                           IUnknown **out)
 {
     Provider *p = FROM_SIMPLE(self);
-    REFIID iid = pattern == UIA_InvokePatternId ? &IID_IInvokeProvider
-               : pattern == UIA_ValuePatternId  ? &IID_IValueProvider
+    REFIID iid = pattern == UIA_InvokePatternId    ? &IID_IInvokeProvider
+               : pattern == UIA_ValuePatternId     ? &IID_IValueProvider
+               : pattern == UIA_TogglePatternId    ? &IID_IToggleProvider
+               : pattern == UIA_SelectionItemPatternId
+                                                   ? &IID_ISelectionItemProvider
+               : pattern == UIA_RangeValuePatternId ? &IID_IRangeValueProvider
                : NULL;
 
     *out = NULL;
@@ -338,13 +299,11 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
                         VARIANT *out)
 {
     Provider *p = FROM_SIMPLE(self);
-    snap_node n;
-    int i;
+    curie_snap_node n;
+    char buf[CURIE_SNAP_TEXT];
 
     VariantInit(out);
-    EnterCriticalSection(&g.lock);
     if (provider_is_root(p)) {
-        LeaveCriticalSection(&g.lock);
         /* if rather than switch throughout: the SDK spells a property id
          * `const long`, which C does not accept as a case label. */
         if (prop == UIA_NamePropertyId) {
@@ -358,21 +317,10 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
         }
         return S_OK;
     }
-    i = snap_find(p->id);
-    if (i < 0) { LeaveCriticalSection(&g.lock); return S_OK; }
-    n = g.node[i];
-    /* Copied out of the snapshot before the lock goes, so the string work
-     * below - which allocates - happens with the frame free to run. */
+    if (!node_of(p->id, &n, buf, sizeof(buf))) return S_OK;
     {
-        const char *name = snap_str(n.name), *value = snap_str(n.value);
-        char nbuf[256], vbuf[256];
-
-        if (name)  { strncpy(nbuf, name, sizeof(nbuf) - 1); nbuf[sizeof(nbuf)-1] = 0; }
-        if (value) { strncpy(vbuf, value, sizeof(vbuf) - 1); vbuf[sizeof(vbuf)-1] = 0; }
-        LeaveCriticalSection(&g.lock);
-
         if (prop == UIA_NamePropertyId) {
-            str_variant(out, name ? nbuf : NULL);
+            str_variant(out, n.name);
         } else if (prop == UIA_ControlTypePropertyId) {
             out->vt = VT_I4;
             out->lVal = control_type(n.role);
@@ -385,7 +333,7 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
         } else if (prop == UIA_IsEnabledPropertyId) {
             bool_variant(out, !(n.state & CURIE_A11Y_DISABLED));
         } else if (prop == UIA_IsKeyboardFocusablePropertyId) {
-            bool_variant(out, keyboard_focusable(n.role, n.state));
+            bool_variant(out, curie_snap_focusable(n.role, n.state));
         } else if (prop == UIA_HasKeyboardFocusPropertyId) {
             bool_variant(out, (n.state & CURIE_A11Y_FOCUSED) != 0);
         } else if (prop == UIA_IsOffscreenPropertyId) {
@@ -394,11 +342,11 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
                    prop == UIA_IsContentElementPropertyId) {
             bool_variant(out, 1);
         } else if (prop == UIA_ValueValuePropertyId) {
-            str_variant(out, value ? vbuf : NULL);
-        /* The last two are a pattern's properties, and a client that asks
-         * through the pattern will not reach here until IToggleProvider and
-         * ISelectionItemProvider exist. One that asks for the property
-         * directly does, which several do, so they are answered. */
+            str_variant(out, n.value);
+        /* The last two are a pattern's properties as well. A client that
+         * asks through IToggleProvider or ISelectionItemProvider gets them
+         * there; one that asks for the property directly, which several do,
+         * gets the same answer here. */
         } else if (prop == UIA_ToggleToggleStatePropertyId) {
             if (n.role == CURIE_A11Y_CHECKBOX || n.role == CURIE_A11Y_RADIO) {
                 out->vt = VT_I4;
@@ -435,84 +383,40 @@ static IRawElementProviderSimpleVtbl g_simple_vtbl = {
 
 /* --- IRawElementProviderFragment ---------------------------------------- */
 
-/* The first child of `parent`, or the sibling of `from` in `dir`. Everything
- * navigation needs is one pass over the snapshot, because the tree is stored
- * flat in draw order and draw order is document order. */
-static unsigned
-nav_child(unsigned parent, int last)
-{
-    unsigned found = 0;
-    int i;
-
-    for (i = 0; i < g.count; i++)
-        if (g.node[i].parent == parent) {
-            found = g.node[i].id;
-            if (!last) break;
-        }
-    return found;
-}
-
-static unsigned
-nav_sibling(unsigned id, int back)
-{
-    int i = snap_find(id), k, seen = 0;
-    unsigned parent, prev = 0;
-
-    if (i < 0) return 0;
-    parent = g.node[i].parent;
-    /* One pass, both directions: the node before it in the parent's run, or
-     * the one after. Draw order is document order, so the run is the order a
-     * client should see. */
-    for (k = 0; k < g.count; k++) {
-        if (g.node[k].parent != parent) continue;
-        if (g.node[k].id == id) {
-            if (back) return prev;
-            seen = 1;
-            continue;
-        }
-        if (seen) return g.node[k].id;
-        prev = g.node[k].id;
-    }
-    return 0;
-}
-
 static HRESULT STDMETHODCALLTYPE
 fragment_Navigate(IRawElementProviderFragment *self,
                   enum NavigateDirection dir, IRawElementProviderFragment **out)
 {
     Provider *p = FROM_FRAGMENT(self);
     unsigned to = 0;
-    int i;
 
     *out = NULL;
-    EnterCriticalSection(&g.lock);
     if (provider_is_root(p)) {
         /* The root's children are the model's roots - nodes with no parent. */
-        if (dir == NavigateDirection_FirstChild) to = nav_child(0, 0);
-        else if (dir == NavigateDirection_LastChild) to = nav_child(0, 1);
-    } else if ((i = snap_find(p->id)) >= 0) {
+        if (dir == NavigateDirection_FirstChild) to = curie_snap_child(0, 0);
+        else if (dir == NavigateDirection_LastChild) to = curie_snap_child(0, 1);
+    } else {
         switch (dir) {
-        case NavigateDirection_Parent:        to = g.node[i].parent; break;
-        case NavigateDirection_FirstChild:    to = nav_child(p->id, 0); break;
-        case NavigateDirection_LastChild:     to = nav_child(p->id, 1); break;
-        case NavigateDirection_NextSibling:   to = nav_sibling(p->id, 0); break;
-        case NavigateDirection_PreviousSibling: to = nav_sibling(p->id, 1); break;
-        default: break;
-        }
-        /* A node whose parent is 0 is a child of the fragment root, and the
-         * root is what Parent has to answer with - not nothing. */
-        if (dir == NavigateDirection_Parent && to == 0) {
-            LeaveCriticalSection(&g.lock);
-            {
+        case NavigateDirection_Parent:
+            /* A node whose parent is 0 is a child of the fragment root, and
+             * the root is what Parent has to answer with - not nothing. */
+            to = curie_snap_parent(p->id);
+            if (!to) {
                 Provider *r = provider_new(0);
                 if (!r) return E_OUTOFMEMORY;
                 *out = &r->fragment;
+                return S_OK;
             }
-            return S_OK;
+            break;
+        case NavigateDirection_FirstChild:  to = curie_snap_child(p->id, 0); break;
+        case NavigateDirection_LastChild:   to = curie_snap_child(p->id, 1); break;
+        case NavigateDirection_NextSibling: to = curie_snap_sibling(p->id, 0); break;
+        case NavigateDirection_PreviousSibling:
+            to = curie_snap_sibling(p->id, 1);
+            break;
+        default: break;
         }
     }
-    LeaveCriticalSection(&g.lock);
-
     if (!to) return S_OK;
     {
         Provider *q = provider_new(to);
@@ -549,22 +453,17 @@ fragment_get_BoundingRectangle(IRawElementProviderFragment *self,
                                struct UiaRect *out)
 {
     Provider *p = FROM_FRAGMENT(self);
+    curie_snap_node n;
+    char buf[CURIE_SNAP_TEXT];
     POINT origin;
-    int i;
 
     out->left = out->top = out->width = out->height = 0.0;
     /* The root's rectangle comes from the HWND provider, so an empty one here
      * is the right answer rather than a missing one. */
     if (provider_is_root(p)) return S_OK;
-
-    EnterCriticalSection(&g.lock);
-    i = snap_find(p->id);
-    if (i >= 0) {
-        out->left = g.node[i].x; out->top = g.node[i].y;
-        out->width = g.node[i].w; out->height = g.node[i].h;
-    }
-    LeaveCriticalSection(&g.lock);
-    if (i < 0) return S_OK;
+    if (!node_of(p->id, &n, buf, sizeof(buf))) return S_OK;
+    out->left = n.x; out->top = n.y;
+    out->width = n.w; out->height = n.h;
 
     /* The model works in window coordinates; UIA wants the screen's. */
     origin.x = origin.y = 0;
@@ -584,29 +483,12 @@ fragment_GetEmbeddedFragmentRoots(IRawElementProviderFragment *self,
     return S_OK;
 }
 
-/* A request from the client's thread, left for the app's. Waking the loop is
- * the other half: with nothing else happening it is asleep in SDL_WaitEvent,
- * and an id recorded and never looked at is a click that does nothing. */
-static void
-request(unsigned *slot, unsigned id)
-{
-    SDL_Event e;
-
-    EnterCriticalSection(&g.lock);
-    *slot = id;
-    LeaveCriticalSection(&g.lock);
-
-    SDL_zero(e);
-    e.type = g.wake;
-    SDL_PushEvent(&e);
-}
-
 static HRESULT STDMETHODCALLTYPE
 fragment_SetFocus(IRawElementProviderFragment *self)
 {
     Provider *p = FROM_FRAGMENT(self);
 
-    if (!provider_is_root(p)) request(&g.want_focus, p->id);
+    if (!provider_is_root(p)) curie_snap_request_focus(p->id);
     return S_OK;
 }
 
@@ -639,33 +521,13 @@ root_ElementProviderFromPoint(IRawElementProviderFragmentRoot *self,
                               IRawElementProviderFragment **out)
 {
     POINT origin;
-    unsigned hit = 0;
-    unsigned char best = 0;
-    int i;
+    unsigned hit;
 
     (void)self;
     *out = NULL;
     origin.x = origin.y = 0;
     if (!ClientToScreen(g.hwnd, &origin)) return S_OK;
-    x -= origin.x;
-    y -= origin.y;
-
-    EnterCriticalSection(&g.lock);
-    /* The deepest node containing the point, and among equals the last drawn.
-     * Depth first, not draw order alone: a group's bounds cover its children,
-     * and the tab strip has two groups over the same band - taking the last
-     * containing node answered with the group beside the tabs rather than
-     * with the tab. UIA wants the innermost element. */
-    for (i = 0; i < g.count; i++) {
-        const snap_node *n = &g.node[i];
-
-        if (n->state & CURIE_A11Y_OFFSCREEN) continue;
-        if (x < n->x || x >= n->x + n->w) continue;
-        if (y < n->y || y >= n->y + n->h) continue;
-        if (!hit || n->level >= best) { hit = n->id; best = n->level; }
-    }
-    LeaveCriticalSection(&g.lock);
-
+    hit = curie_snap_hit((float)(x - origin.x), (float)(y - origin.y));
     if (!hit) return S_OK;
     {
         Provider *q = provider_new(hit);
@@ -683,9 +545,7 @@ root_GetFocus(IRawElementProviderFragmentRoot *self,
 
     (void)self;
     *out = NULL;
-    EnterCriticalSection(&g.lock);
-    id = g.focus && snap_find(g.focus) >= 0 ? g.focus : 0;
-    LeaveCriticalSection(&g.lock);
+    id = curie_snap_focus();
     if (!id) return S_OK;
     {
         Provider *q = provider_new(id);
@@ -705,7 +565,7 @@ static IRawElementProviderFragmentRootVtbl g_root_vtbl = {
 static HRESULT STDMETHODCALLTYPE
 invoke_Invoke(IInvokeProvider *self)
 {
-    request(&g.want_activate, FROM_INVOKE(self)->id);
+    curie_snap_request_activate(FROM_INVOKE(self)->id);
     return S_OK;
 }
 
@@ -752,6 +612,162 @@ static IValueProviderVtbl g_value_vtbl = {
     value_SetValue, value_get_Value, value_get_IsReadOnly
 };
 
+/* --- IToggleProvider, ISelectionItemProvider, IRangeValueProvider --------
+ *
+ * All three change the value by making the press that changes it: a checkbox
+ * ticks when it is clicked, a tab selects, and Nuklear has no way to set
+ * either from outside. So Toggle and Select are Invoke under another name -
+ * which is honest, since it is the same thing a reader's press and the
+ * keyboard's Enter both do. */
+
+static HRESULT STDMETHODCALLTYPE
+toggle_Toggle(IToggleProvider *self)
+{
+    curie_snap_request_activate(FROM_TOGGLE(self)->id);
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE
+toggle_get_ToggleState(IToggleProvider *self, enum ToggleState *out)
+{
+    curie_snap_node n;
+    char buf[CURIE_SNAP_TEXT];
+
+    *out = ToggleState_Indeterminate;
+    if (node_of(FROM_TOGGLE(self)->id, &n, buf, sizeof(buf)))
+        *out = (n.state & CURIE_A11Y_CHECKED) ? ToggleState_On
+                                              : ToggleState_Off;
+    return S_OK;
+}
+
+static IToggleProviderVtbl g_toggle_vtbl = {
+    toggle_QueryInterface, toggle_AddRef, toggle_Release,
+    toggle_Toggle, toggle_get_ToggleState
+};
+
+static HRESULT STDMETHODCALLTYPE
+select_Select(ISelectionItemProvider *self)
+{
+    curie_snap_request_activate(FROM_SELECT(self)->id);
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE
+select_AddToSelection(ISelectionItemProvider *self)
+{
+    /* One at a time everywhere this appears - a tab strip, a radio group, a
+     * list of one choice - so adding is selecting. */
+    return select_Select(self);
+}
+
+static HRESULT STDMETHODCALLTYPE
+select_RemoveFromSelection(ISelectionItemProvider *self)
+{
+    (void)self;
+    /* Nothing here can be deselected without something else being selected. */
+    return UIA_E_INVALIDOPERATION;
+}
+
+static HRESULT STDMETHODCALLTYPE
+select_get_IsSelected(ISelectionItemProvider *self, BOOL *out)
+{
+    curie_snap_node n;
+    char buf[CURIE_SNAP_TEXT];
+
+    *out = FALSE;
+    if (node_of(FROM_SELECT(self)->id, &n, buf, sizeof(buf)))
+        *out = (n.state & (CURIE_A11Y_SELECTED | CURIE_A11Y_CHECKED))
+             ? TRUE : FALSE;
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE
+select_get_SelectionContainer(ISelectionItemProvider *self,
+                              IRawElementProviderSimple **out)
+{
+    unsigned parent = curie_snap_parent(FROM_SELECT(self)->id);
+
+    *out = NULL;
+    if (!parent) return S_OK;
+    {
+        Provider *q = provider_new(parent);
+        if (!q) return E_OUTOFMEMORY;
+        *out = &q->simple;
+    }
+    return S_OK;
+}
+
+static ISelectionItemProviderVtbl g_select_vtbl = {
+    select_QueryInterface, select_AddRef, select_Release,
+    select_Select, select_AddToSelection, select_RemoveFromSelection,
+    select_get_IsSelected, select_get_SelectionContainer
+};
+
+/* The range is the one of the three that can be set without a press: the
+ * widget takes steps from the shell already (curie_focus_step), so a client
+ * asking for a value becomes focus plus that many steps. */
+static HRESULT STDMETHODCALLTYPE
+range_SetValue(IRangeValueProvider *self, double val)
+{
+    (void)self; (void)val;
+    /* Not yet: the step channel carries a count, not a destination, and
+     * turning one into the other means the shell knowing the grain it has
+     * deliberately left to the widget. IsReadOnly says so. */
+    return UIA_E_NOTSUPPORTED;
+}
+
+static HRESULT
+range_field(IRangeValueProvider *self, size_t off, double *out)
+{
+    curie_snap_node n;
+    char buf[CURIE_SNAP_TEXT];
+
+    *out = 0.0;
+    if (node_of(FROM_RANGE(self)->id, &n, buf, sizeof(buf)))
+        *out = *(float *)((char *)&n + off);
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE
+range_get_Value(IRangeValueProvider *self, double *out)
+{ return range_field(self, offsetof(curie_snap_node, num), out); }
+
+static HRESULT STDMETHODCALLTYPE
+range_get_Maximum(IRangeValueProvider *self, double *out)
+{ return range_field(self, offsetof(curie_snap_node, hi), out); }
+
+static HRESULT STDMETHODCALLTYPE
+range_get_Minimum(IRangeValueProvider *self, double *out)
+{ return range_field(self, offsetof(curie_snap_node, lo), out); }
+
+static HRESULT STDMETHODCALLTYPE
+range_get_SmallChange(IRangeValueProvider *self, double *out)
+{ return range_field(self, offsetof(curie_snap_node, step), out); }
+
+static HRESULT STDMETHODCALLTYPE
+range_get_LargeChange(IRangeValueProvider *self, double *out)
+{
+    HRESULT hr = range_field(self, offsetof(curie_snap_node, step), out);
+
+    *out *= 10.0;   /* what Page Up would be worth, if it were bound */
+    return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE
+range_get_IsReadOnly(IRangeValueProvider *self, BOOL *out)
+{
+    (void)self;
+    *out = TRUE;
+    return S_OK;
+}
+
+static IRangeValueProviderVtbl g_range_vtbl = {
+    range_QueryInterface, range_AddRef, range_Release,
+    range_SetValue, range_get_Value, range_get_IsReadOnly,
+    range_get_Maximum, range_get_Minimum, range_get_LargeChange,
+    range_get_SmallChange
+};
+
 static Provider *
 provider_new(unsigned id)
 {
@@ -763,6 +779,9 @@ provider_new(unsigned id)
     p->root.lpVtbl     = &g_root_vtbl;
     p->invoke.lpVtbl   = &g_invoke_vtbl;
     p->value.lpVtbl    = &g_value_vtbl;
+    p->toggle.lpVtbl   = &g_toggle_vtbl;
+    p->selection.lpVtbl = &g_select_vtbl;
+    p->range.lpVtbl    = &g_range_vtbl;
     p->ref = 1;
     p->id  = id;
     return p;
@@ -801,13 +820,7 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
     SDL_Window **wins;
     int count = 0;
 
-    g.activate     = activate;
-    g.focus_action = focus;
-    g.user         = user;
-
-    InitializeCriticalSection(&g.lock);
-    g.wake  = SDL_RegisterEvents(1);
-    g.ready = 1;
+    if (!curie_snap_init(activate, focus, user)) return;
 
     /* Asked for rather than guessed: the shell has exactly one window by the
      * time this runs, but its id is SDL's business. */
@@ -828,68 +841,45 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
                 (unsigned long)GetLastError());
 }
 
-/* On the main thread, before the frame is built: the tree is whole here and
- * nothing else is writing it, which is the whole reason the request waited. */
 void
 curie_a11y_platform_drain(void)
 {
-    unsigned focus, activate;
-
-    if (!g.ready) return;
-    EnterCriticalSection(&g.lock);
-    focus    = g.want_focus;
-    activate = g.want_activate;
-    g.want_focus = g.want_activate = 0;
-    LeaveCriticalSection(&g.lock);
-
-    /* The same two calls a reader's move and press make on the web, which are
-     * the same ones Tab and Enter make - see reader_focus in main.c. */
-    if (focus && g.focus_action) g.focus_action(g.user, focus);
-    if (activate && g.activate)  g.activate(g.user, activate);
+    curie_snap_drain();
 }
 
 void
 curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
 {
-    int n, m, i;
-    const curie_a11y_node *t;
+    if (!curie_snap_update(a, focus_id)) return;
 
-    if (!g.ready) return;
-    curie_a11y_changes(a, &m);
-    t = curie_a11y_tree(a, &n);
-    if (m == 0 && focus_id == g.focus) return;
-
-    EnterCriticalSection(&g.lock);
-    g.str_used = 0;
-    g.count    = 0;
-    for (i = 0; i < n && i < CURIE_A11Y_MAX_NODES; i++) {
-        snap_node *s = &g.node[g.count++];
-
-        s->id     = t[i].id;
-        s->parent = t[i].parent;
-        s->role   = t[i].role;
-        s->level  = t[i].level;
-        s->state  = t[i].state;
-        s->name   = snap_intern(t[i].name);
-        s->value  = snap_intern(t[i].value);
-        s->x = t[i].bounds.x; s->y = t[i].bounds.y;
-        s->w = t[i].bounds.w; s->h = t[i].bounds.h;
-    }
-    g.focus = focus_id;
-    LeaveCriticalSection(&g.lock);
-
-    /* Events only once a client has asked for the tree. Structure first,
-     * because a client that has not walked the new tree cannot be told which
-     * element took focus. */
+    /* Events only once a client has asked for the tree, and only while one is
+     * listening. Structure first, because a client that has not walked the
+     * new tree cannot be told which element took focus. */
     if (!g.wanted || !UiaClientsAreListening()) return;
     {
-        Provider *r = provider_new(0);
+        int m, i, structural = 0;
+        const curie_a11y_change *c = curie_a11y_changes(a, &m);
 
-        if (!r) return;
-        if (m) UiaRaiseStructureChangedEvent(
-                   (IRawElementProviderSimple *)&r->simple,
-                   StructureChangeType_ChildrenBulkAdded, NULL, 0);
-        IRawElementProviderSimple_Release(&r->simple);
+        for (i = 0; i < m; i++)
+            if (c[i].kind == CURIE_A11Y_ADDED ||
+                c[i].kind == CURIE_A11Y_REMOVED) {
+                structural = 1;
+                break;
+            }
+        /* ChildrenInvalidated, not ChildrenBulkAdded: a frame that only
+         * removed something was claiming additions. Raised on the root, which
+         * is what a client needs to know to re-walk; naming the parent that
+         * actually changed wants the change to carry it, and the removals
+         * point into the tree that has just been swapped out. */
+        if (structural) {
+            Provider *r = provider_new(0);
+
+            if (!r) return;
+            UiaRaiseStructureChangedEvent(
+                (IRawElementProviderSimple *)&r->simple,
+                StructureChangeType_ChildrenInvalidated, NULL, 0);
+            IRawElementProviderSimple_Release(&r->simple);
+        }
     }
     if (focus_id) {
         Provider *f = provider_new(focus_id);

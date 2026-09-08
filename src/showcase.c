@@ -377,6 +377,9 @@ slider_cell(App *app, struct nk_context *ctx, unsigned id, float *val,
             if (*val > hi) *val = hi;
         }
     }
+    /* And the same three numbers to the tree, after the arrows rather than
+     * before, so a client reads the value it has just been given. */
+    curie_note_range(app, id, *val, lo, hi, step);
 
     in  = nk_rect(b.x + st->padding.x, b.y + st->padding.y,
                   b.w - 2.0f * st->padding.x, b.h - 2.0f * st->padding.y);
@@ -724,7 +727,7 @@ menu_item(App *app, struct nk_context *ctx, const char *label, int contextual)
  * keeping them together is what stops the tree quietly falling behind the
  * screen - see docs/ACCESSIBILITY.md. `state` carries what the tree needs and
  * the cursor does not: checked, selected, expanded. */
-static void
+static unsigned
 hot(App *app, struct nk_context *ctx, unsigned char role, const char *name,
     unsigned state)
 {
@@ -733,9 +736,11 @@ hot(App *app, struct nk_context *ctx, unsigned char role, const char *name,
     curie_hot(app, b, 1, 1);
     /* CURIE_A11Y_NONE means the caller has already reported it - a widget
      * whose value has to be formatted first reports itself, then asks for the
-     * cursor. Reporting it twice would give a reader two of it. */
-    if (role != CURIE_A11Y_NONE)
-        curie_note(app, role, name, NULL, state, b);
+     * cursor. Reporting it twice would give a reader two of it. Answers with
+     * the node's id, which a widget that takes its own activation needs and
+     * every other caller ignores. */
+    if (role == CURIE_A11Y_NONE) return 0;
+    return curie_note(app, role, name, NULL, state, b);
 }
 
 /* Checkboxes and radios sit the way the Edit menu sits them: label at the
@@ -767,8 +772,12 @@ check_row(struct nk_context *ctx, int cells)
 static void
 check_cell(App *app, struct nk_context *ctx, const char *label, nk_bool *on)
 {
-    hot(app, ctx, CURIE_A11Y_CHECKBOX, label,
-        *on ? CURIE_A11Y_CHECKED : 0u);
+    unsigned id = hot(app, ctx, CURIE_A11Y_CHECKBOX, label,
+                      *on ? CURIE_A11Y_CHECKED : 0u);
+
+    /* Enter, or a screen reader's press, taken here rather than delivered as
+     * a click on the box - see curie_focus_activated. */
+    if (curie_focus_activated(app, id)) *on = !*on;
     nk_checkbox_label_align(ctx, label, on, CHECK_ALIGN);
     nk_spacer(ctx);
 }
@@ -780,9 +789,12 @@ flags_cell(App *app, struct nk_context *ctx, const char *label,
            unsigned *flags, unsigned value)
 {
     nk_bool on = (*flags & value) != 0;
+    unsigned id = hot(app, ctx, CURIE_A11Y_CHECKBOX, label,
+                      on ? CURIE_A11Y_CHECKED : 0u);
 
-    hot(app, ctx, CURIE_A11Y_CHECKBOX, label, on ? CURIE_A11Y_CHECKED : 0u);
-    if (nk_checkbox_label_align(ctx, label, &on, CHECK_ALIGN)) {
+    if (curie_focus_activated(app, id)) on = !on;
+    if (nk_checkbox_label_align(ctx, label, &on, CHECK_ALIGN) ||
+        (*flags & value) != (on ? value : 0u)) {
         if (on) *flags |= value;
         else    *flags &= ~value;
     }
@@ -808,7 +820,12 @@ radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
     int side, dot_px;
     int on = *sel == value;
 
-    hot(app, ctx, CURIE_A11Y_RADIO, label, on ? CURIE_A11Y_CHECKED : 0u);
+    {
+        unsigned id = hot(app, ctx, CURIE_A11Y_RADIO, label,
+                          on ? CURIE_A11Y_CHECKED : 0u);
+
+        if (curie_focus_activated(app, id)) { *sel = value; on = 1; }
+    }
 
     /* Nuklear draws nothing for the circle: its fills are pushed transparent
      * for the call, and the widget keeps its geometry, its label and its
@@ -855,8 +872,13 @@ radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
 static int
 demo_button(App *app, struct nk_context *ctx, const char *label)
 {
-    hot(app, ctx, CURIE_A11Y_BUTTON, label, 0);
-    return nk_button_label(ctx, label);
+    unsigned id = hot(app, ctx, CURIE_A11Y_BUTTON, label, 0);
+    int hit = nk_button_label(ctx, label);
+
+    /* Both, always: `||` would short-circuit and leave the activation for the
+     * frame to turn into a second press. */
+    if (curie_focus_activated(app, id)) hit = 1;
+    return hit;
 }
 
 /* --- first-run values ---------------------------------------------------- */

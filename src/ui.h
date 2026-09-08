@@ -183,10 +183,22 @@ void curie_note_pop(App *app);
  * only as the text a reader would hear, and nothing of its bounds or its
  * grain. Every other role lets the arrows move focus instead. */
 int curie_focus_step(App *app, unsigned id);
+
+/* Whether this node was asked to activate - by Enter, or by a screen reader
+ * pressing it - taken once. A widget that answers it acts on itself, which is
+ * the reliable path; one that does not still gets the synthetic click the
+ * shell falls back to. See the definition. */
+int curie_focus_activated(App *app, unsigned id);
+
+/* The numbers behind a range's value text, for the node `id` names - what a
+ * platform needs to offer a slider as something to set rather than only to
+ * read. See curie_a11y_set_range. */
+void curie_note_range(App *app, unsigned id, float num, float lo, float hi,
+                      float step);
 /* Convenience for the common case: the widget just drawn, at the bounds the
  * layout gave it, with no value. */
-void curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
-                     const char *name, unsigned state);
+unsigned curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
+                         const char *name, unsigned state);
 
 /* The platform's own Open dialog. Answers 0 if one is already up. The choice
  * arrives on SDL's thread, so it is not a return value: call curie_file_taken

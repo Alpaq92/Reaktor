@@ -69,7 +69,7 @@ EM_JS(void, web_a11y_begin, (void), {
 EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
                             const char *name, const char *value,
                             unsigned state, float x, float y, float w,
-                            float h), {
+                            float h, float num, float lo, float hi), {
     var a = Module['a11y']; if (!a) return;
     var el = a.nodes[id];
     if (!el) {
@@ -133,7 +133,13 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
     var valued = aria === 'slider' || aria === 'spinbutton' ||
                  aria === 'progressbar';
     set('aria-valuetext', valued && v ? v : null);
-    set('aria-valuenow', valued && v && !isNaN(parseFloat(v)) ? String(parseFloat(v)) : null);
+    /* From the numbers the widget reported, not from parsing the text back
+       out of the value - "40" and "0.65" happened to parse, and "3 of 8"
+       would not have. hi > lo is how a node says it has a range at all. */
+    var ranged = valued && hi > lo;
+    set('aria-valuenow', ranged ? String(num) : null);
+    set('aria-valuemin', ranged ? String(lo) : null);
+    set('aria-valuemax', ranged ? String(hi) : null);
 
     el.style.left = x + 'px'; el.style.top = y + 'px';
     el.style.width = w + 'px'; el.style.height = h + 'px';
@@ -192,7 +198,7 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
         web_a11y_node(nd->id, nd->parent, curie_a11y_role_name(nd->role),
                       nd->name ? nd->name : "", nd->value ? nd->value : "",
                       nd->state, nd->bounds.x, nd->bounds.y, nd->bounds.w,
-                      nd->bounds.h);
+                      nd->bounds.h, nd->num, nd->lo, nd->hi);
     }
     web_a11y_end(focus_id);
 }

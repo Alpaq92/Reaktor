@@ -177,7 +177,26 @@ emit(curie_a11y *a, unsigned char role, const char *name, const char *value,
     n->name   = intern(a, name, nh);
     n->value  = intern(a, value, hash_str(2166136261u, value));
     n->bounds = bounds;
+    n->num = n->lo = n->hi = n->step = 0.0f;
     return id;
+}
+
+void
+curie_a11y_set_range(curie_a11y *a, unsigned id, float num, float lo, float hi,
+                     float step)
+{
+    int f = a->front, i;
+
+    if (!a->building || !id) return;
+    /* Backwards: the caller is decorating the node it has just reported, so
+     * this is the last entry or close to it. */
+    for (i = a->count[f] - 1; i >= 0; i--) {
+        curie_a11y_node *n = &a->node[f][i];
+
+        if (n->id != id) continue;
+        n->num = num; n->lo = lo; n->hi = hi; n->step = step;
+        return;
+    }
 }
 
 void
@@ -273,18 +292,42 @@ curie_a11y_end(curie_a11y *a)
     a->building = 0;
     a->depth    = 0;
 
-    /* A page scrolls, so plenty of what was reported is above or below the
-     * window. Those nodes stay in the tree - a reader should be able to find
-     * them and scroll to them - but they are marked, because a client that
-     * draws a highlight or a magnifier needs to know the bounds are not on
-     * screen. The window node is the root, so its rect is the viewport. */
-    if (a->count[f] > 0) {
-        struct nk_rect v = a->node[f][0].bounds;
-        for (i = 1; i < a->count[f]; i++) {
-            struct nk_rect b = a->node[f][i].bounds;
+    /* An id to index table for the frame just described. The ancestor walk
+     * below needs it, and so does the suppression in the diff; the diff
+     * builds the same table for the previous frame afterwards, on the next
+     * generation. */
+    a->index_gen++;
+    for (i = 0; i < ncur; i++)
+        slot_of(a->index, a->index_gen, cur[i].id)->val = i + 1;
+
+    /* A page scrolls, so plenty of what was reported is out of sight. Those
+     * nodes stay in the tree - a reader should be able to find them and
+     * scroll to them - but they are marked, because a client that draws a
+     * highlight or a magnifier needs to know the bounds are not on screen.
+     *
+     * Against every ancestor, not only the window. A container's bounds are
+     * what it clips its children to - the page's band, a popup's rect - so a
+     * node scrolled out of a list inside a popup is out of sight even though
+     * it is well inside the window, which is what measuring against the root
+     * alone used to miss. */
+    for (i = 1; i < ncur; i++) {
+        struct nk_rect b = cur[i].bounds;
+        unsigned up = cur[i].parent;
+        int guard = 0;
+
+        while (guard++ <= CURIE_A11Y_MAX_DEPTH) {
+            int k = up ? slot_get(a->index, a->index_gen, up) - 1 : 0;
+            struct nk_rect v;
+
+            if (k < 0) break;
+            v = cur[k].bounds;
             if (b.x + b.w <= v.x || b.x >= v.x + v.w ||
-                b.y + b.h <= v.y || b.y >= v.y + v.h)
+                b.y + b.h <= v.y || b.y >= v.y + v.h) {
                 a->node[f][i].state |= CURIE_A11Y_OFFSCREEN;
+                break;
+            }
+            if (!up) break;              /* reached the window */
+            up = cur[k].parent;
         }
     }
 
@@ -299,7 +342,13 @@ curie_a11y_end(curie_a11y *a)
     for (i = 0; i < ncur; i++) {
         int j = slot_get(a->index, a->index_gen, cur[i].id) - 1;
         if (j < 0) {
-            change(a, CURIE_A11Y_ADDED, cur[i].id, i);
+            /* Only the root of an arrival is reported. A node whose parent is
+             * arriving too is part of that subtree, and a client re-reads a
+             * subtree when its root appears - switching tabs used to be a
+             * hundred unrelated additions where it is one. */
+            if (!cur[i].parent ||
+                slot_get(a->index, a->index_gen, cur[i].parent) > 0)
+                change(a, CURIE_A11Y_ADDED, cur[i].id, i);
             continue;
         }
         a->matched[j] = 1;
@@ -313,9 +362,17 @@ curie_a11y_end(curie_a11y *a)
              * to re-read a node for its state will re-read its bounds too. */
             change(a, CURIE_A11Y_MOVED, cur[i].id, i);
     }
-    for (i = 0; i < nold; i++)
-        if (!a->matched[i])
-            change(a, CURIE_A11Y_REMOVED, old[i].id, i);
+    for (i = 0; i < nold; i++) {
+        if (a->matched[i]) continue;
+        /* And only the root of a departure, by the same argument: the parent
+         * is in the old table, so a parent that is also going is one lookup
+         * away. */
+        if (old[i].parent) {
+            int up = slot_get(a->index, a->index_gen, old[i].parent) - 1;
+            if (up >= 0 && !a->matched[up]) continue;
+        }
+        change(a, CURIE_A11Y_REMOVED, old[i].id, i);
+    }
 
     a->front = b;
     return a->change_count;

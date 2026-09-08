@@ -102,6 +102,23 @@ build(curie_a11y *a, int tab, int with_link, int checked)
     curie_a11y_end(a);
 }
 
+/* The same shape with the page group under a given name. The app names that
+ * group after the tab, and an id is derived from the name - so changing tabs
+ * replaces the whole page rather than restating it, which is the case the
+ * subtree rule exists for. */
+static void
+build_page(curie_a11y *a, const char *group)
+{
+    curie_a11y_begin(a, "Curie", r(0, 0, 960, 680));
+    curie_a11y_push(a, CURIE_A11Y_GROUP, group, NULL, 0, r(0, 74, 960, 606));
+    curie_a11y_add(a, CURIE_A11Y_BUTTON, "Continue", NULL, 0,
+                   r(16, 110, 200, 38));
+    curie_a11y_add(a, CURIE_A11Y_CHECKBOX, "Wrap lines", NULL, 0,
+                   r(16, 158, 160, 24));
+    curie_a11y_pop(a);
+    curie_a11y_end(a);
+}
+
 /* Ids of the nodes after the insertion point, so two frames can be compared. */
 static void
 ids_of(curie_a11y *a, unsigned out[3])
@@ -201,9 +218,11 @@ int main(int argc, char **argv)
     curie_a11y_tree(&a, &n);
     check("node count", n, 9);
 
-    /* Everything is new on the first frame, and nothing else is reported. */
+    /* Everything is new on the first frame, and that is one change, not nine:
+     * a subtree is reported by its root and a client re-reads what hangs off
+     * it. The whole tree arriving is the largest case of that. */
     curie_a11y_changes(&a, &n);
-    check("first frame changes", n, 9);
+    check("first frame changes", n, 1);
 
     /* 2. The same screen again changes nothing at all. This is the property
      *    the whole design rests on: a reader must not hear the screen rebuild
@@ -305,6 +324,24 @@ int main(int argc, char **argv)
             if (c[i].kind == CURIE_A11Y_REMOVED) removed++;
         check("removal: removed", removed, 1);
         check("removal: total changes", n, 1);
+    }
+
+    /* 6b. A page replaced wholesale is one addition and one removal - the two
+     *     group nodes - and not one of each per widget inside them. A client
+     *     re-reads a subtree when its root changes, so reporting the contents
+     *     as well is noise, and on a real page it is a hundred lines of it. */
+    build_page(&a, "Buttons");
+    build_page(&a, "Popups");
+    {
+        const curie_a11y_change *c = curie_a11y_changes(&a, &n);
+        added = removed = 0;
+        for (i = 0; i < n; i++) {
+            if (c[i].kind == CURIE_A11Y_ADDED)   added++;
+            if (c[i].kind == CURIE_A11Y_REMOVED) removed++;
+        }
+        check("page swap: added",          added,   1);
+        check("page swap: removed",        removed, 1);
+        check("page swap: total changes",  n,       2);
     }
 
     /* 7. Unlabelled siblings of the same role are told apart by order, which

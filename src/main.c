@@ -273,6 +273,12 @@ struct App {
      * on the next frame and cleared there whether or not it was drawn. They
      * accumulate: key repeat outruns the frame rate. */
     int            focus_step;
+    /* A node Enter or a platform client asked to activate, for the widget to
+     * take on the next frame. A widget that takes it acts on itself, which is
+     * what makes activation reliable; the frame that ends with it untaken
+     * falls back to the synthetic click below, which is what everything that
+     * has not opted in still gets. */
+    unsigned       activate_id;
     int            focus_seen;
     /* Enter or Space on the focused node, delivered to Nuklear as a press at
      * its centre and released on the frame after. */
@@ -969,15 +975,17 @@ css_button(App *app, struct nk_context *ctx, const char *selector,
            const char *label)
 {
     style_frame f;
+    unsigned id;
     int clicked;
 
     /* tiny.css gives the button a --button-hover fill, so this one does
      * need a frame when the pointer arrives. */
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
-    curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
+    id = curie_note_here(app, ctx, CURIE_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
     clicked = nk_button_label(ctx, label);
     pop_style(ctx, f);
+    if (curie_focus_activated(app, id)) clicked = 1;
     return clicked;
 }
 
@@ -2366,9 +2374,18 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
         nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
 
-        curie_note(app, CURIE_A11Y_TAB, name, NULL,
-                   i == app->tab ? CURIE_A11Y_SELECTED : 0u, b);
-        if (nk_button_label(ctx, name)) set_tab(app, i);
+        {
+            unsigned id = curie_note(app, CURIE_A11Y_TAB, name, NULL,
+                                     i == app->tab ? CURIE_A11Y_SELECTED : 0u,
+                                     b);
+            /* Not `||`: that short-circuits, so a tab that was clicked would
+             * leave the activation unconsumed and the frame would turn it
+             * into a second press. */
+            int hit = nk_button_label(ctx, name);
+
+            if (curie_focus_activated(app, id)) hit = 1;
+            if (hit) set_tab(app, i);
+        }
         if (i == app->tab) active_r = b;
 
         nk_style_pop_float(ctx);
@@ -2958,15 +2975,25 @@ curie_note_pop(App *app)
     curie_a11y_pop(&app->a11y);
 }
 
+void
+curie_note_range(App *app, unsigned id, float num, float lo, float hi,
+                 float step)
+{
+    curie_a11y_set_range(&app->a11y, id, num, lo, hi, step);
+}
+
 /* nk_widget_bounds answers where the *next* widget goes, so this is called
  * before drawing, not after - which is also when the caller still knows what
  * it is about to draw. */
-void
+unsigned
 curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
                 const char *name, unsigned state)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
-    focus_saw(app, curie_a11y_add(&app->a11y, role, name, NULL, state, b), b);
+    unsigned id = curie_a11y_add(&app->a11y, role, name, NULL, state, b);
+
+    focus_saw(app, id, b);
+    return id;
 }
 
 /* --- keyboard focus ----------------------------------------------------- */
@@ -3156,9 +3183,9 @@ focus_key(App *app, const SDL_Event *event)
     case SDLK_END:   case SDLK_KP_1: focus_move(app, FOCUS_LAST);  break;
     case SDLK_RETURN: case SDLK_KP_ENTER: case SDLK_SPACE:
         if (!app->focus_id || !app->focus_seen) return 0;
-        app->key_click   = 1;
-        app->key_click_x = app->focus_rect.x + app->focus_rect.w * 0.5f;
-        app->key_click_y = app->focus_rect.y + app->focus_rect.h * 0.5f;
+        /* Offered to the widget first; the frame that ends without it taken
+         * turns it into the click this used to be. */
+        app->activate_id   = app->focus_id;
         app->focus_visible = 1;
         break;
     case SDLK_ESCAPE:
@@ -3199,12 +3226,33 @@ static void
 reader_activate(void *user, unsigned id)
 {
     App *app = (App *)user;
+    SDL_Event e;
 
     reader_focus(user, id);
     if (app->focus_id != id) return;
-    app->key_click   = 1;
-    app->key_click_x = app->focus_rect.x + app->focus_rect.w * 0.5f;
-    app->key_click_y = app->focus_rect.y + app->focus_rect.h * 0.5f;
+    app->activate_id = id;
+    /* The widget takes it on the next frame, and dirty is cleared at the end
+     * of this one - so the frame has to be asked for. */
+    SDL_zero(e);
+    e.type = SDL_EVENT_USER;
+    SDL_PushEvent(&e);
+}
+
+/* Whether this node was asked to activate, taken once.
+ *
+ * Enter and a platform client's press both used to become a synthetic mouse
+ * click at the node's centre, and for widgets inside the page group that was
+ * not reliable: the click reaches Nuklear's input and the widget does not act
+ * on it, while the identical injection from a key does. Rather than keep
+ * chasing that, a widget can be told directly - it knows its own state and
+ * changing it is a line - and the click stays only as the fallback for the
+ * ones that have not been taught to listen. */
+int
+curie_focus_activated(App *app, unsigned id)
+{
+    if (!id || id != app->activate_id) return 0;
+    app->activate_id = 0;
+    return 1;
 }
 
 /* How many steps the arrows asked this node for, taken once. Zero for every
@@ -4095,10 +4143,9 @@ SDL_AppIterate(void *appstate)
 
     /* Anything a platform client asked for since the last frame - a press, a
      * move - applied here, where the tree is whole and this is the only
-     * thread touching it. Before the block below and not after: a press it
-     * asks for has to reach this frame's input, and a frame that ends without
-     * delivering it would clear the dirty flag and never come back. On the
-     * web it is nothing; the browser calls in on this thread already. */
+     * thread touching it. Before the build, because a press records an id the
+     * widget takes while it draws. On the web it is nothing; the browser
+     * calls in on this thread already. */
     curie_a11y_platform_drain();
 
     /* A key on the focused node, delivered as the click it stands for.
@@ -4154,6 +4201,25 @@ SDL_AppIterate(void *appstate)
         nk_style_push_vec2(ctx, &ctx->style.window.padding, nk_vec2(0, 0));
     }
     nk_end(ctx);
+
+    /* Nobody took the activation, so it becomes the click it used to be.
+     * Every widget that has been taught to listen has already acted and
+     * cleared it; this is what the rest still get, and it is why teaching one
+     * more widget is a line rather than a migration. */
+    if (app->activate_id && app->focus_seen) {
+        SDL_Event e;
+
+        app->activate_id = 0;
+        app->key_click   = 1;
+        app->key_click_x = app->focus_rect.x + app->focus_rect.w * 0.5f;
+        app->key_click_y = app->focus_rect.y + app->focus_rect.h * 0.5f;
+        SDL_zero(e);
+        e.type = SDL_EVENT_USER;
+        SDL_PushEvent(&e);
+        app->dirty = 1;
+    } else {
+        app->activate_id = 0;
+    }
 
     /* Diffs against the previous frame and swaps. The change list is what a
      * platform bridge will consume in phase 4; nothing reads it yet. */

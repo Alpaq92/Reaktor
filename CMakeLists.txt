@@ -194,9 +194,12 @@ endif()
 # The first platform layer this project has had: src/ is portable C with SDL
 # under it, and the bridges that are not - phase 4 of docs/ACCESSIBILITY.md -
 # live in src/sys/ so that stays true of everything else.
+# a11y_snapshot.c is portable and lives here anyway: it is the half of a
+# platform bridge that is not platform-specific, and it is only built when
+# there is a bridge to use it.
 set(SYS_SRC "")
 if(WIN32 AND NOT EMSCRIPTEN)
-    list(APPEND SYS_SRC src/sys/a11y_win32.c)
+    list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_win32.c)
 endif()
 
 add_executable(curie WIN32
