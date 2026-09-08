@@ -198,8 +198,44 @@ endif()
 # platform bridge that is not platform-specific, and it is only built when
 # there is a bridge to use it.
 set(SYS_SRC "")
+set(SYS_LIBS "")
+set(SYS_DEFS "")
 if(WIN32 AND NOT EMSCRIPTEN)
     list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_win32.c)
+elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+    # Linux and the BSDs both: AT-SPI is a freedesktop standard, not a Linux
+    # one, and nothing in the bridge is Linux-specific - hence UNIX AND NOT
+    # APPLE rather than a check for Linux.
+    #
+    # AT-SPI is D-Bus, spoken directly rather than through ATK - see the head
+    # of a11y_atspi.c. libdbus is taken under its Academic Free License 2.1
+    # arm, which is MIT-shaped; NOTICE.md carries the attribution. Without it
+    # the no-op in a11y_web.c stands and the app is simply not served, which
+    # is the same thing that happens on a desktop with no accessibility bus.
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(DBUS QUIET dbus-1)
+    endif()
+    if(DBUS_FOUND)
+        list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_atspi.c)
+        list(APPEND SYS_LIBS ${DBUS_LIBRARIES})
+        list(APPEND SYS_DEFS CURIE_HAVE_ATSPI)
+        message(STATUS "a11y: AT-SPI over libdbus ${DBUS_VERSION}")
+    else()
+        message(STATUS "a11y: no dbus-1; the AT-SPI bridge is not built")
+    endif()
+elseif(APPLE AND NOT EMSCRIPTEN)
+    # The project's first Objective-C, and the only file that is not C:
+    # NSAccessibility is a set of Objective-C protocols with no C entry point.
+    # ARC, because an element per node is the one place here that has object
+    # lifetimes at all, and a leak on a platform this cannot be tested on is
+    # not worth the retain counting.
+    enable_language(OBJC)
+    list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_macos.m)
+    list(APPEND SYS_DEFS CURIE_HAVE_NSACCESSIBILITY)
+    set_source_files_properties(src/sys/a11y_macos.m PROPERTIES
+        COMPILE_OPTIONS "-fobjc-arc")
+    list(APPEND SYS_LIBS "-framework Cocoa")
 endif()
 
 add_executable(curie WIN32
@@ -227,6 +263,15 @@ target_link_libraries(curie PRIVATE
 # the COM and BSTR halves of it.
 if(WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(curie PRIVATE uiautomationcore ole32 oleaut32)
+endif()
+if(SYS_LIBS)
+    target_link_libraries(curie PRIVATE ${SYS_LIBS})
+endif()
+if(DBUS_FOUND)
+    target_include_directories(curie PRIVATE ${DBUS_INCLUDE_DIRS})
+endif()
+if(SYS_DEFS)
+    target_compile_definitions(curie PRIVATE ${SYS_DEFS})
 endif()
 
 # dxguid supplies IID_IDXGIDevice, which is how the app asks the renderer SDL

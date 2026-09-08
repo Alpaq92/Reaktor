@@ -367,17 +367,87 @@ checkbox with the pointer parked off-window.
 field's text or a slider's value means driving Nuklear from outside, which
 belongs with `ITextProvider` and the caret.
 
-**Linux, AT-SPI2.** AT-SPI is D-Bus. Two routes: link `libatspi`/ATK, which is
-LGPL and so a licence question for a project that has kept everything MIT-or-
-better (see [NOTICE.md](NOTICE.md)); or speak the `org.a11y.atspi.*` interfaces
-directly over `sd-bus` or `libdbus`. The second keeps the licence clean and is
-considerably more protocol work.
+**AT-SPI — written, not yet run.** Linux *and the BSDs*: AT-SPI is a
+freedesktop standard rather than a Linux one, `at-spi2-core` and Orca are in
+FreeBSD ports, OpenBSD ports and pkgsrc, and nothing in the bridge is
+Linux-specific. The build reaches it through `UNIX AND NOT APPLE` and the
+source through `CURIE_HAVE_ATSPI`, so no `__linux__` appears anywhere in it and
+the BSDs are covered by construction rather than by luck.
 
-**macOS, NSAccessibility.** Requires an Objective-C translation unit — the first
-one in the project. Get the `NSWindow` from
-`SDL_GetPointerProperty(SDL_GetWindowProperties(win), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL)`,
-attach a custom view implementing the `NSAccessibility` protocol, and answer
-from the shadow tree.
+`src/sys/a11y_atspi.c` speaks the
+`org.a11y.atspi.*` interfaces directly over libdbus rather than going through
+ATK: ATK is LGPL and is being retired in favour of exactly this, and libdbus is
+dual licensed with a permissive arm (AFL-2.1 — see [NOTICE.md](NOTICE.md)), so
+the licence question and the maintenance question pointed the same way.
+
+Three things have no analogue on Windows:
+
+- **The accessibility bus is not the session bus.** Its address comes from
+  `org.a11y.Bus.GetAddress` on the session bus. A desktop with no accessibility
+  stack answers with an error, and the bridge stands down quietly — that is the
+  common case, not a failure.
+- **You register by being embedded.** `Embed` on the registry takes our root's
+  `(bus name, object path)` and answers with the desktop's, which the root then
+  reports as its parent, so the tree hangs off the desktop rather than floating.
+- **One handler owns the whole subtree.** Nodes are objects at
+  `/org/a11y/atspi/accessible/<id>` and there are too many to register one at a
+  time when they come and go with every frame, so a fallback handler answers
+  from the id in the path.
+
+The connection is pumped by a thread of its own, which is what stage 1 was for:
+every handler reads the snapshot and posts a client's request back to the app's
+thread, so nothing here touches the model. `Accessible`, `Component`, `Action`
+and `Value` are implemented; `Value` is read-only for the same reason
+`IValueProvider` is.
+
+**It has never been compiled, let alone run** — there is no Linux here and no
+libdbus to build against. What has been done is a syntax and warnings pass with
+clang against a stub of the libdbus API, which catches typos and shape errors
+and cannot catch a wrong signature, because the stub is this file's idea of
+libdbus and would be wrong the same way. Expect the first real build to fail;
+that is the shape of this, not a sign it is going badly. Verify in this order,
+cheapest first: `busctl --user tree` to see the object appear at all, then
+Accerciser to walk it, then Orca.
+
+One thing is known wrong and waits for a machine: `GetExtents` answers in
+window coordinates whatever coordinate type is asked for, because converting to
+screen coordinates needs a platform call that X and Wayland answer differently.
+
+**macOS, NSAccessibility — written, not yet run.** `src/sys/a11y_macos.m` is
+the project's first Objective-C and the only file that is not C, because
+NSAccessibility is a set of Objective-C protocols with no C entry point.
+
+Nothing of SDL's is subclassed or swizzled. `NSAccessibilityElement` exists
+exactly for UI with no `NSView` behind it, so one element answers for one node,
+and SDL's content view is *told* what it contains through the accessibility
+attributes AppKit lets you set on any view — `accessibilityChildren`,
+`accessibilityRole`, `accessibilityLabel`. The view stays SDL's.
+
+Two things differ from the other bridges:
+
+- **Coordinates are upside down.** AppKit's screen origin is the bottom-left of
+  the main display and the model's is the top-left of the window, so a frame
+  goes view → window → screen, and hit testing goes back the other way. This is
+  the thing the AT-SPI bridge leaves undone; here it cannot be, because a wrong
+  frame puts the cursor ring in the wrong place rather than merely reporting an
+  odd number.
+- **The elements have lifetimes.** The other bridges answer with an id and
+  build nothing. AppKit keeps what it is handed, so there is one element per
+  live node, made on demand, and the cache is dropped whenever the tree's shape
+  changes — a page that has gone would otherwise leave its elements answering
+  emptily for the life of the process. Identity across frames comes free from
+  the model's ids, which is what stops a reader losing its place.
+
+Built with ARC, which is the one place in this project with object lifetimes at
+all; retain counting a bridge that cannot be tested here is not a trade worth
+making.
+
+**Never compiled against real Cocoa**, like the AT-SPI one. It passes a syntax
+and warnings pass under clang against a stub of the Cocoa API, which catches
+typos and shape errors and cannot catch a wrong signature — the stub is this
+file's idea of AppKit and would be wrong the same way. Verify cheapest-first:
+Accessibility Inspector, which shows the tree the way `inspect.exe` does on
+Windows, then VoiceOver.
 
 ## Phase 5 — verification
 
@@ -386,9 +456,104 @@ None of this is verifiable by looking at it.
 - **Windows:** `inspect.exe` and Accessibility Insights from the Windows SDK
   walk the tree and show exactly what a client sees. Then a real NVDA pass.
 - **Web:** Chrome DevTools' accessibility pane, then NVDA and VoiceOver.
-- **Linux:** `accerciser`.
+- **Linux and the BSDs:** `busctl`, then `accerciser`, then Orca.
+- **macOS:** Accessibility Inspector, then VoiceOver.
 - **Always:** the Phase 1 golden file, in CI if there ever is one, because the
   instrumentation is the part that rots.
+
+### What has to be tested on Linux, the BSDs and macOS, and why
+
+The Windows bridge and the web mirror were written on a machine that could run
+them, and every claim about them in this document was measured. **The AT-SPI
+and NSAccessibility bridges were not.** They have never been compiled against
+the real headers and have never executed an instruction. What they have had is
+a `clang -fsyntax-only -Wall -Wextra` pass against hand-written stubs of
+libdbus and Cocoa, which catches typos, unbalanced brackets and wrong argument
+counts — and cannot catch a wrong signature, because each stub is the bridge's
+own idea of the API and would be wrong in the same direction.
+
+So the list below is not a wishlist. It is the set of things that are unknown,
+in the order they will bite, with what makes each one worth its own check.
+
+**Test in this order on either platform.** Each step is cheap and tells you
+whether the next one is worth attempting; a failure at step 1 makes everything
+after it unobservable.
+
+#### Linux and the BSDs
+
+1. **The bus handshake, before anything else.** `busctl --user tree` should
+   show an object under `/org/a11y/atspi/accessible`. *Why first:* the bridge
+   stands down silently when there is no accessibility bus — that is correct
+   behaviour on a desktop without one, and indistinguishable from a bug. Until
+   the object appears, nothing else can be observed. Check the log for
+   "no accessibility bus" and "Embed refused", which are the two ways it gives
+   up deliberately.
+2. **Message signatures, in Accerciser.** Every reply is hand-built with
+   `dbus_message_iter_*`, and the type strings — `(so)`, `a(so)`, `{sv}`,
+   `(sss)`, the two-word state array — are the largest untested surface in the
+   file. *Why:* D-Bus rejects a malformed reply at run time and the stub
+   accepted it at compile time, so this is where a mistake is most likely and
+   least visible from here.
+3. **`GetAll` on the Properties interface.** It answers with an empty
+   dictionary rather than an error. *Why:* that was a judgement, not a
+   measurement — a client that leans on `GetAll` instead of asking for
+   properties by name would see an element with nothing on it.
+4. **Coordinates. This one is known wrong.** `GetExtents` answers in window
+   coordinates whatever coordinate type was asked for, because converting to
+   screen needs a platform call that X and Wayland answer differently, and
+   guessing blind would have been worse than a documented gap. *Why it
+   matters:* a magnifier or a touch reader will land in the wrong place, while
+   a screen reader reading the tree aloud will seem fine — so it will pass a
+   casual test and fail a real user.
+5. **Shutdown.** The pump thread blocks in `dbus_connection_read_write_dispatch`
+   and is stopped by a flag plus the connection closing. *Why:* if that is
+   wrong the app hangs on exit, which is the one failure here that is obvious
+   and infuriating rather than subtle.
+6. **Then Orca**, which is the only thing that answers whether any of it is
+   usable rather than merely present.
+
+#### macOS
+
+1. **Whether the tree is grafted on at all.** Accessibility Inspector should
+   show Curie's nodes under the window. *Why first:* the whole bridge rests on
+   one assumption — that setting `accessibilityChildren` on SDL's content view
+   is enough, with no subclass and no swizzle. If AppKit ignores it for that
+   view, nothing is exposed and there is no error to see. Everything else is
+   moot until this holds.
+2. **Coordinates, immediately after.** AppKit's screen origin is the
+   bottom-left of the main display and the model's is the top-left of the
+   window; frames go view → window → screen and hit testing comes back the
+   other way, including a guess about whether SDL's view is flipped. *Why:*
+   unlike on Linux this cannot be deferred — a wrong frame puts VoiceOver's
+   cursor ring somewhere other than the widget, which is both obvious and
+   specific enough to fix from one screenshot.
+3. **Sliders will not adjust, and this is a gap rather than a bug.** There is
+   no `accessibilityPerformIncrement` or `Decrement`. *Why it matters more here
+   than elsewhere:* on macOS those selectors are the *primary* way VoiceOver
+   changes a value, where UIA and AT-SPI treat setting the value as primary.
+   Wiring them needs a step request in `a11y_snapshot`, which AT-SPI's
+   `Value.SetCurrentValue` wants too — one piece of work, both bridges.
+4. **Whether a page change loses the reader's place.** The element cache is
+   dropped whenever the tree's shape changes. *Why:* identity is what stops a
+   reader jumping to the top, and dropping every element is the crudest form of
+   invalidation. It may be fine — AppKit re-walks after a layout notification —
+   but it is a guess.
+5. **One extra nesting level.** The element for id 0 sits between the view and
+   the model's window node and answers as an unlabelled group, because there is
+   no node 0 in the tree. Harmless in principle; worth hearing once to know
+   whether VoiceOver announces it.
+6. **Then VoiceOver.**
+
+#### What "working" looks like
+
+There is a known-good target for both, which is the useful thing about having
+done Windows first: the same tree, the same names, the same ids. On Windows a
+client walk gives the window, a title-bar group, a tab list of seven tabs, a
+colour-scheme group, and the page group with its widgets; `Toggle` takes a
+checkbox from On to Off; `Select` moves a radio group; `Invoke` on a tab
+switches the page; a point inside a tab resolves to that tab. Anything that
+holds there and not on the other two is the bridge's fault and not the model's,
+which is what makes these cheap to debug at a distance.
 
 ## Order, and what each phase pays for itself with
 
@@ -399,7 +564,8 @@ None of this is verifiable by looking at it.
 | 3 focus + keyboard | Full keyboard operation, visible focus ring. Useful with no reader attached. **Done.** |
 | 4a web | Screen-reader support on every platform, from one implementation. **Done.** |
 | 4b Windows | Native support where the app is developed. **Done:** tree, focus, values, patterns and activation. |
-| 4c/d Linux, macOS | Parity. |
+| 4c Linux, BSD | Parity. **Written, unbuilt** — see above. |
+| 4d macOS | Parity. **Written, unbuilt** — see above. |
 
 1 → 3 is the honest minimum before any bridge is worth writing, and 3 is the
 first phase a user would notice. 4a before 4b: the web bridge is the cheapest

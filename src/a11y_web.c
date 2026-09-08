@@ -203,7 +203,12 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
     web_a11y_end(focus_id);
 }
 
-#elif !defined(_WIN32)   /* Windows has src/sys/a11y_win32.c; 4c-d do not yet */
+/* Windows has src/sys/a11y_win32.c, a free desktop with a dbus to build
+ * against has src/sys/a11y_atspi.c, and macOS has src/sys/a11y_macos.m.
+ * Anything else - a Linux or BSD without dbus - falls through to the no-op
+ * below, which is also what a desktop with no accessibility stack running
+ * amounts to. */
+#elif !defined(_WIN32) && !defined(CURIE_HAVE_ATSPI) &&       !defined(CURIE_HAVE_NSACCESSIBILITY)
 
 void
 curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,

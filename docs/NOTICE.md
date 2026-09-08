@@ -17,6 +17,27 @@ Refresh the pinned revisions with `git submodule status`.
 | [plutosvg](https://github.com/sammycage/plutosvg) | Rasterising those SVGs | MIT | `v0.0.8` |
 | [plutovg](https://github.com/sammycage/plutovg) | The 2D canvas plutosvg draws on (nested submodule) | MIT | tracked by plutosvg |
 
+## The one dependency that is not a submodule
+
+`libdbus`, on Linux and the BSDs, and only if it is there: the AT-SPI bridge
+(`src/sys/a11y_atspi.c`) speaks D-Bus, and D-Bus on a freedesktop desktop is a
+system library that every application already links. CMake asks pkg-config for
+`dbus-1`; if it is missing the bridge is simply not built and the app is not
+served, which is the same thing that happens on a desktop with no
+accessibility bus running.
+
+| Component | Used for | Licence | Version |
+| --- | --- | --- | --- |
+| [libdbus](https://gitlab.freedesktop.org/dbus/dbus) | Speaking AT-SPI on Linux and the BSDs | **Academic Free License 2.1** or GPL-2.0-or-later, your choice — taken here under AFL-2.1 | whatever the system has |
+
+AFL-2.1 is an MIT/X11-shaped permissive licence with an attribution
+requirement, which this table satisfies, and a patent-termination clause. It is
+not GPL-compatible, which does not matter to an MIT project and would matter to
+a downstream that was GPL. The alternative was ATK, which is the provider half
+of the GNOME stack, is LGPL, and is being retired in favour of speaking AT-SPI
+directly — so the licence question and the maintenance question pointed the
+same way.
+
 ## The one vendored source file
 
 `src/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
