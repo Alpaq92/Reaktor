@@ -1805,15 +1805,23 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
      * one open already, and a widget is what a pushed rect expects. */
     nk_layout_space_push(ctx, nk_rect(side, top, (float)CARD_W, card_h));
 
+    /* The card's corners, taking the radius the buttons inside it are
+     * already using. Nuklear fills a panel square and window.rounding is 0
+     * because the page is, so the fill is drawn here instead - through the
+     * masked primitive, so the corners are anti-aliased on the software
+     * renderer like every other round thing - and Nuklear's own is pushed
+     * transparent so it does not paint a square one over the top. */
+    reaktor_fill_round(app, nk_window_get_canvas(ctx),
+                       nk_rect(side, top, (float)CARD_W, card_h),
+                       ctx->style.button.rounding, app->card_bg);
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
-                             nk_style_item_color(app->card_bg));
+                             nk_style_item_color(nk_rgba(0, 0, 0, 0)));
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding,
                        nk_vec2(CARD_PAD_X, CARD_PAD_Y));
     if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
         /* The rect pushed above, which is where the card actually is. */
-            reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Proceed with login",
-                              NULL, 0,
-                          nk_rect(side, top, (float)CARD_W, card_h));
+        reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Proceed with login", NULL,
+                          0, nk_rect(side, top, (float)CARD_W, card_h));
         nk_style_push_vec2(ctx, &ctx->style.window.spacing,
                            nk_vec2(0, (float)ROW_GAP));
 

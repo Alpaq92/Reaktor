@@ -1650,9 +1650,8 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             open = nk_tree_push(ctx, NK_TREE_NODE, "A node inside it",
                                 NK_MINIMIZED);
             tree_chevron(app, ctx, hb, open);
-                reaktor_note_push(app, REAKTOR_A11Y_TREEITEM,
-                                  "A node inside it", NULL,
-                              open ? REAKTOR_A11Y_EXPANDED : 0u, hb);
+            reaktor_note_push(app, REAKTOR_A11Y_TREEITEM, "A node inside it",
+                              NULL, open ? REAKTOR_A11Y_EXPANDED : 0u, hb);
             if (open) {
                 nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
                 nk_label(ctx, "Nesting is unlimited.", NK_TEXT_LEFT);
