@@ -269,6 +269,10 @@ struct App {
     unsigned       focus_id;
     int            focus_visible;  /* the ring: a key shows it, a click hides it */
     struct nk_rect focus_rect;     /* where the focused node landed this frame */
+    /* Arrows pressed while a range had focus, in steps, taken by the widget
+     * on the next frame and cleared there whether or not it was drawn. They
+     * accumulate: key repeat outruns the frame rate. */
+    int            focus_step;
     int            focus_seen;
     /* Enter or Space on the focused node, delivered to Nuklear as a press at
      * its centre and released on the frame after. */
@@ -2928,12 +2932,14 @@ focus_saw(App *app, unsigned id, struct nk_rect b)
     }
 }
 
-void
+unsigned
 curie_note(App *app, unsigned char role, const char *name, const char *value,
            unsigned state, struct nk_rect bounds)
 {
-    focus_saw(app, curie_a11y_add(&app->a11y, role, name, value, state, bounds),
-              bounds);
+    unsigned id = curie_a11y_add(&app->a11y, role, name, value, state, bounds);
+
+    focus_saw(app, id, bounds);
+    return id;
 }
 
 unsigned
@@ -2974,6 +2980,25 @@ enum {
     FOCUS_SIB_NEXT, FOCUS_SIB_PREV     /* arrows: siblings only */
 };
 
+/* Whether the node at `i` has `ancestor` above it. The tree is flat and a
+ * node names its parent by id, so this is the walk up; the guard is the
+ * tree's own depth limit, which a cycle could not exceed. */
+static int
+node_under(const curie_a11y_node *t, int n, int i, unsigned ancestor)
+{
+    int guard = 0;
+
+    while (t[i].parent && guard++ < CURIE_A11Y_MAX_DEPTH) {
+        int k;
+
+        if (t[i].parent == ancestor) return 1;
+        for (k = 0; k < n; k++) if (t[k].id == t[i].parent) break;
+        if (k == n) return 0;
+        i = k;
+    }
+    return 0;
+}
+
 static int
 focusable(const curie_a11y_node *n)
 {
@@ -2990,12 +3015,6 @@ focusable(const curie_a11y_node *n)
     }
 }
 
-/* Applies a pending move against the tree just built, so the ring and the
- * focused state land on the frame after - which the move marks dirty. Tab
- * walks every focusable node in reading order and wraps; the arrows stay
- * among siblings, which is what makes a tab strip or a menu behave as one
- * control. A node that scrolled out of the window is skipped rather than
- * scrolled to: nothing here can move a group's scroll yet. */
 /* Moves focus now, against the tree of the last drawn frame - which is
  * complete, and still valid between frames. At the key rather than after
  * the next frame, because keys arrive faster than frames and two Tabs that
@@ -3046,16 +3065,9 @@ focus_move(App *app, int step)
      * the frame the node was measured in, so they agree. */
     {
         const struct nk_rect *b = &app->body_rect, *r = &t[pick].bounds;
-        int under = 0, j = pick, guard = 0;
 
-        while (t[j].parent && guard++ < CURIE_A11Y_MAX_DEPTH) {
-            int k;
-            if (t[j].parent == app->page_node) { under = 1; break; }
-            for (k = 0; k < n; k++) if (t[k].id == t[j].parent) break;
-            if (k == n) break;
-            j = k;
-        }
-        if (under && (r->y < b->y || r->y + r->h > b->y + b->h)) {
+        if (node_under(t, n, pick, app->page_node) &&
+            (r->y < b->y || r->y + r->h > b->y + b->h)) {
             app->focus_scroll      = 1;
             app->focus_scroll_rect = *r;
         }
@@ -3086,6 +3098,21 @@ focus_resolve(App *app)
     curie_a11y_set_focus(&app->a11y, 0);
 }
 
+/* Whether what has focus takes the arrows as a value rather than as a move. */
+static int
+focus_is_range(App *app)
+{
+    int n, i;
+    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
+
+    if (!app->focus_id) return 0;
+    for (i = 0; i < n; i++)
+        if (t[i].id == app->focus_id)
+            return t[i].role == CURIE_A11Y_SLIDER ||
+                   t[i].role == CURIE_A11Y_SPINBUTTON;
+    return 0;
+}
+
 /* Tab walks the focusable nodes, the arrows walk siblings, Home and End
  * jump, Enter and Space press. Answers whether the key was taken, so the
  * caller keeps it from Nuklear - otherwise Tab would still land in a field
@@ -3108,10 +3135,23 @@ focus_key(App *app, const SDL_Event *event)
     if (editing) return 0;
 
     switch (event->key.key) {
-    case SDLK_RIGHT: case SDLK_DOWN: case SDLK_KP_6: case SDLK_KP_2:
-        focus_move(app, FOCUS_SIB_NEXT); break;
-    case SDLK_LEFT:  case SDLK_UP:   case SDLK_KP_4: case SDLK_KP_8:
-        focus_move(app, FOCUS_SIB_PREV); break;
+    /* On a range the arrows are the value, not the focus - Right and Up up,
+     * Left and Down down, which is what every platform's slider does. The
+     * shell cannot apply the step itself: it knows the node's value as the
+     * text a reader would hear and nothing of its bounds or its grain, so it
+     * records the direction and the widget answers it (curie_focus_step). */
+    case SDLK_RIGHT: case SDLK_KP_6: case SDLK_UP: case SDLK_KP_8:
+        if (focus_is_range(app)) { app->focus_step++; break; }
+        focus_move(app, (event->key.key == SDLK_UP ||
+                         event->key.key == SDLK_KP_8) ? FOCUS_SIB_PREV
+                                                      : FOCUS_SIB_NEXT);
+        break;
+    case SDLK_LEFT:  case SDLK_KP_4: case SDLK_DOWN: case SDLK_KP_2:
+        if (focus_is_range(app)) { app->focus_step--; break; }
+        focus_move(app, (event->key.key == SDLK_DOWN ||
+                         event->key.key == SDLK_KP_2) ? FOCUS_SIB_NEXT
+                                                      : FOCUS_SIB_PREV);
+        break;
     case SDLK_HOME:  case SDLK_KP_7: focus_move(app, FOCUS_FIRST); break;
     case SDLK_END:   case SDLK_KP_1: focus_move(app, FOCUS_LAST);  break;
     case SDLK_RETURN: case SDLK_KP_ENTER: case SDLK_SPACE:
@@ -3167,10 +3207,28 @@ reader_activate(void *user, unsigned id)
     app->key_click_y = app->focus_rect.y + app->focus_rect.h * 0.5f;
 }
 
+/* How many steps the arrows asked this node for, taken once. Zero for every
+ * node but the focused one, and for that one only until it has read it. */
+int
+curie_focus_step(App *app, unsigned id)
+{
+    int s;
+
+    if (!id || id != app->focus_id || !app->focus_step) return 0;
+    s = app->focus_step;
+    app->focus_step = 0;
+    return s;
+}
+
 /* The ring, from one place once the page has drawn: 2px in --focus, a pixel
  * outside the node so it never covers the widget's own edge. Shown once a
  * key has moved focus and hidden by the next click - the :focus-visible
- * rule every desktop follows. */
+ * rule every desktop follows.
+ *
+ * Clipped to the page's band when the focused node is in the page. The ring
+ * is drawn after the group has ended, so nothing else would clip it, and a
+ * node half scrolled under the band's edge was getting a whole ring - drawn
+ * over the tab strip above it, or over the window's edge below. */
 static void
 focus_ring(App *app, struct nk_context *ctx)
 {
@@ -3178,10 +3236,21 @@ focus_ring(App *app, struct nk_context *ctx)
     struct nk_color col = curie_style_token("--focus", c)
                         ? col_of(c) : nk_rgb(0x56, 0xc7, 0xff);
     struct nk_rect r = app->focus_rect;
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    struct nk_rect save = cv->clip;
+    int n, i, in_page = 0;
+    const curie_a11y_node *t = curie_a11y_tree(&app->a11y, &n);
 
-    nk_stroke_rect(nk_window_get_canvas(ctx),
+    for (i = 0; i < n; i++)
+        if (t[i].id == app->focus_id) {
+            in_page = node_under(t, n, i, app->page_node);
+            break;
+        }
+    if (in_page) nk_push_scissor(cv, app->body_rect);
+    nk_stroke_rect(cv,
                    nk_rect(r.x - 2.0f, r.y - 2.0f, r.w + 4.0f, r.h + 4.0f),
                    5.0f, 2.0f, col);
+    if (in_page) nk_push_scissor(cv, save);
 }
 
 /* The radius for a popup, tooltip or menu: `dialog`'s, capped, because 1rem is
@@ -4024,6 +4093,14 @@ SDL_AppIterate(void *appstate)
 
     Uint64 t_build0 = SDL_GetPerformanceCounter();
 
+    /* Anything a platform client asked for since the last frame - a press, a
+     * move - applied here, where the tree is whole and this is the only
+     * thread touching it. Before the block below and not after: a press it
+     * asks for has to reach this frame's input, and a frame that ends without
+     * delivering it would clear the dirty flag and never come back. On the
+     * web it is nothing; the browser calls in on this thread already. */
+    curie_a11y_platform_drain();
+
     /* A key on the focused node, delivered as the click it stands for.
      * Nuklear's default button fires on the press when it lands inside the
      * widget, so a press here and a release on the next frame is a click to
@@ -4071,6 +4148,9 @@ SDL_AppIterate(void *appstate)
         nk_style_pop_vec2(ctx);
         page_shell(app, ctx, win_w, win_h);
         if (app->focus_visible && app->focus_seen) focus_ring(app, ctx);
+        /* Whether or not the range that asked for it was drawn: a step that
+         * outlived its frame belongs to a page nobody is looking at. */
+        app->focus_step = 0;
         nk_style_push_vec2(ctx, &ctx->style.window.padding, nk_vec2(0, 0));
     }
     nk_end(ctx);

@@ -346,7 +346,7 @@ state_text(unsigned state, char *out, size_t cap)
 {
     static const char *const names[] = {
         "focused", "checked", "expanded", "selected",
-        "disabled", "readonly", "offscreen"
+        "disabled", "readonly", "offscreen", "volatile"
     };
     size_t len = 0;
     int i;

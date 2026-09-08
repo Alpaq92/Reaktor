@@ -59,7 +59,16 @@ enum {
     CURIE_A11Y_SELECTED  = 1u << 3,
     CURIE_A11Y_DISABLED  = 1u << 4,
     CURIE_A11Y_READONLY  = 1u << 5,
-    CURIE_A11Y_OFFSCREEN = 1u << 6   /* scrolled or clipped out of reach */
+    CURIE_A11Y_OFFSCREEN = 1u << 6,  /* scrolled or clipped out of reach */
+    /* Changes on its own, and a reader must not read the change out. The
+     * Diagnostics page is a page of these: every reading moves as the pointer
+     * does, and a platform that turned each into an announcement would talk
+     * over everything else in the app. The node is still in the tree and
+     * still readable on demand - this says only that its changing is not
+     * news. ARIA spells it aria-live="off"; UIA is the reason it exists,
+     * since a provider raises a property-changed event per change unless
+     * something says not to. */
+    CURIE_A11Y_VOLATILE  = 1u << 7
 };
 
 /* One element. `name` and `value` point into the frame's string arena, so they
@@ -229,5 +238,14 @@ typedef void (*curie_a11y_action)(void *user, unsigned id);
 void curie_a11y_platform_init(curie_a11y_action activate,
                               curie_a11y_action focus, void *user);
 void curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id);
+
+/* Runs whatever a client asked for since the last call, on the thread that
+ * owns the tree. A bridge whose client calls it on another thread - UIA does,
+ * from an RPC thread, while this one may be asleep in SDL_WaitEvent - cannot
+ * run the action there: it would read the tree the frame is rewriting. So it
+ * records the request, wakes the loop with an event, and the shell calls this
+ * before it builds the next frame. On the web it is a no-op; there is one
+ * thread there and the request arrives on it. */
+void curie_a11y_platform_drain(void);
 
 #endif /* CURIE_A11Y_H */

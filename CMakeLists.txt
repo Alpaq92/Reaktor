@@ -191,9 +191,18 @@ endif()
 
 # ---------------------------------------------------------------- app -------
 # WIN32 selects the GUI subsystem; SDL's main shim supplies the entry point.
+# The first platform layer this project has had: src/ is portable C with SDL
+# under it, and the bridges that are not - phase 4 of docs/ACCESSIBILITY.md -
+# live in src/sys/ so that stays true of everything else.
+set(SYS_SRC "")
+if(WIN32 AND NOT EMSCRIPTEN)
+    list(APPEND SYS_SRC src/sys/a11y_win32.c)
+endif()
+
 add_executable(curie WIN32
     src/a11y.c
     src/a11y_web.c
+    ${SYS_SRC}
     src/main.c
     src/nk_impl.c
     src/theme.c
@@ -211,6 +220,12 @@ target_link_libraries(curie PRIVATE
     curie_core
     SDL3::SDL3-static
     lcui)
+# uiautomationcore is the UIA provider API (phase 4b); ole32 and oleaut32 are
+# the COM and BSTR halves of it.
+if(WIN32 AND NOT EMSCRIPTEN)
+    target_link_libraries(curie PRIVATE uiautomationcore ole32 oleaut32)
+endif()
+
 # dxguid supplies IID_IDXGIDevice, which is how the app asks the renderer SDL
 # gave it whether Direct3D is talking to a real GPU - see renderer_is_software
 # in src/main.c. Nothing else in the tree touches Direct3D.

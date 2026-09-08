@@ -20,8 +20,8 @@
  * presses a node or moves to one is answered through two exported functions,
  * which the shell turns into the same click and focus a key would make.
  *
- * Off the web every function here is a no-op; phases 4b-d are the native
- * bridges. */
+ * Off the web and off Windows every function here is a no-op; 4c and 4d are
+ * the bridges that are still missing. */
 #include "a11y.h"
 
 static curie_a11y_action g_activate, g_focus;
@@ -91,7 +91,8 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
         else if (el.getAttribute(k) !== v) el.setAttribute(k, v);
     };
     var r = UTF8ToString(role), n = UTF8ToString(name), v = UTF8ToString(value);
-    var CHECKED = 2, EXPANDED = 4, SELECTED = 8, DISABLED = 16, READONLY = 32;
+    var CHECKED = 2, EXPANDED = 4, SELECTED = 8, DISABLED = 16, READONLY = 32,
+        VOLATILE = 128;
 
     /* Curie's vocabulary is the one every platform shares; three names
        differ in ARIA. A label has no role - it is text. */
@@ -109,7 +110,11 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
 
     /* The name is read from content for text and from aria-label for a
        control; a field's content is its value. */
-    var text = aria === 'textbox' ? v : (aria ? '' : n);
+    /* A reading is a name and a value; roleless, it is text, and the two
+       halves are joined the way they are drawn. Each platform composes it
+       its own way - the tree keeps them apart. */
+    var text = aria === 'textbox' ? v
+             : aria ? '' : (v ? n + ': ' + v : n);
     if (el.textContent !== text) el.textContent = text;
     set('aria-label', aria && n ? n : null);
 
@@ -121,6 +126,10 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
     set('aria-selected', selectable ? ((state & SELECTED) ? 'true' : 'false') : null);
     set('aria-disabled', (state & DISABLED) ? 'true' : null);
     set('aria-readonly', (state & READONLY) ? 'true' : null);
+    /* Off is the default for anything that is not a live region, but a
+       reading that changes every frame is exactly what someone would be
+       tempted to make one, so the intent is written down. */
+    set('aria-live', (state & VOLATILE) ? 'off' : null);
     var valued = aria === 'slider' || aria === 'spinbutton' ||
                  aria === 'progressbar';
     set('aria-valuetext', valued && v ? v : null);
@@ -160,6 +169,13 @@ curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
 }
 
 void
+curie_a11y_platform_drain(void)
+{
+    /* The browser calls the exported functions on the main thread, so the
+     * action has already run by the time anything asks. */
+}
+
+void
 curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
 {
     static unsigned last_focus;
@@ -181,7 +197,7 @@ curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
     web_a11y_end(focus_id);
 }
 
-#else /* not the web: nothing reads the tree yet - phases 4b-d */
+#elif !defined(_WIN32)   /* Windows has src/sys/a11y_win32.c; 4c-d do not yet */
 
 void
 curie_a11y_platform_init(curie_a11y_action activate, curie_a11y_action focus,
@@ -196,6 +212,11 @@ void
 curie_a11y_platform_push(const curie_a11y *a, unsigned focus_id)
 {
     (void)a; (void)focus_id;
+}
+
+void
+curie_a11y_platform_drain(void)
+{
 }
 
 #endif

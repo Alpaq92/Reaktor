@@ -306,24 +306,20 @@ chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
 #define DISC_RING    "radio-button-off"
 #define DISC_OUTLINE "ellipse-outline"
 
-/* A step away from the page: lighter on a dark scheme, darker on a light one.
- * The knob is the accent and so is the fill it sits on the end of, so without
- * this it vanishes into the bar; with it the two are still the same colour. */
-static struct nk_color
-lifted(struct nk_color c, struct nk_color page, float amount)
-{
-    float lum = (float)page.r * 0.299f + (float)page.g * 0.587f
-              + (float)page.b * 0.114f;
-    float up = lum < 128.0f ? amount : -amount;
-    int i;
-    unsigned char *p = &c.r;
+/* The knob is the accent and so is the fill it sits on the end of, so it
+ * vanished into the bar. A shade off the fill tells them apart and keeps them
+ * the same colour - and darker rather than lighter, which reads as the part
+ * to take hold of on either scheme. */
+#define KNOB_SHADE 0.16f
 
-    for (i = 0; i < 3; i++) {
-        float v = up > 0.0f ? (float)p[i] + up * (255.0f - (float)p[i])
-                            : (float)p[i] * (1.0f + up);
-        p[i] = (unsigned char)(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v));
-    }
-    return c;
+static struct nk_color
+shaded(struct nk_color c, float amount)
+{
+    unsigned char rgba[4];
+
+    rgba[0] = c.r; rgba[1] = c.g; rgba[2] = c.b; rgba[3] = c.a;
+    curie_style_darken(rgba, amount);
+    return nk_rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
 }
 
 /* Nuklear draws none of a slider either. Its bar and fill are rounded rects
@@ -336,8 +332,8 @@ lifted(struct nk_color c, struct nk_color page, float amount)
  * bar_height centred in it, as much of it filled as the value, and the knob a
  * cursor_size square on the same centre line. */
 static void
-slider_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
-            float step)
+slider_cell(App *app, struct nk_context *ctx, unsigned id, float *val,
+            float lo, float hi, float step)
 {
     const struct nk_style_slider *st = &ctx->style.slider;
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
@@ -348,10 +344,8 @@ slider_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
                                          : &st->cursor_normal;
     struct nk_color track = hot ? st->bar_hover : st->bar_normal;
     struct nk_color filled = st->bar_filled;
-    struct nk_color knob = lifted(ci->type == NK_STYLE_ITEM_COLOR
-                                 ? ci->data.color : filled,
-                                 curie_token("--background-body",
-                                             ctx->style.text.color), 0.22f);
+    struct nk_color knob = shaded(ci->type == NK_STYLE_ITEM_COLOR
+                                 ? ci->data.color : filled, KNOB_SHADE);
     float cap = st->bar_height * 0.5f;
     struct nk_rect in, bar, fl, kn;
     float t;
@@ -371,6 +365,18 @@ slider_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
     nk_style_pop_color(ctx);
     nk_style_pop_color(ctx);
     nk_style_pop_color(ctx);
+
+    /* The arrows, if this is what has focus: applied here rather than in the
+     * shell, which knows neither the bounds nor the grain of the value. */
+    {
+        int steps = curie_focus_step(app, id);
+
+        if (steps) {
+            *val += step * (float)steps;
+            if (*val < lo) *val = lo;
+            if (*val > hi) *val = hi;
+        }
+    }
 
     in  = nk_rect(b.x + st->padding.x, b.y + st->padding.y,
                   b.w - 2.0f * st->padding.x, b.h - 2.0f * st->padding.y);
@@ -393,13 +399,14 @@ slider_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
 
 /* nk_slider_int's own few lines, with the aligned call in the middle. */
 static void
-slider_cell_int(App *app, struct nk_context *ctx, int *val, int lo, int hi,
-                int step)
+slider_cell_int(App *app, struct nk_context *ctx, unsigned id, int *val,
+                int lo, int hi, int step)
 {
     float f = (float)*val;
 
-    slider_cell(app, ctx, &f, (float)lo, (float)hi, (float)step);
-    *val = (int)f;
+    slider_cell(app, ctx, id, &f, (float)lo, (float)hi, (float)step);
+    /* Rounded, not truncated: a step that arrives as 39.999999 is 40. */
+    *val = (int)(f + (f < 0.0f ? -0.5f : 0.5f));
 }
 
 /* Nuklear draws neither of the bar's two rounded rects: they are the shape
@@ -521,6 +528,23 @@ knob_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
     glyph_at(app, ctx, dot, DISC_ROUND,   ink,  dot_px, 0.0f);
 }
 
+/* A stepper's hover wash, round rather than the square Nuklear draws: the
+ * slot is a square the height of the font, so half of it is a circle, and
+ * curie_fill_round makes it one that is actually round. Nuklear draws none -
+ * see stepper_push. */
+static void
+stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
+{
+    struct nk_color wash;
+
+    if (!nk_input_is_mouse_hovering_rect(&ctx->input, sq)) return;
+    wash = curie_token("--background-hover", ctx->style.property.hover.type
+                       == NK_STYLE_ITEM_COLOR
+                       ? ctx->style.property.hover.data.color
+                       : ctx->style.text.color);
+    curie_fill_round(app, nk_window_get_canvas(ctx), sq, sq.w * 0.5f, wash);
+}
+
 /* The two steppers of a property, placed the way nk_do_property places
  * them: a font-height square inside the border and padding at each end.
  * `b` is the bounds captured before the property was emitted. */
@@ -536,8 +560,35 @@ property_chevrons(App *app, struct nk_context *ctx, struct nk_rect b)
     l.y = b.y + st->border + b.h * 0.5f - h * 0.5f;
     r.x = b.x + b.w - (h + st->padding.x);
     r.y = l.y;
+    stepper_wash(app, ctx, l);
+    stepper_wash(app, ctx, r);
     chevron_at(app, ctx, l, "chevron-back-outline",    st->dec_button.text_normal);
     chevron_at(app, ctx, r, "chevron-forward-outline", st->inc_button.text_normal);
+}
+
+/* Nuklear's own stepper wash, off for the length of one property: it is a
+ * square, and stepper_wash draws a circle over the same slot afterwards,
+ * which would leave the square's corners standing. Not turned off in the
+ * theme, because the colour picker's three properties have no chevrons and
+ * so no wash drawn for them - there, Nuklear's is all there is. */
+static void
+stepper_push(struct nk_context *ctx)
+{
+    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+
+    nk_style_push_style_item(ctx, &ctx->style.property.dec_button.hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.property.dec_button.active, clear);
+    nk_style_push_style_item(ctx, &ctx->style.property.inc_button.hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.property.inc_button.active, clear);
+}
+
+static void
+stepper_pop(struct nk_context *ctx)
+{
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
 }
 
 /* A tree header's chevron, in the slot nk_tree_state_base gives its own: a
@@ -1083,6 +1134,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
 {
     static const char *const sizes[] = { "Compact", "Comfortable", "Spacious" };
     char line[96];
+    unsigned id;
 
     section(app, ctx, "Text",
             "One rule - tiny.css's `input` - supplies the fill, the radius, "
@@ -1122,18 +1174,18 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
 
     nk_layout_row_dynamic(ctx, ROW, 2);
     SDL_snprintf(line, sizeof(line), "%.2f", (double)s->slider_f);
-    curie_note(app, CURIE_A11Y_SLIDER, "Float", line, 0,
-               nk_widget_bounds(ctx));
+    id = curie_note(app, CURIE_A11Y_SLIDER, "Float", line, 0,
+                    nk_widget_bounds(ctx));
     hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    slider_cell(app, ctx, &s->slider_f, 0.0f, 1.0f, 0.01f);
+    slider_cell(app, ctx, id, &s->slider_f, 0.0f, 1.0f, 0.01f);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
     SDL_snprintf(line, sizeof(line), "%d", s->slider_i);
-    curie_note(app, CURIE_A11Y_SLIDER, "Integer", line, 0,
-               nk_widget_bounds(ctx));
+    id = curie_note(app, CURIE_A11Y_SLIDER, "Integer", line, 0,
+                    nk_widget_bounds(ctx));
     hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    slider_cell_int(app, ctx, &s->slider_i, 0, 100, 1);
+    slider_cell_int(app, ctx, id, &s->slider_i, 0, 100, 1);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
@@ -1167,23 +1219,29 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
         SDL_snprintf(line, sizeof(line), "%d", s->prop_i);
         curie_note(app, CURIE_A11Y_SPINBUTTON, "Columns:", line, 0, pb);
         hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        stepper_push(ctx);
         nk_property_int(ctx, "Columns:", 1, &s->prop_i, 24, 1, 0.25f);
+        stepper_pop(ctx);
         property_chevrons(app, ctx, pb);
 
         pb = nk_widget_bounds(ctx);
         SDL_snprintf(line, sizeof(line), "%.2f", (double)s->prop_f);
         curie_note(app, CURIE_A11Y_SPINBUTTON, "Stroke:", line, 0, pb);
         hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        stepper_push(ctx);
         nk_property_float(ctx, "Stroke:", 0.25f, &s->prop_f, 8.0f, 0.05f,
                           0.01f);
+        stepper_pop(ctx);
         property_chevrons(app, ctx, pb);
 
         pb = nk_widget_bounds(ctx);
         SDL_snprintf(line, sizeof(line), "%.2f", s->prop_d);
         curie_note(app, CURIE_A11Y_SPINBUTTON, "Ratio:", line, 0, pb);
         hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
+        stepper_push(ctx);
         nk_property_double(ctx, "Ratio:", 0.0, &s->prop_d, 100.0, 0.25,
                            0.05f);
+        stepper_pop(ctx);
         property_chevrons(app, ctx, pb);
     }
 
@@ -1289,7 +1347,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                                  nk_vec2(nk_widget_width(ctx), 130.0f))) {
             nk_layout_row_dynamic(ctx, 26.0f, 1);
             nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
-            slider_cell(app, ctx, &s->slider_f, 0.0f, 1.0f, 0.01f);
+            slider_cell(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
             nk_checkbox_label(ctx, "with a layout in it", &s->check_spell);
             nk_combo_end(ctx);
         }
@@ -1841,7 +1899,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                                 NK_WIDGET_RIGHT, NK_TEXT_LEFT);
         nk_spacer(ctx);
         nk_layout_row_dynamic(ctx, MENU_ROW, 1);
-        slider_cell(app, ctx, &s->slider_f, 0.0f, 1.0f, 0.01f);
+        slider_cell(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
         menu_rows_pop(ctx);
         nk_menu_end(ctx);
     }
@@ -2075,20 +2133,36 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 /* --- diagnostics --------------------------------------------------------- */
 
 /* One labelled reading. Two columns, so the values line up down the page
- * rather than wherever their labels happen to end. */
+ * rather than wherever their labels happen to end.
+ *
+ * Reported as one node carrying both halves, rather than the two labels a
+ * reader would otherwise meet as unrelated runs of text: a reading is a name
+ * and a value, which is what the tree is shaped to say. Marked volatile,
+ * because every one of them moves as the pointer does and none of that is
+ * worth announcing - see CURIE_A11Y_VOLATILE. */
 static void
 diag_row(App *app, struct nk_context *ctx, const char *name, const char *value)
 {
+    struct nk_rect a, b;
+
     nk_layout_row_template_begin(ctx, 24.0f);
     nk_layout_row_template_push_static(ctx, 190.0f);
     nk_layout_row_template_push_dynamic(ctx);
     nk_layout_row_template_end(ctx);
 
+    a = nk_widget_bounds(ctx);
     nk_style_push_font(ctx, curie_font(app, 13, 0));
     nk_label_colored(ctx, name, NK_TEXT_LEFT,
                      curie_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
+    b = nk_widget_bounds(ctx);
     nk_label(ctx, value, NK_TEXT_LEFT);
+    /* Both columns, so a magnifier lands on the whole reading. Reported
+     * after them because the second column's bounds are only known once the
+     * first is drawn; the node still falls between its neighbours, which is
+     * what reading order is. */
+    curie_note(app, CURIE_A11Y_LABEL, name, value, CURIE_A11Y_VOLATILE,
+               nk_rect(a.x, a.y, (b.x + b.w) - a.x, a.h));
 }
 
 static void

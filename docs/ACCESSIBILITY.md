@@ -221,9 +221,18 @@ How it came out, and where it differs from the sketch above:
   little air. Only nodes inside the page ask — the tab strip is outside the band
   too and must not — which the tree answers by ancestry, since the page reports
   itself as a group.
-- **Not done:** arrows on a focused slider move focus rather than the value. A
-  ring on a node half under a group's edge is drawn whole. Both small; neither
-  blocks 4b.
+- **The arrows are the value on a range.** Right and Up step up, Left and Down
+  down, on a slider or a spinner; every other role still lets them move focus
+  among siblings. The shell cannot apply the step itself — it knows a node's
+  value as the text a reader would hear and nothing of its bounds or its grain
+  — so it counts the presses and the widget takes them (`curie_focus_step`).
+  They accumulate, because key repeat outruns the frame rate, and they are
+  dropped at the end of a frame whether or not the range was drawn.
+- **The ring is clipped to the page's band** when the focused node is in the
+  page. It is drawn after the group has ended, so nothing else would clip it,
+  and a node scrolled half under the band's edge was getting a whole ring —
+  over the tab strip above it, or over the window's edge below. Which nodes are
+  in the page the tree answers by ancestry, the same walk the scroll uses.
 
 ## Phase 4 — platform bridges
 
@@ -279,14 +288,47 @@ all):
   is how Tab was checked; keys injected by a debugging protocol may not reach
   it, and that is the harness, not the app.
 
-**Windows, UI Automation.** A server-side provider: implement
+**Windows, UI Automation — the tree is served.** `src/sys/a11y_win32.c`, the
+first file in this project that is not portable. A server-side provider:
 `IRawElementProviderSimple`, `IRawElementProviderFragment` and
-`IRawElementProviderFragmentRoot`, answer `WM_GETOBJECT` (reachable through
-`SDL_SetWindowsMessageHook`) with the fragment root, and raise
-`UiaRaiseAutomationEvent` / `UiaRaiseAutomationPropertyChangedEvent` from the
-change list. COM from C means hand-written vtables, which is ordinary if
-tedious. Budget 800–1200 lines. Text fields want `ITextProvider` for full
-support; start with value-only and add it later.
+`IRawElementProviderFragmentRoot` on every node, `IInvokeProvider` on the
+things that take a press and `IValueProvider` on the things that carry text.
+
+Three things the sketch above got wrong or did not know:
+
+- **A message hook cannot answer `WM_GETOBJECT`.** SDL's hook says only whether
+  to keep processing a message; the answer to `WM_GETOBJECT` is the window
+  procedure's *return value*, which is what `UiaReturnRawElementProvider` has
+  to be handed. So the window is subclassed — `SetWindowLongPtrW`, everything
+  else passed to the previous procedure.
+- **UIA calls in on its own thread**, while this one may be asleep in
+  `SDL_WaitEvent`, and the tree it would read is rewritten by every frame. So
+  the provider never touches the model: a drawn frame copies it — strings and
+  all, since the model's arena is reused — into a snapshot under a lock, and
+  the provider answers from that. A client's request goes the other way by the
+  same rule: `SetFocus` and `Invoke` record an id, push an SDL event to wake
+  the loop, and `curie_a11y_platform_drain` runs them on the app's thread
+  before the next frame is built. It runs *before* the synthetic click is
+  injected, because a press that misses this frame's input would be cleared
+  with the dirty flag and never delivered.
+- **Hit testing wants the innermost element, not the last drawn.** The tab
+  strip has two groups over the same band, so taking the last node containing
+  the point answered with the group beside the tabs. Depth first, draw order
+  as the tie-break.
+
+Checked with a UIA client rather than by eye: `System.Windows.Automation`
+walks the tree, and the whole page comes out with its control types, names,
+stable `AutomationId`s (the model's own ids, which survive a redraw) and
+screen-space rectangles. Invoking the Popups tab through UIA switches the page;
+`SetFocus` on a tab makes it `AutomationElement.FocusedElement`; a point inside
+a tab resolves to the tab.
+
+Still to do here: `IToggleProvider`, `ISelectionItemProvider` and
+`IRangeValueProvider`, so a checkbox, a tab and a slider are operable and not
+only readable — their properties are already answered directly, which some
+clients read and others will not. `IValueProvider` is read-only; setting a
+field's text means driving Nuklear's editor, which belongs with `ITextProvider`
+and the caret.
 
 **Linux, AT-SPI2.** AT-SPI is D-Bus. Two routes: link `libatspi`/ATK, which is
 LGPL and so a licence question for a project that has kept everything MIT-or-
@@ -319,7 +361,7 @@ None of this is verifiable by looking at it.
 | 2 instrumentation | Nothing visible. The bulk of the work. **Done.** |
 | 3 focus + keyboard | Full keyboard operation, visible focus ring. Useful with no reader attached. **Done.** |
 | 4a web | Screen-reader support on every platform, from one implementation. **Done.** |
-| 4b Windows | Native support where the app is developed. |
+| 4b Windows | Native support where the app is developed. **Tree, focus, invoke and values done;** the remaining patterns are listed above. |
 | 4c/d Linux, macOS | Parity. |
 
 1 → 3 is the honest minimum before any bridge is worth writing, and 3 is the
@@ -336,10 +378,16 @@ and reaches the most readers.
 - **Identity across pages.** Switching tabs replaces the whole tree. That is
   correct, but the diff should report it as a subtree replacement rather than
   a hundred unrelated removals.
-- **Live regions.** The Diagnostics page changes every frame. It must not be
-  announced continuously; mark it polite, or exclude the numbers from the tree
-  and expose them on demand.
-- **Scope.** This adds a platform layer to a project that has so far had none —
-  `src/` is portable C with SDL underneath it and no `#ifdef _WIN32` in sight.
-  Phase 4 breaks that, and the per-platform files should live apart (`src/sys/`)
-  so the rest stays as it is.
+- ~~**Live regions.**~~ The Diagnostics page turned out to have the opposite
+  problem: its readings were not in the tree at all, so a reader got the prose
+  and not one number. Each row is now a `label` node carrying the name and the
+  value and spanning both columns, marked `CURIE_A11Y_VOLATILE` — it changes on
+  its own and the change is not news. The web bridge writes that out as
+  `aria-live="off"`, which is the default for anything that is not a live
+  region and so says only what was intended; it earns its keep at 4b, where a
+  provider raises a property-changed event per change unless something says
+  not to.
+- ~~**Scope.**~~ Phase 4 added the platform layer this project had gone without,
+  and it is one directory: `src/sys/`, holding the one file that is not
+  portable. `src/` is still SDL and C with no `#ifdef _WIN32` in it; the build
+  adds the file on Windows and the web bridge's fallback stands down there.

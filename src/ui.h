@@ -169,12 +169,20 @@ float curie_popup_rounding(void);
  * These are the only calls a page needs. Nothing is served to a platform yet -
  * phase 4 - so an unreported widget is not a visible bug today, which is
  * exactly why the widgets go through helpers that report for you. */
-void curie_note(App *app, unsigned char role, const char *name,
-                const char *value, unsigned state, struct nk_rect bounds);
+/* Answers the node's id, which a widget that takes the keyboard needs -
+ * see curie_focus_step. Most callers ignore it. */
+unsigned curie_note(App *app, unsigned char role, const char *name,
+                    const char *value, unsigned state, struct nk_rect bounds);
 /* The same, and everything until curie_note_pop is a child of it. */
 unsigned curie_note_push(App *app, unsigned char role, const char *name,
                      const char *value, unsigned state, struct nk_rect bounds);
 void curie_note_pop(App *app);
+
+/* How many steps the arrows asked this node for, taken once and only while it
+ * has focus. A range answers its own arrows: the shell knows a node's value
+ * only as the text a reader would hear, and nothing of its bounds or its
+ * grain. Every other role lets the arrows move focus instead. */
+int curie_focus_step(App *app, unsigned id);
 /* Convenience for the common case: the widget just drawn, at the bounds the
  * layout gave it, with no value. */
 void curie_note_here(App *app, struct nk_context *ctx, unsigned char role,
