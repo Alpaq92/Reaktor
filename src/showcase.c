@@ -1785,13 +1785,18 @@ page_layout(App *app, struct nk_context *ctx, showcase_state *s)
             "window on the first tab.");
     api(app, ctx, "nk_layout_space_begin / nk_layout_space_push");
 
+    /* They overlap on purpose - that is the point being made, that these are
+     * placed rather than laid out and the later one is drawn over the earlier.
+     * The step is a third of the height rather than a quarter because at a
+     * quarter each box cut the bottom off the label of the one behind it,
+     * which reads as a widget drawn wrong rather than as a demonstration. */
     nk_layout_space_begin(ctx, NK_STATIC, 110.0f, 4);
     nk_layout_space_push(ctx, nk_rect(0.0f, 0.0f, 130.0f, 44.0f));
     demo_button(app, ctx, "0, 0");
-    nk_layout_space_push(ctx, nk_rect(60.0f, 26.0f, 130.0f, 44.0f));
-    demo_button(app, ctx, "60, 26");
-    nk_layout_space_push(ctx, nk_rect(120.0f, 52.0f, 130.0f, 44.0f));
-    demo_button(app, ctx, "120, 52");
+    nk_layout_space_push(ctx, nk_rect(60.0f, 33.0f, 130.0f, 44.0f));
+    demo_button(app, ctx, "60, 33");
+    nk_layout_space_push(ctx, nk_rect(120.0f, 66.0f, 130.0f, 44.0f));
+    demo_button(app, ctx, "120, 66");
     nk_layout_space_push(ctx, nk_rect(300.0f, 10.0f, 160.0f, 86.0f));
     demo_button(app, ctx, "and anywhere");
     nk_layout_space_end(ctx);

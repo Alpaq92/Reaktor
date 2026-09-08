@@ -214,6 +214,9 @@ struct App {
     Uint32        wake_event;      /* pushed from the callback's thread */
 
     int   theme_mode;          /* THEME_SYSTEM | THEME_LIGHT | THEME_DARK */
+    /* A scheme picked mid-frame, as mode + 1, for the next frame to apply
+     * where no style is pushed. Zero when there is nothing waiting. */
+    int   theme_pending;
     struct nk_color page, card_bg, text;
     /* --text-muted and --links as "#rrggbb" - strings, because that is what
      * goes into the SVG before it is parsed. */
@@ -2427,8 +2430,9 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         curie_note(app, CURIE_A11Y_RADIO, g_theme_names[i], NULL,
                    i == app->theme_mode ? CURIE_A11Y_CHECKED : 0u, b);
         if (nk_button_label(ctx, g_theme_names[i]) && i != app->theme_mode) {
-            app->theme_mode = i;
-            load_theme(app);
+            /* Not applied here: see the top of SDL_AppIterate. */
+            app->theme_pending = i + 1;
+            app->dirty = 1;
         }
 
         nk_style_pop_float(ctx);
@@ -4001,6 +4005,18 @@ SDL_AppIterate(void *appstate)
     App *app = (App *)appstate;
     struct nk_context *ctx = app->ctx;
     int win_w = 0, win_h = 0;
+
+    /* A scheme picked last frame, applied here and not where it was clicked.
+     * The links that pick it push eight button style items around themselves,
+     * and load_theme writes the new palette straight into ctx->style - so
+     * reloading between a push and its pop had the pop put the old colours
+     * back, and every button kept the scheme it had just left while the page
+     * around it changed. Nothing is pushed at the top of a frame. */
+    if (app->theme_pending) {
+        app->theme_mode    = app->theme_pending - 1;
+        app->theme_pending = 0;
+        load_theme(app);
+    }
 
     SDL_GetWindowSize(app->win, &win_w, &win_h);
     if (win_w != app->laid_w || win_h != app->laid_h) app->dirty = 1;
