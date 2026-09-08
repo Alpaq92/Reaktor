@@ -116,6 +116,13 @@ struct nk_image curie_ionicon(App *app, const char *name, int px);
 /* The same, stroked in a colour of the caller's choosing - for an icon that
  * sits on something other than the page, such as a row filled with the
  * accent. curie_on gives the colour that reads on a given background. */
+struct nk_image curie_ionicon_exact(App *app, const char *name, int px,
+                                    struct nk_color stroke, float sw);
+
+/* A filled rounded rect whose corners are anti-aliased on every backend -
+ * nk_fill_rect's are not, on the software one. See the definition. */
+void curie_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                      float rounding, struct nk_color col);
 struct nk_image curie_ionicon_col(App *app, const char *name, int px,
                                   struct nk_color stroke);
 struct nk_color curie_on(struct nk_color bg);
@@ -138,6 +145,10 @@ int curie_button(App *app, struct nk_context *ctx, const char *label);
 int curie_button_accent(App *app, struct nk_context *ctx, const char *label);
 int curie_button_icon(App *app, struct nk_context *ctx,
                       const char *ionicon, const char *label);
+/* The button rule with no label and the given fill: a colour swatch that is
+ * otherwise a button. `name` is what a reader is told it is. */
+int curie_button_color(App *app, struct nk_context *ctx, const char *name,
+                       struct nk_color fill);
 int curie_link(App *app, struct nk_context *ctx, const char *label, int active);
 
 /* A text field styled from tiny.css's `input` rule, with `hint` painted into

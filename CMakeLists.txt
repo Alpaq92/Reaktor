@@ -143,10 +143,17 @@ target_link_libraries(curie_core PUBLIC plutosvg)
 
 # ------------------------------------------------------------ icon ----------
 # Explorer reads the icon from a linked Win32 resource, so it has to exist
-# before the linker runs. branding/ holds it: the mark is authored art, not
-# something generated at build time.
+# before the linker runs. branding/ holds it committed for that reason: the
+# .svg beside it is the authored mark and the .ico is derived from it, by a
+# tool that is not part of the build.
+#     cmake --build build --target mkicon && build/mkicon
 set(APP_ICON branding/curie-icon.ico)
 set(APP_RESOURCES "")
+
+add_executable(mkicon EXCLUDE_FROM_ALL tools/mkicon.c)
+target_link_libraries(mkicon PRIVATE curie_core)
+set_target_properties(mkicon PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 # Phase 1 of docs/ACCESSIBILITY.md: the shadow-tree model and its diff, with no
 # platform behind it and nothing instrumented yet. Built by default rather than
@@ -257,10 +264,21 @@ if(EMSCRIPTEN)
     endforeach()
     list(REMOVE_DUPLICATES WASM_ASSETS)
 
-    # The Ionicons submodule is 1357 files and 3.6 MB; about twenty of them
-    # are ever drawn. Their names are string literals in src/, so they are
-    # found rather than listed - a hand-written list would be wrong the first
-    # time a page gained an icon.
+    # The Ionicons submodule is 1357 files and 3.6 MB; about forty of them are
+    # ever drawn. Their names are string literals in src/, so they are found
+    # rather than listed - a hand-written list would be wrong the first time a
+    # page gained an icon.
+    #
+    # Two patterns, because a name reaches the source two ways and the EXISTS
+    # test below decides between the candidates. Most are written inside a
+    # longer literal - "chevron-down-outline.svg?stroke=%s" - and only the
+    # "-outline" suffix can be found in the middle of one without matching
+    # every identifier in the file. The circles broke that: a filled disc is
+    # "ellipse" and a radio's rim "radio-button-off", so a name that is the
+    # whole literal counts too. A missing icon draws as a white quad and says
+    # nothing, which is what one pattern alone cost. The second picks up a few
+    # literals that happen to share a name with an icon - "list", "menu",
+    # "card" - about two kilobytes of glyphs nobody draws.
     file(GLOB _curie_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
                       "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
     set(WASM_ICONS "")
@@ -270,11 +288,17 @@ if(EMSCRIPTEN)
             string(REGEX MATCHALL "[a-z0-9]+(-[a-z0-9]+)*-outline" _n "${_l}")
             list(APPEND WASM_ICONS ${_n})
         endforeach()
+        file(STRINGS "${_s}" _lines REGEX "\"[a-z0-9]+(-[a-z0-9]+)*\"")
+        foreach(_l IN LISTS _lines)
+            string(REGEX MATCHALL "\"[a-z0-9]+(-[a-z0-9]+)*\"" _n "${_l}")
+            foreach(_q IN LISTS _n)
+                string(REPLACE "\"" "" _q "${_q}")
+                list(APPEND WASM_ICONS "${_q}")
+            endforeach()
+        endforeach()
     endforeach()
     list(REMOVE_DUPLICATES WASM_ICONS)
-    list(LENGTH WASM_ICONS _icon_count)
     list(LENGTH WASM_ASSETS _asset_count)
-    message(STATUS "wasm: packaging ${_asset_count} assets and ${_icon_count} icons")
 
     # SHELL: keeps CMake from de-duplicating the repeated --preload-file flag
     # and leaving one flag in front of every path, which emcc then reads as
@@ -286,13 +310,16 @@ if(EMSCRIPTEN)
                  "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/${_a}@/${_a}")
         endif()
     endforeach()
+    set(_icon_count 0)
     foreach(_i IN LISTS WASM_ICONS)
         set(_rel "third_party/ionicons/src/svg/${_i}.svg")
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_rel}")
             list(APPEND WASM_PRELOAD
                  "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/${_rel}@/${_rel}")
+            math(EXPR _icon_count "${_icon_count} + 1")
         endif()
     endforeach()
+    message(STATUS "wasm: packaging ${_asset_count} assets and ${_icon_count} icons")
 
     set_target_properties(curie PROPERTIES SUFFIX ".html")
     target_link_options(curie PRIVATE

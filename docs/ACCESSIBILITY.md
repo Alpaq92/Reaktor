@@ -273,7 +273,11 @@ all):
   `build-wasm` (`.claude/launch.json` starts a static server for it) and the
   mirror inspected as DOM — roles, names, states and positions. One thing to
   know when doing that: a hidden tab gets no animation frames, so the app
-  draws nothing and the mirror stays empty until the page is visible.
+  draws nothing and the mirror stays empty until the page is visible. And
+  SDL takes keys from the canvas element itself — a key dispatched to it as a
+  DOM `KeyboardEvent` moves focus and updates `aria-activedescendant`, which
+  is how Tab was checked; keys injected by a debugging protocol may not reach
+  it, and that is the harness, not the app.
 
 **Windows, UI Automation.** A server-side provider: implement
 `IRawElementProviderSimple`, `IRawElementProviderFragment` and

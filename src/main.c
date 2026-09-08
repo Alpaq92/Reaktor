@@ -56,7 +56,7 @@ static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19 };
 /* Nuklear adds 4px between columns and the group pads again, so the gap on
  * screen is ~10px wider than these numbers. */
 #define TITLE_PAD      1   /* before the app mark */
-#define TITLE_GAP      6   /* between the app mark and the name */
+#define TITLE_PX      16   /* the name's size; the one size the bold is baked at */
 #define MARK_SIZE     18   /* the app mark, drawn size */
 
 /* Both memory counters at each startup milestone (the list is in ui.h). File
@@ -119,6 +119,14 @@ struct img_slot {
     int          w, h;
 };
 
+/* One disc mask per radius, for curie_fill_round. Eight is more radii than
+ * any one screen asks for. */
+#define ROUND_CACHE_MAX 8
+struct round_slot {
+    int          r;
+    SDL_Texture *tex;
+};
+
 /* Named, and declared as an incomplete type in ui.h, so a page can be handed
  * an App * without being handed the window, the renderer or the atlas. */
 struct App {
@@ -133,9 +141,13 @@ struct App {
     struct img_slot img[IMG_CACHE_MAX];
     int img_count;
 
+    struct round_slot round[ROUND_CACHE_MAX];
+    int round_count;
+
     /* Nuklear bakes a glyph atlas per size, so a face is baked once per size
      * the stylesheet asks for and selected per draw. */
     struct nk_font *faces[FONT_STEPS];
+    struct nk_font *face_bold;      /* Aileron-Bold at TITLE_PX, for the title */
     char            font_status[160];
     /* The backend's atlas, kept only so a rebake can free the bake before it -
      * see rebuild_font. */
@@ -403,6 +415,12 @@ img_cache_clear(App *app)
     for (i = 0; i < app->img_count; i++)
         if (app->img[i].tex) SDL_DestroyTexture(app->img[i].tex);
     app->img_count = 0;
+    /* The disc masks are white and tinted when drawn, so they outlive a
+     * scheme change - but not the renderer, and this is where that is torn
+     * down. */
+    for (i = 0; i < app->round_count; i++)
+        if (app->round[i].tex) SDL_DestroyTexture(app->round[i].tex);
+    app->round_count = 0;
 }
 
 /* Rasterised at the size actually drawn, times the display scale, so slots are
@@ -479,12 +497,16 @@ img_lookup(App *app, const char *src, int px)
     return &app->img[app->img_count++];
 }
 
-/* Above the drawn size: a linear filter downscales cleanly and upscales
- * blurrily, and the widget rect is often taller than the nominal size. */
+/* `over` is how far above the drawn size the artwork is rasterised: a linear
+ * filter downscales cleanly and upscales blurrily, and the widget rect is
+ * often taller than the nominal size, so an image goes in at twice. One is
+ * for a caller that draws at exactly px and needs the edge where plutovg put
+ * it - a resample is a blur, and on a rim one pixel wide it reads as a smear
+ * three pixels across rather than a line. */
 static struct nk_image
-icon(App *app, const char *src, int px)
+icon_over(App *app, const char *src, int px, float over)
 {
-    int raster = (int)(px * curie_scale() * 2.0f + 0.5f);
+    int raster = (int)(px * curie_scale() * over + 0.5f);
     struct img_slot *slot = img_lookup(app, src, raster);
 
     if (!slot) return nk_image_id(0);
@@ -493,6 +515,12 @@ icon(App *app, const char *src, int px)
      * nk_draw_image does not, and a degenerate region drew a white quad. */
     return nk_subimage_ptr(slot->tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
                            nk_rect(0.0f, 0.0f, (float)slot->w, (float)slot->h));
+}
+
+static struct nk_image
+icon(App *app, const char *src, int px)
+{
+    return icon_over(app, src, px, 2.0f);
 }
 
 /* Draws an image centred at exactly px, and consumes the widget slot. nk_image
@@ -509,6 +537,129 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
     nk_spacing(ctx, 1);
 }
 
+/* --- a rounded rect that is actually round -------------------------------
+ *
+ * Nuklear fills one as a polygon, and with fill feathering off - which is what
+ * the software renderer wants, see nk_sdl_render_ex - the arc steps in whole
+ * pixels. A stroke over it grades the step, but only by a fixed half: the pass
+ * that puts every vertex on the pixel grid quantises the stroke's feather onto
+ * the same staircase, so the corner reads as stairs with a halo rather than a
+ * curve. Every curve on a page went to a texture for this reason; a rounded
+ * rect is the one that has no artwork to go to.
+ *
+ * So the mask is computed instead. One disc of 2r, white, its alpha the
+ * coverage of the circle - sampled four by four, which is finer than the eye
+ * asks of a corner - and each quadrant of it drawn into a corner as a
+ * sub-image, with three plain rects for what is left. Exact at any radius,
+ * identical on both backends, and one texture per radius for the session. */
+static struct nk_image
+round_mask(App *app, int r)
+{
+    const int ss = 4;                       /* samples per axis */
+    int d = 2 * r, x, y, i;
+    SDL_Surface *surf;
+    SDL_Texture *tex;
+    unsigned char *px;
+
+    for (i = 0; i < app->round_count; i++)
+        if (app->round[i].r == r)
+            return app->round[i].tex
+                 ? nk_subimage_ptr(app->round[i].tex, (nk_ushort)d,
+                                   (nk_ushort)d,
+                                   nk_rect(0.0f, 0.0f, (float)d, (float)d))
+                 : nk_image_id(0);
+    if (app->round_count >= ROUND_CACHE_MAX) return nk_image_id(0);
+
+    surf = SDL_CreateSurface(d, d, SDL_PIXELFORMAT_ARGB8888);
+    tex  = NULL;
+    if (surf) {
+        px = (unsigned char *)surf->pixels;
+        for (y = 0; y < d; y++) {
+            for (x = 0; x < d; x++) {
+                int sx, sy, hit = 0;
+                unsigned char *p = px + (size_t)y * surf->pitch + x * 4;
+
+                for (sy = 0; sy < ss; sy++) {
+                    for (sx = 0; sx < ss; sx++) {
+                        float fx = (float)x + ((float)sx + 0.5f) / (float)ss
+                                 - (float)r;
+                        float fy = (float)y + ((float)sy + 0.5f) / (float)ss
+                                 - (float)r;
+                        if (fx * fx + fy * fy <= (float)r * (float)r) hit++;
+                    }
+                }
+                p[0] = p[1] = p[2] = 255;   /* B, G, R - tinted when drawn */
+                p[3] = (unsigned char)((hit * 255) / (ss * ss));
+            }
+        }
+        tex = SDL_CreateTextureFromSurface(app->ren, surf);
+        SDL_DestroySurface(surf);
+    }
+    if (tex) {
+        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+        /* Drawn one to one, so nothing is sampled between texels. */
+        SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+    }
+    app->round[app->round_count].r   = r;
+    app->round[app->round_count].tex = tex;
+    app->round_count++;
+    if (!tex) return nk_image_id(0);
+    return nk_subimage_ptr(tex, (nk_ushort)d, (nk_ushort)d,
+                           nk_rect(0.0f, 0.0f, (float)d, (float)d));
+}
+
+void
+curie_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                 float rounding, struct nk_color col)
+{
+    struct nk_image disc;
+    nk_handle h;
+    float fr = rounding;
+    int r;
+
+    if (b.w <= 0.0f || b.h <= 0.0f) return;
+    if (fr > b.w * 0.5f) fr = b.w * 0.5f;
+    if (fr > b.h * 0.5f) fr = b.h * 0.5f;
+    r = (int)(fr + 0.5f);
+    if (r < 1) { nk_fill_rect(cv, b, 0.0f, col); return; }
+
+    disc = round_mask(app, r);
+    if (!disc.handle.ptr) { nk_fill_rect(cv, b, (float)r, col); return; }
+    h = disc.handle;
+
+    {
+        float R = (float)r, d = (float)(2 * r);
+        struct nk_image q;
+        struct nk_rect corner[4];
+        struct nk_rect from[4];
+        int i;
+
+        corner[0] = nk_rect(b.x, b.y, R, R);
+        corner[1] = nk_rect(b.x + b.w - R, b.y, R, R);
+        corner[2] = nk_rect(b.x, b.y + b.h - R, R, R);
+        corner[3] = nk_rect(b.x + b.w - R, b.y + b.h - R, R, R);
+        from[0] = nk_rect(0.0f, 0.0f, R, R);
+        from[1] = nk_rect(R, 0.0f, R, R);
+        from[2] = nk_rect(0.0f, R, R, R);
+        from[3] = nk_rect(R, R, R, R);
+        for (i = 0; i < 4; i++) {
+            q = nk_subimage_handle(h, (nk_ushort)d, (nk_ushort)d, from[i]);
+            nk_draw_image(cv, corner[i], &q, col);
+        }
+        /* The cross between the four caps: a band the full width and two
+         * short ones above and below it. Either can be empty - at a radius of
+         * half the height the shape is a pill, at half of both a disc - and a
+         * zero-extent rect is not something to hand the rasteriser. */
+        if (b.h > d)
+            nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, b.h - d), 0.0f, col);
+        if (b.w > d) {
+            nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - d, R), 0.0f, col);
+            nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - d, R), 0.0f,
+                         col);
+        }
+    }
+}
+
 /* --- fonts --------------------------------------------------------------- */
 /* Nuklear's default is ProggyClean, a 13px bitmap font; baking a TTF through
  * stb_truetype is what makes text look like text.
@@ -517,18 +668,21 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
  * project's submodule rule. Its download has no licence file, so the terms are
  * read off the font's own name table into Aileron-Notice.txt. An OTF:
  * stb_truetype reads CFF outlines too. See docs/NOTICE.md. */
-#define FONT_FILE "assets/fonts/Aileron-Regular.otf"
+#define FONT_FILE      "assets/fonts/Aileron-Regular.otf"
+#define FONT_BOLD_FILE "assets/fonts/Aileron-Bold.otf"
 
-/* Nearest baked size. `bold` is accepted and ignored: Aileron-Bold.otf sits
- * beside the regular, but baking it would put a second set of FONT_STEPS faces
- * in the atlas and roughly double the largest allocation here. */
+/* Nearest baked size. The bold is baked at one size only, TITLE_PX, for the
+ * title: a whole second family would put another FONT_STEPS glyph sets in the
+ * atlas and roughly double the largest allocation here. A bold asked for at
+ * any other size gets the regular. */
 static const struct nk_user_font *
 pick_font(App *app, int px, int bold)
 {
     int best = 0, i, bd = 1 << 30;
 
-    (void)bold;
     if (px <= 0) px = FONT_SIZE;
+    if (bold && px == TITLE_PX && app->face_bold)
+        return &app->face_bold->handle;
     for (i = 0; i < FONT_STEPS; i++) {
         int d = g_font_px[i] > px ? g_font_px[i] - px : px - g_font_px[i];
         if (d < bd) { bd = d; best = i; }
@@ -562,6 +716,7 @@ rebuild_font(App *app)
     if (app->atlas) {
         nk_font_atlas_clear(app->atlas);
         SDL_memset(app->faces, 0, sizeof(app->faces));
+        app->face_bold = NULL;
     }
     atlas = nk_sdl_font_stash_begin(app->ctx);
     app->atlas = atlas;
@@ -591,6 +746,22 @@ rebuild_font(App *app)
         for (i = 0; i < FONT_STEPS; i++)
             if (app->faces[i])
                 app->faces[i]->handle.height = (float)g_font_px[i];
+        /* The bold, one size, from the file beside the regular: the path
+         * already resolved above, with its basename swapped. */
+        {
+            const char *slash = SDL_strrchr(path, '/');
+            const char *bslash = SDL_strrchr(path, 92);   /* a backslash */
+            const char *base = SDL_strrchr(FONT_BOLD_FILE, '/') + 1;
+            char bpath[1024];
+
+            if (bslash > slash) slash = bslash;
+            SDL_snprintf(bpath, sizeof(bpath), "%.*s%s",
+                         slash ? (int)(slash - path + 1) : 0, path, base);
+            app->face_bold = nk_font_atlas_add_from_file(
+                atlas, bpath, (float)curie_px(TITLE_PX), &cfg);
+            if (app->face_bold)
+                app->face_bold->handle.height = (float)TITLE_PX;
+        }
         if (!font)
             SDL_snprintf(app->font_status, sizeof(app->font_status),
                          "FALLBACK (ProggyClean) - could not load %s", path);
@@ -606,8 +777,9 @@ rebuild_font(App *app)
         if (font) font->handle.height = (float)FONT_SIZE;
     } else {
         SDL_snprintf(app->font_status, sizeof(app->font_status),
-                     "Aileron, %d sizes %d-%dpx", FONT_STEPS,
-                     curie_px(g_font_px[0]), curie_px(g_font_px[FONT_STEPS - 1]));
+                     "Aileron, %d sizes %d-%dpx%s", FONT_STEPS,
+                     curie_px(g_font_px[0]), curie_px(g_font_px[FONT_STEPS - 1]),
+                     app->face_bold ? ", bold at one" : "");
     }
 
     nk_sdl_font_stash_end(app->ctx);
@@ -1199,8 +1371,18 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
     stroke_edit_edge(ctx, bounds, &s);
 
     /* Right-click menu. Nuklear places and dismisses it; the items act on the
-     * edit state directly, which is why it is ours to hold. */
-    if (nk_contextual_begin(ctx, 0, nk_vec2(160, 172), bounds)) {
+     * edit state directly, which is why it is ours to hold. The theme leaves
+     * window.rounding at 0 - the page is square - so the popup's radius is
+     * pushed here for as long as the popup can draw, as the showcase's menus
+     * do; without it this one menu came out square-cornered. NK_WINDOW_BORDER
+     * because a contextual popup is dynamic - it fills its body at
+     * nk_panel_end, sized to its rows - and that is also where Nuklear
+     * strokes the border, at the final height and at the rounding; without
+     * the flag the fill's corners were a staircase on the software renderer,
+     * where a fill is not feathered and only a stroke is. */
+    nk_style_push_float(ctx, &ctx->style.window.rounding,
+                        curie_popup_rounding());
+    if (nk_contextual_begin(ctx, NK_WINDOW_BORDER, nk_vec2(160, 172), bounds)) {
         int has_sel = app->edit.select_start != app->edit.select_end;
 
         nk_layout_row_dynamic(ctx, 26, 1);
@@ -1216,6 +1398,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
             nk_textedit_select_all(&app->edit);
         nk_contextual_end(ctx);
     }
+    nk_style_pop_float(ctx);
 
     if (hint && *len == 0) draw_hint(ctx, bounds, hint, &s);
 }
@@ -1451,7 +1634,7 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
     if (!nk_group_begin(ctx, "titlebar", NK_WINDOW_NO_SCROLLBAR)) return;
     curie_note_push(app, CURIE_A11Y_GROUP, "Title bar", NULL, 0, bar);
 
-    nk_layout_row_begin(ctx, NK_STATIC, (float)CTL_SIZE, 7);
+    nk_layout_row_begin(ctx, NK_STATIC, (float)CTL_SIZE, 6);
 
     nk_layout_row_push(ctx, (float)TITLE_PAD);
     nk_spacing(ctx, 1);
@@ -1463,22 +1646,31 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
     nk_layout_row_push(ctx, (float)MARK_SIZE);
     image_centred(ctx, icon(app, CURIE_MARK, MARK_SIZE), MARK_SIZE);
 
-    nk_layout_row_push(ctx, (float)TITLE_GAP);
-    nk_spacing(ctx, 1);
+    /* No spacer between the mark and the name: the 4px Nuklear puts between
+     * any two columns is the whole gap, and it read as a word-space with a
+     * spacer column adding its own width and a second 4px. */
 
     /* Exactly the remainder, so the controls finish flush with the right edge:
      * the group's padding either side plus the five gaps Nuklear inserts
      * across six columns. A guessed constant left a strip of dead titlebar. */
-    nk_layout_row_push(ctx, (float)(win_w - TITLE_PAD - MARK_SIZE - TITLE_GAP -
-                                    3 * CTL_SIZE - 2 * 4 - 6 * 4));
+    nk_layout_row_push(ctx, (float)(win_w - TITLE_PAD - MARK_SIZE -
+                                    3 * CTL_SIZE - 2 * 4 - 5 * 4));
     {
-        nk_style_push_font(ctx, pick_font(app, 13, 0));
-        if (curie_style_token("--text-muted", c))
+        /* At the body size, in the same ink as the window controls beside
+         * it: --text-muted on the dark scheme, --text-main on the light one -
+         * the rule titlebar_button follows. */
+        nk_style_push_font(ctx, pick_font(app, TITLE_PX, 1));
+        if (app->dark && curie_style_token("--text-muted", c))
             nk_style_push_color(ctx, &ctx->style.text.color, col_of(c));
         else
             nk_style_push_color(ctx, &ctx->style.text.color, app->text);
+        /* 3px of text padding rather than Nuklear's 4: with the column gap
+         * and the mark's own margin, 4 held the name a word-space off the
+         * mark and 0 put it against it. */
+        nk_style_push_vec2(ctx, &ctx->style.text.padding, nk_vec2(3.0f, 0.0f));
         curie_note_here(app, ctx, CURIE_A11Y_LABEL, "Curie", 0);
         nk_label(ctx, "Curie", NK_TEXT_LEFT);
+        nk_style_pop_vec2(ctx);
         nk_style_pop_color(ctx);
         nk_style_pop_font(ctx);
     }
@@ -1640,7 +1832,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
         css_button_accent(app, ctx, "button", "Continue with email", "--links");
 
         nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-        nk_style_push_font(ctx, pick_font(app, 13, 0));
+        nk_style_push_font(ctx, pick_font(app, 16, 0));
         nk_label(ctx, "or", NK_TEXT_CENTERED);
         nk_style_pop_font(ctx);
 
@@ -1869,7 +2061,13 @@ apply_widget_style(App *app)
     st->slider.cursor_hover  = nk_style_item_color(focus);
     st->slider.cursor_active = nk_style_item_color(focus);
     st->slider.border_color  = edge;
-    st->slider.rounding      = 2.0f;
+    /* Six pixels and a radius of three, rather than Nuklear's four and two.
+     * A two-pixel arc does not survive the software renderer: every vertex of
+     * it lands on the same pixel once the backend puts them on the grid, and
+     * the cap came out square, which on a bar flush with the column edge read
+     * as one running off it. Three is enough of an arc to stay an arc. */
+    st->slider.bar_height    = 6.0f;
+    st->slider.rounding      = 3.0f;
     st->slider.show_buttons  = nk_false;
 
     st->knob.normal            = i_none;
@@ -1892,16 +2090,26 @@ apply_widget_style(App *app)
     st->progress.cursor_active       = nk_style_item_color(focus);
     st->progress.border_color        = edge;
     st->progress.cursor_border_color = accent;
-    st->progress.border              = 1.0f;
+    /* No outline on the track either: at the button's corner it is a dark
+     * ring round a bright fill, and the ring's own arc is a fill's arc, so it
+     * steps where the fill under it does. The track's tone is enough to say
+     * where the bar ends. */
+    st->progress.border              = 0.0f;
     /* No outline on the fill: Nuklear strokes it in cursor_border_color on top,
      * which on a solid accent is a lighter line inside the bar. */
     st->progress.cursor_border       = 0.0f;
-    /* tiny.css has no `progress` rule. A rounded rect whose radius exceeds
-     * half its width self-intersects and Nuklear does not clamp it - at the
-     * button's 8px a bar in its first few per cent drew as a knot. The fill
-     * takes square ends, invisible against a 3px track. */
-    st->progress.rounding            = 3.0f;
-    st->progress.cursor_rounding     = 0.0f;
+    /* tiny.css has no `progress` rule, so the track and the fill borrow the
+     * button's corner. A rounded rect whose radius exceeds half its width
+     * self-intersects and Nuklear does not clamp it, so a bar in its first
+     * few per cent would draw as a knot; progress_cell clamps the fill's
+     * radius to its own width before each call. */
+    {
+        curie_style bs;
+
+        curie_style_get("button", &bs);
+        st->progress.rounding        = bs.matched ? bs.rounding : 3.0f;
+        st->progress.cursor_rounding = st->progress.rounding;
+    }
 
     st->property.normal       = i_base;
     st->property.hover        = i_hover;
@@ -2042,6 +2250,12 @@ apply_widget_style(App *app)
     st->window.rounding = 0.0f;
     st->window.combo_border_color      = edge;
     st->window.contextual_border_color = edge;
+    /* 2px, not Nuklear's 1: a contextual popup is dynamic and fills its body
+     * at nk_panel_end, unfeathered on the software renderer, so its corners
+     * are a staircase up to half a pixel either side of the arc. A 1px rim
+     * centred on that arc covers half of it; a 2px rim covers all of it and
+     * the corner reads as the stroke's own feathered curve. */
+    st->window.contextual_border       = 2.0f;
     st->window.menu_border_color       = edge;
     st->window.group_border_color      = edge;
     /* Not `edge`: --background-hover is both border and hover fill, so the
@@ -2346,6 +2560,20 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     if (nk_group_begin(ctx, "body", 0)) {
         struct nk_vec2 sz = nk_window_get_content_region_size(ctx);
 
+        /* Nuklear puts the first widget of a row one pixel left of the
+         * group's content edge, and the group's scissor is exactly that
+         * edge - so the leftmost widget in every row lost the outer pixel of
+         * its 2px border and read as cut down one side. Visible on both
+         * renderers, so it is the layout and not the rasteriser. The scissor
+         * is widened by two pixels either side; the group spans the whole
+         * window, so this stays well inside it. */
+        {
+            struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+            struct nk_rect c = cv->clip;
+
+            nk_push_scissor(cv, nk_rect(c.x - 2.0f, c.y, c.w + 4.0f, c.h));
+        }
+
         /* Popped here rather than after the group ends: both were read when
          * the panel began, and leaving the hidden background on the stack
          * meant every popup and menu inside the page inherited it. */
@@ -2425,6 +2653,21 @@ curie_ionicon(App *app, const char *name, int px)
     return icon(app, src, px);
 }
 
+/* Rasterised at exactly the size it is drawn, at an explicit stroke weight:
+ * both matter to a rim a pixel wide. `sw` at zero takes the hairline rule. */
+struct nk_image
+curie_ionicon_exact(App *app, const char *name, int px, struct nk_color stroke,
+                    float sw)
+{
+    char src[192];
+
+    if (sw <= 0.0f) sw = px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f;
+    SDL_snprintf(src, sizeof(src),
+                 "third_party/ionicons/src/svg/%s.svg?stroke=#%02x%02x%02x"
+                 "&sw=%.2f", name, stroke.r, stroke.g, stroke.b, (double)sw);
+    return icon_over(app, src, px, 1.0f);
+}
+
 struct nk_image
 curie_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
 {
@@ -2483,6 +2726,56 @@ int
 curie_button_accent(App *app, struct nk_context *ctx, const char *label)
 {
     return css_button_accent(app, ctx, "button", label, "--links");
+}
+
+/* A colour swatch: the button rule exactly as its neighbours draw it, with
+ * the fill replaced and no label. Not nk_button_color, which draws its own
+ * rect and so keeps none of the rule's geometry. */
+int
+curie_button_color(App *app, struct nk_context *ctx, const char *name,
+                   struct nk_color fill)
+{
+    struct nk_rect b = nk_widget_bounds(ctx);
+    unsigned char hov[4];
+    char hex[10];
+    int clicked;
+
+    hot_push(app, b, 1, 1);
+    SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x", fill.r, fill.g, fill.b);
+    curie_note(app, CURIE_A11Y_BUTTON, name, hex, 0, b);
+
+    hov[0] = fill.r; hov[1] = fill.g; hov[2] = fill.b; hov[3] = fill.a;
+    curie_style_darken(hov, 0.12f);
+
+    /* Only the colours are pushed. Size, radius and padding stay whatever
+     * the caller has in force, which is what makes this the same button as
+     * the nk_button_image beside it rather than a lookalike - pushing the
+     * `button` rule here instead put the CSS radius and padding over the
+     * caller's, and the two stopped matching.
+     *
+     * The border takes the fill colour too, which is the one deviation and
+     * the reason the corner matches. nk_draw_button fills the bounds in the
+     * border colour and then fills the inset rect in the background, so the
+     * border is a band and the fill's own arc sits at rounding - border.
+     * With a grey rim the outer arc is there and measures identical to the
+     * neighbour's, but grey on the page is a two-step difference nobody
+     * sees: the eye reads the blue, and the blue is the tighter corner.
+     * Colouring the band blue puts the visible edge back on the button's
+     * outer arc, where its neighbour's is. */
+    nk_style_push_style_item(ctx, &ctx->style.button.normal,
+                             nk_style_item_color(fill));
+    nk_style_push_style_item(ctx, &ctx->style.button.hover,
+                             nk_style_item_color(col_of(hov)));
+    nk_style_push_style_item(ctx, &ctx->style.button.active,
+                             nk_style_item_color(col_of(hov)));
+    nk_style_push_color(ctx, &ctx->style.button.border_color, fill);
+    clicked = nk_button_label(ctx, "");
+    nk_style_pop_color(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+
+    return clicked;
 }
 
 int

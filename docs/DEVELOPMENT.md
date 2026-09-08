@@ -74,11 +74,12 @@ reads stale for exactly as long as the app is quiet.
 ## Fonts and the atlas
 
 Five sizes are baked — 12, 13, 14, 16 and 19px — at the display scale, into a
-single Nuklear atlas texture. `curie_font(app, px, bold)` returns the nearest
-baked size; `bold` is accepted and ignored — not for want of a face, since
-`Aileron-Bold.otf` sits beside the regular, but because baking it would put a
-second set of five faces in the atlas and roughly double the largest allocation
-the app makes.
+single Nuklear atlas texture, plus one face of `Aileron-Bold.otf` at 16px for
+the titlebar's name. `curie_font(app, px, bold)` returns the nearest baked
+size; `bold` is honoured only at that one size, because a bold at all five
+would put a second set of faces in the atlas and roughly double the largest
+allocation the app makes. The one extra face left the atlas where it was:
+1024x128.
 
 The face is Aileron, CC0, vendored under `assets/fonts/`. It replaced Karla,
 which came from inside the Nuklear submodule with no licence file anywhere near
@@ -515,7 +516,49 @@ and a fill ring at a 6px radius with no feather reads as a square corner. The
 shell's buttons stroke their border, which is why they kept their corners; the
 text fields did not, and lost theirs until `stroke_edit_edge` drew the ring as
 a stroke on the same footprint. A widget whose corners go square on the
-software path and nowhere else is almost certainly a fill ring.
+software path and nowhere else is almost certainly a fill ring. A context menu
+asks Nuklear for its border (`NK_WINDOW_BORDER`) at 2px for the same reason: a
+contextual popup is dynamic, fills its body at `nk_panel_end` and strokes the
+rim there at the final height — anything drawn inside it earlier is painted
+over — and a 1px rim reaches only half a pixel either side of the arc, which is
+exactly where the unfeathered fill's corner steps are.
+
+A colour swatch (`curie_button_color`) is the button rule with the fill
+replaced and the border tinted to match. The border is a *fill band* here, so
+the swatch's own arc would otherwise sit at `rounding - border` — measurably
+identical to its neighbour on the outside, and visibly tighter, because a grey
+rim two steps off the page is not what the eye reads as the edge. Colouring the
+band puts the visible edge back on the button's outer arc.
+
+**A rounded rect gets its corners from a mask.** A stroke on the fill's own
+footprint is the older remedy and still what the text fields use, but it only
+grades the step by a fixed half: the snapping pass quantises the stroke's
+feather onto the same staircase the fill made, so a large radius reads as
+stairs with a halo rather than a curve. `curie_fill_round` computes the
+coverage instead — one white disc of 2r whose alpha is the circle sampled four
+by four, each quadrant drawn into a corner as a sub-image, three plain rects
+for the rest — so the corner is exact at any radius and identical on both
+backends, at one texture per radius for the session. The progress bar's track
+and fill and the slider's bar and fill are drawn with it; the widgets' own
+style items go transparent for the call, which keeps their geometry, their
+drag and their value.
+
+**Circles are the one shape this rasteriser cannot draw at all.** Nuklear fills
+a circle as a polygon and grades its rim with the same fractional geometry, so
+with fill feathering off there is nothing to grade it: a radio came out
+nineteen pixels across and seventeen high with a rim that jumped between five
+tones, and raising `circle_segment_count` to 48 bought nothing, because the
+snapping pass quantises the arc as well. A texture's alpha *is* blended per
+texel on both backends, so every circle on a page — a radio's rim and dot, a
+combo's leading symbol, a selectable's — is an Ionicon drawn into the slot
+Nuklear sized, with `NK_SYMBOL_NONE` handed to the widget. Two details make or
+break it. The icon is rasterised **1:1** with the rect it is drawn in
+(`curie_ionicon_exact`, against `icon`'s usual 2×): a downscale re-samples
+plutovg's antialiasing, and on a rim one pixel wide that reads as a smear three
+pixels across. And `nk_draw_option` fills the whole selector with
+`border_color` before the background, without asking whether there is a border,
+so that colour has to be pushed transparent along with the fills or Nuklear's
+disc stands under the icon as a second rim a pixel outside the real one.
 
 **Glyphs are snapped on hardware**, separately from either of those. Nuklear
 advances the pen by fractional widths, so a glyph quad can begin mid-pixel;

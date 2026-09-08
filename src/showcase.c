@@ -110,14 +110,17 @@ rule(struct nk_context *ctx)
 static void
 compact_push(struct nk_context *ctx)
 {
-    nk_style_push_vec2(ctx, &ctx->style.button.padding, nk_vec2(4.0f, 4.0f));
-    nk_style_push_float(ctx, &ctx->style.button.rounding, 3.0f);
+    /* The radius is left alone: an icon-only button should have the same
+     * corner as a labelled one. Only the padding goes, because nk_do_button
+     * insets its content by padding + border + rounding and hands what is
+     * left to the glyph - so the room the larger radius takes has to come
+     * from somewhere, and it is padding a glyph does not need. */
+    nk_style_push_vec2(ctx, &ctx->style.button.padding, nk_vec2(0.0f, 0.0f));
 }
 
 static void
 compact_pop(struct nk_context *ctx)
 {
-    nk_style_pop_float(ctx);
     nk_style_pop_vec2(ctx);
 }
 
@@ -254,6 +257,28 @@ combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
  * centred in the slot Nuklear sized. */
 #define CHEVRON_PX 14
 
+/* One Ionicon centred in `slot`, at exactly px and no resampling - which is
+ * what keeps a rim a line rather than a smear. `sw` multiplies the stroke the
+ * artwork declares; at zero the hairline rule decides, which is what a
+ * chevron wants and twice what a rim does. */
+static void
+glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
+         const char *name, struct nk_color col, int px, float sw)
+{
+    struct nk_rect r;
+    struct nk_image im;
+
+    if (px < 1) return;
+    im = curie_ionicon_exact(app, name, px, col, sw);
+    /* A glyph the cache could not load has no handle, and nk_draw_image would
+     * paint the null texture - a white quad, which is worse than nothing. */
+    if (!im.handle.ptr) return;
+    r.w = r.h = (float)px;
+    r.x = slot.x + (slot.w - r.w) * 0.5f;
+    r.y = slot.y + (slot.h - r.h) * 0.5f;
+    nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
+}
+
 static void
 chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
            const char *name, struct nk_color col)
@@ -265,6 +290,235 @@ chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
     r.x = slot.x + (slot.w - r.w) * 0.5f;
     r.y = slot.y + (slot.h - r.h) * 0.5f;
     nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
+}
+
+/* A circle is the one shape the software renderer cannot draw. Nuklear fills
+ * one as a polygon and grades its rim with geometry a fraction of a pixel
+ * wide; SDL's software rasteriser has no partial coverage, so that geometry
+ * lands whole or not at all, and the pass that puts every vertex on the pixel
+ * grid - right for a rect's edges, see nk_sdl_render_ex - quantises the arc
+ * with it. A radio came out nineteen pixels across and seventeen high, with a
+ * rim that jumped between five tones.
+ *
+ * A texture's alpha is blended per texel on both backends, so every circle on
+ * a page is an Ionicon instead, drawn in the slot Nuklear sized. */
+#define DISC_ROUND   "ellipse"
+#define DISC_RING    "radio-button-off"
+#define DISC_OUTLINE "ellipse-outline"
+
+/* A step away from the page: lighter on a dark scheme, darker on a light one.
+ * The knob is the accent and so is the fill it sits on the end of, so without
+ * this it vanishes into the bar; with it the two are still the same colour. */
+static struct nk_color
+lifted(struct nk_color c, struct nk_color page, float amount)
+{
+    float lum = (float)page.r * 0.299f + (float)page.g * 0.587f
+              + (float)page.b * 0.114f;
+    float up = lum < 128.0f ? amount : -amount;
+    int i;
+    unsigned char *p = &c.r;
+
+    for (i = 0; i < 3; i++) {
+        float v = up > 0.0f ? (float)p[i] + up * (255.0f - (float)p[i])
+                            : (float)p[i] * (1.0f + up);
+        p[i] = (unsigned char)(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v));
+    }
+    return c;
+}
+
+/* Nuklear draws none of a slider either. Its bar and fill are rounded rects
+ * whose caps it steps through in whole pixels, and its knob is one more
+ * nk_fill_circle - so the styles go transparent for the call, which keeps the
+ * geometry, the drag and the value, and all three are drawn afterwards, with
+ * the value the drag has just produced rather than the previous frame's.
+ *
+ * The rects are nk_do_slider's: the bounds inset by padding, a bar of
+ * bar_height centred in it, as much of it filled as the value, and the knob a
+ * cursor_size square on the same centre line. */
+static void
+slider_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
+            float step)
+{
+    const struct nk_style_slider *st = &ctx->style.slider;
+    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    struct nk_rect b = nk_widget_bounds(ctx);
+    int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
+    const struct nk_style_item *ci = hot ? &st->cursor_hover
+                                         : &st->cursor_normal;
+    struct nk_color track = hot ? st->bar_hover : st->bar_normal;
+    struct nk_color filled = st->bar_filled;
+    struct nk_color knob = lifted(ci->type == NK_STYLE_ITEM_COLOR
+                                 ? ci->data.color : filled,
+                                 curie_token("--background-body",
+                                             ctx->style.text.color), 0.22f);
+    float cap = st->bar_height * 0.5f;
+    struct nk_rect in, bar, fl, kn;
+    float t;
+
+    nk_style_push_color(ctx, &ctx->style.slider.bar_normal, clear.data.color);
+    nk_style_push_color(ctx, &ctx->style.slider.bar_hover, clear.data.color);
+    nk_style_push_color(ctx, &ctx->style.slider.bar_active, clear.data.color);
+    nk_style_push_color(ctx, &ctx->style.slider.bar_filled, clear.data.color);
+    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_normal, clear);
+    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_active, clear);
+    nk_slider_float(ctx, lo, val, hi, step);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
+
+    in  = nk_rect(b.x + st->padding.x, b.y + st->padding.y,
+                  b.w - 2.0f * st->padding.x, b.h - 2.0f * st->padding.y);
+    bar = nk_rect(in.x, in.y + in.h * 0.5f - cap, in.w, st->bar_height);
+    t   = (hi > lo) ? (*val - lo) / (hi - lo) : 0.0f;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    fl  = nk_rect(bar.x, bar.y, bar.w * t, bar.h);
+    kn  = nk_rect(in.x + in.w * t - st->cursor_size.x * 0.5f,
+                  in.y + in.h * 0.5f - st->cursor_size.y * 0.5f,
+                  st->cursor_size.x, st->cursor_size.y);
+
+    curie_fill_round(app, cv, bar, cap, track);
+    if (fl.w >= 1.0f) curie_fill_round(app, cv, fl, cap, filled);
+    glyph_at(app, ctx, kn, DISC_ROUND, knob,
+             (int)(st->cursor_size.x < st->cursor_size.y ? st->cursor_size.x
+                                                         : st->cursor_size.y),
+             0.0f);
+}
+
+/* nk_slider_int's own few lines, with the aligned call in the middle. */
+static void
+slider_cell_int(App *app, struct nk_context *ctx, int *val, int lo, int hi,
+                int step)
+{
+    float f = (float)*val;
+
+    slider_cell(app, ctx, &f, (float)lo, (float)hi, (float)step);
+    *val = (int)f;
+}
+
+/* Nuklear draws neither of the bar's two rounded rects: they are the shape
+ * curie_fill_round exists for, and its corners are the only ones on the page
+ * that are actually curves rather than stairs. So the style items go
+ * transparent for the call - which keeps the geometry, the drag and the
+ * value - and the track and the fill are drawn here.
+ *
+ * The rects are nk_do_progress's: the bounds padded by padding plus border,
+ * the fill scaled by the value. The fill's corner is the track's, clamped to
+ * half its own width, or a bar in its first few per cent would draw a corner
+ * wider than the bar. */
+static void
+progress_cell(App *app, struct nk_context *ctx, nk_size *cur, nk_size max,
+              int modifiable)
+{
+    const struct nk_style_progress *st = &ctx->style.progress;
+    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    struct nk_rect b = nk_widget_bounds(ctx);
+    struct nk_vec2 pad = nk_vec2(st->padding.x + st->border,
+                                 st->padding.y + st->border);
+    struct nk_rect fill = nk_rect(b.x + pad.x, b.y + pad.y,
+                                  b.w - 2.0f * pad.x, b.h - 2.0f * pad.y);
+    int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
+    struct nk_style_item track_it = hot ? st->hover : st->normal;
+    struct nk_style_item fill_it = hot ? st->cursor_hover : st->cursor_normal;
+    float track_r = st->rounding, r;
+
+    fill.w *= max ? (float)*cur / (float)max : 0.0f;
+    r = track_r;
+    if (r > fill.w * 0.5f) r = fill.w * 0.5f;
+    if (r < 0.0f) r = 0.0f;
+
+    nk_style_push_style_item(ctx, &ctx->style.progress.normal, clear);
+    nk_style_push_style_item(ctx, &ctx->style.progress.hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.progress.active, clear);
+    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_normal, clear);
+    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_active, clear);
+    nk_progress(ctx, cur, max, modifiable);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+
+    if (track_it.type == NK_STYLE_ITEM_COLOR)
+        curie_fill_round(app, cv, b, track_r, track_it.data.color);
+    if (fill.w >= 1.0f && fill_it.type == NK_STYLE_ITEM_COLOR)
+        curie_fill_round(app, cv, fill, r, fill_it.data.color);
+}
+
+/* The knob is the same again, and the widget the stylesheet reaches least:
+ * CSS has no such control, so Nuklear's own greys stand, and what it draws is
+ * a filled circle with a hairline spoke from the middle out. It draws none of
+ * it here - every colour is cleared for the call, which keeps the geometry,
+ * the drag and the value - and the widget is three Ionicons instead: a face
+ * in the surface colour, its rim, and a dot at the value's angle in the link
+ * colour, which is what the rest of the page uses to mean "this one".
+ *
+ * The angle is nk_draw_knob's own, the value's fraction of the range as a
+ * full turn zeroed at the given heading, reproduced because Nuklear keeps
+ * none of it. The two fractions are placement, picked to sit the dot clear of
+ * the rim; the artwork's margin inside its own box is the same for face and
+ * dot, so the pair stays in proportion at any size. */
+#define KNOB_DOT   0.22f   /* the dot's box, against the face's */
+#define KNOB_ORBIT 0.23f   /* how far its centre sits from the middle */
+
+static void
+knob_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
+          enum nk_heading zero)
+{
+    static const float zero_rads[4] = { NK_PI * 1.5f, 0.0f, NK_PI * 0.5f,
+                                        NK_PI };
+    struct nk_style_knob *st = &ctx->style.knob;
+    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    struct nk_rect b = nk_widget_bounds(ctx);
+    struct nk_color face = st->knob_normal;
+    struct nk_color rim  = st->knob_border_color;
+    struct nk_color ink  = st->cursor_normal;
+    struct nk_rect dot;
+    float a, orbit;
+    int i, px = (int)(b.w < b.h ? b.w : b.h);
+    int dot_px = (int)((float)px * KNOB_DOT + 0.5f);
+    struct nk_color *cols[7];
+
+    cols[0] = &st->border_color;    cols[1] = &st->knob_normal;
+    cols[2] = &st->knob_hover;      cols[3] = &st->knob_active;
+    cols[4] = &st->cursor_normal;   cols[5] = &st->cursor_hover;
+    cols[6] = &st->cursor_active;
+
+    nk_style_push_style_item(ctx, &st->normal, clear);
+    nk_style_push_style_item(ctx, &st->hover, clear);
+    nk_style_push_style_item(ctx, &st->active, clear);
+    for (i = 0; i < 7; i++)
+        nk_style_push_color(ctx, cols[i], clear.data.color);
+    nk_style_push_float(ctx, &st->knob_border, 0.0f);
+    nk_knob_float(ctx, lo, val, hi, 0.01f, zero, 0.0f);
+    nk_style_pop_float(ctx);
+    for (i = 0; i < 7; i++)
+        nk_style_pop_color(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+
+    a = (hi > lo) ? (*val - lo) / (hi - lo) : 0.0f;
+    a = a * NK_PI * 2.0f + zero_rads[zero];
+    orbit = (float)px * KNOB_ORBIT;
+    dot = nk_rect(b.x + b.w * 0.5f + orbit * (float)cos((double)a)
+                      - (float)dot_px * 0.5f,
+                  b.y + b.h * 0.5f + orbit * (float)sin((double)a)
+                      - (float)dot_px * 0.5f,
+                  (float)dot_px, (float)dot_px);
+
+    glyph_at(app, ctx, b,   DISC_ROUND,   face, px, 0.0f);
+    glyph_at(app, ctx, b,   DISC_OUTLINE, rim,  px, 0.5f);
+    glyph_at(app, ctx, dot, DISC_ROUND,   ink,  dot_px, 0.0f);
 }
 
 /* The two steppers of a property, placed the way nk_do_property places
@@ -484,14 +738,63 @@ flags_cell(App *app, struct nk_context *ctx, const char *label,
     nk_spacer(ctx);
 }
 
+/* Nuklear draws a radio as three filled circles - ring, hollow, dot - which
+ * is three staircases here. So it draws none of them and the icons go in the
+ * rects nk_do_toggle uses: the selector is a font-height square at the right
+ * of the cell, the cursor that square inset by padding and border. A checkbox
+ * is squares and needs none of this. */
 static void
 radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
            int value)
 {
-    hot(app, ctx, CURIE_A11Y_RADIO, label,
-        *sel == value ? CURIE_A11Y_CHECKED : 0u);
-    if (nk_option_label_align(ctx, label, *sel == value, CHECK_ALIGN))
+    struct nk_rect r = nk_widget_bounds(ctx);
+    const struct nk_style_toggle *st = &ctx->style.option;
+    float h = ctx->style.font->height;
+    struct nk_rect ring, dot;
+
+    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    struct nk_style_item bg = st->normal, cursor = st->cursor_normal;
+    int side, dot_px;
+    int on = *sel == value;
+
+    hot(app, ctx, CURIE_A11Y_RADIO, label, on ? CURIE_A11Y_CHECKED : 0u);
+
+    /* Nuklear draws nothing for the circle: its fills are pushed transparent
+     * for the call, and the widget keeps its geometry, its label and its
+     * click. border_color has to go with them - nk_draw_option fills the
+     * whole selector with it before the background and does not ask whether
+     * there is a border, so leaving it stood a disc under everything here,
+     * which read as a second rim a pixel outside the real one. */
+    nk_style_push_style_item(ctx, &ctx->style.option.normal, clear);
+    nk_style_push_style_item(ctx, &ctx->style.option.hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.option.active, clear);
+    nk_style_push_style_item(ctx, &ctx->style.option.cursor_normal, clear);
+    nk_style_push_style_item(ctx, &ctx->style.option.cursor_hover, clear);
+    nk_style_push_color(ctx, &ctx->style.option.border_color, clear.data.color);
+    nk_style_push_float(ctx, &ctx->style.option.border, 0.0f);
+    if (nk_option_label_align(ctx, label, on, CHECK_ALIGN))
         *sel = value;
+    nk_style_pop_float(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+
+    /* Then the circle: the hollow, the rim over it, and the dot inside. */
+    ring   = nk_rect(r.x + r.w - h, r.y + r.h * 0.5f - h * 0.5f, h, h);
+    dot    = nk_rect(ring.x + st->padding.x + st->border,
+                     ring.y + st->padding.y + st->border,
+                     h - 2.0f * (st->padding.x + st->border),
+                     h - 2.0f * (st->padding.y + st->border));
+    side   = (int)h;
+    dot_px = (int)dot.w;
+    if (bg.type == NK_STYLE_ITEM_COLOR)
+        glyph_at(app, ctx, ring, DISC_ROUND, bg.data.color, side, 0.0f);
+    glyph_at(app, ctx, ring, DISC_RING, st->border_color, side, 1.0f);
+    if (on && cursor.type == NK_STYLE_ITEM_COLOR)
+        glyph_at(app, ctx, dot, DISC_ROUND, cursor.data.color, dot_px, 0.0f);
     nk_spacer(ctx);
 }
 
@@ -633,14 +936,14 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
      * square or the glyph is smeared. nk_button_image_label - which is what
      * the window controls use - insets it by image_padding instead. */
     nk_layout_row_template_begin(ctx, 40.0f);
-    nk_layout_row_template_push_static(ctx, 60.0f);
+    nk_layout_row_template_push_static(ctx, 40.0f);   /* the swatch, square like its neighbour */
     nk_layout_row_template_push_static(ctx, 40.0f);
     nk_layout_row_template_push_dynamic(ctx);
     nk_layout_row_template_push_dynamic(ctx);
     nk_layout_row_template_end(ctx);
     compact_push(ctx);
-    hot(app, ctx, CURIE_A11Y_BUTTON, "Tint swatch", 0);
-    if (nk_button_color(ctx, nk_rgb_cf(s->tint))) s->presses++;
+    if (curie_button_color(app, ctx, "Tint swatch", nk_rgb_cf(s->tint)))
+        s->presses++;
     hot(app, ctx, CURIE_A11Y_BUTTON, "Download", 0);
     if (nk_button_image(ctx, curie_ionicon(app, "cloud-download-outline", 24)))
         s->presses++;
@@ -732,8 +1035,27 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_static(ctx, 32.0f, 190, 2);
     hot(app, ctx, CURIE_A11Y_LISTITEM, "With a symbol",
         s->sel_row ? CURIE_A11Y_SELECTED : 0u);
-    nk_selectable_symbol_label(ctx, NK_SYMBOL_CIRCLE_SOLID, "With a symbol",
-                               NK_TEXT_CENTERED, &s->sel_row);
+    {
+        /* NK_SYMBOL_NONE and the disc drawn into the slot Nuklear sized for
+         * it - nk_do_selectable_symbol's icon rect, which for any alignment
+         * but NK_TEXT_LEFT sits at twice the style's padding from the left
+         * edge and is as tall as the row less that padding. */
+        const struct nk_style_selectable *st = &ctx->style.selectable;
+        struct nk_rect b = nk_widget_bounds(ctx);
+        struct nk_rect icon;
+
+        nk_selectable_symbol_label(ctx, NK_SYMBOL_NONE, "With a symbol",
+                                   NK_TEXT_CENTERED, &s->sel_row);
+
+        icon.y = b.y + st->padding.y + st->image_padding.y;
+        icon.x = b.x + 2.0f * st->padding.x + st->image_padding.x;
+        icon.w = icon.h = b.h - 2.0f * st->padding.y;
+        icon.w -= 2.0f * st->image_padding.x;
+        icon.h -= 2.0f * st->image_padding.y;
+        glyph_at(app, ctx, icon, DISC_ROUND,
+                 s->sel_row ? st->text_pressed : st->text_normal,
+                 (int)(icon.w < icon.h ? icon.w : icon.h), 0.0f);
+    }
     hot(app, ctx, CURIE_A11Y_LISTITEM, "With an image",
         s->toggle ? CURIE_A11Y_SELECTED : 0u);
     {
@@ -803,7 +1125,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     curie_note(app, CURIE_A11Y_SLIDER, "Float", line, 0,
                nk_widget_bounds(ctx));
     hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    nk_slider_float(ctx, 0.0f, &s->slider_f, 1.0f, 0.01f);
+    slider_cell(app, ctx, &s->slider_f, 0.0f, 1.0f, 0.01f);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
@@ -811,7 +1133,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     curie_note(app, CURIE_A11Y_SLIDER, "Integer", line, 0,
                nk_widget_bounds(ctx));
     hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    nk_slider_int(ctx, 0, &s->slider_i, 100, 1);
+    slider_cell_int(app, ctx, &s->slider_i, 0, 100, 1);
     nk_label(ctx, line, NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, ROW, 2);
@@ -819,7 +1141,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     curie_note(app, CURIE_A11Y_PROGRESS, "Progress", line, 0,
                nk_widget_bounds(ctx));
     hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    nk_progress(ctx, &s->progress, 100, NK_MODIFIABLE);
+    progress_cell(app, ctx, &s->progress, 100, NK_MODIFIABLE);
     nk_label(ctx, "modifiable - drag it", NK_TEXT_LEFT);
 
     nk_layout_row_static(ctx, 62.0f, 62, 2);
@@ -827,7 +1149,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     curie_note(app, CURIE_A11Y_SLIDER, "Knob", line, 0,
                nk_widget_bounds(ctx));
     hot(app, ctx, CURIE_A11Y_NONE, NULL, 0);
-    nk_knob_float(ctx, 0.0f, &s->knob, 1.0f, 0.01f, NK_DOWN, 0.0f);
+    knob_cell(app, ctx, &s->knob, 0.0f, 1.0f, NK_DOWN);
     nk_spacer(ctx);
 
     section(app, ctx, "Properties",
@@ -901,8 +1223,16 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     {
         struct nk_rect h = nk_widget_bounds(ctx);
 
+        /* The disc goes in nk_combo_begin_symbol_text's own slot: the header
+         * inset by content_padding, square on its height. */
+        struct nk_rect im =
+            nk_rect(h.x + ctx->style.combo.content_padding.x,
+                    h.y + ctx->style.combo.content_padding.y,
+                    h.h - 2.0f * ctx->style.combo.content_padding.y,
+                    h.h - 2.0f * ctx->style.combo.content_padding.y);
+
         if (nk_combo_begin_symbol_label(ctx, sizes[s->combo_size],
-                                        NK_SYMBOL_CIRCLE_SOLID,
+                                        NK_SYMBOL_NONE,
                                         nk_vec2(nk_widget_width(ctx),
                                                 130.0f))) {
             int i;
@@ -917,6 +1247,8 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
             }
             nk_combo_end(ctx);
         }
+        glyph_at(app, ctx, im, DISC_ROUND, ctx->style.combo.symbol_normal,
+                 (int)im.w, 0.0f);
         combo_chrome(app, ctx, h, 2.0f);
     }
     nk_style_pop_vec2(ctx);
@@ -957,7 +1289,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                                  nk_vec2(nk_widget_width(ctx), 130.0f))) {
             nk_layout_row_dynamic(ctx, 26.0f, 1);
             nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
-            nk_slider_float(ctx, 0.0f, &s->slider_f, 1.0f, 0.01f);
+            slider_cell(app, ctx, &s->slider_f, 0.0f, 1.0f, 0.01f);
             nk_checkbox_label(ctx, "with a layout in it", &s->check_spell);
             nk_combo_end(ctx);
         }
@@ -1190,7 +1522,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_dynamic(ctx, 20.0f, 1);
     {
         nk_size fixed = s->progress;
-        nk_progress(ctx, &fixed, 100, NK_FIXED);
+        progress_cell(app, ctx, &fixed, 100, NK_FIXED);
     }
 
     section_grid(app, ctx);
@@ -1509,7 +1841,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                                 NK_WIDGET_RIGHT, NK_TEXT_LEFT);
         nk_spacer(ctx);
         nk_layout_row_dynamic(ctx, MENU_ROW, 1);
-        nk_slider_float(ctx, 0.0f, &s->slider_f, 1.0f, 0.01f);
+        slider_cell(app, ctx, &s->slider_f, 0.0f, 1.0f, 0.01f);
         menu_rows_pop(ctx);
         nk_menu_end(ctx);
     }
@@ -1519,7 +1851,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                             nk_vec2(170.0f, MENU_H(2)))) {
         menu_rows_push(ctx);
         nk_layout_row_dynamic(ctx, MENU_ROW, 1);
-        nk_progress(ctx, &s->progress, 100, NK_MODIFIABLE);
+        progress_cell(app, ctx, &s->progress, 100, NK_MODIFIABLE);
         if (menu_item(app, ctx, "Reset", 0))
             s->progress = 50;
         menu_rows_pop(ctx);
@@ -1586,7 +1918,9 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         /* The same width and the same three-row height as the File menu
          * above it: a context menu is the same widget, and two popups of
          * different sizes on one page read as an oversight. */
-        if (nk_contextual_begin(ctx, 0, nk_vec2(150.0f, MENU_H(3)),
+        /* NK_WINDOW_BORDER: the rim a dynamic popup strokes for itself at
+         * nk_panel_end, at its final height - see css_field in main.c. */
+        if (nk_contextual_begin(ctx, NK_WINDOW_BORDER, nk_vec2(150.0f, MENU_H(3)),
                                 trigger)) {
             menu_rows_push(ctx);
             nk_layout_row_dynamic(ctx, MENU_ROW, 1);

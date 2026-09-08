@@ -50,7 +50,7 @@ to build a distributable on.
 
 | Font | Role | Licence | Where the terms are |
 | --- | --- | --- | --- |
-| **Aileron** | The UI face. Regular is baked; Bold is vendored but not baked. | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
+| **Aileron** | The UI face. Regular is baked at five sizes; Bold at one, for the title. | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
 
 Aileron is by Sora Sagano of DOT COLON. Its download ships no licence file either,
 so rather than repeat Karla's problem the terms were traced to their source and
@@ -70,7 +70,7 @@ IBM Plex Sans (all OFL). None is in the tree — everything shipped here is CC0.
 
 ## The mark
 
-`branding/` is original work, not vendored: the icon in both inks, each as SVG,
+`branding/` is original work, not vendored: the icon in its one ink, as SVG,
 PNG and `.ico`. It is covered by this project's own MIT licence. Its colours are USWDS system tokens, which are public domain
 (a U.S. Government work); the shapes are not taken from anywhere.
 

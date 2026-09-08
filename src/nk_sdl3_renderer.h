@@ -349,7 +349,13 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         config.vertex_size = sizeof(struct nk_sdl_vertex);
         config.vertex_alignment = NK_ALIGNOF(struct nk_sdl_vertex);
         config.tex_null = sdl->ogl.tex_null;
-        config.circle_segment_count = 22;
+        /* CURIE: 22 was upstream's, and at that count a small circle is a
+         * visible polygon on the software renderer, which cannot feather a
+         * fill. The circles a page draws are Ionicons now (see showcase.c),
+         * so this only reaches what Nuklear still draws itself and the
+         * fallbacks for a glyph that failed to load - a few dozen more
+         * vertices a frame, and none of them is a polygon. */
+        config.circle_segment_count = 48;
         config.curve_segment_count = 22;
         config.arc_segment_count = 22;
         config.global_alpha = 1.0f;
