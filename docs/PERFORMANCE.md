@@ -104,7 +104,7 @@ GhostBSD's frame is present, not drawing: 6.7 ms of the Login median's 7.1 and
 and 3.4 ms of build and render. Its X server drives VMware's SVGA II with no
 3D, so a frame is a software blit into the virtual framebuffer and then out to
 the host again. The other three columns' splits were not recorded, so the table
-compares whole frames and nothing finer.
+compares whole frames and nothing finer; its ranges are p10–p90 of 31 samples.
 
 The accessibility tree adds **4.2 µs** to a drawn frame (82 nodes), below the
 noise in the measurements above. For contrast, the one figure that made the
@@ -127,10 +127,7 @@ the `.wasm`.
 - **Linux** — Debian 13, x86_64, GCC Release, X11, also without a GPU.
 - **macOS** — 11.7 Big Sur, Intel iMac, Apple Clang 12, 1024×768 non-Retina,
   built with `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk`.
-- **GhostBSD** — 26.1-R15.0p2 (FreeBSD 15.0-RELEASE-p2), x86_64, Clang 19.1.7
-  Release, X11, in a VMware VM with no 3D adapter. Frame times with
-  `REAKTOR_REDRAW=always REAKTOR_FRAME_RATE=0 REAKTOR_VSYNC=0`, read from
-  `REAKTOR_STATS` over 31 one-second samples a page, quoted p10–p90.
+- **GhostBSD** — 26.1-R15.0p2, x86_64, Clang 19.1.7, X11, VMware, no 3D.
 - **All four** — 1.00× scale, 960×680 window.
 
 The **Diagnostics** tab reports the renderer, the frame breakdown and the
