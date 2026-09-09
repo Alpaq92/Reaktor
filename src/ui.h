@@ -12,23 +12,6 @@
 
 typedef struct App App;
 
-/* Tab 0 is the login screen this app began as. The rest exist to put every
- * Nuklear widget on screen under the same stylesheet, which is the only
- * honest way to find out how far the CSS seam actually reaches: a control
- * that tiny.css has no rule for has to be styled from its palette tokens
- * instead, and doing that for all of them is what shows where the line is. */
-enum {
-    TAB_LOGIN = 0,
-    TAB_BUTTONS,
-    TAB_INPUTS,
-    TAB_DISPLAY,
-    TAB_LAYOUT,
-    TAB_POPUPS,
-    TAB_DIAG,
-    TAB_COUNT
-};
-extern const char *const reaktor_tab_names[TAB_COUNT];
-
 /* Startup milestones, sampled into reaktor_diag::rss_at so the diagnostics
  * page can report what each step of the startup cost. They live here rather
  * than in the shell because the page indexes the same list: adding a milestone
@@ -53,47 +36,6 @@ extern const char *const reaktor_rss_names[RSS_STEPS];
  * picker can legitimately land. */
 #define SC_PATH_CAP  520
 
-/* Everything the showcase remembers between frames. Immediate mode keeps no
- * widget state of its own for anything that holds a value, so it lives here -
- * one struct rather than scattered statics, so a page is a pure function of
- * it. */
-typedef struct showcase_state {
-    /* buttons and toggles */
-    int          repeats, presses;
-    nk_bool      check_wrap, check_spell;
-    unsigned int flags;
-    int          radio;
-    nk_bool      sel_tile[4];
-    nk_bool      sel_row;
-    nk_bool      toggle;
-
-    /* inputs */
-    char   name[SC_TEXT_CAP];   int name_len;
-    char   digits[SC_TEXT_CAP]; int digits_len;
-    char   hex[SC_TEXT_CAP];    int hex_len;
-    char   note[SC_BOX_CAP];    int note_len;
-    float  slider_f;
-    int    slider_i;
-    float  knob;
-    int    prop_i;
-    float  prop_f;
-    double prop_d;
-    int    combo_size, combo_symbol;
-    struct nk_colorf tint;
-    nk_size          progress;
-
-    /* display */
-    float series[SC_SERIES_N];
-    int   list_sel;
-    nk_bool tree_leaf[3];
-
-    /* popups */
-    int  popup_open;
-    char menu_pick[40];
-    char file_pick[SC_PATH_CAP];   /* what the platform picker last answered */
-
-    int seeded;
-} showcase_state;
 
 /* --- what a page may ask of the shell ---------------------------------- */
 
@@ -204,6 +146,10 @@ int reaktor_focus_activated(App *app, unsigned id);
  * read. See reaktor_a11y_set_range. */
 void reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
                         float step);
+/* The chords that reach the node `id` names, as ARIA writes them - see
+ * reaktor_shortcut_text in core/ui/keys.h. Announced by every bridge, bound
+ * by none: the binding stays where the application declared it. */
+void reaktor_note_keys(App *app, unsigned id, const char *keys);
 /* Convenience for the common case: the widget just drawn, at the bounds the
  * layout gave it, with no value. */
 unsigned reaktor_note_here(App *app, struct nk_context *ctx,
@@ -227,7 +173,7 @@ typedef struct reaktor_diag {
     const char *frame_rate;    /* SDL_HINT_MAIN_CALLBACK_RATE at rest */
     const char *drag_rate;     /* and while a button is held */
     const char *font;
-    int   vsync, dark, sheets, tab;
+    int   vsync, dark, sheets;
     const char *aa;            /* what the frame is drawn with - not always
                                 * what was asked for on the software path */
     float scale, style_ms, build_ms, render_ms, present_ms;
@@ -254,12 +200,5 @@ typedef struct reaktor_diag {
 } reaktor_diag;
 
 void reaktor_diagnostics(App *app, reaktor_diag *out);
-
-showcase_state *reaktor_showcase(App *app);
-
-/* Drawn by showcase.c, one page per tab above TAB_LOGIN. w and h are the
- * content region of the group it is being drawn into. */
-void reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
-                           float w, float h);
 
 #endif /* REAKTOR_UI_H */

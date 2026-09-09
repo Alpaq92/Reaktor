@@ -1,13 +1,8 @@
-# build.ps1 - convenience wrapper around CMake on Windows.
+# build.ps1 - CMake wrapper for Windows; build.sh elsewhere. Finds MSVC and
+# the CMake/Ninja inside VS Build Tools, so nothing need be on PATH.
 #
-# All build logic lives in CMakeLists.txt; this only locates the MSVC
-# environment and the CMake/Ninja that ship inside VS Build Tools, so nothing
-# has to be installed or added to PATH.
-#
-# On macOS, Linux and the BSDs skip this entirely:
-#     cmake -S . -B build && cmake --build build --parallel
-# -Target builds one CMake target instead of everything, which is what you
-# want while a single library is being brought up.
+#     .\build.ps1                 # everything
+#     .\build.ps1 -Target NAME    # one target
 param([string]$Target = "")
 
 $ErrorActionPreference = "Stop"

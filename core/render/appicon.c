@@ -1,10 +1,18 @@
-/* appicon.c - an Ionicons SVG recoloured and rasterised, entirely at runtime.
+/* appicon.c - an SVG loaded, optionally recoloured, and rasterised, at runtime.
  *
+ * Three callers, and only one of them is Ionicons. The app's own mark is
+ * branding/reaktor-icon.svg: draw.c rasterises it for the window icon and
+ * tools/mkicon.c derives the .ico the executable carries from the same file.
+ * Both pass no colours and get the artwork as it was authored. The third
+ * caller is the widget icon cache, which asks for Ionicons glyphs and does
+ * recolour them, once per theme.
+ *
+ * That recolouring is the only reason this is not four lines of plutosvg.
  * Ionicons "-outline" glyphs share one idiom: shapes carry
  * style="fill:none;stroke:#000;..." and any solid shape is a <path> with no
- * fill attribute (so it defaults to black). Recolouring therefore needs three
- * substitutions, applied to the file loaded from the submodule - no path data
- * or colour value is copied into this tree. */
+ * fill attribute (so it defaults to black). Three substitutions therefore
+ * cover them, applied to the file loaded from the submodule - no path data or
+ * colour value is copied into this tree. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

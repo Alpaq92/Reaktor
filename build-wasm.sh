@@ -1,21 +1,12 @@
 #!/bin/sh
 # build-wasm.sh - the same sources, linked to a web page.
 #
-# The counterpart of build-wasm.ps1. All build logic lives in CMakeLists.txt,
-# exactly as for the native build; this only locates the Emscripten toolchain
-# and hands it to CMake.
-#
 #     ./build-wasm.sh            # build
 #     ./build-wasm.sh --serve    # build, then serve it on :8000
 #
-# emsdk is looked for in $EMSDK, then beside emcc on PATH, then in ~/emsdk, and
-# failing all three a packaged Emscripten is taken instead. If none of them has
-# it:
-#     git clone https://github.com/emscripten-core/emsdk
-#     cd emsdk && ./emsdk install latest && ./emsdk activate latest
-#
-# Output: build-wasm/reaktor.html plus its .js, .wasm and .data. A file:// page
-# cannot fetch the .wasm, so the directory has to be served.
+# Emscripten is looked for in $EMSDK, beside emcc on PATH, in ~/emsdk, then as
+# a distribution package. Output is build-wasm/reaktor.html and its .js, .wasm
+# and .data, which must be served: a file:// page cannot fetch the .wasm.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

@@ -11,7 +11,7 @@ typedef struct snap_node {
     unsigned      id, parent;
     unsigned char role, level;
     unsigned      state;
-    int           name, value;      /* offsets into `str`, -1 for none */
+    int           name, value, keys; /* offsets into `str`, -1 for none */
     float         x, y, w, h;
     float         num, lo, hi, step;
 } snap_node;
@@ -105,6 +105,7 @@ reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id)
         s->state  = t[i].state;
         s->name   = intern(t[i].name);
         s->value  = intern(t[i].value);
+        s->keys   = intern(t[i].keys);
         s->x = t[i].bounds.x; s->y = t[i].bounds.y;
         s->w = t[i].bounds.w; s->h = t[i].bounds.h;
         s->num = t[i].num; s->lo = t[i].lo;
@@ -158,6 +159,7 @@ reaktor_snap_get(unsigned id, reaktor_snap_node *out, char *buf, size_t cap)
         out->hi = s->hi;   out->step = s->step;
         out->name  = copy_text(s->name, &at, &left);
         out->value = copy_text(s->value, &at, &left);
+        out->keys  = copy_text(s->keys, &at, &left);
         ok = 1;
     }
     SDL_UnlockMutex(g.lock);

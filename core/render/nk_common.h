@@ -27,6 +27,6 @@
  * button, let go - and nothing happens. */
 #define NK_BUTTON_TRIGGER_ON_RELEASE
 
-#include "../third_party/nuklear/nuklear.h"
+#include "../../third_party/nuklear/nuklear.h"
 
 #endif /* REAKTOR_NK_COMMON_H */

@@ -236,6 +236,18 @@ append_null_ref(DBusMessageIter *it)
     append_ref(it, "org.a11y.atspi.Registry", "/org/a11y/atspi/null");
 }
 
+/* One entry of an a{ss}, which is the shape AT-SPI gives object attributes. */
+static void
+append_attribute(DBusMessageIter *arr, const char *key, const char *val)
+{
+    DBusMessageIter e;
+
+    dbus_message_iter_open_container(arr, DBUS_TYPE_DICT_ENTRY, NULL, &e);
+    dbus_message_iter_append_basic(&e, DBUS_TYPE_STRING, &key);
+    dbus_message_iter_append_basic(&e, DBUS_TYPE_STRING, &val);
+    dbus_message_iter_close_container(arr, &e);
+}
+
 static void
 append_variant_string(DBusMessageIter *it, const char *s)
 {
@@ -577,6 +589,11 @@ handle_accessible(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
     } else if (dbus_message_has_member(m, "GetAttributes")) {
         DBusMessageIter arr;
         dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "{ss}", &arr);
+        /* An object attribute rather than an interface: that is the mapping
+         * the ARIA working group settled on for aria-keyshortcuts, and it is
+         * where a reader on this desktop looks. */
+        if (!is_root && n && n->keys)
+            append_attribute(&arr, "keyshortcuts", n->keys);
         dbus_message_iter_close_container(&it, &arr);
     } else if (dbus_message_has_member(m, "GetInterfaces")) {
         append_interfaces(&it, n, is_root);

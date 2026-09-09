@@ -171,13 +171,36 @@ target_include_directories(plutosvg PUBLIC "${TP}/plutosvg/source")
 target_compile_definitions(plutosvg PUBLIC PLUTOSVG_BUILD_STATIC)
 target_link_libraries(plutosvg PUBLIC plutovg)
 
+# -------------------------------------------------------------- onlay -------
+# The layout engine: it computes rectangles and nothing else - no widgets, no
+# drawing, no input, and no knowledge of the program using it. Forked from
+# randrew/layout and converted to plain C99, because upstream needs C++ under
+# MSVC; see onlay/README.md.
+#
+# In-tree while the sample drives its API, and written to leave as its own
+# repository afterwards - which is why it includes nothing from the rest of the
+# tree and is linked here exactly like a third-party library.
+add_library(onlay STATIC onlay/onlay.c)
+target_include_directories(onlay PUBLIC onlay)
+
+# Checked against the login card's real geometry, with the expected numbers
+# taken from the running app's accessibility dump rather than from onlay
+# itself. Built by default so it cannot rot silently:
+#     build/onlaytest
+if(NOT EMSCRIPTEN)
+    add_executable(onlaytest onlay/test_onlay.c)
+    target_link_libraries(onlaytest PRIVATE onlay)
+    set_target_properties(onlaytest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+
 # ------------------------------------------------------------- shared -------
 # Asset loading and the SVG->raster path, used by both the app and the icon
 # generator. Deliberately free of SDL and Nuklear so the tool stays small.
 add_library(reaktor_core STATIC
-    src/util.c
-    src/appicon.c)
-target_include_directories(reaktor_core PUBLIC src)
+    core/base/util.c
+    core/render/appicon.c)
+target_include_directories(reaktor_core PUBLIC core/base core/render)
 target_link_libraries(reaktor_core PUBLIC plutosvg)
 
 # ------------------------------------------------------------ icon ----------
@@ -199,9 +222,20 @@ set_target_properties(mkicon PROPERTIES
 # on demand so it cannot rot silently - nothing else compiles src/a11y.c until
 # phase 2 - and run by hand:
 #     build/a11ytest
+# Chord matching, which the accessibility dumps cannot reach: a keypress is
+# not a frame. Built by default for the same reason as the others:
+#     build/keytest
 if(NOT EMSCRIPTEN)
-    add_executable(a11ytest tools/a11ytest.c src/a11y.c)
-    target_include_directories(a11ytest PRIVATE src)
+    add_executable(keytest tools/keytest.c core/ui/keys.c)
+    target_include_directories(keytest PRIVATE core/ui)
+    target_link_libraries(keytest PRIVATE SDL3::SDL3-static)
+    set_target_properties(keytest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+
+if(NOT EMSCRIPTEN)
+    add_executable(a11ytest tools/a11ytest.c core/a11y/a11y.c)
+    target_include_directories(a11ytest PRIVATE core/a11y core/render)
     set_target_properties(a11ytest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
@@ -276,7 +310,7 @@ set(SYS_SRC "")
 set(SYS_LIBS "")
 set(SYS_DEFS "")
 if(WIN32 AND NOT EMSCRIPTEN)
-    list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_win32.c)
+    list(APPEND SYS_SRC platform/a11y/a11y_snapshot.c platform/a11y/a11y_win32.c)
 elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     # Linux and the BSDs both: AT-SPI is a freedesktop standard, not a Linux
     # one, and nothing in the bridge is Linux-specific - hence UNIX AND NOT
@@ -292,7 +326,7 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         pkg_check_modules(DBUS QUIET dbus-1)
     endif()
     if(DBUS_FOUND)
-        list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_atspi.c)
+        list(APPEND SYS_SRC platform/a11y/a11y_snapshot.c platform/a11y/a11y_atspi.c)
         list(APPEND SYS_LIBS ${DBUS_LIBRARIES})
         list(APPEND SYS_DEFS REAKTOR_HAVE_ATSPI)
         message(STATUS "a11y: AT-SPI over libdbus ${DBUS_VERSION}")
@@ -306,27 +340,43 @@ elseif(APPLE AND NOT EMSCRIPTEN)
     # lifetimes at all, and a leak on a platform this cannot be tested on is
     # not worth the retain counting.
     enable_language(OBJC)
-    list(APPEND SYS_SRC src/sys/a11y_snapshot.c src/sys/a11y_macos.m)
+    list(APPEND SYS_SRC platform/a11y/a11y_snapshot.c platform/a11y/a11y_macos.m)
     list(APPEND SYS_DEFS REAKTOR_HAVE_NSACCESSIBILITY)
-    set_source_files_properties(src/sys/a11y_macos.m PROPERTIES
+    set_source_files_properties(platform/a11y/a11y_macos.m PROPERTIES
         COMPILE_OPTIONS "-fobjc-arc")
     list(APPEND SYS_LIBS "-framework Cocoa")
 endif()
 
 add_executable(reaktor WIN32
-    src/a11y.c
-    src/a11y_web.c
+    core/a11y/a11y.c
+    core/base/metrics.c
+    core/css/style.c
+    core/css/cssflat.c
+    core/render/nk_impl.c
+    core/render/draw.c
+    core/ui/focus.c
+    core/ui/keys.c
+    core/ui/style_map.c
+    core/ui/widgets.c
+    platform/a11y/a11y_web.c
+    platform/theme.c
     ${SYS_SRC}
-    src/main.c
-    src/nk_impl.c
-    src/theme.c
-    src/metrics.c
-    src/style.c
-    src/cssflat.c
-    src/showcase.c
+    runtime/app.c
+    samples/shell.c
+    samples/shortcuts.c
+    samples/showcase.c
     ${APP_RESOURCES})
 
 target_include_directories(reaktor PRIVATE
+    core/a11y
+    core/base
+    core/css
+    core/render
+    core/ui
+    platform
+    platform/a11y
+    samples
+    src
     "${TP}/nuklear"
     "${TP}/nuklear/demo/sdl3_renderer")
 
@@ -384,8 +434,19 @@ if(EMSCRIPTEN)
     # list would go stale the first time a path changed. The branding SVG comes
     # along the same way - it is the window icon.
     set(WASM_ASSETS "")
+    # Every directory holding app or library sources: an asset named in one
+    # of them and not scanned here is a white quad on the page and says
+    # nothing about it.
     file(GLOB _reaktor_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
-                      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
+                      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/core/*/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/core/*/*.h"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.h"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/platform/*/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/runtime/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/samples/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/samples/*.h")
     foreach(_s IN LISTS _reaktor_srcs)
         # \. and not \. : CMake unescapes a quoted argument before the regex
         # engine sees it, so \. arrives as a bare dot, which matches anything.
@@ -417,8 +478,19 @@ if(EMSCRIPTEN)
     # nothing, which is what one pattern alone cost. The second picks up a few
     # literals that happen to share a name with an icon - "list", "menu",
     # "card" - about two kilobytes of glyphs nobody draws.
+    # Every directory holding app or library sources: an asset named in one
+    # of them and not scanned here is a white quad on the page and says
+    # nothing about it.
     file(GLOB _reaktor_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
-                      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
+                      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/core/*/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/core/*/*.h"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.h"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/platform/*/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/runtime/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/samples/*.c"
+                      "${CMAKE_CURRENT_SOURCE_DIR}/samples/*.h")
     set(WASM_ICONS "")
     foreach(_s IN LISTS _reaktor_srcs)
         file(STRINGS "${_s}" _lines REGEX "[a-z0-9-]+-outline")

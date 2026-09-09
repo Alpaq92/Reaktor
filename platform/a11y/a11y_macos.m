@@ -165,6 +165,32 @@ static ReaktorElement *element_for(unsigned id);
     return @(n.hi);
 }
 
+/* AXKeyShortcutsValue has no accessor in the NSAccessibility protocol - the
+ * protocol never grew one - so it goes through the attribute API underneath,
+ * which is exactly where WebKit puts aria-keyshortcuts. Appending to super's
+ * list leaves everything the protocol already answers untouched. */
+- (NSArray *)accessibilityAttributeNames
+{
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
+    NSArray *base = [super accessibilityAttributeNames];
+
+    if (![self node:&n buffer:buf] || !n.keys) return base;
+    return [base arrayByAddingObject:@"AXKeyShortcutsValue"];
+}
+
+- (id)accessibilityAttributeValue:(NSString *)attribute
+{
+    if ([attribute isEqualToString:@"AXKeyShortcutsValue"]) {
+        reaktor_snap_node n;
+        char buf[REAKTOR_SNAP_TEXT];
+
+        if (![self node:&n buffer:buf] || !n.keys) return nil;
+        return [NSString stringWithUTF8String:n.keys];
+    }
+    return [super accessibilityAttributeValue:attribute];
+}
+
 - (NSArray *)accessibilityChildren
 {
     NSMutableArray *kids = [NSMutableArray array];

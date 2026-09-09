@@ -69,8 +69,9 @@ EM_JS(void, web_a11y_begin, (void), {
 
 EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
                             const char *name, const char *value,
-                            unsigned state, float x, float y, float w,
-                            float h, float num, float lo, float hi), {
+                            const char *keys, unsigned state, float x,
+                            float y, float w, float h, float num, float lo,
+                            float hi), {
     var a = Module['a11y']; if (!a) return;
     var el = a.nodes[id];
     if (!el) {
@@ -91,7 +92,8 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
         if (v === null) { if (el.hasAttribute(k)) el.removeAttribute(k); }
         else if (el.getAttribute(k) !== v) el.setAttribute(k, v);
     };
-    var r = UTF8ToString(role), n = UTF8ToString(name), v = UTF8ToString(value);
+    var r = UTF8ToString(role), n = UTF8ToString(name), v = UTF8ToString(value),
+        k = UTF8ToString(keys);
     var CHECKED = 2, EXPANDED = 4, SELECTED = 8, DISABLED = 16, READONLY = 32,
         VOLATILE = 128;
 
@@ -141,6 +143,10 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
     set('aria-valuenow', ranged ? String(num) : null);
     set('aria-valuemin', ranged ? String(lo) : null);
     set('aria-valuemax', ranged ? String(hi) : null);
+    /* Announced, never bound - the app owns the key, and ARIA says so in as
+       many words. A space-separated list, which is how one action carries
+       both Control+1 and Meta+1. */
+    set('aria-keyshortcuts', k ? k : null);
 
     el.style.left = x + 'px'; el.style.top = y + 'px';
     el.style.width = w + 'px'; el.style.height = h + 'px';
@@ -198,6 +204,7 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
         const reaktor_a11y_node *nd = &t[i];
         web_a11y_node(nd->id, nd->parent, reaktor_a11y_role_name(nd->role),
                       nd->name ? nd->name : "", nd->value ? nd->value : "",
+                      nd->keys ? nd->keys : "",
                       nd->state, nd->bounds.x, nd->bounds.y, nd->bounds.w,
                       nd->bounds.h, nd->num, nd->lo, nd->hi);
     }

@@ -397,6 +397,46 @@ checkbox with the pointer parked off-window.
 field's text or a slider's value means driving Nuklear from outside, which
 belongs with `ITextProvider` and the caret.
 
+**Keyboard shortcuts are announced, never bound.** A node carries the chords
+that reach it as one string in ARIA's syntax — `"Control+1 Meta+1"`, a
+space-separated list, because an action commonly answers to more than one.
+Every platform here has a property for exactly this and none of them makes the
+key work; the binding stays in the table the application declared it in
+(`samples/shortcuts.c`), and `reaktor_shortcut_text` reads that table back.
+
+| | |
+| --- | --- |
+| Web | `aria-keyshortcuts` |
+| Windows | UIA `AcceleratorKey` |
+| Linux, the BSDs | AT-SPI object attribute `keyshortcuts` |
+| macOS | `AXKeyShortcutsValue` |
+
+One string serves all four, which is the shape AccessKit settled on for the
+same four platforms. macOS is the odd one: `AXKeyShortcutsValue` has no
+accessor in the NSAccessibility protocol, so it goes through the attribute API
+underneath — which is where WebKit puts `aria-keyshortcuts` too.
+
+Verified through UIA: the tab strip answers `AcceleratorKey =
+"Control+Tab Meta+Alt+ArrowRight Control+Shift+Tab Meta+Alt+ArrowLeft"` and
+Diagnostics answers `"F1 Control+7 Meta+7"`. The other three are written and
+unverified, as those bridges already are.
+
+Two things to know before writing this up as a feature.
+
+**Only NVDA and iOS VoiceOver handle these announcements well today.** The
+attribute costs almost nothing and it is where support will land, but a user
+should still be told the shortcuts some other way.
+
+**A chord is announced on every platform, and the desktop may claim it on
+one.** The string is one string — that is the shape AccessKit uses, and there
+is no per-platform variant of it — so a Mac's `Meta+Alt+ArrowRight` is read
+out on Windows too, where the shell takes the Meta key first. Driving that
+chord into the running app on Windows does not change the page. The Ctrl rows
+are the ones that work here, and they are announced alongside. Choosing
+bindings the desktop does not reserve is therefore part of writing the table,
+not something the bridge can fix: `Cmd+Tab` and `Win+Tab` were both in it once
+and neither ever reached the application.
+
 **AT-SPI — the tree is served.** Linux *and the BSDs*: AT-SPI is a
 freedesktop standard rather than a Linux one, `at-spi2-core` and Orca are in
 FreeBSD ports, OpenBSD ports and pkgsrc, and nothing in the bridge is

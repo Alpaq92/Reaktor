@@ -82,6 +82,12 @@ typedef struct reaktor_a11y_node {
     unsigned       state;
     const char    *name;
     const char    *value;
+    /* The chords that reach this node, as ARIA writes them - and as a list,
+     * "Control+1 Meta+1", because an action commonly answers to more than one.
+     * Announced by every bridge and bound by none of them: the key itself is
+     * the application's, and this only says it exists. NULL for a node with
+     * none, which is nearly all of them. */
+    const char    *keys;
     struct nk_rect bounds;     /* window coordinates */
     /* A range in numbers, for a client that computes rather than reads: ARIA
      * asks for valuemin and valuemax, UIA for IRangeValueProvider, and
@@ -93,7 +99,7 @@ typedef struct reaktor_a11y_node {
 enum {
     REAKTOR_A11Y_ADDED = 0,
     REAKTOR_A11Y_REMOVED,
-    REAKTOR_A11Y_RENAMED,        /* name or value */
+    REAKTOR_A11Y_RENAMED,        /* name, value or keys */
     REAKTOR_A11Y_RESTATED,       /* state bits */
     REAKTOR_A11Y_MOVED           /* bounds only */
 };
@@ -221,6 +227,12 @@ void reaktor_a11y_set_focus(reaktor_a11y *a, unsigned id);
  * and the rest would carry four arguments they have no use for. */
 void reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
                             float hi, float step);
+
+/* The keyboard chords that reach the node `id` names - same shape as the range
+ * above, and for the same reason: a handful of nodes have one. NULL or empty
+ * means none, so a chord that stops applying can be taken away. See
+ * reaktor_shortcut_text, which is what produces the string. */
+void reaktor_a11y_set_keys(reaktor_a11y *a, unsigned id, const char *keys);
 
 /* --- reading it back --------------------------------------------------- */
 

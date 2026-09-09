@@ -176,6 +176,7 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
     n->state  = state;
     n->name   = intern(a, name, nh);
     n->value  = intern(a, value, hash_str(2166136261u, value));
+    n->keys   = NULL;
     n->bounds = bounds;
     n->num = n->lo = n->hi = n->step = 0.0f;
     return id;
@@ -195,6 +196,22 @@ reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
 
         if (n->id != id) continue;
         n->num = num; n->lo = lo; n->hi = hi; n->step = step;
+        return;
+    }
+}
+
+void
+reaktor_a11y_set_keys(reaktor_a11y *a, unsigned id, const char *keys)
+{
+    int f = a->front, i;
+
+    if (!a->building || !id) return;
+    for (i = a->count[f] - 1; i >= 0; i--) {
+        reaktor_a11y_node *n = &a->node[f][i];
+
+        if (n->id != id) continue;
+        n->keys = (keys && *keys)
+                ? intern(a, keys, hash_str(2166136261u, keys)) : NULL;
         return;
     }
 }
@@ -354,7 +371,8 @@ reaktor_a11y_end(reaktor_a11y *a)
         }
         a->matched[j] = 1;
         if (!same_str(cur[i].name, old[j].name) ||
-            !same_str(cur[i].value, old[j].value))
+            !same_str(cur[i].value, old[j].value) ||
+            !same_str(cur[i].keys, old[j].keys))
             change(a, REAKTOR_A11Y_RENAMED, cur[i].id, i);
         if (cur[i].state != old[j].state)
             change(a, REAKTOR_A11Y_RESTATED, cur[i].id, i);
@@ -438,6 +456,7 @@ reaktor_a11y_dump(const reaktor_a11y *a, FILE *out)
         fprintf(out, "%*s%s", pad, "", reaktor_a11y_role_name(t[i].role));
         if (t[i].name)  fprintf(out, " \"%s\"", t[i].name);
         if (t[i].value) fprintf(out, " = \"%s\"", t[i].value);
+        if (t[i].keys)  fprintf(out, " keys=\"%s\"", t[i].keys);
         if (st[0])      fprintf(out, " [%s]", st + 1);
         fprintf(out, " %d,%d %dx%d\n",
                 (int)t[i].bounds.x, (int)t[i].bounds.y,

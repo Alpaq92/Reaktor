@@ -343,6 +343,11 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
             bool_variant(out, 1);
         } else if (prop == UIA_ValueValuePropertyId) {
             str_variant(out, n.value);
+        } else if (prop == UIA_AcceleratorKeyPropertyId) {
+            /* What Narrator reads out after the name. Setting it does not
+             * make the key work - the binding is the application's - which is
+             * the whole point of the property. */
+            str_variant(out, n.keys);
         /* The last two are a pattern's properties as well. A client that
          * asks through IToggleProvider or ISelectionItemProvider gets them
          * there; one that asks for the property directly, which several do,

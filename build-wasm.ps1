@@ -1,13 +1,5 @@
-# build-wasm.ps1 - the same sources, linked to a web page.
-#
-# All build logic lives in CMakeLists.txt, exactly as for the native build;
-# this only locates the Emscripten toolchain and a CMake/Ninja to drive it.
-#
-# On macOS, Linux and the BSDs skip this entirely:
-#     source /path/to/emsdk/emsdk_env.sh
-#     emcmake cmake -S . -B build-wasm && cmake --build build-wasm --parallel
-#
-# Output: build-wasm/reaktor.html plus its .js, .wasm and .data.
+# build-wasm.ps1 - the same sources, linked to a web page. build-wasm.sh
+# elsewhere. Output: build-wasm/reaktor.html plus its .js, .wasm and .data.
 param([switch]$Serve)
 
 $ErrorActionPreference = "Stop"

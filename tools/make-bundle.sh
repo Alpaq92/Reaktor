@@ -1,15 +1,10 @@
 #!/bin/sh
 # make-bundle.sh - assemble build/reaktor.app around the plain binary.
 #
-# Called from CMake as a POST_BUILD step on the reaktor target, only on macOS,
-# so both invocations survive: `./build/reaktor` is the CLI-runnable binary
-# (unchanged), and `./build/reaktor.app` is a Finder-launchable bundle with
-# the assets alongside it. The two share exactly one copy of the executable.
-#
 #   make-bundle.sh BUNDLE BINARY INFOPLIST SOURCE_ROOT
 #
-# The bundle is always rebuilt from scratch: it's ~200 KB, and stale files in
-# the resource tree are worse than an extra second's copying.
+# A CMake POST_BUILD step on macOS. The CLI binary and the Finder bundle both
+# survive and share one copy of the executable. Rebuilt from scratch each time.
 set -eu
 
 bundle=$1

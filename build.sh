@@ -1,17 +1,11 @@
 #!/bin/sh
-# build.sh - convenience wrapper around CMake on macOS, Linux and the BSDs.
-#
-# The counterpart of build.ps1, which does the same job on Windows. All build
-# logic lives in CMakeLists.txt, exactly as it does there; this only checks
-# that the submodules are present and prefers Ninja when it is installed, so
-# that the failure modes are a sentence rather than a page of CMake.
+# build.sh - CMake wrapper for macOS, Linux and the BSDs. build.ps1 on Windows.
 #
 #     ./build.sh                 # everything
-#     ./build.sh --target NAME   # one CMake target, which is what you want
-#                                # while a single library is being brought up
+#     ./build.sh --target NAME   # one target
 #     ./build.sh --debug         # -DCMAKE_BUILD_TYPE=Debug
 #
-# Anything after -- is passed to the configure step untouched.
+# Anything after -- goes to the configure step untouched.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

@@ -22,13 +22,13 @@
 
 #include "a11y.h"
 
-/* One node, copied out. `name` and `value` point into the buffer the caller
- * passed, or are NULL; everything else is by value. */
+/* One node, copied out. `name`, `value` and `keys` point into the buffer the
+ * caller passed, or are NULL; everything else is by value. */
 typedef struct reaktor_snap_node {
     unsigned      id, parent;
     unsigned char role, level;
     unsigned      state;
-    const char   *name, *value;
+    const char   *name, *value, *keys;
     float         x, y, w, h;        /* window coordinates */
     /* Zero-width - lo == hi - means the node is not a range. */
     float         num, lo, hi, step;

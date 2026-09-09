@@ -25,6 +25,21 @@
 #    include <stdint.h>
 #    include <malloc/malloc.h>
 #  endif
+/* The BSDs have no /proc, so both questions Linux answers by reading a file -
+ * where am I installed, and how much memory am I using - are asked of the
+ * kernel directly instead.
+ *
+ * All three answer the memory one. FreeBSD and NetBSD answer the other
+ * outright; OpenBSD does not expose a process's executable path at all, on
+ * purpose, so there it is reconstructed from argv[0] and checked before it is
+ * believed. See the branches below for what each one costs. */
+#  if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#    include <sys/types.h>
+#    include <sys/sysctl.h>
+#    if defined(__FreeBSD__)
+#      include <sys/user.h>   /* struct kinfo_proc; the others put it above */
+#    endif
+#  endif
 #endif
 
 #include "reaktor.h"
@@ -107,8 +122,88 @@ int reaktor_root(char *out, size_t cap)
             exe[n] = '\0';
         }
         (void)i;
+#  elif defined(__FreeBSD__) || defined(__NetBSD__)
+        {
+            /* The same question, spelled two ways: FreeBSD hangs
+             * KERN_PROC_PATHNAME off KERN_PROC, NetBSD off KERN_PROC_ARGS.
+             * -1 is this process in both. */
+#    if defined(__FreeBSD__)
+            int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1 };
+#    else
+            int mib[4] = { CTL_KERN, KERN_PROC_ARGS, -1, KERN_PROC_PATHNAME };
+#    endif
+            size_t n = sizeof(exe);
+
+            /* A kernel that will not answer leaves the working directory,
+             * which is what every platform without this call already uses -
+             * so being wrong here costs the old behaviour, not the app. */
+            if (sysctl(mib, 4, exe, &n, NULL, 0) != 0 || n == 0) {
+                if (!getcwd(exe, sizeof(exe))) return 0;
+            }
+            exe[sizeof(exe) - 1] = '\0';
+        }
+        (void)i;
+#  elif defined(__OpenBSD__)
+        {
+            /* OpenBSD will not tell a process where its own executable is,
+             * and that is a decision rather than a gap. What is left is
+             * argv[0], which the kernel does not promise is a path at all -
+             * so it is resolved, then checked on disk, and anything that does
+             * not check out leaves the working directory, which is what this
+             * platform used before. REAKTOR_ROOT still overrides both.
+             *
+             * Good enough for the case that matters: started from a shell,
+             * argv[0] is either a path or a name the shell found on PATH, and
+             * both lead to the right file. */
+            int    mib[4] = { CTL_KERN, KERN_PROC_ARGS, 0, KERN_PROC_ARGV };
+            char   args[REAKTOR_PATH_CAP * 2];
+            size_t n = sizeof(args);
+            char  *real = NULL;
+
+            exe[0] = '\0';
+            mib[2] = (int)getpid();
+            /* The buffer comes back as a NULL-terminated array of pointers
+             * into itself, with the strings following them. */
+            if (sysctl(mib, 4, args, &n, NULL, 0) == 0 && n > sizeof(char *)) {
+                const char *a0 = ((char **)(void *)args)[0];
+
+                if (a0 && *a0 && strchr(a0, '/')) {
+                    real = realpath(a0, NULL);
+                } else if (a0 && *a0) {
+                    /* A bare name means the shell searched PATH; do the same,
+                     * and stop at the first entry that could have been run. */
+                    const char *p = getenv("PATH");
+                    size_t      a0len = strlen(a0);
+
+                    while (p && *p && !real) {
+                        const char *sep = strchr(p, ':');
+                        size_t      len = sep ? (size_t)(sep - p) : strlen(p);
+                        char        cand[REAKTOR_PATH_CAP];
+
+                        if (len && len + 1 + a0len < sizeof(cand)) {
+                            memcpy(cand, p, len);
+                            cand[len] = '/';
+                            memcpy(cand + len + 1, a0, a0len + 1);
+                            if (access(cand, X_OK) == 0)
+                                real = realpath(cand, NULL);
+                        }
+                        p = sep ? sep + 1 : NULL;
+                    }
+                }
+            }
+            if (real) {
+                struct stat st;
+                if (stat(real, &st) != 0 || !S_ISREG(st.st_mode))
+                    exe[0] = '\0';
+                else if (!copy_out(exe, sizeof(exe), real))
+                    exe[0] = '\0';
+                free(real);
+            }
+            if (!exe[0] && !getcwd(exe, sizeof(exe))) return 0;
+        }
+        (void)i;
 #  else
-        /* No executable path without a platform call; the working directory
+        /* No executable path without a platform call. The working directory
          * is the honest fallback, and REAKTOR_ROOT covers the rest. */
         if (!getcwd(exe, sizeof(exe))) return 0;
         (void)i;
@@ -279,6 +374,44 @@ void reaktor_process_memory(size_t *rss, size_t *priv)
             fclose(f);
             *priv = (size_t)kb * 1024u;
         }
+    }
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    {
+        /* Resident pages, from the process table - all three BSDs answer this
+         * one. None of them offers Windows' commit or Linux's Private_Clean
+         * and Private_Dirty, and a number invented here would read as a
+         * measurement, so priv stays 0 and the page renders it as unknown. */
+#  if defined(__FreeBSD__)
+        struct kinfo_proc kp;
+        int    mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, 0 };
+        size_t n = sizeof(kp);
+
+        mib[3] = (int)getpid();
+        if (sysctl(mib, 4, &kp, &n, NULL, 0) == 0 && n >= sizeof(kp))
+            *rss = (size_t)kp.ki_rssize * (size_t)sysconf(_SC_PAGESIZE);
+#  else
+        /* NetBSD and OpenBSD make the identical request and answer with the
+         * identical field; only the two names below differ. Both want the
+         * struct's size and a count as the last two levels, so one call
+         * serves whatever version of the struct the kernel has. */
+#    if defined(__NetBSD__)
+#      define REAKTOR_KINFO struct kinfo_proc2
+#      define REAKTOR_KWHAT KERN_PROC2
+#    else
+#      define REAKTOR_KINFO struct kinfo_proc
+#      define REAKTOR_KWHAT KERN_PROC
+#    endif
+        REAKTOR_KINFO kp;
+        int    mib[6] = { CTL_KERN, REAKTOR_KWHAT, KERN_PROC_PID, 0,
+                          (int)sizeof(REAKTOR_KINFO), 1 };
+        size_t n = sizeof(kp);
+
+        mib[3] = (int)getpid();
+        if (sysctl(mib, 6, &kp, &n, NULL, 0) == 0 && n >= sizeof(kp))
+            *rss = (size_t)kp.p_vm_rssize * (size_t)sysconf(_SC_PAGESIZE);
+#    undef REAKTOR_KINFO
+#    undef REAKTOR_KWHAT
+#  endif
     }
 #endif
 }

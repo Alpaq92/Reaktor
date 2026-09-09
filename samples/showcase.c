@@ -18,6 +18,7 @@
 
 #include "nk_common.h"
 #include "ui.h"
+#include "sample.h"
 #include "style.h"
 
 /* A menu row, and the height of a popup holding n of them: the rows, the
@@ -2369,11 +2370,27 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
 
 /* --- dispatch ------------------------------------------------------------ */
 
+/* Owned here, not by the library: what this demo remembers between frames is
+ * the demo's business. */
+static showcase_state g_show;
+
+showcase_state *
+sample_state(void)
+{
+    return &g_show;
+}
+
+void
+sample_file_taken(App *app)
+{
+    reaktor_file_taken(app, g_show.file_pick, (int)sizeof(g_show.file_pick));
+}
+
 void
 reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
                       float w, float h)
 {
-    showcase_state *s = reaktor_showcase(app);
+    showcase_state *s = sample_state();
 
     (void)w; (void)h;
     if (!s->seeded) seed(s);
