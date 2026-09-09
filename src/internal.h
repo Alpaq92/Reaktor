@@ -21,6 +21,7 @@
 #include "metrics.h"
 #include "reaktor.h"
 #include "style.h"
+#include "layout.h"
 #include "ui.h"
 
 #ifdef __EMSCRIPTEN__
@@ -270,6 +271,9 @@ struct App {
      * from the widgets as they are drawn, and diffed against the previous one.
      * Large (arenas, not pointers), so it lives here rather than on a stack. */
     reaktor_a11y a11y;
+    /* Where the declared boxes went. One frame behind by construction - see
+     * core/ui/layout.h - and empty until a page declares something. */
+    reaktor_layout lay;
 
     /* Keyboard focus - phase 3 of docs/ACCESSIBILITY.md. The tree above is in
      * reading order, so its focusable subset is the tab order and nothing

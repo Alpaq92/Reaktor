@@ -14,6 +14,7 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 #include "internal.h"
+#include "declare.h"
 #include "sample.h"
 
 int
@@ -1035,6 +1036,9 @@ SDL_AppIterate(void *appstate)
     app->focus_seen = 0;
     reaktor_a11y_begin(&app->a11y, "Reaktor",
                        nk_rect(0, 0, (float)win_w, (float)win_h));
+    /* The declared tree, opened around the same region. Empty until a page
+     * declares something, which no page does yet - see core/ui/declare.h. */
+    reaktor_frame_begin(app, ctx, nk_rect(0, 0, (float)win_w, (float)win_h));
 
     if (nk_begin(ctx, "page", nk_rect(0, 0, (float)win_w, (float)win_h),
                  NK_WINDOW_BACKGROUND | NK_WINDOW_NO_SCROLLBAR)) {
@@ -1070,6 +1074,9 @@ SDL_AppIterate(void *appstate)
     } else {
         app->activate_id = 0;
     }
+
+    /* Runs the layout, so the next frame has somewhere to draw. */
+    reaktor_frame_end();
 
     /* Diffs against the previous frame and swaps. The change list is what a
      * platform bridge will consume in phase 4; nothing reads it yet. */

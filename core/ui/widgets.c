@@ -116,7 +116,7 @@ reaktor_hot_follow(App *app, struct nk_rect r, int cursor)
 }
 
 int
-reaktor_button(App *app, struct nk_context *ctx, const char *label)
+reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
 {
     return css_button(app, ctx, "button", label);
 }
@@ -404,6 +404,12 @@ void
 reaktor_note_keys(App *app, unsigned id, const char *keys)
 {
     reaktor_a11y_set_keys(&app->a11y, id, keys);
+}
+
+void
+reaktor_note_bounds(App *app, unsigned id, struct nk_rect r)
+{
+    reaktor_a11y_set_bounds(&app->a11y, id, r);
 }
 
 /* nk_widget_bounds answers where the *next* widget goes, so this is called

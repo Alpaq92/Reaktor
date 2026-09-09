@@ -992,7 +992,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_button_label  /  nk_button_image_label");
 
     nk_layout_row_dynamic(ctx, 38.0f, 3);
-    if (reaktor_button(app, ctx, "Default")) s->presses++;
+    if (reaktor_button_label(app, ctx, "Default")) s->presses++;
     if (reaktor_button_accent(app, ctx, "Primary")) s->presses++;
     if (reaktor_button_icon(app, ctx, "key-outline", "With icon"))
         s->presses++;
@@ -2109,7 +2109,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_template_push_static(ctx, 14.0f);
     nk_layout_row_template_push_dynamic(ctx);
     nk_layout_row_template_end(ctx);
-    if (reaktor_button(app, ctx, "Open a dialog")) s->popup_open = 1;
+    if (reaktor_button_label(app, ctx, "Open a dialog")) s->popup_open = 1;
     nk_spacer(ctx);
     nk_label(ctx, s->popup_open ? "open" : "closed", NK_TEXT_LEFT);
 
@@ -2167,7 +2167,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
             nk_layout_row_template_push_static(ctx, 96.0f);
             nk_layout_row_template_end(ctx);
             nk_spacer(ctx);
-            if (reaktor_button(app, ctx, "Cancel")) {
+            if (reaktor_button_label(app, ctx, "Cancel")) {
                 s->popup_open = 0;
                 nk_popup_close(ctx);
             }

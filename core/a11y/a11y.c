@@ -217,6 +217,21 @@ reaktor_a11y_set_keys(reaktor_a11y *a, unsigned id, const char *keys)
 }
 
 void
+reaktor_a11y_set_bounds(reaktor_a11y *a, unsigned id, struct nk_rect r)
+{
+    int f = a->front, i;
+
+    if (!a->building || !id) return;
+    for (i = a->count[f] - 1; i >= 0; i--) {
+        reaktor_a11y_node *n = &a->node[f][i];
+
+        if (n->id != id) continue;
+        n->bounds = r;
+        return;
+    }
+}
+
+void
 reaktor_a11y_set_focus(reaktor_a11y *a, unsigned id)
 {
     a->focus_id = id;

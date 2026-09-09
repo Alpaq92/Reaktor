@@ -234,6 +234,12 @@ void reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
  * reaktor_shortcut_text, which is what produces the string. */
 void reaktor_a11y_set_keys(reaktor_a11y *a, unsigned id, const char *keys);
 
+/* Where the node `id` ended up. A widget that is placed by the layout engine
+ * reports itself before it knows: the id comes from the report, and the rect
+ * is found with the id. So the report carries no bounds and this puts them
+ * on afterwards. */
+void reaktor_a11y_set_bounds(reaktor_a11y *a, unsigned id, struct nk_rect r);
+
 /* --- reading it back --------------------------------------------------- */
 
 const reaktor_a11y_node *reaktor_a11y_tree(const reaktor_a11y *a, int *count);

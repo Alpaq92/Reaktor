@@ -91,7 +91,7 @@ void reaktor_hot_follow(App *app, struct nk_rect r, int cursor);
 int  reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b);
 void reaktor_unfit_label(struct nk_context *ctx, int fitted);
 
-int reaktor_button(App *app, struct nk_context *ctx, const char *label);
+int reaktor_button_label(App *app, struct nk_context *ctx, const char *label);
 int reaktor_button_accent(App *app, struct nk_context *ctx, const char *label);
 int reaktor_button_icon(App *app, struct nk_context *ctx,
                         const char *ionicon, const char *label);
@@ -150,6 +150,8 @@ void reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
  * reaktor_shortcut_text in core/ui/keys.h. Announced by every bridge, bound
  * by none: the binding stays where the application declared it. */
 void reaktor_note_keys(App *app, unsigned id, const char *keys);
+/* Where the node `id` was placed, once the layout engine has said. */
+void reaktor_note_bounds(App *app, unsigned id, struct nk_rect r);
 /* Convenience for the common case: the widget just drawn, at the bounds the
  * layout gave it, with no value. */
 unsigned reaktor_note_here(App *app, struct nk_context *ctx,

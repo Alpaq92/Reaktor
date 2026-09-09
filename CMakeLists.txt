@@ -182,6 +182,12 @@ target_link_libraries(plutosvg PUBLIC plutovg)
 # tree and is linked here exactly like a third-party library.
 add_library(onlay STATIC onlay/onlay.c)
 target_include_directories(onlay PUBLIC onlay)
+# Onlay stores coordinates as int16_t unless told otherwise. Nuklear draws in
+# floats and the accessibility dumps compare bounds exactly, so a truncating
+# layout would drift from the pixels it is supposed to reproduce. A definition
+# rather than an edit, so the fork's diff against upstream stays what it is.
+# (=1 rather than bare: upstream tests it both with #ifdef and #if ==1.)
+target_compile_definitions(onlay PUBLIC LAY_FLOAT=1)
 
 # Checked against the login card's real geometry, with the expected numbers
 # taken from the running app's accessibility dump rather than from onlay
@@ -237,6 +243,17 @@ if(NOT EMSCRIPTEN)
     add_executable(a11ytest tools/a11ytest.c core/a11y/a11y.c)
     target_include_directories(a11ytest PRIVATE core/a11y core/render)
     set_target_properties(a11ytest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+
+# The Onlay shim: ids in, rects out, one frame later. Onlay's own arithmetic is
+# onlaytest's job; this is what the shim owes on top of it:
+#     build/laytest
+if(NOT EMSCRIPTEN)
+    add_executable(laytest tools/laytest.c core/ui/layout.c)
+    target_include_directories(laytest PRIVATE core/ui core/render)
+    target_link_libraries(laytest PRIVATE onlay)
+    set_target_properties(laytest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
@@ -354,8 +371,10 @@ add_executable(reaktor WIN32
     core/css/cssflat.c
     core/render/nk_impl.c
     core/render/draw.c
+    core/ui/declare.c
     core/ui/focus.c
     core/ui/keys.c
+    core/ui/layout.c
     core/ui/style_map.c
     core/ui/widgets.c
     platform/a11y/a11y_web.c
@@ -383,6 +402,7 @@ target_include_directories(reaktor PRIVATE
 target_link_libraries(reaktor PRIVATE
     reaktor_core
     SDL3::SDL3-static
+    onlay
     lcui)
 # uiautomationcore is the UIA provider API (phase 4b); ole32 and oleaut32 are
 # the COM and BSTR halves of it.
