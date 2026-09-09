@@ -27,6 +27,12 @@ void reaktor_process_memory(size_t *rss, size_t *priv);
 double reaktor_process_cpu_ms(void);
 void  reaktor_free(void *p);
 
+/* Ask the platform's allocator to hand back cached-but-free pages. On macOS
+ * libmalloc otherwise keeps them for reuse; on Windows and Linux the local
+ * heap does that on its own timescale, so this is a no-op there. Called
+ * from the app's idle path. Cheap, but not free - do not call every frame. */
+void reaktor_release_free_memory(void);
+
 /* The app's own colour, for the window icon and the .ico in the executable.
  *
  * The one value in this tree that is not read from a submodule, and it cannot

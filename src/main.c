@@ -43,8 +43,11 @@
 static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19 };
 
 /* One slot per icon per size per theme - the stroke colour is part of the key,
- * so a scheme change empties the cache rather than doubling it. */
-#define IMG_CACHE_MAX 96
+ * so a scheme change empties the cache rather than doubling it. 48 covers
+ * the busiest page (Buttons: ~15 icons at 2-3 sizes) with headroom; on
+ * overflow the cache returns a null image, which draws blank rather than
+ * crashes, so this is a soft cap on memory not a hard cap on the app. */
+#define IMG_CACHE_MAX 48
 #define CARD_W        420
 
 /* Height of the titlebar this app draws for itself when the native one is
@@ -188,6 +191,21 @@ struct App {
      * after the sizes above it were fixed. */
     int            restore_rate;
     int            borderless;
+#ifdef __APPLE__
+    /* On macOS the styleMask change inside SDL_SetWindowBordered arrives
+     * back as a phantom mouse event that Nuklear reads as a second click
+     * on the same toggle button in the next frame, so the flag flips
+     * twice and the frame that macOS already added stays. Two pieces:
+     * pending defers the real click to SDL_AppIterate (so it does not
+     * race against a click that macOS is about to invent), and
+     * lock_frames swallows the phantom click that arrives shortly after
+     * the apply. Three frames is enough to cover the WindowServer round
+     * trip and short enough that a real second click can never fit
+     * inside it - a user cannot physically press the same button twice
+     * within 50 ms. */
+    int            borderless_pending;
+    int            borderless_lock_frames;
+#endif
     struct nk_rect ctl[3];     /* minimise, maximise, close */
     int            ctl_n;
     int            want_quit;
@@ -2488,7 +2506,17 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         if (nk_button_label(ctx, swl)) {
             /* Live, not at startup. SDL_SetWindowBordered puts the frame
              * back, and the hit test has to go with it or it keeps claiming
-             * the top of a window that no longer draws a titlebar. */
+             * the top of a window that no longer draws a titlebar.
+             *
+             * On macOS: record a request and let SDL_AppIterate apply it,
+             * so the flip is not inline with a click that macOS is about
+             * to synthesise a duplicate of. See borderless_pending. */
+#ifdef __APPLE__
+            if (app->borderless_lock_frames == 0) {
+                app->borderless_pending = 1;
+                app->dirty = 1;
+            }
+#else
             app->borderless = !app->borderless;
             SDL_SetWindowBordered(app->win, app->borderless ? false : true);
             SDL_SetWindowHitTest(app->win,
@@ -2496,6 +2524,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
                                  app->borderless ? app : NULL);
             app->ctl_n = 0;
             app->dirty = 1;
+#endif
         }
 
         nk_style_pop_float(ctx);
@@ -4116,6 +4145,39 @@ SDL_AppIterate(void *appstate)
         load_theme(app);
     }
 
+#ifdef __APPLE__
+    /* See the note where borderless_pending is set. Applied here, outside
+     * the frame's event dispatch, so the phantom click SDL delivers when
+     * the styleMask changes is enqueued for a later frame - which
+     * lock_frames swallows. */
+    if (app->borderless_lock_frames > 0)
+        app->borderless_lock_frames--;
+    if (app->borderless_pending) {
+        int w = 0, h = 0;
+        app->borderless_pending = 0;
+        app->borderless = !app->borderless;
+        SDL_SetWindowBordered(app->win, app->borderless ? false : true);
+        SDL_SetWindowHitTest(app->win,
+                             app->borderless ? window_hit_test : NULL,
+                             app->borderless ? app : NULL);
+        /* macOS caches the old drawable across a styleMask change and the
+         * new draw does not fully invalidate it - the pixels from before
+         * the flip linger even though titlebar() is not called any more.
+         * SDL_SyncWindow blocks until the pending window changes are
+         * applied by the WindowServer; asking SDL to set the size to the
+         * *current* size then forces a fresh SDL_EVENT_WINDOW_RESIZED,
+         * which is what a SDL_Renderer takes as its cue to rebuild its
+         * backing texture. Together those two calls make the flip visible
+         * on the frame that draws it, rather than several frames later. */
+        SDL_SyncWindow(app->win);
+        SDL_GetWindowSize(app->win, &w, &h);
+        SDL_SetWindowSize(app->win, w, h);
+        app->ctl_n = 0;
+        app->dirty = 1;
+        app->borderless_lock_frames = 3;
+    }
+#endif
+
     SDL_GetWindowSize(app->win, &win_w, &win_h);
     if (win_w != app->laid_w || win_h != app->laid_h) app->dirty = 1;
 
@@ -4417,6 +4479,12 @@ SDL_AppIterate(void *appstate)
     if (!app->first_frame_done) {
         app->first_frame_done = 1;
         SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
+        /* First frame's transient allocations - font atlas bake buffers,
+         * plutosvg parse buffers, libcss's rule-tree scratch - are freed by
+         * this point but macOS's libmalloc keeps their pages cached. Ask
+         * for them back once here; no-op elsewhere. Called once, not per
+         * frame: pressure relief walks every zone and is not free. */
+        reaktor_release_free_memory();
     }
     return SDL_APP_CONTINUE;
 }

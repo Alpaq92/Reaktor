@@ -73,6 +73,18 @@ builds one target, `--debug` switches the build type. Or drive CMake yourself:
 cmake -S . -B build && cmake --build build --parallel
 ```
 
+On macOS the build also assembles `build/reaktor.app` around the plain
+binary — same executable file, plus an `Info.plist`, the assets under
+`Contents/Resources`, and a real `reaktor.icns` rasterised from the brand
+PNG at ten sizes. Both work: `./build/reaktor` from a shell and
+`open build/reaktor.app` from Finder. The bundle is self-contained and
+can be moved to `/Applications`.
+
+If the build fails against `MacOSX12.1.sdk` with a `NSBundle.h` error, the
+default CommandLineTools SDK on that machine is newer than the compiler
+it ships with. Configure once with `-DCMAKE_OSX_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX11.3.sdk`
+and the fix sticks. Full context lives in [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+
 ### The web
 
 ```powershell
@@ -111,6 +123,7 @@ emcmake cmake -S . -B build-wasm && cmake --build build-wasm --parallel
 | `src/theme.c` | Which colour scheme the desktop is using |
 | `src/util.c` | Paths, whole-file reads, the resident set |
 | `build.sh` / `build-wasm.sh` | The Unix side of `build.ps1` and `build-wasm.ps1`; all the build logic is in `CMakeLists.txt` either way |
+| `tools/Info.plist.in` / `tools/make-bundle.sh` | The `.app` bundle: the `Info.plist` template, and the POST_BUILD step that copies the binary, the assets and a generated `.icns` around it |
 | `branding/` | The project's mark, as SVG, PNG and `.ico` |
 | `assets/fonts/` | Aileron, the CC0 typeface the UI is set in — vendored rather than submoduled, the one exception to the rule |
 

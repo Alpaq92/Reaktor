@@ -475,6 +475,21 @@ if(EMSCRIPTEN)
         "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.html")
     set_property(TARGET reaktor APPEND PROPERTY LINK_DEPENDS
                  "${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.html")
+
+    # Favicon: the browser fetches /favicon.ico from the server root; the
+    # brand SVG plus the same PNG the .app bundle uses are dropped next to
+    # reaktor.html so the <link rel="icon"> in shell.html can reach them.
+    # The .svg is served as the primary and the .png as the alternate for
+    # any client that will not draw SVG icons.
+    add_custom_command(TARGET reaktor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/branding/reaktor-icon.svg"
+            "${CMAKE_BINARY_DIR}/reaktor-icon.svg"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/branding/reaktor-icon.png"
+            "${CMAKE_BINARY_DIR}/reaktor-icon.png"
+        COMMENT "Copying favicon assets"
+        VERBATIM)
 endif()
 
 if(MSVC)
@@ -489,3 +504,25 @@ endif()
 # containing third_party/, so keep the binary inside the tree.
 set_target_properties(reaktor PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+# ------------------------------------------------------------- macOS .app --
+# Assemble build/reaktor.app around the plain binary, alongside it. Both are
+# runnable: `./build/reaktor` from the command line as before, and
+# `./build/reaktor.app` from Finder without a Terminal. They share one copy
+# of the executable file, and the bundle carries the asset tree the walk-up
+# would otherwise need - see reaktor_root() in src/util.c, which prefers
+# Contents/Resources when it detects a bundle layout in argv[0].
+if(APPLE AND NOT EMSCRIPTEN)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/Info.plist.in"
+        "${CMAKE_BINARY_DIR}/Info.plist" @ONLY)
+
+    add_custom_command(TARGET reaktor POST_BUILD
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tools/make-bundle.sh"
+                "${CMAKE_BINARY_DIR}/reaktor.app"
+                "$<TARGET_FILE:reaktor>"
+                "${CMAKE_BINARY_DIR}/Info.plist"
+                "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Assembling reaktor.app"
+        VERBATIM)
+endif()

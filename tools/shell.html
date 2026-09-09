@@ -8,6 +8,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reaktor</title>
+<link rel="icon" type="image/svg+xml" href="reaktor-icon.svg">
+<link rel="alternate icon" type="image/png" href="reaktor-icon.png">
 <style>
   html, body {
     margin: 0;
@@ -36,6 +38,19 @@
        corner of the viewport. Top only - the bottom edge is the bottom of the
        page, and rounding it would cut a notch out of nothing. */
     border-radius: 10px 10px 0 0;
+    /* WebKit on macOS (Safari, Orion) sometimes rasterises canvas layers
+       at reduced resolution for performance and upscales at composite
+       time - text baked at 1:1 then comes out visibly blurred. Promoting
+       the canvas to its own composited layer with a 3D transform forces
+       WebKit to keep it at native pixel density. `image-rendering:
+       pixelated` is the belt to `translate3d`'s braces: it also disables
+       the composite-time filter WebKit would otherwise apply. Chrome,
+       Firefox and Edge already do the right thing; these hints are
+       no-ops on them. */
+    transform: translate3d(0, 0, 0);
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
   }
   #status {
     position: fixed;

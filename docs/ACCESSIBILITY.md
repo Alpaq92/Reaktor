@@ -8,7 +8,9 @@ also answers Ctrl-Tab, Ctrl-Shift-Tab and Ctrl-1..7, and F1 opens Diagnostics.
 hidden DOM beside the canvas, with ARIA roles, names, states and positions, and
 the browser exposes that to every reader on every platform. **On Windows and on
 the free desktops a reader gets it natively**, through UI Automation and through
-AT-SPI; macOS is written and has never run.
+AT-SPI; the macOS bridge now compiles and runs against real Cocoa (built on
+macOS 11.7), and keyboard access is confirmed there, but the bridge itself has
+not yet been walked with Accessibility Inspector or VoiceOver.
 
 **Phases 1, 2, 3, 4a, 4b and 4c are done.** The model exists, every widget
 reports into it, focus lives in it, the web serves it, and two native bridges
@@ -473,9 +475,14 @@ Two things are wrong, and both were predicted:
 Neither is fixed here. What has not been done is **Orca**, which is the only
 thing that answers whether any of this is usable rather than merely present.
 
-**macOS, NSAccessibility — written, not yet run.** `src/sys/a11y_macos.m` is
-the project's first Objective-C and the only file that is not C, because
-NSAccessibility is a set of Objective-C protocols with no C entry point.
+**macOS, NSAccessibility — built, not yet walked by a client.**
+`src/sys/a11y_macos.m` is the project's first Objective-C and the only file
+that is not C, because NSAccessibility is a set of Objective-C protocols with
+no C entry point. It now compiles and links against the real Cocoa headers on
+macOS 11.7 (Apple Clang 12; the default MacOSX12.1 SDK is incompatible with
+that compiler, so `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk` is passed at configure
+time), and the app launches. What has not been done is Accessibility Inspector
+or VoiceOver — every claim below is still a claim, not a measurement.
 
 Nothing of SDL's is subclassed or swizzled. `NSAccessibilityElement` exists
 exactly for UI with no `NSView` behind it, so one element answers for one node,
@@ -502,12 +509,15 @@ Built with ARC, which is the one place in this project with object lifetimes at
 all; retain counting a bridge that cannot be tested here is not a trade worth
 making.
 
-**Never compiled against real Cocoa**, like the AT-SPI one. It passes a syntax
-and warnings pass under clang against a stub of the Cocoa API, which catches
-typos and shape errors and cannot catch a wrong signature — the stub is this
-file's idea of AppKit and would be wrong the same way. Verify cheapest-first:
-Accessibility Inspector, which shows the tree the way `inspect.exe` does on
-Windows, then VoiceOver.
+**Now compiled against real Cocoa** on macOS 11.7 — clean under `-Wall -Wextra`
+against AppKit's actual headers — and the app runs. Keyboard access works
+(Tab and Shift-Tab walk the widgets, Ctrl-1..7 switches tabs), which exercises
+the model and the focus system but not the bridge itself. What has not been
+done, and what the section below still describes as unknowns, is a client walk:
+Accessibility Inspector first — which shows the tree the way `inspect.exe`
+does on Windows — then VoiceOver. Until those happen, "the syntax passed" is
+all that has moved from the previous "never compiled" claim; the questions
+about coordinates, the element cache and the extra nesting level remain open.
 
 ## Phase 5 — verification
 
@@ -525,12 +535,16 @@ None of this is verifiable by looking at it.
 
 The Windows bridge, the web mirror and now the AT-SPI bridge were each written
 or run on a machine that could run them, and every claim about them in this
-document was measured. **The NSAccessibility bridge was not.** It has never
-been compiled against the real headers and has never executed an instruction.
-What it has had is a `clang -fsyntax-only -Wall -Wextra` pass against a
-hand-written stub of Cocoa, which catches typos, unbalanced brackets and wrong
-argument counts — and cannot catch a wrong signature, because the stub is the
-bridge's own idea of the API and would be wrong in the same direction.
+document was measured. **The NSAccessibility bridge is halfway there.** It now
+compiles and links against the real Cocoa headers on macOS 11.7 (Apple Clang
+12; the walk-up default `MacOSX12.1.sdk` has a `NSBundle.h` incompatible with
+that compiler, so the build passes `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk`).
+The app launches; keyboard focus works, which exercises the model and the
+scroll-into-view path. What the bridge itself does — whether `accessibilityChildren`
+on SDL's content view is enough with no subclass, whether coordinates land
+where VoiceOver's cursor expects them, whether the element cache survives a
+page change — is still a set of claims rather than measurements, because
+Accessibility Inspector and VoiceOver have not been run.
 
 The AT-SPI list is kept below with its answers, because the answers are the
 useful part: it is the record of what a bridge written blind actually got
@@ -642,7 +656,7 @@ which is what makes these cheap to debug at a distance.
 | 4a web | Screen-reader support on every platform, from one implementation. **Done.** |
 | 4b Windows | Native support where the app is developed. **Done:** tree, focus, values, patterns and activation. |
 | 4c Linux, BSD | Parity. **Done:** built and run on Debian over libdbus; tree, focus, actions. |
-| 4d macOS | Parity. **Written, unbuilt** — see above. |
+| 4d macOS | Parity. **Written and built on macOS 11.7; keyboard access confirmed. The NSAccessibility bridge itself has not been walked by a client yet** — see above. |
 
 1 → 3 is the honest minimum before any bridge is worth writing, and 3 is the
 first phase a user would notice. 4a before 4b: the web bridge is the cheapest

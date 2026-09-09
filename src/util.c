@@ -20,6 +20,11 @@
 #  include <unistd.h>
 #  include <sys/stat.h>
 #  include <sys/resource.h>
+#  if defined(__APPLE__)
+#    include <mach-o/dyld.h>
+#    include <stdint.h>
+#    include <malloc/malloc.h>
+#  endif
 #endif
 
 #include "reaktor.h"
@@ -58,6 +63,50 @@ int reaktor_root(char *out, size_t cap)
         if (n == 0 || n >= sizeof(exe)) return 0;
         /* Normalise, so the walk below only has to look for one separator. */
         for (i = 0; exe[i]; i++) if (exe[i] == '\\') exe[i] = '/';
+#  elif defined(__APPLE__)
+        {
+            uint32_t n = (uint32_t)sizeof(exe);
+            if (_NSGetExecutablePath(exe, &n) != 0) return 0;
+        }
+        (void)i;
+        /* Inside a .app bundle the executable lives at
+         *   Something.app/Contents/MacOS/reaktor
+         * and the assets belong under Contents/Resources. Detect that shape
+         * from the path suffix and hand back the resource dir directly, so
+         * the walk below never runs and a bundle can sit anywhere on disk
+         * without a .reaktor-root file next to it. */
+        {
+            size_t exelen = strlen(exe);
+            const char *tail = "/Contents/MacOS/";
+            size_t taillen = strlen(tail);
+            char *cut = NULL;
+            if (exelen > taillen) {
+                char *p;
+                for (p = exe + exelen - taillen; p >= exe; p--) {
+                    if (strncmp(p, tail, taillen) == 0) { cut = p; break; }
+                }
+            }
+            if (cut) {
+                char resources[REAKTOR_PATH_CAP];
+                *cut = '\0';
+                if (snprintf(resources, sizeof(resources),
+                             "%s/Contents/Resources", exe) < 0)
+                    return 0;
+                resources[sizeof(resources) - 1] = '\0';
+                {
+                    struct stat st;
+                    if (stat(resources, &st) == 0 && (st.st_mode & S_IFDIR))
+                        return copy_out(out, cap, resources);
+                }
+            }
+        }
+#  elif defined(__linux__)
+        {
+            ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+            if (n <= 0 || (size_t)n >= sizeof(exe)) return 0;
+            exe[n] = '\0';
+        }
+        (void)i;
 #  else
         /* No executable path without a platform call; the working directory
          * is the honest fallback, and REAKTOR_ROOT covers the rest. */
@@ -139,6 +188,18 @@ char *reaktor_read_file(const char *path, size_t *len)
 }
 
 void reaktor_free(void *p) { free(p); }
+
+/* macOS-specific: libmalloc caches freed pages by default rather than
+ * returning them to the kernel; on a resident-set-conscious app that is
+ * pure footprint. Ask each zone to give back what it can. No-op on
+ * Windows, Linux and Emscripten - glibc's arena and Windows's heap
+ * decommit their own way, so there is nothing to prompt. */
+void reaktor_release_free_memory(void)
+{
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    malloc_zone_pressure_relief(NULL, 0);
+#endif
+}
 
 #if defined(_WIN32)
 /* Both counters come from one call. <psapi.h> maps GetProcessMemoryInfo to
