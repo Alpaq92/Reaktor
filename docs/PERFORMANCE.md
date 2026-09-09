@@ -68,16 +68,18 @@ cost is the wake, not a frame.
 
 Forced to redraw at a fixed rate, 960×680:
 
-| Page | Windows | Linux |
-| --- | --- | --- |
-| Login | 6.8–6.9 ms/frame | 6.2–6.7 ms/frame |
-| Buttons (the busiest) | 11.5–12.2 ms/frame | 11.7–13.0 ms/frame |
+| Page | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| Login | 6.8–6.9 ms/frame | 6.2–6.7 ms/frame | 17.5–20.5 ms/frame |
+| Buttons (the busiest) | 11.5–12.2 ms/frame | 11.7–13.0 ms/frame | 29.6–30.2 ms/frame |
 
-The same rasteriser on both, so the agreement is the expected result rather
-than a coincidence. Cost is linear in frames: a pointer swept across a row of
-buttons draws one per hover crossing, typing draws one per keystroke. macOS
-frame times are not measured yet — the Diagnostics tab reports them live and
-is where to reproduce.
+The same rasteriser on all three, so Windows and Linux agreeing is the
+expected result rather than a coincidence; macOS runs the same code but pays
+another pass for it, because SDL's Metal renderer uploads the software bitmap
+to a texture and presents that — the same private-copy-at-every-step pattern
+that dominates the memory table above. Cost is linear in frames: a pointer
+swept across a row of buttons draws one per hover crossing, typing draws one
+per keystroke.
 
 The accessibility tree adds **4.2 µs** to a drawn frame (82 nodes), below the
 noise in the measurements above. For contrast, the one figure that made the
