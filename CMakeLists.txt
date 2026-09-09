@@ -262,9 +262,13 @@ endif()
 
 # ---------------------------------------------------------------- app -------
 # WIN32 selects the GUI subsystem; SDL's main shim supplies the entry point.
-# The first platform layer this project has had: src/ is portable C with SDL
-# under it, and the bridges that are not - phase 4 of docs/ACCESSIBILITY.md -
-# live in src/sys/ so that stays true of everything else.
+# The rule the tree follows, which is about size rather than about platforms:
+# a whole platform subsystem gets its own file under src/sys/, built only
+# where it applies - phase 4 of docs/ACCESSIBILITY.md is the one that exists.
+# A small platform fact stays inline behind #ifdef in the file that needs it:
+# src/util.c (the executable's path, the memory counters), src/theme.c (the
+# desktop's colour scheme) and src/main.c (the browser's missing window frame,
+# a DXGI query, a macOS event quirk).
 # a11y_snapshot.c is portable and lives here anyway: it is the half of a
 # platform bridge that is not platform-specific, and it is only built when
 # there is a bridge to use it.

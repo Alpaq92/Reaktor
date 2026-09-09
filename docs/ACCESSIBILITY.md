@@ -690,6 +690,9 @@ and reaches the most readers.
   provider raises a property-changed event per change unless something says
   not to.
 - ~~**Scope.**~~ Phase 4 added the platform layer this project had gone without,
-  and it is one directory: `src/sys/`, holding the one file that is not
-  portable. `src/` is still SDL and C with no `#ifdef _WIN32` in it; the build
-  adds the file on Windows and the web bridge's fallback stands down there.
+  and it is one directory: `src/sys/`, holding the files that are not
+  portable. That is where a whole platform subsystem goes; the smaller
+  platform facts elsewhere in `src/` — the executable's path and the memory
+  counters in `util.c`, the desktop scheme in `theme.c` — stay inline behind
+  `#ifdef`, as they did before phase 4. The build adds the bridge for the host
+  and the web bridge's fallback stands down there.

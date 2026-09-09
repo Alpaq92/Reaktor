@@ -31,9 +31,12 @@ like, and expect a conversation rather than a checklist.
 
 ## Code conventions
 
-- **C99, and portable.** No compiler extensions in `src/`. Platform code goes
-  behind `_WIN32` / `__EMSCRIPTEN__` / POSIX in the one file that needs it —
-  today that is only `src/util.c`.
+- **C99, and portable.** No compiler extensions in `src/`. Size decides where
+  platform code lives: a whole subsystem gets its own file under `src/sys/`,
+  built only where it applies — the accessibility bridges are the ones that
+  exist. A small platform fact stays inline behind `_WIN32` / `__APPLE__` /
+  `__linux__` / `__EMSCRIPTEN__` in the file that needs it, today `src/util.c`,
+  `src/theme.c` and `src/main.c`.
 - **Around 79 columns**, four-space indent, no tabs. Headers keep to it
   strictly; a source line may run over where breaking it would read worse.
 - **Comments say why, not what.** The code already says what it does. A

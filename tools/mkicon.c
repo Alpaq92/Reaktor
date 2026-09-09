@@ -32,8 +32,11 @@
 #define ICON_ICO "branding/reaktor-icon.ico"
 #define ICON_TMP "branding/reaktor-icon.png.tmp"
 
-/* Every size Explorer, the taskbar and the Alt-Tab switcher ask for. */
-static const int g_sizes[] = { 16, 24, 32, 48, 64, 128, 256 };
+/* Every size Explorer, the taskbar and the Alt-Tab switcher ask for. 20 and
+ * 40 are the two fractional display scaling adds: at 125% and 250% the shell
+ * asks for those rather than scaling 16 and 32, and an entry that is missing
+ * is resampled from the next one up. They cost about 2.8 KB between them. */
+static const int g_sizes[] = { 16, 20, 24, 32, 40, 48, 64, 128, 256 };
 #define SIZE_N ((int)(sizeof(g_sizes) / sizeof(g_sizes[0])))
 
 struct entry {
