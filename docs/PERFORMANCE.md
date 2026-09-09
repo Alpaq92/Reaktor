@@ -17,14 +17,16 @@ atlas and the icons are baked.
 | `reaktor.exe` (Windows) | 2,473,984 |
 | `reaktor` (Linux, stripped) | 3,967,504 |
 | `reaktor` (macOS, stripped) | 3,242,248 |
-| Web bundle (macOS emsdk) | 1,389,145 |
 | Web bundle (Windows emsdk) | 1,389,356 |
+| Web bundle (Linux emsdk) | 1,389,186 |
+| Web bundle (macOS emsdk) | 1,389,145 |
 
 Everything links statically — SDL, libcss, plutosvg, plutovg, with Nuklear
 compiled in — so nothing but the C runtime loads from outside the binary. The
-two emsdk builds agree to 211 bytes, so the Closure and `wasm-opt` version
-differences between platforms turn out not to matter (Windows: emscripten
-6.0.9).
+three emsdk builds agree to 211 bytes end to end, so the Closure and
+`wasm-opt` differences between host platforms turn out not to matter (Windows
+and Linux both on emscripten 6.0.9). The Linux bundle is 1,221,689 of `.wasm`,
+86,001 of packaged assets, 80,045 of `.js` and 1,451 of `.html`.
 
 The Windows binary also carries the icon as a linked resource: 125 KB, nine
 sizes, the 256×256 one stored as PNG. `tools/mkicon.c` builds it from the SVG.
