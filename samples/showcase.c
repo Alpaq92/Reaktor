@@ -1198,19 +1198,19 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_edit_string with nk_filter_default / _decimal / _hex");
 
     nk_layout_row_dynamic(ctx, 36.0f, 1);
-    reaktor_field(app, ctx, NK_EDIT_FIELD, s->name, &s->name_len,
+    reaktor_field_text(app, ctx, NK_EDIT_FIELD, s->name, &s->name_len,
                   SC_TEXT_CAP, "Full name", nk_filter_default);
 
     nk_layout_row_dynamic(ctx, 36.0f, 2);
-    reaktor_field(app, ctx, NK_EDIT_FIELD, s->digits, &s->digits_len,
+    reaktor_field_text(app, ctx, NK_EDIT_FIELD, s->digits, &s->digits_len,
                   SC_TEXT_CAP, "Digits only", nk_filter_decimal);
-    reaktor_field(app, ctx, NK_EDIT_FIELD, s->hex, &s->hex_len,
+    reaktor_field_text(app, ctx, NK_EDIT_FIELD, s->hex, &s->hex_len,
                   SC_TEXT_CAP, "Hex only", nk_filter_hex);
 
     api(app, ctx, "nk_edit_string with NK_EDIT_BOX "
                   "(Nuklear breaks lines on newlines only - there is no wrap)");
     nk_layout_row_dynamic(ctx, 92.0f, 1);
-    reaktor_field(app, ctx, NK_EDIT_BOX, s->note, &s->note_len,
+    reaktor_field_text(app, ctx, NK_EDIT_BOX, s->note, &s->note_len,
                   SC_BOX_CAP, NULL, nk_filter_default);
 
     section(app, ctx, "Ranges",

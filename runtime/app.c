@@ -41,7 +41,7 @@ effective_dark(const App *app)
 void
 load_theme(App *app)
 {
-    char pal[1024], core[1024];
+    char pal[1024], core[1024], own[1024];
     const char *sheets[SHEET_COUNT];
     unsigned char c[4];
     Uint64 t0, t1;
@@ -49,12 +49,14 @@ load_theme(App *app)
     app->dark = effective_dark(app);
 
     if (!reaktor_path(pal, sizeof(pal), theme_sheet(app->dark)) ||
-        !reaktor_path(core, sizeof(core), CORE_SHEET)) {
-        SDL_Log("could not resolve the tiny.css sources");
+        !reaktor_path(core, sizeof(core), CORE_SHEET) ||
+        !reaktor_path(own, sizeof(own), APP_SHEET)) {
+        SDL_Log("could not resolve the stylesheet sources");
         return;
     }
     sheets[0] = pal;
     sheets[1] = core;
+    sheets[2] = own;   /* last, so equal specificity resolves in its favour */
 
     t0 = SDL_GetPerformanceCounter();
     if (!reaktor_style_init(sheets, SHEET_COUNT))

@@ -8,6 +8,10 @@
  */
 #include "internal.h"
 
+/* Non-zero while a widget that reports itself is being drawn by one that
+ * has already reported it - see reaktor_note_mute. */
+static int g_note_mute;
+
 /* --- what a page may ask of the shell ------------------------------------
  * Declared in ui.h. Thin on purpose: the point of the indirection is only that
  * showcase.c never sees inside App. */
@@ -113,6 +117,39 @@ void
 reaktor_hot_follow(App *app, struct nk_rect r, int cursor)
 {
     hot_push_ex(app, r, cursor, 1, 0, 1);
+}
+
+/* Text that acts, reported as a link. Lifted out of the sample when the
+ * declarative API needed one: a link is a widget, not a page's business. */
+int
+reaktor_link_label(App *app, struct nk_context *ctx, const char *label, int active)
+{
+    unsigned char c[4];
+    struct nk_color col;
+    int clicked = 0;
+
+    /* A link does not change colour on hover, only the cursor. */
+    {
+        struct nk_rect b = nk_widget_bounds(ctx);
+
+        hot_push(app, b, 1, 0);
+        reaktor_note(app, REAKTOR_A11Y_LINK, label, NULL,
+                     active ? REAKTOR_A11Y_SELECTED : 0u, b);
+        /* Released inside, not pressed - the same reason the buttons use
+         * NK_BUTTON_TRIGGER_ON_RELEASE. Checked against clicked_pos, so
+         * letting go elsewhere does not count. */
+        if (nk_input_is_mouse_click_in_rect(&ctx->input, NK_BUTTON_LEFT, b))
+            clicked = 1;
+    }
+
+    col = active && reaktor_style_token("--links", c)
+        ? col_of(c)
+        : (reaktor_style_token("--text-muted", c) ? col_of(c) : app->text);
+
+    nk_style_push_color(ctx, &ctx->style.text.color, col);
+    nk_label(ctx, label, NK_TEXT_CENTERED);
+    nk_style_pop_color(ctx);
+    return clicked;
 }
 
 int
@@ -237,7 +274,7 @@ reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
  * inside Nuklear, so a page can have several; the login field uses
  * nk_edit_buffer because its context menu has to reach that state. */
 nk_flags
-reaktor_field(App *app, struct nk_context *ctx, nk_flags flags,
+reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
               char *buf, int *len, int cap, const char *hint,
               nk_plugin_filter filter)
 {
@@ -321,20 +358,42 @@ reaktor_file_taken(App *app, char *out, int cap)
     return 1;
 }
 
-/* REAKTOR_A11Y_DUMP=<path> writes the tree once, after the first frame is
- * built, and is how phase 2 is checked: the instrumentation is invisible on
- * screen, so the only way to see whether a widget reported itself is to read
- * the tree. */
+/* REAKTOR_A11Y_DUMP=<path> writes the tree once, early, and is how phase 2 is
+ * checked: the instrumentation is invisible on screen, so the only way to see
+ * whether a widget reported itself is to read the tree. */
+
+/* Frames to let pass before the tree is written out.
+ *
+ * It was one. A declared box is placed by the layout engine at the end of the
+ * frame that declares it - see core/ui/layout.h - so on the very first frame
+ * a declared page reports two empty containers and nothing inside them. That
+ * is correct behaviour and a useless snapshot. Two frames is what it takes for
+ * the first one to have somewhere to be, and every page that draws itself
+ * immediately is identical on both. */
+#define A11Y_DUMP_FRAME 2
+
 void
 a11y_dump_once(App *app)
 {
-    static int done;
+    static int done, frames;
     const char *path;
     FILE *f;
 
     if (done) return;
     path = SDL_getenv("REAKTOR_A11Y_DUMP");
     if (!path) { done = 1; return; }
+    if (++frames < A11Y_DUMP_FRAME) {
+        /* Dirty alone is not enough: at rest the loop is parked in
+         * SDL_WaitEvent, and nothing here is an event. An empty user event is
+         * what the activation fallback already uses to ask for a frame. */
+        SDL_Event e;
+
+        app->dirty = 1;
+        SDL_zero(e);
+        e.type = SDL_EVENT_USER;
+        SDL_PushEvent(&e);
+        return;
+    }
     done = 1;
     f = fopen(path, "w");
     if (!f) return;
@@ -370,9 +429,10 @@ unsigned
 reaktor_note(App *app, unsigned char role, const char *name, const char *value,
              unsigned state, struct nk_rect bounds)
 {
-    unsigned id = reaktor_a11y_add(&app->a11y, role, name, value, state,
-                                   bounds);
+    unsigned id;
 
+    if (g_note_mute) return 0;
+    id = reaktor_a11y_add(&app->a11y, role, name, value, state, bounds);
     focus_saw(app, id, bounds);
     return id;
 }
@@ -381,8 +441,10 @@ unsigned
 reaktor_note_push(App *app, unsigned char role, const char *name,
                   const char *value, unsigned state, struct nk_rect bounds)
 {
-    unsigned id = reaktor_a11y_push(&app->a11y, role, name, value, state, bounds);
+    unsigned id;
 
+    if (g_note_mute) return 0;
+    id = reaktor_a11y_push(&app->a11y, role, name, value, state, bounds);
     focus_saw(app, id, bounds);
     return id;
 }
@@ -412,6 +474,14 @@ reaktor_note_bounds(App *app, unsigned id, struct nk_rect r)
     reaktor_a11y_set_bounds(&app->a11y, id, r);
 }
 
+void
+reaktor_note_mute(App *app, int on)
+{
+    (void)app;
+    g_note_mute += on ? 1 : -1;
+    if (g_note_mute < 0) g_note_mute = 0;
+}
+
 /* nk_widget_bounds answers where the *next* widget goes, so this is called
  * before drawing, not after - which is also when the caller still knows what
  * it is about to draw. */
@@ -419,9 +489,12 @@ unsigned
 reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
                   const char *name, unsigned state)
 {
-    struct nk_rect b = nk_widget_bounds(ctx);
-    unsigned id = reaktor_a11y_add(&app->a11y, role, name, NULL, state, b);
+    struct nk_rect b;
+    unsigned       id;
 
+    if (g_note_mute) return 0;
+    b  = nk_widget_bounds(ctx);
+    id = reaktor_a11y_add(&app->a11y, role, name, NULL, state, b);
     focus_saw(app, id, b);
     return id;
 }

@@ -9,6 +9,7 @@
  */
 #include "internal.h"
 #include "sample.h"
+#include "declare.h"
 
 /* Which parts of a frameless window the desktop treats as chrome - without it
  * the window cannot be moved, resized, snapped or maximised by double-click.
@@ -280,45 +281,33 @@ card_height(int with_diag)
 /* A clickable line of text: Nuklear has no link widget and tiny.css no
  * component for one, so this is a label that reports its own hover and click.
  * The resting colour is tiny.css's --links, so it tracks the theme. */
-static int
-text_link(App *app, struct nk_context *ctx, const char *label, int active)
-{
-    unsigned char c[4];
-    struct nk_color col;
-    int clicked = 0;
-
-    /* A link does not change colour on hover, only the cursor. */
-    {
-        struct nk_rect b = nk_widget_bounds(ctx);
-
-        hot_push(app, b, 1, 0);
-        reaktor_note(app, REAKTOR_A11Y_LINK, label, NULL,
-                     active ? REAKTOR_A11Y_SELECTED : 0u, b);
-        /* Released inside, not pressed - the same reason the buttons use
-         * NK_BUTTON_TRIGGER_ON_RELEASE. Checked against clicked_pos, so
-         * letting go elsewhere does not count. */
-        if (nk_input_is_mouse_click_in_rect(&ctx->input, NK_BUTTON_LEFT, b))
-            clicked = 1;
-    }
-
-    col = active && reaktor_style_token("--links", c)
-        ? col_of(c)
-        : (reaktor_style_token("--text-muted", c) ? col_of(c) : app->text);
-
-    nk_style_push_color(ctx, &ctx->style.text.color, col);
-    nk_label(ctx, label, NK_TEXT_CENTERED);
-    nk_style_pop_color(ctx);
-    return clicked;
-}
 
 /* The card, centred in whatever region the shell hands it. Placed with
  * nk_layout_space, which takes an explicit rect: the row APIs advance a
  * cursor, and mixing nk_spacing into a pushed row does not advance it the way
  * centring arithmetic assumes. */
+/* The card's type, from assets/reaktor.css rather than from a number written
+ * next to the label. tiny.css has no heading rule anywhere in it, so these
+ * three sizes had nowhere to come from and were spelled out here; they are a
+ * class each now, and this is the only thing that reads them.
+ *
+ * The fallback is what each one used to be. A stylesheet that loses a rule
+ * should cost a page its styling, not its legibility. */
+static const struct nk_user_font *
+card_font(App *app, const char *selector, int px, int bold)
+{
+    reaktor_style st;
+
+    reaktor_style_get(selector, &st);
+    return pick_font(app, st.matched ? st.font_px : px,
+                     st.matched ? st.bold : bold);
+}
+
 static void
 login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
            float body_h)
 {
+    struct nk_rect at;
     float card_h = card_height(app->show_contact);
     float side = (win_w - (float)CARD_W) * 0.5f;
     float top  = body_y + (body_h - card_height(0)) * 0.5f;
@@ -335,109 +324,100 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
      * one open already, and a widget is what a pushed rect expects. */
     nk_layout_space_push(ctx, nk_rect(side, top, (float)CARD_W, card_h));
 
+    /* Where that push actually lands, in screen coordinates. A rect pushed
+     * into a space is local to it, so `side` and `top` are screen coordinates
+     * only while the space starts at the origin - true on the desktop and not
+     * in the browser, where the card's fill and its contents came apart by
+     * exactly the difference. Taken here because inside the group
+     * nk_window_get_bounds answers the enclosing window, which is the same
+     * trap the titlebar above already documents. */
+    at = nk_widget_bounds(ctx);
+
     /* The card's corners, taking the radius the buttons inside it are
      * already using. Nuklear fills a panel square and window.rounding is 0
      * because the page is, so the fill is drawn here instead - through the
      * masked primitive, so the corners are anti-aliased on the software
      * renderer like every other round thing - and Nuklear's own is pushed
      * transparent so it does not paint a square one over the top. */
-    reaktor_fill_round(app, nk_window_get_canvas(ctx),
-                       nk_rect(side, top, (float)CARD_W, card_h),
+    reaktor_fill_round(app, nk_window_get_canvas(ctx), at,
                        ctx->style.button.rounding, app->card_bg);
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(nk_rgba(0, 0, 0, 0)));
-    nk_style_push_vec2(ctx, &ctx->style.window.group_padding,
-                       nk_vec2(CARD_PAD_X, CARD_PAD_Y));
+    /* Zero, not CARD_PAD: the padding is the declared boxes' margins now, and
+     * applying it twice is exactly the trap core/ui/layout.h warns about. */
+    nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
     if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
-        /* The rect pushed above, which is where the card actually is. */
-        reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Proceed with login", NULL,
-                          0, nk_rect(side, top, (float)CARD_W, card_h));
-        nk_style_push_vec2(ctx, &ctx->style.window.spacing,
-                           nk_vec2(0, (float)ROW_GAP));
+        /* Declared, not drawn. Every rect below comes from Onlay, every node
+         * from the widget that made it, and the only numbers here are the
+         * ones this card is actually built to. */
+        REAKTOR_COLUMN(.name = "Proceed with login",
+                       .w = CARD_W, .h = card_h, .ml = at.x, .mt = at.y,
+                       .gap = ROW_GAP) {
+            REAKTOR_ROW(.h = ROW_BRAND, .gap = 10, .flags = REAKTOR_LAY_FILL_X,
+                        .ml = CARD_PAD_X, .mr = CARD_PAD_X, .mt = CARD_PAD_Y) {
+                reaktor_icon(&(reaktor_icon_spec){
+                    .name = "person-circle-outline", .accent = 1,
+                    .box  = { .w = ROW_BRAND, .h = ROW_BRAND } });
+                reaktor_label(&(reaktor_label_spec){
+                    .text  = "Proceed with login",
+                    .style = ".card-title",
+                    .box   = { .flags = REAKTOR_LAY_FILL_X |
+                                        REAKTOR_LAY_FILL_Y } });
+            }
 
-        /* A square slot for the icon so it is never stretched, and a column
-         * of its own for the gap: row spacing does not apply within a row. */
-        nk_layout_row_begin(ctx, NK_STATIC, ROW_BRAND, 3);
-        nk_layout_row_push(ctx, ROW_BRAND);
-        {
-            char src[176];
-            SDL_snprintf(src, sizeof(src),
-                         "third_party/ionicons/src/svg/"
-                         "person-circle-outline.svg?stroke=%s",
-                         app->accent_hex);
-            image_centred(ctx, icon(app, src, ROW_BRAND), ROW_BRAND);
-        }
-        nk_layout_row_push(ctx, 10);
-        nk_spacing(ctx, 1);
-        nk_layout_row_push(ctx, CARD_W - 2.0f * CARD_PAD_X - ROW_BRAND - 10.0f);
-        nk_style_push_font(ctx, pick_font(app, 19, 1));
-            reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL,
-                              "Proceed with login", 0);
-        nk_label(ctx, "Proceed with login", NK_TEXT_LEFT);
-        nk_style_pop_font(ctx);
-        nk_layout_row_end(ctx);
+            {
+                int used = (int)app->edit.string.len;
+                reaktor_field(&(reaktor_field_spec){
+                    .buf = app->edit_buf, .len = &used,
+                    .cap = (int)sizeof(app->edit_buf),
+                    .hint = "you@example.com",
+                    .box = { .h = ROW_FIELD, .flags = REAKTOR_LAY_FILL_X,
+                             .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
+            }
 
-        nk_layout_row_dynamic(ctx, ROW_FIELD, 1);
-        {
-            int used = (int)app->edit.string.len;
-            css_field(app, ctx, app->edit_buf, &used, sizeof(app->edit_buf),
-                      "you@example.com");
-        }
+            reaktor_button(&(reaktor_button_spec){
+                .label = "Continue with email", .accent = 1,
+                .box = { .h = ROW_BUTTON, .flags = REAKTOR_LAY_FILL_X,
+                         .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
-        nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
-        css_button_accent(app, ctx, "button", "Continue with email", "--links");
+            reaktor_label(&(reaktor_label_spec){
+                .text = "or", .style = ".card-note", .centred = 1,
+                .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                         .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
-        nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-        nk_style_push_font(ctx, pick_font(app, 16, 0));
-        nk_label(ctx, "or", NK_TEXT_CENTERED);
-        nk_style_pop_font(ctx);
+            reaktor_button(&(reaktor_button_spec){
+                .label = "Use a passkey", .icon = "key-outline",
+                .box = { .h = ROW_BUTTON, .flags = REAKTOR_LAY_FILL_X,
+                         .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
+            reaktor_button(&(reaktor_button_spec){
+                .label = "Use biometrics", .icon = "finger-print-outline",
+                .box = { .h = ROW_BUTTON, .flags = REAKTOR_LAY_FILL_X,
+                         .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
-        {
-            char key_src[160], bio_src[160];
+            if (reaktor_link(&(reaktor_link_spec){
+                    .text = app->show_contact ? "hide contact" : "contact",
+                    .style = ".card-link",
+                    .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                             .ml = CARD_PAD_X, .mr = CARD_PAD_X } }))
+                app->show_contact = !app->show_contact;
 
-            SDL_snprintf(key_src, sizeof(key_src),
-                         "third_party/ionicons/src/svg/"
-                         "key-outline.svg?stroke=%s", app->icon_hex);
-            SDL_snprintf(bio_src, sizeof(bio_src),
-                         "third_party/ionicons/src/svg/"
-                         "finger-print-outline.svg?stroke=%s", app->icon_hex);
+            if (app->show_contact) {
+                /* Stub, and obviously so: the reserved example.com domain and
+                 * an Ofcom drama number, which cannot reach anyone. */
+                static const char *const lines[CONTACT_ROWS] = {
+                    "support@reaktor.example",
+                    "+44 20 7946 0958",
+                    "Mon-Fri, 09:00-17:00 UTC"
+                };
+                int i;
 
-            nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
-            css_button_icon(app, ctx, "button", key_src, "Use a passkey");
-
-            nk_layout_row_dynamic(ctx, ROW_BUTTON, 1);
-            css_button_icon(app, ctx, "button", bio_src, "Use biometrics");
-        }
-
-        /* The scheme switch is a property of the window, not this page, so it
-         * lives in the tab strip beside the titlebar switch. */
-        nk_style_push_font(ctx, pick_font(app, 14, 0));
-
-        nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-        if (text_link(app, ctx,
-                      app->show_contact ? "hide contact" : "contact", 0))
-            app->show_contact = !app->show_contact;
-
-        if (app->show_contact) {
-            /* Stub, and obviously so: the reserved example.com domain and an
-             * Ofcom drama number, which cannot reach anyone. */
-            static const char *const lines[CONTACT_ROWS] = {
-                "support@reaktor.example",
-                "+44 20 7946 0958",
-                "Mon-Fri, 09:00-17:00 UTC"
-            };
-            int i;
-
-            for (i = 0; i < CONTACT_ROWS; i++) {
-                nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-                reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, lines[i], 0);
-                nk_label(ctx, lines[i], NK_TEXT_CENTERED);
+                for (i = 0; i < CONTACT_ROWS; i++)
+                    reaktor_label(&(reaktor_label_spec){
+                        .text = lines[i], .style = ".card-link", .centred = 1,
+                        .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                                 .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
             }
         }
-        nk_style_pop_font(ctx);
-
-        nk_style_pop_vec2(ctx);
-        reaktor_note_pop(app);
         nk_group_end(ctx);
     }
     nk_style_pop_vec2(ctx);            /* group_padding */

@@ -4,45 +4,48 @@
  * grammar, and C99 spells it natively - a compound literal for the first, a
  * scope for the second:
  *
- *     REAKTOR_COLUMN(.gap = 10) {
- *         REAKTOR_ROW(.gap = 5) {
- *             if (reaktor_button(&(reaktor_button_spec){ .label = "Save" }))
- *                 save_to(&doc);
+ *     REAKTOR_COLUMN(.gap = 15, .ml = 22, .mr = 22) {
+ *         REAKTOR_ROW(.h = 28, .gap = 10) {
+ *             reaktor_icon(&(reaktor_icon_spec){ .name = "person-circle" });
+ *             reaktor_label(&(reaktor_label_spec){
+ *                 .text = "Proceed with login", .style = ".card-title",
+ *                 .box  = { .flags = REAKTOR_LAY_FILL_X } });
  *         }
- *         reaktor_label(&(reaktor_label_spec){ .text = doc.title });
+ *         if (reaktor_button(&(reaktor_button_spec){
+ *                 .label = "Continue with email", .accent = 1 }))
+ *             submit(&form);
  *     }
  *
  * That `if` is why there are no callbacks here. A retained toolkit has to hand
  * you one: its widget outlives the code that built it, so the click arrives
  * somewhere else, later, with a void * to find its way home. This widget *is*
  * that code. Its answer is a return value, and the enclosing scope - locals,
- * loop variables and all - is still on the stack when it comes back. Nothing
- * a callback can carry beats that.
+ * loop variables and all - is still on the stack when it comes back.
  *
- * Sizes are optional because a widget knows its own: a label is as wide as its
- * text in the font the stylesheet chose, and `.label = "Save"` is a whole
- * button. Give a size only where you mean to override one.
+ * Sizes are optional because a widget knows its own, and `.style` names a CSS
+ * selector rather than a number, because a size written here would be the one
+ * thing the premise does not allow. See assets/reaktor.css.
  *
  * ONE RULE THE COMPILER CANNOT ENFORCE: do not `return`, `break` or `goto` out
  * of a container scope. C has no defer, so the closing call would be skipped
  * and the tree left open. It is the same contract nk_begin/nk_end already
- * impose on every page in this tree, and it fails the same way - loudly, on
- * the next frame, not silently.
+ * impose on every page in this tree.
  */
 #ifndef REAKTOR_DECLARE_H
 #define REAKTOR_DECLARE_H
 
 #include "layout.h"
 
+#ifndef REAKTOR_APP_FWD
+#define REAKTOR_APP_FWD
 typedef struct App App;
+#endif
 
 /* --- the frame ---------------------------------------------------------- */
 
 /* One screen is being described at a time - that is what immediate mode
  * means - so the frame's context is held here rather than threaded through
- * every call. Passing it everywhere would put the plumbing back into the page,
- * which is the thing being taken out. The runtime opens and closes this; a
- * page never does. */
+ * every call. The runtime opens and closes this; a page never does. */
 void reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area);
 void reaktor_frame_end(void);
 
@@ -52,7 +55,7 @@ void reaktor_box_open(unsigned char dir, const reaktor_box *b);
 void reaktor_box_close(void);
 
 /* A run-once for, so the body is a scope rather than a pair of calls the
- * caller has to balance. The odd name is deliberate: it appears in the
+ * caller has to balance. The odd variable name is deliberate: it lands in the
  * caller's scope, and something shorter would collide with a local. */
 #define REAKTOR_BOX_SCOPE_(axis, ...)                                        \
     for (int reaktor_box_scope_ =                                            \
@@ -63,6 +66,10 @@ void reaktor_box_close(void);
 
 #define REAKTOR_ROW(...)    REAKTOR_BOX_SCOPE_(REAKTOR_LAY_ROW, __VA_ARGS__)
 #define REAKTOR_COLUMN(...) REAKTOR_BOX_SCOPE_(REAKTOR_LAY_COLUMN, __VA_ARGS__)
+
+/* Nothing, taking up room. A gap between two children is the container's
+ * `gap`; this is for the one place a single hole is wanted. */
+void reaktor_gap(float w, float h);
 
 /* --- handlers ----------------------------------------------------------- */
 
@@ -79,12 +86,15 @@ typedef struct reaktor_handler {
 
 /* --- widgets ------------------------------------------------------------ */
 
-/* Common to every spec. `name` is what a screen reader hears when the visible
- * text is not enough - an icon-only button, a field whose label sits beside
- * it. `box` overrides the size the widget would choose for itself. */
+/* Common to the specs below. `name` is what a screen reader hears when the
+ * visible text is not enough. `style` is a CSS selector - ".card-title" - and
+ * supplies the type; without one the widget takes the frame's font. `box`
+ * overrides the size the widget would otherwise choose for itself. */
 typedef struct reaktor_button_spec {
     const char     *label;
+    const char     *icon;      /* an Ionicons name, without path or suffix */
     const char     *name;
+    const char     *style;
     const char     *keys;      /* the chords that reach it; see keys.h */
     reaktor_box     box;
     reaktor_handler on_press;
@@ -96,11 +106,50 @@ typedef struct reaktor_button_spec {
 int reaktor_button(const reaktor_button_spec *s);
 
 typedef struct reaktor_label_spec {
-    const char *text;
-    const char *name;          /* when the text is not what should be read */
-    reaktor_box box;
+    const char   *text;
+    const char   *name;        /* when the text is not what should be read */
+    const char   *style;
+    reaktor_box   box;
+    unsigned char centred;
 } reaktor_label_spec;
 
 void reaktor_label(const reaktor_label_spec *s);
+
+/* An Ionicon, drawn at the size of its box. `stroke` is a "#rrggbb" the
+ * artwork is recoloured to, or NULL for the accent. */
+typedef struct reaktor_icon_spec {
+    const char   *name;     /* an Ionicons name, without path or suffix */
+    reaktor_box   box;
+    unsigned char accent;   /* the stylesheet's --links, not the muted stroke */
+} reaktor_icon_spec;
+
+void reaktor_icon(const reaktor_icon_spec *s);
+
+/* A text field, with `hint` painted into it while it is empty. `len` is the
+ * caller's, because the text is the caller's. */
+typedef struct reaktor_field_spec {
+    char       *buf;
+    int        *len;
+    int         cap;
+    const char *hint;
+    const char *name;
+    const char *style;
+    reaktor_box box;
+} reaktor_field_spec;
+
+void reaktor_field(const reaktor_field_spec *s);
+
+/* Text that acts. Reported as a link rather than a button, because that is
+ * what it looks like and what it should be read as. */
+typedef struct reaktor_link_spec {
+    const char     *text;
+    const char     *name;
+    const char     *style;
+    reaktor_box     box;
+    reaktor_handler on_press;
+    unsigned char   active;    /* drawn in the link colour rather than muted */
+} reaktor_link_spec;
+
+int reaktor_link(const reaktor_link_spec *s);
 
 #endif /* REAKTOR_DECLARE_H */

@@ -166,6 +166,14 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
     id = base ^ ((unsigned)sl->val * 0x85ebca6bu);
     sl->val++;
     if (id == 0) id = 1;   /* 0 is the window's parent, so it cannot be a node */
+
+    /* Decorative: an icon that repeats its label, a box that is only spacing.
+     * The id is still computed and the occurrence counter still advances, so
+     * ids stay stable either way - but nothing is added, because a reader has
+     * no use for a node with no role and no name, and every bridge would have
+     * to filter it out again. */
+    if (role == REAKTOR_A11Y_NONE) return id;
+
     if (id == a->focus_id) state |= REAKTOR_A11Y_FOCUSED;
 
     n = &a->node[f][a->count[f]++];

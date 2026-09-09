@@ -10,7 +10,10 @@
 #include "nk_common.h"
 #include "a11y.h"
 
+#ifndef REAKTOR_APP_FWD
+#define REAKTOR_APP_FWD
 typedef struct App App;
+#endif
 
 /* Startup milestones, sampled into reaktor_diag::rss_at so the diagnostics
  * page can report what each step of the startup cost. They live here rather
@@ -92,6 +95,9 @@ int  reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b);
 void reaktor_unfit_label(struct nk_context *ctx, int fitted);
 
 int reaktor_button_label(App *app, struct nk_context *ctx, const char *label);
+/* Text that acts. `active` draws it in the link colour rather than muted. */
+int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
+                       int active);
 int reaktor_button_accent(App *app, struct nk_context *ctx, const char *label);
 int reaktor_button_icon(App *app, struct nk_context *ctx,
                         const char *ionicon, const char *label);
@@ -102,7 +108,7 @@ int reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
 
 /* A text field styled from tiny.css's `input` rule, with `hint` painted into
  * it while it is empty. Nuklear has no placeholder of its own. */
-nk_flags reaktor_field(App *app, struct nk_context *ctx, nk_flags flags,
+nk_flags reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
                        char *buf, int *len, int cap, const char *hint,
                        nk_plugin_filter filter);
 
@@ -152,6 +158,10 @@ void reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
 void reaktor_note_keys(App *app, unsigned id, const char *keys);
 /* Where the node `id` was placed, once the layout engine has said. */
 void reaktor_note_bounds(App *app, unsigned id, struct nk_rect r);
+/* Stops reports being recorded while a widget that already reports itself is
+ * drawn by one that has reported it. Nested, so it is safe to bracket a call
+ * that brackets another. Goes away with the imperative surface in stage 08. */
+void reaktor_note_mute(App *app, int on);
 /* Convenience for the common case: the widget just drawn, at the bounds the
  * layout gave it, with no value. */
 unsigned reaktor_note_here(App *app, struct nk_context *ctx,

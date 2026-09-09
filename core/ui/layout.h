@@ -36,7 +36,14 @@ enum {
      * and not what Nuklear was doing before, so the default here is the top
      * left corner and centring is something you ask for. */
     REAKTOR_LAY_CENTER_X = 1u << 3,
-    REAKTOR_LAY_CENTER_Y = 1u << 4
+    REAKTOR_LAY_CENTER_Y = 1u << 4,
+    /* And the same trap on the other axis: LAY_MIDDLE is 0x000 too, so a
+     * container that says nothing centres its children along its own axis and
+     * every one of them drifts by half the leftover. Children start at the
+     * beginning here; these ask for anything else. */
+    REAKTOR_LAY_PACK_CENTER = 1u << 5,
+    REAKTOR_LAY_PACK_END    = 1u << 6,
+    REAKTOR_LAY_PACK_SPREAD = 1u << 7
 };
 
 /* One box. Every field is optional, which is the whole point: a designated
@@ -47,12 +54,22 @@ enum {
  * whatever is left over, 0 meaning an equal share. `gap` separates its
  * children, and the margins are its own. */
 typedef struct reaktor_box {
+    /* First on purpose. The scope macros write `{ 0, __VA_ARGS__ }` so that a
+     * container with nothing to say still has a legal initialiser, and that 0
+     * lands on whichever member comes first - which a caller then overrides,
+     * and every compiler with -Winitializer-overrides says so. `dir` is the
+     * one member no caller ever sets: the macro supplies it from the axis it
+     * was called as. So the 0 lands somewhere harmless and stays quiet. */
+    unsigned char dir;      /* a container's axis: _ROW or _COLUMN */
+    /* What a reader is told this container is. Nothing in this file reads it -
+     * it rides along because the scope macros take one struct - but a named
+     * container is a named group in the accessibility tree. */
+    const char   *name;
     float         w, h;
     float         weight;
     float         gap;
     float         ml, mt, mr, mb;
     unsigned      flags;    /* REAKTOR_LAY_FILL_* | REAKTOR_LAY_WRAP */
-    unsigned char dir;      /* a container's axis: _ROW or _COLUMN */
 } reaktor_box;
 
 /* Enough for the busiest page twice over, and the same failure as the

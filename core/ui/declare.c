@@ -1,38 +1,86 @@
 /* declare.c - see declare.h.
  *
- * Every widget here is three steps and no drawing of its own:
+ * Every widget here is four steps and no drawing of its own:
  *
  *   1. report itself to the accessibility tree, which answers with an id;
  *   2. declare a box under that id, and ask layout where the same id went on
  *      the previous frame;
- *   3. draw there, through the imperative helper that already knows how.
+ *   3. hand that rect to Nuklear as an absolute placement;
+ *   4. draw through the imperative helper that already knows how.
  *
- * Step 3 is why this file is short and why behaviour cannot drift: nothing is
+ * Step 4 is why this file is short and why behaviour cannot drift: nothing is
  * reimplemented. Step 1 comes first because the id is what steps 2 and 3 both
  * need, and reaktor_note computes it from the tree's shape rather than from
  * anything on screen - so it is available before the widget knows where it is.
+ *
+ * Step 3 is the one with a trap in it. nk_layout_space_begin opens a row, and
+ * calling it per widget stacks a row per widget and advances the panel's
+ * cursor under every one of them. So the *outermost* container opens exactly
+ * one space, every widget inside pushes into that, and the rect is converted
+ * with nk_layout_space_rect_to_local because a pushed rect is local to the space
+ * and ours are the window's.
  */
 #include "internal.h"
 #include "declare.h"
 
 /* The frame being described. See declare.h on why this is not an argument. */
-static App              *g_app;
+static App               *g_app;
 static struct nk_context *g_ctx;
+static int                g_depth;   /* containers open */
+static int                g_space;   /* a Nuklear space is open */
+static int                g_unplaced; /* boxes with nowhere to go this frame */
 
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
 {
-    g_app = app;
-    g_ctx = ctx;
+    g_app   = app;
+    g_ctx   = ctx;
+    g_depth    = 0;
+    g_space    = 0;
+    g_unplaced = 0;
     reaktor_layout_begin(&app->lay, area);
 }
 
 void
 reaktor_frame_end(void)
 {
-    if (g_app) reaktor_layout_end(&g_app->lay);
+    if (!g_app) return;
+    /* A page that left a container open still gets its space closed, because
+     * Nuklear would draw the rest of the frame into it otherwise. */
+    if (g_space) { nk_layout_space_end(g_ctx); g_space = 0; }
+    reaktor_layout_end(&g_app->lay);
+
+    /* Anything declared for the first time was measured just now and has
+     * nowhere to have been drawn, so the frame that shows it is the next one -
+     * and this application only draws when something asks it to. On a desktop
+     * a stray event usually arrives and hides that; in a browser nothing does,
+     * and the page came up as an empty card that stayed empty. So the frame
+     * that measures asks for the frame that draws. */
+    if (g_unplaced) {
+        SDL_Event e;
+
+        g_app->dirty = 1;
+        SDL_zero(e);
+        e.type = SDL_EVENT_USER;
+        SDL_PushEvent(&e);
+    }
     g_app = NULL;
     g_ctx = NULL;
+}
+
+/* The type a selector asks for, pushed for one widget. Answers whether
+ * anything was pushed, so the caller knows whether to pop. A selector with no
+ * rule behind it leaves the frame's own font in place rather than guessing. */
+static int
+push_style_font(const char *selector)
+{
+    reaktor_style st;
+
+    if (!selector || !g_ctx) return 0;
+    reaktor_style_get(selector, &st);
+    if (!st.matched || st.font_px <= 0) return 0;
+    nk_style_push_font(g_ctx, pick_font(g_app, st.font_px, st.bold));
+    return 1;
 }
 
 void
@@ -45,79 +93,135 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     box = *b;
     box.dir = dir;
 
-    /* A container is a group in the tree: it has no name of its own, and a
-     * reader walks through it to its children. */
-    id = reaktor_note_push(g_app, REAKTOR_A11Y_GROUP, NULL, NULL, 0u,
+    /* A container is a group in the tree: no name of its own, and a reader
+     * walks through it to its children. */
+    id = reaktor_note_push(g_app, REAKTOR_A11Y_GROUP, box.name, NULL, 0u,
                            nk_rect(0, 0, 0, 0));
     reaktor_layout_open(&g_app->lay, id, &box);
+
     {
         struct nk_rect r;
-        if (reaktor_layout_rect(&g_app->lay, id, &r))
+
+        if (reaktor_layout_rect(&g_app->lay, id, &r)) {
             reaktor_note_bounds(g_app, id, r);
+            /* One space for the whole tree, opened by whichever container is
+             * outermost. A page that declares nothing opens none, which is
+             * what lets the old API keep working beside this one. */
+            if (g_depth == 0) {
+                nk_layout_space_begin(g_ctx, NK_STATIC, r.h, REAKTOR_LAY_MAX);
+                g_space = 1;
+            }
+        } else {
+            g_unplaced++;
+        }
     }
+    g_depth++;
 }
 
 void
 reaktor_box_close(void)
 {
     if (!g_app) return;
+    if (g_depth > 0) g_depth--;
+    if (g_depth == 0 && g_space) {
+        nk_layout_space_end(g_ctx);
+        g_space = 0;
+    }
     reaktor_layout_close(&g_app->lay);
     reaktor_note_pop(g_app);
 }
 
-/* Steps 1 and 2, which every widget shares. Answers 0 when layout has not
- * placed this box yet - the first frame it exists, and the frame after the
- * tree changed shape - in which case the caller draws nothing at all rather
- * than drawing it somewhere wrong. */
+/* Steps 1 to 3, which every widget shares. Answers 0 when layout has not
+ * placed this box yet - its first frame, and the frame after the tree changed
+ * shape - in which case the caller draws nothing rather than somewhere wrong.
+ * `role` of NONE reports no node at all, for a box that is only spacing. */
 static int
 place(unsigned char role, const char *name, const char *value, unsigned state,
-      const char *keys, const reaktor_box *b, unsigned *out_id,
-      struct nk_rect *out_rect)
+      const char *keys, const reaktor_box *b, unsigned *out_id)
 {
-    unsigned id = reaktor_note(g_app, role, name, value, state,
-                               nk_rect(0, 0, 0, 0));
+    struct nk_rect r;
+    unsigned       id;
 
-    *out_id = id;
+    if (!g_app) return 0;
+
+    id = role ? reaktor_note(g_app, role, name, value, state,
+                             nk_rect(0, 0, 0, 0))
+              : reaktor_note(g_app, REAKTOR_A11Y_NONE, NULL, NULL, 0u,
+                             nk_rect(0, 0, 0, 0));
+    if (out_id) *out_id = id;
+
+    /* Declared before anything else can go wrong. A box that is not declared
+     * is not measured, and a box that is not measured never gets a rect - so
+     * bailing out early here is what kept every widget on this page at 0,0
+     * for every frame after the first, not just the first. */
     reaktor_layout_leaf(&g_app->lay, id, b);
     if (keys) reaktor_note_keys(g_app, id, keys);
-    if (!reaktor_layout_rect(&g_app->lay, id, out_rect)) return 0;
-    reaktor_note_bounds(g_app, id, *out_rect);
+
+    if (!g_space) { g_unplaced++; return 0; }   /* nothing to draw into yet */
+    if (!reaktor_layout_rect(&g_app->lay, id, &r)) { g_unplaced++; return 0; }
+    reaktor_note_bounds(g_app, id, r);
+
+    nk_layout_space_push(g_ctx, nk_layout_space_rect_to_local(g_ctx, r));
     return 1;
+}
+
+/* A box's own size, or what the text needs in the font a selector chose. */
+static void
+size_to_text(reaktor_box *box, const char *text, const char *selector,
+             float pad_x, float pad_y)
+{
+    const struct nk_user_font *f = g_ctx->style.font;
+    reaktor_style              st;
+
+    if (selector) {
+        reaktor_style_get(selector, &st);
+        if (st.matched && st.font_px > 0)
+            f = pick_font(g_app, st.font_px, st.bold);
+    }
+    if (box->w <= 0.0f && text)
+        box->w = f->width(f->userdata, f->height, text, (int)strlen(text))
+               + 2.0f * pad_x;
+    if (box->h <= 0.0f)
+        box->h = f->height + 2.0f * pad_y;
+}
+
+void
+reaktor_gap(float w, float h)
+{
+    reaktor_box box;
+
+    memset(&box, 0, sizeof(box));
+    box.w = w;
+    box.h = h;
+    (void)place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL);
 }
 
 int
 reaktor_button(const reaktor_button_spec *s)
 {
-    reaktor_box    box;
-    struct nk_rect r;
-    unsigned       id;
-    int            hit;
+    reaktor_box box;
+    unsigned    id = 0;
+    int         hit, styled;
 
     if (!g_app || !s) return 0;
     box = s->box;
-    /* A button is as wide as its label unless told otherwise; the stylesheet
-     * owns the padding, so this asks Nuklear's own measurement for it. */
-    if (box.w <= 0.0f && s->label)
-        box.w = g_ctx->style.font->width(g_ctx->style.font->userdata,
-                                         g_ctx->style.font->height, s->label,
-                                         (int)strlen(s->label))
-              + 2.0f * g_ctx->style.button.padding.x;
-    if (box.h <= 0.0f)
-        box.h = g_ctx->style.font->height
-              + 2.0f * g_ctx->style.button.padding.y;
+    size_to_text(&box, s->label, s->style,
+                 g_ctx->style.button.padding.x, g_ctx->style.button.padding.y);
 
     if (!place(REAKTOR_A11Y_BUTTON, s->name ? s->name : s->label, NULL,
-               s->disabled ? REAKTOR_A11Y_DISABLED : 0u, s->keys, &box,
-               &id, &r))
+               s->disabled ? REAKTOR_A11Y_DISABLED : 0u, s->keys, &box, &id))
         return 0;
 
-    /* Placed absolutely, because the layout engine has already decided where
-     * this goes; nk_layout_space is how Nuklear is told a caller means it. */
-    nk_layout_space_begin(g_ctx, NK_STATIC, r.h, 1);
-    nk_layout_space_push(g_ctx, nk_rect(r.x, r.y, r.w, r.h));
-    hit = s->accent ? reaktor_button_accent(g_app, g_ctx, s->label)
-                    : reaktor_button_label(g_app, g_ctx, s->label);
-    nk_layout_space_end(g_ctx);
+    styled = push_style_font(s->style);
+    /* The helpers below report themselves - they were written to be called
+     * directly by a page. Here the node already exists, so the inner one is
+     * muted rather than allowed to arrive as a duplicate. */
+    reaktor_note_mute(g_app, 1);
+    if (s->icon)        hit = reaktor_button_icon(g_app, g_ctx, s->icon, s->label);
+    else if (s->accent) hit = reaktor_button_accent(g_app, g_ctx, s->label);
+    else                hit = reaktor_button_label(g_app, g_ctx, s->label);
+    reaktor_note_mute(g_app, 0);
+    if (styled) nk_style_pop_font(g_ctx);
 
     if (reaktor_focus_activated(g_app, id)) hit = 1;
     if (hit && s->on_press.fn) s->on_press.fn(s->on_press.user);
@@ -127,24 +231,92 @@ reaktor_button(const reaktor_button_spec *s)
 void
 reaktor_label(const reaktor_label_spec *s)
 {
-    reaktor_box    box;
-    struct nk_rect r;
-    unsigned       id;
+    reaktor_box box;
+    int         styled;
 
     if (!g_app || !s || !s->text) return;
     box = s->box;
-    if (box.w <= 0.0f)
-        box.w = g_ctx->style.font->width(g_ctx->style.font->userdata,
-                                         g_ctx->style.font->height, s->text,
-                                         (int)strlen(s->text));
-    if (box.h <= 0.0f) box.h = g_ctx->style.font->height;
+    size_to_text(&box, s->text, s->style, 0.0f, 0.0f);
 
     if (!place(REAKTOR_A11Y_LABEL, s->name ? s->name : s->text, NULL, 0u, NULL,
-               &box, &id, &r))
+               &box, NULL))
         return;
 
-    nk_layout_space_begin(g_ctx, NK_STATIC, r.h, 1);
-    nk_layout_space_push(g_ctx, nk_rect(r.x, r.y, r.w, r.h));
-    nk_label(g_ctx, s->text, NK_TEXT_LEFT);
-    nk_layout_space_end(g_ctx);
+    styled = push_style_font(s->style);
+    nk_label(g_ctx, s->text, s->centred ? NK_TEXT_CENTERED : NK_TEXT_LEFT);
+    if (styled) nk_style_pop_font(g_ctx);
+}
+
+void
+reaktor_icon(const reaktor_icon_spec *s)
+{
+    reaktor_box     box;
+    struct nk_image im;
+    int             px;
+
+    if (!g_app || !s || !s->name) return;
+    box = s->box;
+    if (box.w <= 0.0f) box.w = box.h > 0.0f ? box.h : 24.0f;
+    if (box.h <= 0.0f) box.h = box.w;
+    px = (int)box.w;
+
+    /* The bare name, not a path: reaktor_ionicon builds the path, applies the
+     * hairline rule for small sizes and reads the artwork straight out of the
+     * submodule. Handing it a path made it build a second one and the icon
+     * came out blank. */
+    im = s->accent
+       ? reaktor_ionicon_col(g_app, s->name, px,
+                             reaktor_token("--links", g_app->text))
+       : reaktor_ionicon(g_app, s->name, px);
+
+    if (!place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL)) return;
+    reaktor_image(g_app, g_ctx, im, px);
+}
+
+void
+reaktor_field(const reaktor_field_spec *s)
+{
+    reaktor_box box;
+    unsigned    id = 0;
+
+    if (!g_app || !s || !s->buf || !s->len) return;
+    box = s->box;
+    if (box.h <= 0.0f) box.h = g_ctx->style.font->height + 20.0f;
+
+    /* The hint names the field when nothing else does - it is what a sighted
+     * user reads off the empty box - and the value is whatever has been typed
+     * into it, which is nothing until it is. */
+    if (!place(REAKTOR_A11Y_TEXTBOX, s->name ? s->name : s->hint,
+               s->buf[0] ? s->buf : NULL, 0u, NULL, &box, &id))
+        return;
+    reaktor_note_mute(g_app, 1);
+    (void)reaktor_field_text(g_app, g_ctx, NK_EDIT_FIELD, s->buf, s->len,
+                             s->cap, s->hint, NULL);
+    reaktor_note_mute(g_app, 0);
+}
+
+int
+reaktor_link(const reaktor_link_spec *s)
+{
+    reaktor_box box;
+    unsigned    id = 0;
+    int         hit, styled;
+
+    if (!g_app || !s || !s->text) return 0;
+    box = s->box;
+    size_to_text(&box, s->text, s->style, 0.0f, 0.0f);
+
+    if (!place(REAKTOR_A11Y_LINK, s->name ? s->name : s->text, NULL,
+               s->active ? REAKTOR_A11Y_SELECTED : 0u, NULL, &box, &id))
+        return 0;
+
+    styled = push_style_font(s->style);
+    reaktor_note_mute(g_app, 1);
+    hit = reaktor_link_label(g_app, g_ctx, s->text, s->active);
+    reaktor_note_mute(g_app, 0);
+    if (styled) nk_style_pop_font(g_ctx);
+
+    if (reaktor_focus_activated(g_app, id)) hit = 1;
+    if (hit && s->on_press.fn) s->on_press.fn(s->on_press.user);
+    return hit;
 }

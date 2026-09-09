@@ -88,7 +88,9 @@ static void rss_mark(int step)
 
 /* tiny.css keeps palette and rules in separate files, so a theme is which
  * variables file loads in front of core.css. Read from the submodule. */
-#define SHEET_COUNT 2
+/* Three: tiny.css's palette, tiny.css's rules, and this application's own
+ * layer on top - see assets/reaktor.css for why the third one exists. */
+#define SHEET_COUNT 3
 static const char *
 theme_sheet(int dark)
 {
@@ -96,6 +98,7 @@ theme_sheet(int dark)
                 : "third_party/tinycss/src/variables-light.css";
 }
 #define CORE_SHEET "third_party/tinycss/src/core.css"
+#define APP_SHEET  "assets/reaktor.css"
 
 /* Which scheme the user asked for, as opposed to which one is in force. */
 #define THEME_SYSTEM 0

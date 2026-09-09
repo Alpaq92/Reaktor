@@ -21,7 +21,18 @@ static uint32_t
 contain_of(const reaktor_box *b)
 {
     uint32_t f = (b->dir == REAKTOR_LAY_COLUMN) ? LAY_COLUMN : LAY_ROW;
+
     if (b->flags & REAKTOR_LAY_WRAP) f |= LAY_WRAP;
+
+    /* Onlay's justify is LAY_MIDDLE at 0x000, so a container that asks for
+     * nothing centres its children on its own axis - and every child then
+     * carries half the leftover as an offset. That is the second time this
+     * file has had to spell out a default of Onlay's: the cross axis does it
+     * too, in behave_of below. Start is what a page means. */
+    if (b->flags & REAKTOR_LAY_PACK_CENTER)      f |= LAY_MIDDLE;
+    else if (b->flags & REAKTOR_LAY_PACK_END)    f |= LAY_END;
+    else if (b->flags & REAKTOR_LAY_PACK_SPREAD) f |= LAY_JUSTIFY;
+    else                                         f |= LAY_START;
     return f;
 }
 
