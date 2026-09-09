@@ -8,8 +8,9 @@
 #     ./build-wasm.sh            # build
 #     ./build-wasm.sh --serve    # build, then serve it on :8000
 #
-# emsdk is looked for in $EMSDK, then beside emcc on PATH, then in ~/emsdk.
-# If none of those has it:
+# emsdk is looked for in $EMSDK, then beside emcc on PATH, then in ~/emsdk, and
+# failing all three a packaged Emscripten is taken instead. If none of them has
+# it:
 #     git clone https://github.com/emscripten-core/emsdk
 #     cd emsdk && ./emsdk install latest && ./emsdk activate latest
 #
@@ -48,10 +49,36 @@ fi
 [ -n "$emsdk" ] || emsdk="$HOME/emsdk"
 
 toolchain="$emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+
+# Nothing there means either no Emscripten at all or a packaged one: the BSD
+# ports and the Linux distributions ship the same tree with no emsdk around it,
+# dropped into a libdir with emcc symlinked onto PATH. Only reached once the
+# emsdk layout above has come up empty, so an emsdk install takes the path it
+# always did.
+if [ ! -f "$toolchain" ] && command -v emcc >/dev/null 2>&1; then
+    emcc_bin=$(command -v emcc)
+    emcc_dir=$(dirname -- "$emcc_bin")
+    # Following the symlink finds the root whatever the package called it.
+    # readlink -f is absent on macOS before 12.3, so two spelled-out layouts
+    # stand behind it.
+    packaged=$(readlink -f "$emcc_bin" 2>/dev/null || echo "")
+    if [ -n "$packaged" ]; then
+        packaged=$(dirname -- "$packaged")
+    fi
+    for candidate in "$packaged" "$emcc_dir/../lib/emscripten" "$emcc_dir/../share/emscripten"; do
+        [ -n "$candidate" ] || continue
+        [ -f "$candidate/cmake/Modules/Platform/Emscripten.cmake" ] || continue
+        emsdk=$(CDPATH= cd -- "$candidate" && pwd)
+        toolchain="$emsdk/cmake/Modules/Platform/Emscripten.cmake"
+        break
+    done
+fi
+
 if [ ! -f "$toolchain" ]; then
-    echo "build-wasm.sh: emsdk not found at $emsdk" >&2
+    echo "build-wasm.sh: no Emscripten found (looked for an emsdk at $emsdk)" >&2
     echo "  clone https://github.com/emscripten-core/emsdk, run './emsdk install latest'" >&2
     echo "  then './emsdk activate latest', or set EMSDK to an existing one" >&2
+    echo "  or install your system's emscripten package" >&2
     exit 1
 fi
 

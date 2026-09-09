@@ -96,8 +96,10 @@ and the fix sticks. Full context lives in [docs/PERFORMANCE.md](docs/PERFORMANCE
 ```
 
 The shell script looks for emsdk in `$EMSDK`, then beside an `emcc` already on
-`PATH`, then in `~/emsdk`. `--serve` builds and then serves the result, which
-is worth knowing because a `file://` page cannot fetch the `.wasm`:
+`PATH`, then in `~/emsdk`; failing all three it takes a packaged Emscripten, the
+kind the BSD ports and the Linux distributions install with no emsdk around it.
+`--serve` builds and then serves the result, which is worth knowing because a
+`file://` page cannot fetch the `.wasm`:
 
 ```bash
 python3 -m http.server -d build-wasm 8000
