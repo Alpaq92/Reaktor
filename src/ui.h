@@ -95,6 +95,23 @@ int  reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b);
 void reaktor_unfit_label(struct nk_context *ctx, int fitted);
 
 int reaktor_button_label(App *app, struct nk_context *ctx, const char *label);
+/* One Ionicon centred in `slot` at exactly px, no resampling - which is what
+ * keeps a rim a line rather than a smear. `sw` multiplies the artwork's own
+ * stroke; 0 takes the hairline rule. The disc names below go with it: a
+ * circle is the one shape the software rasteriser cannot draw, so every
+ * circle in this tree is a glyph. */
+void reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
+                      const char *name, struct nk_color col, int px, float sw);
+#define REAKTOR_DISC_ROUND   "ellipse"
+#define REAKTOR_DISC_RING    "radio-button-off"
+#define REAKTOR_DISC_OUTLINE "ellipse-outline"
+
+/* A radio, drawn as a glyph rather than as Nuklear's three filled circles -
+ * see the note on the definition. `on` is whether this one is the chosen one;
+ * answers whether it was clicked. */
+int reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
+                        int on);
+
 /* Text that acts. `active` draws it in the link colour rather than muted. */
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);

@@ -256,26 +256,22 @@ combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
  * centred in the slot Nuklear sized. */
 #define CHEVRON_PX 14
 
-/* One Ionicon centred in `slot`, at exactly px and no resampling - which is
- * what keeps a rim a line rather than a smear. `sw` multiplies the stroke the
- * artwork declares; at zero the hairline rule decides, which is what a
- * chevron wants and twice what a rim does. */
-static void
-glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
-         const char *name, struct nk_color col, int px, float sw)
+/* A button that exists only to be looked at. Same as nk_button_label, plus
+ * the hover registration every interactive widget owes the shell now that the
+ * page-wide backstop no longer forces a frame. */
+static int
+demo_button(App *app, struct nk_context *ctx, const char *label)
 {
-    struct nk_rect r;
-    struct nk_image im;
+    unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
+    int fitted = reaktor_fit_label(app, ctx, nk_widget_bounds(ctx));
+    int hit = nk_button_label(ctx, label);
 
-    if (px < 1) return;
-    im = reaktor_ionicon_exact(app, name, px, col, sw);
-    /* A glyph the cache could not load has no handle, and nk_draw_image would
-     * paint the null texture - a white quad, which is worse than nothing. */
-    if (!im.handle.ptr) return;
-    r.w = r.h = (float)px;
-    r.x = slot.x + (slot.w - r.w) * 0.5f;
-    r.y = slot.y + (slot.h - r.h) * 0.5f;
-    nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
+    reaktor_unfit_label(ctx, fitted);
+
+    /* Both, always: `||` would short-circuit and leave the activation for the
+     * frame to turn into a second press. */
+    if (reaktor_focus_activated(app, id)) hit = 1;
+    return hit;
 }
 
 static void
@@ -291,19 +287,6 @@ chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
     nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
 }
 
-/* A circle is the one shape the software renderer cannot draw. Nuklear fills
- * one as a polygon and grades its rim with geometry a fraction of a pixel
- * wide; SDL's software rasteriser has no partial coverage, so that geometry
- * lands whole or not at all, and the pass that puts every vertex on the pixel
- * grid - right for a rect's edges, see nk_sdl_render_ex - quantises the arc
- * with it. A radio came out nineteen pixels across and seventeen high, with a
- * rim that jumped between five tones.
- *
- * A texture's alpha is blended per texel on both backends, so every circle on
- * a page is an Ionicon instead, drawn in the slot Nuklear sized. */
-#define DISC_ROUND   "ellipse"
-#define DISC_RING    "radio-button-off"
-#define DISC_OUTLINE "ellipse-outline"
 
 /* The knob is the accent and so is the fill it sits on the end of, so it
  * vanished into the bar. A shade off the fill tells them apart and keeps them
@@ -393,7 +376,7 @@ slider_cell(App *app, struct nk_context *ctx, unsigned id, float *val,
 
     reaktor_fill_round(app, cv, bar, cap, track);
     if (fl.w >= 1.0f) reaktor_fill_round(app, cv, fl, cap, filled);
-    glyph_at(app, ctx, kn, DISC_ROUND, knob,
+    reaktor_glyph_at(app, ctx, kn, REAKTOR_DISC_ROUND, knob,
              (int)(st->cursor_size.x < st->cursor_size.y ? st->cursor_size.x
                                                          : st->cursor_size.y),
              0.0f);
@@ -525,9 +508,9 @@ knob_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
                       - (float)dot_px * 0.5f,
                   (float)dot_px, (float)dot_px);
 
-    glyph_at(app, ctx, b,   DISC_ROUND,   face, px, 0.0f);
-    glyph_at(app, ctx, b,   DISC_OUTLINE, rim,  px, 0.5f);
-    glyph_at(app, ctx, dot, DISC_ROUND,   ink,  dot_px, 0.0f);
+    reaktor_glyph_at(app, ctx, b,   REAKTOR_DISC_ROUND,   face, px, 0.0f);
+    reaktor_glyph_at(app, ctx, b,   REAKTOR_DISC_OUTLINE, rim,  px, 0.5f);
+    reaktor_glyph_at(app, ctx, dot, REAKTOR_DISC_ROUND,   ink,  dot_px, 0.0f);
 }
 
 /* A stepper's hover wash, round rather than the square Nuklear draws: the
@@ -820,91 +803,6 @@ flags_cell(App *app, struct nk_context *ctx, const char *label,
     nk_spacer(ctx);
 }
 
-/* Nuklear draws a radio as three filled circles - ring, hollow, dot - which
- * is three staircases here. So it draws none of them and the icons go in the
- * rects nk_do_toggle uses: the selector is a font-height square at the right
- * of the cell, the cursor that square inset by padding and border. A checkbox
- * is squares and needs none of this. */
-static void
-radio_cell(App *app, struct nk_context *ctx, const char *label, int *sel,
-           int value)
-{
-    struct nk_rect r = nk_widget_bounds(ctx);
-    const struct nk_style_toggle *st = &ctx->style.option;
-    float h = ctx->style.font->height;
-    struct nk_rect ring, dot;
-
-    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
-    struct nk_style_item bg = st->normal, cursor = st->cursor_normal;
-    int side, dot_px;
-    int on = *sel == value;
-
-    {
-        unsigned id = hot(app, ctx, REAKTOR_A11Y_RADIO, label,
-                          on ? REAKTOR_A11Y_CHECKED : 0u);
-
-        if (reaktor_focus_activated(app, id)) { *sel = value; on = 1; }
-    }
-
-    /* Nuklear draws nothing for the circle: its fills are pushed transparent
-     * for the call, and the widget keeps its geometry, its label and its
-     * click. border_color has to go with them - nk_draw_option fills the
-     * whole selector with it before the background and does not ask whether
-     * there is a border, so leaving it stood a disc under everything here,
-     * which read as a second rim a pixel outside the real one. */
-    nk_style_push_style_item(ctx, &ctx->style.option.normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.active, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.cursor_normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.cursor_hover, clear);
-    nk_style_push_color(ctx, &ctx->style.option.border_color, clear.data.color);
-    nk_style_push_float(ctx, &ctx->style.option.border, 0.0f);
-    if (nk_option_label_align(ctx, label, on, CHECK_ALIGN))
-        *sel = value;
-    nk_style_pop_float(ctx);
-    nk_style_pop_color(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-
-    /* Then the circle: the hollow, the rim over it, and the dot inside. */
-    ring   = nk_rect(r.x + r.w - h, r.y + r.h * 0.5f - h * 0.5f, h, h);
-    dot    = nk_rect(ring.x + st->padding.x + st->border,
-                     ring.y + st->padding.y + st->border,
-                     h - 2.0f * (st->padding.x + st->border),
-                     h - 2.0f * (st->padding.y + st->border));
-    side   = (int)h;
-    dot_px = (int)dot.w;
-    if (bg.type == NK_STYLE_ITEM_COLOR)
-        glyph_at(app, ctx, ring, DISC_ROUND, bg.data.color, side, 0.0f);
-    glyph_at(app, ctx, ring, DISC_RING, st->border_color, side, 1.0f);
-    if (on && cursor.type == NK_STYLE_ITEM_COLOR)
-        glyph_at(app, ctx, dot, DISC_ROUND, cursor.data.color, dot_px, 0.0f);
-    nk_spacer(ctx);
-}
-
-/* A button that exists only to be looked at. Same as nk_button_label, plus
- * the hover registration every interactive widget owes the shell now that the
- * page-wide backstop no longer forces a frame. */
-static int
-demo_button(App *app, struct nk_context *ctx, const char *label)
-{
-    unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
-    int fitted = reaktor_fit_label(app, ctx, nk_widget_bounds(ctx));
-    int hit = nk_button_label(ctx, label);
-
-    reaktor_unfit_label(ctx, fitted);
-
-    /* Both, always: `||` would short-circuit and leave the activation for the
-     * frame to turn into a second press. */
-    if (reaktor_focus_activated(app, id)) hit = 1;
-    return hit;
-}
-
-/* --- first-run values ---------------------------------------------------- */
-
 static void
 seed(showcase_state *s)
 {
@@ -1192,10 +1090,21 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
                      reaktor_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
 
-    check_row(ctx, 3);
-    for (i = 0; i < 3; i++) {
+    {
+        struct nk_rect at = nk_widget_bounds(ctx);
         static const char *const names[3] = { "Never", "On Wi-Fi", "Always" };
-        radio_cell(app, ctx, names[i], &s->radio, i);
+
+        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = ROW,
+                    .gap = ctx->style.window.spacing.x) {
+            for (i = 0; i < 3; i++) {
+                reaktor_radio(&(reaktor_radio_spec){
+                    .label = names[i], .choice = &s->radio, .value = i,
+                    .box = { .w = CHECK_CELL,
+                             .flags = REAKTOR_LAY_FILL_Y } });
+                reaktor_gap(CHECK_GAP, 0.0f);
+            }
+            reaktor_soak();
+        }
     }
 
     section(app, ctx, "Selectables",
@@ -1244,7 +1153,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
         icon.w = icon.h = b.h - 2.0f * st->padding.y;
         icon.w -= 2.0f * st->image_padding.x;
         icon.h -= 2.0f * st->image_padding.y;
-        glyph_at(app, ctx, icon, DISC_ROUND,
+        reaktor_glyph_at(app, ctx, icon, REAKTOR_DISC_ROUND,
                  s->sel_row ? st->text_pressed : st->text_normal,
                  (int)(icon.w < icon.h ? icon.w : icon.h), 0.0f);
     }
@@ -1448,7 +1357,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
             }
             nk_combo_end(ctx);
         }
-        glyph_at(app, ctx, im, DISC_ROUND, ctx->style.combo.symbol_normal,
+        reaktor_glyph_at(app, ctx, im, REAKTOR_DISC_ROUND, ctx->style.combo.symbol_normal,
                  (int)im.w, 0.0f);
         combo_chrome(app, ctx, h, 2.0f);
     }

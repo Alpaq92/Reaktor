@@ -495,3 +495,30 @@ reaktor_check(const reaktor_check_spec *s)
     else         *s->flags &= ~s->bit;
     return changed;
 }
+
+int
+reaktor_radio(const reaktor_radio_spec *s)
+{
+    reaktor_box box;
+    unsigned    id = 0;
+    int         on, hit;
+
+    if (!g_app || !s || !s->choice) return 0;
+    on = (*s->choice == s->value);
+
+    box = s->box;
+    size_to_text(&box, s->label, NULL, 0.0f, 0.0f);
+
+    if (!place(REAKTOR_A11Y_RADIO, s->name ? s->name : s->label, NULL,
+               on ? REAKTOR_A11Y_CHECKED : 0u, NULL, &box, &id))
+        return 0;
+
+    if (reaktor_focus_activated(g_app, id)) { *s->choice = s->value; on = 1; }
+
+    reaktor_note_mute(g_app, 1);
+    hit = reaktor_radio_label(g_app, g_ctx, s->label, on);
+    reaktor_note_mute(g_app, 0);
+
+    if (hit) *s->choice = s->value;
+    return hit;
+}

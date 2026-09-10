@@ -191,6 +191,19 @@ typedef struct reaktor_check_spec {
 
 int reaktor_check(const reaktor_check_spec *s);
 
+/* One of a group. `choice` is the group's answer and `value` is this one's,
+ * so being chosen is the two matching - which is all a radio group ever is.
+ * Chooses this one when clicked, and answers whether it did. */
+typedef struct reaktor_radio_spec {
+    const char   *label;
+    const char   *name;
+    int          *choice;
+    int           value;
+    reaktor_box   box;
+} reaktor_radio_spec;
+
+int reaktor_radio(const reaktor_radio_spec *s);
+
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */
 typedef struct reaktor_link_spec {
