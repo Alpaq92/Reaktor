@@ -44,6 +44,20 @@ static int                g_settled_run;
 static float              g_width[REAKTOR_LAY_DEPTH + 1];
 static int                g_widths;
 
+/* Where the open tree starts, in the layout's own coordinates.
+ *
+ * Everything below is pushed relative to this rather than converted from it,
+ * and that is the whole of what makes scrolling work. A rect pushed into a
+ * Nuklear space is local to the space, and the space's screen position moves
+ * with the scroll every frame. A rect that has been through the layout is a
+ * frame old. Subtracting a fresh screen position from a stale rect leaves the
+ * frame's worth of scrolling in the answer - which is a page whose contents
+ * trail the scrollbar for as long as it is dragged.
+ *
+ * So the layout never sees the scroll at all: local coordinates go in, local
+ * coordinates come out, and Nuklear applies this frame's scroll to them. */
+static float              g_ox, g_oy;
+
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
 {
@@ -104,6 +118,24 @@ push_style_font(const char *selector)
     return 1;
 }
 
+/* A rect the layout produced, as Nuklear's space wants it: local to the tree
+ * rather than to the window. */
+static struct nk_rect
+in_tree(struct nk_rect r)
+{
+    r.x -= g_ox;
+    r.y -= g_oy;
+    return r;
+}
+
+/* And where that lands on screen this frame, scroll and all - which is what
+ * the accessibility tree reports and what a magnifier follows. */
+static struct nk_rect
+on_screen(struct nk_rect r)
+{
+    return g_space ? nk_layout_space_rect_to_screen(g_ctx, in_tree(r)) : r;
+}
+
 void
 reaktor_box_open(unsigned char dir, const reaktor_box *b)
 {
@@ -131,14 +163,16 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
         struct nk_rect r;
 
         if (reaktor_layout_rect(&g_app->lay, id, &r)) {
-            reaktor_note_bounds(g_app, id, r);
             /* One space for the whole tree, opened by whichever container is
              * outermost. A page that declares nothing opens none, which is
              * what lets the old API keep working beside this one. */
             if (g_depth == 0) {
+                g_ox = r.x;
+                g_oy = r.y;
                 nk_layout_space_begin(g_ctx, NK_STATIC, r.h, REAKTOR_LAY_MAX);
                 g_space = 1;
             }
+            reaktor_note_bounds(g_app, id, on_screen(r));
         } else {
             g_unsettled++;
         }
@@ -190,9 +224,9 @@ emit(unsigned id, const char *keys, const reaktor_box *b)
 
     if (!g_space) { g_unsettled++; return 0; }
     if (!reaktor_layout_rect(&g_app->lay, id, &r)) { g_unsettled++; return 0; }
-    reaktor_note_bounds(g_app, id, r);
+    reaktor_note_bounds(g_app, id, on_screen(r));
 
-    nk_layout_space_push(g_ctx, nk_layout_space_rect_to_local(g_ctx, r));
+    nk_layout_space_push(g_ctx, in_tree(r));
     return 1;
 }
 
