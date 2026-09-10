@@ -79,6 +79,11 @@ void reaktor_box_close(void);
  * `gap`; this is for the one place a single hole is wanted. */
 void reaktor_gap(float w, float h);
 
+/* Nothing, taking whatever is left. What a page reaches for when the boxes
+ * beside it are meant to keep the width they asked for rather than share the
+ * window between them - nk_layout_row_template's trailing dynamic column. */
+void reaktor_soak(void);
+
 /* --- handlers ----------------------------------------------------------- */
 
 /* Sugar for a caller who would rather name a function than write an `if`. It
@@ -167,6 +172,24 @@ typedef struct reaktor_field_spec {
 } reaktor_field_spec;
 
 void reaktor_field(const reaktor_field_spec *s);
+
+/* A checkbox. It writes either a bool of the caller's, or one bit of a
+ * flags word of the caller's - which is how a set of independent options
+ * lives in a single value, and is the only reason there are two fields here
+ * rather than one. Set exactly one of them.
+ *
+ * Non-zero on the frame it changed. */
+typedef struct reaktor_check_spec {
+    const char   *label;
+    const char   *name;
+    nk_bool      *on;
+    unsigned     *flags;
+    unsigned      bit;
+    reaktor_box   box;
+    unsigned char box_right;   /* the box at the far edge, label first */
+} reaktor_check_spec;
+
+int reaktor_check(const reaktor_check_spec *s);
 
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */

@@ -246,6 +246,16 @@ reaktor_gap(float w, float h)
     (void)place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL);
 }
 
+void
+reaktor_soak(void)
+{
+    reaktor_box box;
+
+    memset(&box, 0, sizeof(box));
+    box.flags = REAKTOR_LAY_FILL_X;
+    (void)place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL);
+}
+
 int
 reaktor_button(const reaktor_button_spec *s)
 {
@@ -446,4 +456,42 @@ reaktor_swatch(const reaktor_swatch_spec *s)
     if (reaktor_focus_activated(g_app, id)) hit = 1;
     if (hit && s->on_press.fn) s->on_press.fn(s->on_press.user);
     return hit;
+}
+
+int
+reaktor_check(const reaktor_check_spec *s)
+{
+    reaktor_box box;
+    nk_bool     on, was;
+    unsigned    id = 0;
+    int         changed;
+
+    if (!g_app || !s || (!s->on && !s->flags)) return 0;
+    on = s->on ? *s->on : (nk_bool)((*s->flags & s->bit) != 0);
+    was = on;
+
+    box = s->box;
+    size_to_text(&box, s->label, NULL, 0.0f, 0.0f);
+
+    if (!place(REAKTOR_A11Y_CHECKBOX, s->name ? s->name : s->label, NULL,
+               on ? REAKTOR_A11Y_CHECKED : 0u, NULL, &box, &id))
+        return 0;
+
+    /* Enter, or a screen reader's press, taken here rather than delivered as
+     * a click on the box - see reaktor_focus_activated. */
+    if (reaktor_focus_activated(g_app, id)) on = !on;
+
+    reaktor_note_mute(g_app, 1);
+    if (s->box_right)
+        nk_checkbox_label_align(g_ctx, s->label, &on,
+                                NK_WIDGET_RIGHT, NK_TEXT_LEFT);
+    else
+        nk_checkbox_label(g_ctx, s->label, &on);
+    reaktor_note_mute(g_app, 0);
+
+    changed = (on != was);
+    if (s->on) *s->on = on;
+    else if (on) *s->flags |= s->bit;
+    else         *s->flags &= ~s->bit;
+    return changed;
 }

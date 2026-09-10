@@ -1137,14 +1137,53 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     /* A fixed grid, not dynamic columns: two dynamic columns put the second
      * checkbox at the halfway mark of a 960px window, which reads as two
      * unrelated controls rather than a pair. */
-    check_row(ctx, 2);
-    check_cell(app, ctx, "Wrap long lines", &s->check_wrap);
-    check_cell(app, ctx, "Check spelling", &s->check_spell);
+    {
+        /* A fixed grid rather than dynamic columns, declared as one: cells of
+         * a known width with a hole between them, and one box at the end that
+         * soaks up whatever is left so the cells keep the width they asked
+         * for rather than sharing the window.
+         *
+         * Both rows in one column, because a container that has just closed
+         * leaves nothing worth peeking at - the same reason the icon grid and
+         * the row under it are one block. */
+        struct nk_rect at = nk_widget_bounds(ctx);
+        static const struct { const char *label; unsigned bit; } perms[3] = {
+            { "read", 1u }, { "write", 2u }, { "execute", 4u }
+        };
 
-    check_row(ctx, 3);
-    flags_cell(app, ctx, "read", &s->flags, 1u);
-    flags_cell(app, ctx, "write", &s->flags, 2u);
-    flags_cell(app, ctx, "execute", &s->flags, 4u);
+        REAKTOR_COLUMN(.ml = at.x, .mt = at.y, .w = at.w,
+                       .gap = ctx->style.window.spacing.y) {
+            REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                reaktor_check(&(reaktor_check_spec){
+                    .label = "Wrap long lines", .on = &s->check_wrap,
+                    .box_right = 1,
+                    .box = { .w = CHECK_CELL,
+                             .flags = REAKTOR_LAY_FILL_Y } });
+                reaktor_gap(CHECK_GAP, 0.0f);
+                reaktor_check(&(reaktor_check_spec){
+                    .label = "Check spelling", .on = &s->check_spell,
+                    .box_right = 1,
+                    .box = { .w = CHECK_CELL,
+                             .flags = REAKTOR_LAY_FILL_Y } });
+                reaktor_gap(CHECK_GAP, 0.0f);
+                reaktor_soak();
+            }
+
+            REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                for (i = 0; i < 3; i++) {
+                    reaktor_check(&(reaktor_check_spec){
+                        .label = perms[i].label, .flags = &s->flags,
+                        .bit = perms[i].bit, .box_right = 1,
+                        .box = { .w = CHECK_CELL,
+                                 .flags = REAKTOR_LAY_FILL_Y } });
+                    reaktor_gap(CHECK_GAP, 0.0f);
+                }
+                reaktor_soak();
+            }
+        }
+    }
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "flags = 0x%02x", s->flags);
