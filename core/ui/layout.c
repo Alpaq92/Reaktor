@@ -20,8 +20,13 @@ rect_of(float x, float y, float w, float h)
 static uint32_t
 contain_of(const reaktor_box *b)
 {
-    uint32_t f = (b->dir == REAKTOR_LAY_COLUMN) ? LAY_COLUMN : LAY_ROW;
+    uint32_t f;
 
+    /* Onlay reads a contain of 0 as free placement, which is exactly what
+     * REAKTOR_LAY_FREE wants and never what a row or a column does. */
+    if (b->dir == REAKTOR_LAY_FREE) return 0;
+
+    f = (b->dir == REAKTOR_LAY_COLUMN) ? LAY_COLUMN : LAY_ROW;
     if (b->flags & REAKTOR_LAY_WRAP) f |= LAY_WRAP;
 
     /* Onlay's justify is LAY_MIDDLE at 0x000, so a container that asks for
@@ -122,7 +127,7 @@ reaktor_layout_begin(reaktor_layout *l, struct nk_rect root)
     memset(&rb, 0, sizeof(rb));
     rb.w   = root.w;
     rb.h   = root.h;
-    rb.dir = REAKTOR_LAY_COLUMN;
+    rb.dir = REAKTOR_LAY_FREE;
 
     /* The root is a box like any other, so a caller can ask for its rect and
      * get the same answer it passed in. Id 0 is the accessibility model's

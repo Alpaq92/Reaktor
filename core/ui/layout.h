@@ -25,7 +25,16 @@
 #include "nk_common.h"
 #include "onlay.h"
 
-enum { REAKTOR_LAY_ROW = 0, REAKTOR_LAY_COLUMN };
+enum {
+    REAKTOR_LAY_ROW = 0,
+    REAKTOR_LAY_COLUMN,
+    /* Children go where their own margins put them, side by side or on top of
+     * each other, and take no notice of one another. This is what the frame's
+     * root is: a page opens several trees at absolute positions - a card here,
+     * a section there - and they are not a stack. A stacking root made the
+     * second one start below the first and then add its own offset on top. */
+    REAKTOR_LAY_FREE
+};
 
 enum {
     REAKTOR_LAY_FILL_X = 1u << 0,

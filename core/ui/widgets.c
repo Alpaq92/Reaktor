@@ -7,6 +7,7 @@
  * Lifted out of main.c unchanged.
  */
 #include "internal.h"
+#include "declare.h"
 
 /* Non-zero while a widget that reports itself is being drawn by one that
  * has already reported it - see reaktor_note_mute. */
@@ -382,7 +383,10 @@ a11y_dump_once(App *app)
     if (done) return;
     path = SDL_getenv("REAKTOR_A11Y_DUMP");
     if (!path) { done = 1; return; }
-    if (++frames < A11Y_DUMP_FRAME) {
+    /* Not just a frame count: a wrapped paragraph needs the frame after the
+     * one that learned its width, and a page with none is settled at once. So
+     * the dump waits for the tree to stop moving rather than for a number. */
+    if (++frames < A11Y_DUMP_FRAME || !reaktor_frame_settled()) {
         /* Dirty alone is not enough: at rest the loop is parked in
          * SDL_WaitEvent, and nothing here is an event. An empty user event is
          * what the activation fallback already uses to ask for a frame. */

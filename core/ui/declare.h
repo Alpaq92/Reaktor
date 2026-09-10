@@ -49,6 +49,14 @@ typedef struct App App;
 void reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area);
 void reaktor_frame_end(void);
 
+/* Whether the last frame drew everything where it finally belongs. A box on
+ * its first frame has nowhere to be, and a wrapped paragraph needs one more
+ * still: its height depends on its width, so the frame that learns the width
+ * is not the frame that can be the right height. Both ask for another frame
+ * on their own; this is for anything that wants to wait for the answer, and
+ * the accessibility dump is the reason it exists. */
+int reaktor_frame_settled(void);
+
 /* --- containers --------------------------------------------------------- */
 
 void reaktor_box_open(unsigned char dir, const reaktor_box *b);
@@ -109,8 +117,15 @@ typedef struct reaktor_label_spec {
     const char   *text;
     const char   *name;        /* when the text is not what should be read */
     const char   *style;
+    const char   *colour;      /* a palette token, e.g. "--text-muted" */
     reaktor_box   box;
     unsigned char centred;
+    /* Wrap to the width the layout gives it, and be as tall as that takes.
+     * Which is circular - the height is wanted before the width is known -
+     * and the frame of lag is what breaks it: the width used is the one this
+     * label had last frame. On its first frame it has none, so it is not
+     * drawn at all, which is what every box does on its first frame. */
+    unsigned char wrap;
 } reaktor_label_spec;
 
 void reaktor_label(const reaktor_label_spec *s);

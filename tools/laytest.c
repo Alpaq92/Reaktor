@@ -208,6 +208,63 @@ test_limits(reaktor_layout *l)
     int i;
 
     puts("");
+    puts("two trees at absolute positions, each minding its own business");
+    {
+        reaktor_box a = { 0 }, b2 = { 0 }, kid = { 0 };
+        struct nk_rect ra, rb;
+
+        /* What a page actually does: a card here, a section there. In a
+         * stacking root the second one started below the first and then added
+         * its own offset on top, which is how one section became several. */
+        a.dir = REAKTOR_LAY_COLUMN;  a.w = 100.0f; a.ml = 30.0f; a.mt = 40.0f;
+        b2.dir = REAKTOR_LAY_COLUMN; b2.w = 100.0f; b2.ml = 30.0f; b2.mt = 200.0f;
+        kid.h = 25.0f; kid.flags = REAKTOR_LAY_FILL_X;
+
+        reaktor_layout_begin(l, R(0.0f, 0.0f, 400.0f, 400.0f));
+        reaktor_layout_open(l, 600u, &a);
+        reaktor_layout_leaf(l, 601u, &kid);
+        reaktor_layout_close(l);
+        reaktor_layout_open(l, 610u, &b2);
+        reaktor_layout_leaf(l, 611u, &kid);
+        reaktor_layout_close(l);
+        reaktor_layout_end(l);
+
+        reaktor_layout_rect(l, 600u, &ra);
+        reaktor_layout_rect(l, 610u, &rb);
+        ok("the first is where its margins put it",
+           (int)ra.x == 30 && (int)ra.y == 40, 1);
+        ok("the second is where ITS margins put it, not after the first",
+           (int)rb.x == 30 && (int)rb.y == 200, 1);
+        ok("and each is as tall as its own child",
+           (int)ra.h == 25 && (int)rb.h == 25, 1);
+    }
+
+    puts("");
+    puts("a container with no height of its own");
+    {
+        reaktor_box col = { 0 }, a = { 0 }, c = { 0 };
+        struct nk_rect r;
+
+        col.dir   = REAKTOR_LAY_COLUMN;
+        col.w     = 200.0f;          /* width given, height left to the children */
+        col.gap   = 7.0f;
+        a.h = 30.0f; a.flags = REAKTOR_LAY_FILL_X;
+        c.h = 19.0f; c.flags = REAKTOR_LAY_FILL_X;
+
+        reaktor_layout_begin(l, R(0.0f, 0.0f, 400.0f, 400.0f));
+        reaktor_layout_open(l, 500u, &col);
+        reaktor_layout_leaf(l, 501u, &a);
+        reaktor_layout_leaf(l, 502u, &c);
+        reaktor_layout_close(l);
+        reaktor_layout_end(l);
+
+        ok("it is as tall as what is in it, gap included",
+           reaktor_layout_rect(l, 500u, &r) ? (int)r.h : -1, 30 + 7 + 19);
+        ok("...and as wide as it asked to be",
+           reaktor_layout_rect(l, 500u, &r) ? (int)r.w : -1, 200);
+    }
+
+    puts("");
     puts("more boxes than there is room for");
     b.w = 4.0f;
     b.h = 4.0f;

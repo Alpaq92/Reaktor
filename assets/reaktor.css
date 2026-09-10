@@ -31,3 +31,18 @@
 .card-link {
     font-size: 14px;
 }
+
+/* The showcase's prose. Same story as the card: tiny.css has no heading rule,
+ * so these three sizes were written next to the label that used them. */
+.section-title {
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.section-note {
+    font-size: 16px;
+}
+
+.api-line {
+    font-size: 12px;
+}

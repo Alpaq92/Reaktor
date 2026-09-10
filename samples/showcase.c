@@ -19,6 +19,7 @@
 #include "nk_common.h"
 #include "ui.h"
 #include "sample.h"
+#include "declare.h"
 #include "style.h"
 
 /* A menu row, and the height of a popup holding n of them: the rows, the
@@ -47,38 +48,35 @@ content_w(struct nk_context *ctx)
     return nk_window_get_content_region_size(ctx).x;
 }
 
+/* The heading and the paragraph under it, declared rather than drawn: one
+ * column, two labels, and the sizes in assets/reaktor.css where they belong.
+ * The rule above them stays imperative - it is a line, not a box.
+ *
+ * The paragraph wraps, so its height depends on its width, which the layout
+ * only knows after it has run. The frame of lag is what breaks that: it
+ * measures against the width it had last frame. See core/ui/declare.h. */
 static void
-heading(App *app, struct nk_context *ctx, const char *text)
+head_and_note(App *app, struct nk_context *ctx, const char *title,
+              const char *note)
 {
-    struct nk_color c = reaktor_token("--text-bright", ctx->style.text.color);
+    struct nk_rect at = nk_widget_bounds(ctx);
 
-    nk_layout_row_dynamic(ctx, 30.0f, 1);
-    nk_style_push_font(ctx, reaktor_font(app, 19, 1));
-    reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, text, 0);
-    nk_label_colored(ctx, text, NK_TEXT_LEFT, c);
-    nk_style_pop_font(ctx);
-}
-
-/* A wrapped note under a heading. The row has to be tall enough before the
- * text is emitted - Nuklear cannot grow it afterwards - so the line count is
- * measured from the font rather than guessed, with one line of slack because
- * breaking on words can always cost one more than the raw width implies. */
-static void
-caption(App *app, struct nk_context *ctx, const char *text)
-{
-    const struct nk_user_font *f = reaktor_font(app, 16, 0);
-    struct nk_color c = reaktor_token("--text-muted", ctx->style.text.color);
-    float avail = content_w(ctx) - 4.0f;
-    float tw    = f->width(f->userdata, f->height, text, (int)strlen(text));
-    int   lines = 1;
-
-    if (avail > 1.0f && tw > avail) lines = (int)(tw / avail) + 2;
-
-    nk_style_push_font(ctx, f);
-    nk_layout_row_dynamic(ctx, (f->height + 3.0f) * (float)lines, 1);
-    reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, text, 0);
-    nk_label_colored_wrap(ctx, text, c);
-    nk_style_pop_font(ctx);
+    (void)app;
+    /* The gap Nuklear would have put between two rows, which is what these
+     * were before they became one box. Read from the style rather than
+     * written down, because the page pushes its own spacing. */
+    REAKTOR_COLUMN(.name = title, .ml = at.x, .mt = at.y, .w = at.w,
+                   .gap = ctx->style.window.spacing.y) {
+        reaktor_label(&(reaktor_label_spec){
+            .text = title, .style = ".section-title",
+            .colour = "--text-bright",
+            .box = { .h = 30.0f, .flags = REAKTOR_LAY_FILL_X } });
+        if (note)
+            reaktor_label(&(reaktor_label_spec){
+                .text = note, .style = ".section-note",
+                .colour = "--text-muted", .wrap = 1,
+                .box = { .flags = REAKTOR_LAY_FILL_X } });
+    }
     nk_layout_row_dynamic(ctx, 6.0f, 1);
     nk_spacer(ctx);
 }
@@ -146,8 +144,7 @@ static void
 section(App *app, struct nk_context *ctx, const char *title, const char *note)
 {
     rule(ctx);
-    heading(app, ctx, title);
-    if (note) caption(app, ctx, note);
+    head_and_note(app, ctx, title, note);
 }
 
 /* Popups, tooltips and menus are panels like any other, so they read
@@ -1987,8 +1984,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 
     nk_layout_row_dynamic(ctx, 8.0f, 1);
     nk_spacer(ctx);
-    heading(app, ctx, "Menus");
-    caption(app, ctx,
+    head_and_note(app, ctx, "Menus",
             "The bar above. A menu is a popup anchored to the item that "
             "opened it, and its items are ordinary widgets - the View menu "
             "has a draggable progress bar in it. An item's glyph and the "

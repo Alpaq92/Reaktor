@@ -803,12 +803,20 @@ lay_scalar lay_calc_stacked_size(
     lay_item_t *LAY_RESTRICT pitem = lay_get_item(ctx, item);
     lay_scalar need_size = 0;
     lay_id child = pitem->first_child;
+    lay_id kids = 0;  // ONLAY: for the gaps between them
     while (child != LAY_INVALID_ID) {
         lay_item_t *pchild = lay_get_item(ctx, child);
         lay_vec4 rect = ctx->rects[child];
         need_size += rect.v[dim] + rect.v[2 + dim] + pchild->margins.v[wdim];
         child = pchild->next_sibling;
+        kids++;
     }
+    // ONLAY: a gap sits between children, so it is part of what they need. It
+    // was applied when they were arranged and not when they were measured, so
+    // a container sized to its contents came out one gap per child too short
+    // and everything below it rode up by exactly that.
+    if (kids > 1 && pitem->gap > 0)
+        need_size += pitem->gap * (lay_scalar)(kids - 1);
     return need_size;
 }
 
