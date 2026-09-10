@@ -100,6 +100,28 @@ push_button_style(App *app, struct nk_context *ctx, const char *selector)
     nk_style_push_float(ctx, &ctx->style.button.border, s.border);
     f.floats = 2;
 
+    /* The vertical padding a stylesheet asks for is a wish, not a promise.
+     * Nuklear insets a button's content by padding + border + rounding on
+     * each side, so a button shorter than twice that has a content rect with
+     * no height left - and a label centred in a rect with no height is drawn
+     * from its top edge, which is the button's own middle. The text then sits
+     * in the bottom half and a row of buttons agrees with nothing.
+     *
+     * The clamp has to be here, and this is the whole of why it was not
+     * working before. reaktor_fit_label computes the same number and pushes
+     * it, but a caller pushes it *around* the draw, and this function then
+     * pushes the stylesheet's value over the top of it - so the fit was
+     * undone before Nuklear ever read the padding. Measured on a 30px button:
+     * the label's x-height sat at rows 345..351 of 329..358, four and a half
+     * rows below centre. Here is where the padding is decided, so here is
+     * where it is bounded. */
+    {
+        float room = nk_widget_bounds(ctx).h * 0.5f - (s.border + s.rounding);
+
+        if (room < 0.0f) room = 0.0f;
+        if (s.pad_y > room) s.pad_y = room;
+    }
+
     nk_style_push_vec2(ctx, &ctx->style.button.padding,
                        nk_vec2(s.pad_x, s.pad_y));
     f.vec2s = 1;

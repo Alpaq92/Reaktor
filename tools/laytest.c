@@ -166,6 +166,46 @@ test_gap(reaktor_layout *l)
 }
 
 static void
+test_wrap(reaktor_layout *l)
+{
+    reaktor_box    row = { 0 }, cell = { 0 };
+    struct nk_rect r[7], box;
+    int            i;
+
+    puts("");
+    puts("a wrapping row starts a second line, a gap below the first");
+    row.dir   = REAKTOR_LAY_ROW;
+    row.w     = 300.0f;
+    row.gap   = 10.0f;
+    row.flags = REAKTOR_LAY_WRAP;
+    cell.w    = 100.0f;
+    cell.h    = 20.0f;
+
+    /* Three fit on a line - 3 * 100 plus two gaps is 320, so two do - and
+     * seven of them make four lines, the last of them short. */
+    reaktor_layout_begin(l, R(0.0f, 0.0f, 300.0f, 300.0f));
+    reaktor_layout_open(l, 300u, &row);
+    for (i = 0; i < 7; i++) reaktor_layout_leaf(l, 301u + (unsigned)i, &cell);
+    reaktor_layout_close(l);
+    reaktor_layout_end(l);
+
+    for (i = 0; i < 7; i++) reaktor_layout_rect(l, 301u + (unsigned)i, &r[i]);
+
+    ok("two boxes to a line, a gap apart",
+       r[0].x == 0.0f && r[1].x == 110.0f, 1);
+    ok("the third went to the next line, back at the left",
+       r[2].x == 0.0f, 1);
+    ok("which sits a gap below the first, not against it",
+       r[2].y == r[0].y + 20.0f + 10.0f, 1);
+    ok("and the line after that is the same distance again",
+       r[4].y == r[2].y + 30.0f, 1);
+    ok("a short last line is still a line",
+       r[6].x == 0.0f && r[6].y == r[4].y + 30.0f, 1);
+    ok("the row is as tall as four lines and the three gaps between them",
+       reaktor_layout_rect(l, 300u, &box) && box.h == 4.0f * 20.0f + 30.0f, 1);
+}
+
+static void
 test_nesting(reaktor_layout *l)
 {
     reaktor_box col = { 0 }, row = { 0 }, leaf = { 0 };
@@ -352,6 +392,7 @@ main(void)
     test_origin(&l);
     test_weight(&l);
     test_gap(&l);
+    test_wrap(&l);
     test_nesting(&l);
     test_centring(&l);
     test_limits(&l);

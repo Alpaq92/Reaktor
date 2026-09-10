@@ -286,6 +286,65 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
 #define FONT_FILE      "assets/fonts/Aileron-Regular.otf"
 #define FONT_BOLD_FILE "assets/fonts/Aileron-Bold.otf"
 
+/* Letters centred on their line box read low, and this is where that is
+ * corrected - once, on the glyph table this application baked, because the
+ * Nuklear submodule is read as it is shipped.
+ *
+ * Two things put them there. Nuklear bakes each glyph's vertical offset as
+ * its outline plus the ascent plus a half pixel, so every glyph is drawn
+ * half a pixel below where the metrics say it goes. And a line box is
+ * ascent + descent, which reserves room under the baseline for descenders
+ * whether or not the string has any - so the letters of a string that does
+ * not sit above the middle of the box that was centred.
+ *
+ * Measured on Aileron at 16px, against a line box of 0..16 whose middle is
+ * 8.00: a capital runs 3.43..13.43, middle 8.43, and an x runs 5.43..13.43,
+ * middle 9.43. So capitals were half a pixel low and lowercase a pixel and a
+ * half.
+ *
+ * The band to centre is the x-height one, not the cap one, and the reason is
+ * that this is measured in whole pixels rather than in fractions. Every
+ * vertex is snapped to the grid before it is drawn - see the two snapping
+ * passes in nk_sdl3_renderer.h - so a correction of less than a pixel does
+ * not survive to the screen: centring the cap band moved a capital's quad
+ * from 339.43 to 339.00 and it landed on row 339 either way. In whole rows a
+ * capital was already centred and lowercase was one row low, which is the
+ * one that shows, because almost every label in this application is
+ * lowercase with at most a leading capital.
+ *
+ * Centring the x-height instead lifts everything by that row. Capitals then
+ * sit a row high, which is the trade and the right way round: the eye reads
+ * the mass of the lowercase, not the one tall letter at the front. CSS calls
+ * the family of these rules `text-box-edge`; this is its `ex` variant rather
+ * than the more usual `cap`.
+ *
+ * Applied to the outlines rather than to any one widget, so a button, a
+ * label and a menu item are all corrected by the same amount and go on
+ * agreeing with each other. */
+static void
+centre_glyphs_optically(struct nk_font *f)
+{
+    const struct nk_font_glyph *ex;
+    float shift;
+    nk_rune i;
+
+    if (!f || !f->glyphs || f->info.glyph_count == 0) return;
+    /* An x, because it has no ascender and no descender: its top and bottom
+     * are the x-height and the baseline exactly. */
+    ex = nk_font_find_glyph(f, 'x');
+    if (!ex) return;
+
+    /* In baked units: info.height is the size the outlines were rasterised
+     * at, which on a scaled display is not the size they are reported at. */
+    shift = f->info.height * 0.5f - (ex->y0 + ex->y1) * 0.5f;
+    if (shift > -0.01f && shift < 0.01f) return;
+
+    for (i = 0; i < f->info.glyph_count; i++) {
+        f->glyphs[i].y0 += shift;
+        f->glyphs[i].y1 += shift;
+    }
+}
+
 /* Nearest baked size. The bold is baked at one size only, TITLE_PX, for the
  * title: a whole second family would put another FONT_STEPS glyph sets in the
  * atlas and roughly double the largest allocation here. A bold asked for at
@@ -398,6 +457,23 @@ rebuild_font(App *app)
     }
 
     nk_sdl_font_stash_end(app->ctx);
+
+    /* After the bake, because it reads the baked outlines, and before
+     * anything measures or draws with them. */
+    {
+        int i, done = 0;
+
+        for (i = 0; i < FONT_STEPS; i++) {
+            centre_glyphs_optically(app->faces[i]);
+            if (app->faces[i] == font) done = 1;
+        }
+        centre_glyphs_optically(app->face_bold);
+        /* Only if it is not one of those already - the fallback path, where
+         * every face is null and this is Nuklear's own default. Shifting a
+         * face twice would move the letters past centre the other way. */
+        if (font && !done) centre_glyphs_optically(font);
+    }
+
     /* The bake keeps a copy of the whole font file per face - five of the same
      * 27 KB - and nothing reads them once stb_truetype has the outlines. */
     nk_font_atlas_cleanup(atlas);

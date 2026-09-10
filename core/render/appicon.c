@@ -8,11 +8,20 @@
  * recolour them, once per theme.
  *
  * That recolouring is the only reason this is not four lines of plutosvg.
- * Ionicons "-outline" glyphs share one idiom: shapes carry
- * style="fill:none;stroke:#000;..." and any solid shape is a <path> with no
- * fill attribute (so it defaults to black). Three substitutions therefore
- * cover them, applied to the file loaded from the submodule - no path data or
- * colour value is copied into this tree. */
+ * Most Ionicons "-outline" glyphs carry style="fill:none;stroke:#000;...",
+ * but not all of them: 35 of the 421 spell the same thing as the attributes
+ * fill="none" stroke="#000", and 82 draw their solid parts with <circle> or
+ * <rect> rather than <path>. calendar-outline does both, so nothing in it was
+ * substituted and it rendered black on a dark background.
+ *
+ * So the fill is set on the <svg> element rather than on the shapes. fill is
+ * an inherited property: every shape that does not name one of its own picks
+ * it up, whichever element it is, and every shape that says fill:none or
+ * fill="none" still overrides it. That is one rule instead of one per tag,
+ * and it is what the per-<path> substitution was approximating.
+ *
+ * Applied to the file loaded from the submodule - no path data or colour
+ * value is copied into this tree. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,7 +132,7 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
 {
     char path[REAKTOR_PATH_MAX];
     char outline_hex[16] = "#000000", inside_hex[16] = "none";
-    char fill_decl[32], stroke_decl[32], path_open[48];
+    char fill_decl[32], stroke_decl[32], stroke_attr[32], svg_open[48];
     char *svg;
     const char *src;
     char *stage0 = NULL, *stage1 = NULL, *stage2 = NULL, *stage3 = NULL;
@@ -154,7 +163,8 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
 
     snprintf(fill_decl,   sizeof(fill_decl),   "fill:%s", inside_hex);
     snprintf(stroke_decl, sizeof(stroke_decl), "stroke:%s", outline_hex);
-    snprintf(path_open,   sizeof(path_open),   "<path fill=\"%s\" ",
+    snprintf(stroke_attr, sizeof(stroke_attr), "stroke=\"%s\"", outline_hex);
+    snprintf(svg_open,    sizeof(svg_open),    "<svg fill=\"%s\" ",
               outline_hex);
 
     cap = strlen(svg) * 4 + 1024;
@@ -177,13 +187,18 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
         src = stage1;
     }
     if (outline_colour) {
+        /* Both spellings of the same thing, because the set uses both. */
         if (!str_replace_all(src, stage2, cap, "stroke:#000", stroke_decl))
             goto done;
-        if (!str_replace_all(stage2, stage3, cap, "<path ", path_open)) {
+        if (!str_replace_all(stage2, stage3, cap, "stroke=\"#000\"",
+                             stroke_attr))
+            goto done;
+        /* And one inherited fill for every shape that names none. */
+        if (!str_replace_all(stage3, stage2, cap, "<svg ", svg_open)) {
             fprintf(stderr, "svg: replace overflow\n");
             goto done;
         }
-        src = stage3;
+        src = stage2;
     }
 
     doc = plutosvg_document_load_from_data(src, (int)strlen(src),

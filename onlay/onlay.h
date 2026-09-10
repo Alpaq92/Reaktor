@@ -828,6 +828,7 @@ lay_scalar lay_calc_wrapped_overlayed_size(
     lay_item_t *LAY_RESTRICT pitem = lay_get_item(ctx, item);
     lay_scalar need_size = 0;
     lay_scalar need_size2 = 0;
+    lay_scalar breaks = 0;  // ONLAY: for the gaps between lines
     lay_id child = pitem->first_child;
     while (child != LAY_INVALID_ID) {
         lay_item_t *pchild = lay_get_item(ctx, child);
@@ -835,11 +836,18 @@ lay_scalar lay_calc_wrapped_overlayed_size(
         if (pchild->flags & LAY_BREAK) {
             need_size2 += need_size;
             need_size = 0;
+            breaks++;  // ONLAY: one fewer than the number of lines
         }
         lay_scalar child_size = rect.v[dim] + rect.v[2 + dim] + pchild->margins.v[wdim];
         need_size = lay_scalar_max(need_size, child_size);
         child = pchild->next_sibling;
     }
+    // ONLAY: a gap separates one wrapped line from the next as well as one
+    // child from its sibling, so a container sized to its contents has to
+    // leave room for them. Without this a wrapping row came out exactly its
+    // lines tall and they touched.
+    if (pitem->gap > 0)
+        need_size2 += pitem->gap * breaks;
     return need_size2 + need_size;
 }
 
@@ -852,17 +860,25 @@ lay_scalar lay_calc_wrapped_stacked_size(
     lay_item_t *LAY_RESTRICT pitem = lay_get_item(ctx, item);
     lay_scalar need_size = 0;
     lay_scalar need_size2 = 0;
+    lay_id kids = 0;  // ONLAY: children on the line being measured
     lay_id child = pitem->first_child;
     while (child != LAY_INVALID_ID) {
         lay_item_t *pchild = lay_get_item(ctx, child);
         lay_vec4 rect = ctx->rects[child];
         if (pchild->flags & LAY_BREAK) {
+            // ONLAY: same rule as lay_calc_stacked_size, once per line
+            if (kids > 1 && pitem->gap > 0)
+                need_size += pitem->gap * (kids - 1);
             need_size2 = lay_scalar_max(need_size2, need_size);
             need_size = 0;
+            kids = 0;
         }
         need_size += rect.v[dim] + rect.v[2 + dim] + pchild->margins.v[wdim];
+        kids++;
         child = pchild->next_sibling;
     }
+    if (kids > 1 && pitem->gap > 0)
+        need_size += pitem->gap * (kids - 1);
     return lay_scalar_max(need_size2, need_size);
 }
 
@@ -1157,7 +1173,7 @@ lay_scalar lay_arrange_wrapped_overlay_squeezed(
         lay_item_t *pchild = lay_get_item(ctx, child);
         if (pchild->flags & LAY_BREAK) {
             lay_arrange_overlay_squeezed_range(ctx, dim, start_child, child, offset, need_size);
-            offset += need_size;
+            offset += need_size + pitem->gap;  // ONLAY: between lines
             start_child = child;
             need_size = 0;
         }

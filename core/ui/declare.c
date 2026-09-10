@@ -20,6 +20,8 @@
  * with nk_layout_space_rect_to_local because a pushed rect is local to the space
  * and ours are the window's.
  */
+#include <stdio.h>
+
 #include "internal.h"
 #include "declare.h"
 
@@ -32,6 +34,33 @@ static int                g_space;   /* a Nuklear space is open */
  * Non-zero means the frame just drawn is not the final one. */
 static int                g_unsettled;
 static int                g_settled_run;
+
+/* A tree that never stops moving.
+ *
+ * Settling is normally three frames: a box is measured on the frame that
+ * declares it and drawn on the next, and a wrapped paragraph needs one more
+ * for the container above it. But two mistakes make it never happen, and
+ * both are silent - the page simply never draws, because every frame asks
+ * for another one.
+ *
+ *   - A box is found again next frame by an id built from its parent, its
+ *     role and its name. A widget whose name changes every frame is a new
+ *     box every frame, so it never has a rect and never settles. A readout
+ *     is the usual way in: its text is its name unless it is given one.
+ *
+ *   - Reporting a node only on the frames where something is known changes
+ *     the shape of the tree, and an id is computed from that shape - so the
+ *     boxes after it are renumbered, lose their rects, and take the node
+ *     away again on the next frame. It oscillates and never converges.
+ *
+ * So the asking is bounded. Past this many consecutive unsettled frames the
+ * frame stops requesting redraws, says what it knows, and lets the page draw
+ * whatever it has - a page missing a widget beats an application spinning at
+ * 100% that never puts anything on screen. Well above the three a correct
+ * page takes, and above the handful a theme change costs. */
+#define REAKTOR_SETTLE_TRIES 16
+static int                g_settle_tries;
+static const char        *g_stuck;    /* first box with no rect this frame */
 
 /* The width each open container will hand its children, innermost last.
  *
@@ -58,6 +87,13 @@ static int                g_widths;
  * coordinates come out, and Nuklear applies this frame's scroll to them. */
 static float              g_ox, g_oy;
 
+/* Where each open container landed on screen, innermost last, and whether it
+ * has landed at all. A row is not a widget and has no bounds of its own, so
+ * anything painted behind a container's children - a table's zebra, a card's
+ * fill - has to ask. Index 0 is unused: depth 0 means no container is open. */
+static struct nk_rect     g_boxrect[REAKTOR_LAY_DEPTH + 1];
+static unsigned char      g_boxok[REAKTOR_LAY_DEPTH + 1];
+
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
 {
@@ -68,6 +104,7 @@ reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
     g_unsettled = 0;
     g_width[0]  = area.w;
     g_widths    = 1;
+    g_stuck     = NULL;
     reaktor_layout_begin(&app->lay, area);
 }
 
@@ -91,13 +128,27 @@ reaktor_frame_end(void)
      * paragraph's is - so a single quiet frame is not proof the tree has
      * stopped moving, and two consecutive ones are. */
     g_settled_run = g_unsettled ? 0 : g_settled_run + 1;
-    if (g_unsettled) {
+    if (!g_unsettled) {
+        g_settle_tries = 0;
+    } else if (g_settle_tries < REAKTOR_SETTLE_TRIES) {
         SDL_Event e;
 
+        g_settle_tries++;
         g_app->dirty = 1;
         SDL_zero(e);
         e.type = SDL_EVENT_USER;
         SDL_PushEvent(&e);
+    } else if (g_settle_tries == REAKTOR_SETTLE_TRIES) {
+        /* Once per run of them, not once per frame. */
+        g_settle_tries++;
+        fprintf(stderr,
+                "reaktor: the declared tree did not settle after %d frames - "
+                "%d of %d boxes have no rect, the first of them named \"%s\".\n"
+                "reaktor: a box is found again by its name, so a widget whose "
+                "name changes every frame is a new one every frame; and a node "
+                "reported only on some frames renumbers everything after it.\n",
+                REAKTOR_SETTLE_TRIES, g_unsettled, g_app->lay.count,
+                g_stuck ? g_stuck : "(unnamed)");
     }
     g_app = NULL;
     g_ctx = NULL;
@@ -146,6 +197,19 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     box = *b;
     box.dir = dir;
 
+    /* A tree with no width of its own fills the panel it is in.
+     *
+     * Asked of the panel rather than peeked from the row cursor, and that is
+     * the whole difference. nk_widget_bounds answers where the *next* widget
+     * would go, so a peek taken after another declared tree has closed its
+     * space answers whatever that space left behind - which is how a page
+     * ended up with containers 0 and 27 pixels wide, and why "two declared
+     * blocks side by side must be one container" was a rule anyone writing a
+     * page had to know. The panel's content region does not move with the
+     * cursor, so there is nothing to be stale. */
+    if (g_depth == 0 && box.w <= 0.0f)
+        box.w = nk_window_get_content_region_size(g_ctx).x;
+
     /* A container is a group in the tree: no name of its own, and a reader
      * walks through it to its children. */
     id = reaktor_note_push(g_app, REAKTOR_A11Y_GROUP, box.name, NULL, 0u,
@@ -173,11 +237,26 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
                 g_space = 1;
             }
             reaktor_note_bounds(g_app, id, on_screen(r));
+            if (g_depth < REAKTOR_LAY_DEPTH) {
+                g_boxrect[g_depth + 1] = on_screen(r);
+                g_boxok[g_depth + 1]   = 1;
+            }
         } else {
+            if (g_depth < REAKTOR_LAY_DEPTH) g_boxok[g_depth + 1] = 0;
+            if (!g_stuck) g_stuck = box.name ? box.name : "(a container)";
             g_unsettled++;
         }
     }
     g_depth++;
+}
+
+int
+reaktor_box_rect(struct nk_rect *out)
+{
+    if (!out || g_depth <= 0 || g_depth > REAKTOR_LAY_DEPTH) return 0;
+    if (!g_boxok[g_depth]) return 0;
+    *out = g_boxrect[g_depth];
+    return 1;
 }
 
 void
@@ -248,7 +327,9 @@ place(unsigned char role, const char *name, const char *value, unsigned state,
     if (!g_app) return 0;
     id = note_of(role, name, value, state);
     if (out_id) *out_id = id;
-    return emit(id, keys, b);
+    if (emit(id, keys, b)) return 1;
+    if (!g_stuck) g_stuck = name;
+    return 0;
 }
 
 /* The font a selector asks for, or the frame's own when it names no rule. */
@@ -314,9 +395,10 @@ reaktor_soak(void)
 int
 reaktor_button(const reaktor_button_spec *s)
 {
-    reaktor_box box;
-    unsigned    id = 0;
-    int         hit, styled;
+    reaktor_box    box;
+    struct nk_rect r;
+    unsigned       id = 0;
+    int            hit, styled, fitted;
 
     if (!g_app || !s) return 0;
     box = s->box;
@@ -327,20 +409,38 @@ reaktor_button(const reaktor_button_spec *s)
                s->disabled ? REAKTOR_A11Y_DISABLED : 0u, s->keys, &box, &id))
         return 0;
 
+    /* The rect the layout gave it, which place() has just pushed into the
+     * space - and which nk_widget_bounds answers, because that is the rect
+     * the next widget will be drawn into. Wanted twice below, and neither
+     * time can use the caller's box: a box that fills has no size of its own
+     * on that axis, and size_to_text leaves it alone on purpose. */
+    r = nk_widget_bounds(g_ctx);
+
     styled = push_style_font(s->style);
     if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_REPEATER);
     if (s->disabled) nk_widget_disable_begin(g_ctx);
+    /* For the icon-only branch below, which draws through Nuklear directly.
+     * Everything else here goes through css_button, and push_button_style
+     * bounds the padding itself - it has to, because it pushes the
+     * stylesheet's padding after this and would otherwise undo it. */
+    fitted = reaktor_fit_label(g_app, g_ctx, r);
     /* The helpers below report themselves - they were written to be called
      * directly by a page. Here the node already exists, so the inner one is
      * muted rather than allowed to arrive as a duplicate. */
     reaktor_note_mute(g_app, 1);
+    /* At 0.6 of the height the layout gave it. Sizing the glyph from the
+     * caller's box instead asked for 0.6 of nothing on a button that fills
+     * its row, and nk_button_image stretched whatever came back across the
+     * whole button - which read as a bad icon rather than as a size asked
+     * for wrong. */
     if (s->icon && !s->label)
         hit = nk_button_image(g_ctx, reaktor_ionicon(g_app, s->icon,
-                                                     (int)(box.h * 0.6f)));
+                                                     (int)(r.h * 0.6f)));
     else if (s->icon)   hit = reaktor_button_icon(g_app, g_ctx, s->icon, s->label);
     else if (s->accent) hit = reaktor_button_accent(g_app, g_ctx, s->label);
     else                hit = reaktor_button_label(g_app, g_ctx, s->label);
     reaktor_note_mute(g_app, 0);
+    reaktor_unfit_label(g_ctx, fitted);
     if (s->disabled) nk_widget_disable_end(g_ctx);
     if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_DEFAULT);
     if (styled) nk_style_pop_font(g_ctx);
@@ -360,7 +460,16 @@ reaktor_label(const reaktor_label_spec *s)
 
     if (!g_app || !s || !s->text) return;
     box = s->box;
-    id  = note_of(REAKTOR_A11Y_LABEL, s->name ? s->name : s->text, NULL, 0u);
+    /* A silent label adds no node, so its name is never read - it is only
+     * ever an identity. Identifying it by its own text would make it a new
+     * box every time that text changed, which for a readout is every frame,
+     * and a box that is new every frame never has a rect to draw into. So a
+     * silent label with no name of its own has none at all, and its siblings
+     * are told apart the way a row of unlabelled buttons is: by how many
+     * with the same parent and role came before it. */
+    id  = note_of(s->silent ? REAKTOR_A11Y_NONE : REAKTOR_A11Y_LABEL,
+                  s->name ? s->name : (s->silent ? NULL : s->text),
+                  s->value, 0u);
     f   = style_font(s->style);
 
     if (s->wrap) {
@@ -492,7 +601,11 @@ reaktor_link(const reaktor_link_spec *s)
 int
 reaktor_frame_settled(void)
 {
-    return g_settled_run >= 2;
+    /* Giving up counts. Whoever is waiting for the tree to hold still - the
+     * accessibility dump is the one that matters - would otherwise wait for
+     * a frame that is never coming, and the broken tree is the thing they
+     * wanted to look at. */
+    return g_settled_run >= 2 || g_settle_tries > REAKTOR_SETTLE_TRIES;
 }
 
 int

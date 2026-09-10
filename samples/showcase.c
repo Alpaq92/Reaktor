@@ -42,15 +42,9 @@ const char *const reaktor_tab_names[TAB_COUNT] = {
 
 /* --- page furniture ------------------------------------------------------ */
 
-static float
-content_w(struct nk_context *ctx)
-{
-    return nk_window_get_content_region_size(ctx).x;
-}
-
 /* The heading and the paragraph under it, declared rather than drawn: one
  * column, two labels, and the sizes in assets/reaktor.css where they belong.
- * The rule above them stays imperative - it is a line, not a box.
+ * The rule above them stays imperative - see rule() on why.
  *
  * The paragraph wraps, so its height depends on its width, which the layout
  * only knows after it has run. The frame of lag is what breaks that: it
@@ -59,14 +53,11 @@ static void
 head_and_note(App *app, struct nk_context *ctx, const char *title,
               const char *note)
 {
-    struct nk_rect at = nk_widget_bounds(ctx);
-
     (void)app;
     /* The gap Nuklear would have put between two rows, which is what these
      * were before they became one box. Read from the style rather than
      * written down, because the page pushes its own spacing. */
-    REAKTOR_COLUMN(.name = title, .w = at.w,
-                   .gap = ctx->style.window.spacing.y) {
+    REAKTOR_COLUMN(.name = title,                    .gap = ctx->style.window.spacing.y) {
         reaktor_label(&(reaktor_label_spec){
             .text = title, .style = ".section-title",
             .colour = "--text-bright",
@@ -83,7 +74,19 @@ head_and_note(App *app, struct nk_context *ctx, const char *title,
 
 /* nk_rule_horizontal fills the whole widget rect rather than stroking a line
  * inside it, so the row height *is* the rule's thickness - at the 9px row it
- * was first given it came out as a bar. */
+ * was first given it came out as a bar.
+ *
+ * This and api() below are the last two places on these pages that lay out
+ * imperatively, and they stay that way on purpose. A declared tree ends with
+ * nk_layout_space_end, which does not restore the panel's row - so anything
+ * afterwards that measures itself by peeking the cursor measures nothing. A
+ * declared block is fine, because a top-level one takes its width from the
+ * panel; an imperative widget is not, and the tree headers on the Display
+ * page came out zero wide the moment these two were converted. Making the
+ * space leave a row behind fixes that and costs a row's spacing every time,
+ * which put 160px of drift down a page. So they go when the widgets that
+ * follow them do - the trees, groups and list views of stage 10 - and not
+ * before. */
 static void
 rule(struct nk_context *ctx)
 {
@@ -361,24 +364,6 @@ hot(App *app, struct nk_context *ctx, unsigned char role, const char *name,
     return reaktor_note(app, role, name, NULL, state, b);
 }
 
-/* A button that exists only to be looked at. Same as nk_button_label, plus
- * the hover registration every interactive widget owes the shell now that the
- * page-wide backstop no longer forces a frame. */
-static int
-demo_button(App *app, struct nk_context *ctx, const char *label)
-{
-    unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
-    int fitted = reaktor_fit_label(app, ctx, nk_widget_bounds(ctx));
-    int hit = nk_button_label(ctx, label);
-
-    reaktor_unfit_label(ctx, fitted);
-
-    /* Both, always: `||` would short-circuit and leave the activation for the
-     * frame to turn into a second press. */
-    if (reaktor_focus_activated(app, id)) hit = 1;
-    return hit;
-}
-
 /* Checkboxes and radios sit the way the Edit menu sits them: label at the
  * left of its cell, box at the right. nk_checkbox_label_align puts the box
  * flush against the edge of the widget it is given, with no padding of its
@@ -524,9 +509,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
         /* Where nk_layout_row_dynamic(ctx, 38, 3) put three equal columns:
          * one row, three boxes that fill, and the gap Nuklear puts between
          * columns rather than a number. */
-        struct nk_rect at = nk_widget_bounds(ctx);
-
-        REAKTOR_ROW(.w = at.w, .h = 38.0f,
+        REAKTOR_ROW(.h = 38.0f,
                     .gap = ctx->style.window.spacing.x) {
             if (reaktor_button(&(reaktor_button_spec){
                     .label = "Default",
@@ -555,7 +538,6 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     {
         /* Nuklear starts a new row when a dynamic one fills up; a declared
          * grid says so, as a column of rows. */
-        struct nk_rect at = nk_widget_bounds(ctx);
         static const struct { const char *icon, *label; } nav[3] = {
             { "chevron-back-outline",    "Back" },
             { "chevron-forward-outline", "Forward" },
@@ -563,8 +545,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
         };
         int row, col;
 
-        REAKTOR_COLUMN(.w = at.w,
-                       .gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(                       .gap = ctx->style.window.spacing.y) {
             for (row = 0; row * 4 < ICON_N; row++) {
                 REAKTOR_ROW(.h = 38.0f, .flags = REAKTOR_LAY_FILL_X,
                             .gap = ctx->style.window.spacing.x) {
@@ -617,9 +598,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
          * nk_layout_row_template's static and dynamic, and here is a floor of
          * 40 beside two boxes that fill. Onlay's weighted tracks are the same
          * arithmetic; this is the first place the sample asks for them. */
-        struct nk_rect at = nk_widget_bounds(ctx);
-
-        REAKTOR_ROW(.w = at.w, .h = 40.0f,
+        REAKTOR_ROW(.h = 40.0f,
                     .gap = ctx->style.window.spacing.x) {
             compact_push(ctx);
             if (reaktor_swatch(&(reaktor_swatch_spec){
@@ -678,13 +657,11 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
          * Both rows in one column, because a container that has just closed
          * leaves nothing worth peeking at - the same reason the icon grid and
          * the row under it are one block. */
-        struct nk_rect at = nk_widget_bounds(ctx);
         static const struct { const char *label; unsigned bit; } perms[3] = {
             { "read", 1u }, { "write", 2u }, { "execute", 4u }
         };
 
-        REAKTOR_COLUMN(.w = at.w,
-                       .gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(                       .gap = ctx->style.window.spacing.y) {
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
                 reaktor_check(&(reaktor_check_spec){
@@ -725,10 +702,9 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     nk_style_pop_font(ctx);
 
     {
-        struct nk_rect at = nk_widget_bounds(ctx);
         static const char *const names[3] = { "Never", "On Wi-Fi", "Always" };
 
-        REAKTOR_ROW(.w = at.w, .h = ROW,
+        REAKTOR_ROW(.h = ROW,
                     .gap = ctx->style.window.spacing.x) {
             for (i = 0; i < 3; i++) {
                 reaktor_radio(&(reaktor_radio_spec){
@@ -752,9 +728,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     {
         /* nk_layout_row_static's fixed columns: four boxes of a stated width
          * and nothing filling, so the row ends where they do. */
-        struct nk_rect at = nk_widget_bounds(ctx);
-
-        REAKTOR_ROW(.w = at.w, .h = 32.0f,
+        REAKTOR_ROW(.h = 32.0f,
                     .gap = ctx->style.window.spacing.x) {
             for (i = 0; i < 4; i++) {
                 char lab[16];
@@ -779,9 +753,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     {
         /* Two selectables that carry a glyph. Which one Nuklear can draw and
          * how it places it is the library's problem now, not this page's. */
-        struct nk_rect at = nk_widget_bounds(ctx);
-
-        REAKTOR_ROW(.w = at.w, .h = 32.0f,
+        REAKTOR_ROW(.h = 32.0f,
                     .gap = ctx->style.window.spacing.x) {
             reaktor_select(&(reaktor_select_spec){
                 .label = "With a symbol", .on = &s->sel_row,
@@ -819,10 +791,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_edit_string with nk_filter_default / _decimal / _hex");
 
     {
-        struct nk_rect at = nk_widget_bounds(ctx);
-
-        REAKTOR_COLUMN(.w = at.w,
-                       .gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(                       .gap = ctx->style.window.spacing.y) {
             reaktor_field(&(reaktor_field_spec){
                 .buf = s->name, .len = &s->name_len, .cap = SC_TEXT_CAP,
                 .hint = "Full name", .filter = nk_filter_default,
@@ -849,9 +818,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_edit_string with NK_EDIT_BOX "
                   "(Nuklear breaks lines on newlines only - there is no wrap)");
     {
-        struct nk_rect at = nk_widget_bounds(ctx);
-
-        REAKTOR_ROW(.w = at.w, .h = 92.0f) {
+        REAKTOR_ROW(.h = 92.0f) {
             reaktor_field(&(reaktor_field_spec){
                 .buf = s->note, .len = &s->note_len, .cap = SC_BOX_CAP,
                 .name = "Notes", .multiline = 1,
@@ -875,13 +842,12 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
          * one container: a container that has just closed leaves nothing
          * worth peeking at, and this is the third time that has been the
          * answer. */
-        struct nk_rect at = nk_widget_bounds(ctx);
         char fv[32], iv[32];
 
         SDL_snprintf(fv, sizeof(fv), "%.2f", (double)s->slider_f);
         SDL_snprintf(iv, sizeof(iv), "%d", s->slider_i);
 
-        REAKTOR_COLUMN(.w = at.w, .gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
                 reaktor_slider(&(reaktor_slider_spec){
@@ -935,9 +901,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                   "nk_property_double");
 
     {
-        struct nk_rect at = nk_widget_bounds(ctx);
-
-        REAKTOR_ROW(.w = at.w, .h = ROW,
+        REAKTOR_ROW(.h = ROW,
                     .gap = ctx->style.window.spacing.x) {
             reaktor_property(&(reaktor_property_spec){
                 .label = "Columns:", .ivalue = &s->prop_i,
@@ -973,10 +937,9 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     {
         /* Four combos, two to a row. Each one's body is a block, because what
          * a combo contains is whatever is put in it. */
-        struct nk_rect at = nk_widget_bounds(ctx);
         int i;
 
-        REAKTOR_COLUMN(.w = at.w, .gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
             REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x) {
                 REAKTOR_COMBO(.label = sizes[s->combo_size], .name = "Size",
                               .body_h = 130.0f,
@@ -1040,12 +1003,11 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
         /* The picker and, beside it, what it is picking. The second cell was
          * a group of its own only so two things could be stacked in it,
          * which is what a column is. */
-        struct nk_rect  at = nk_widget_bounds(ctx);
         struct nk_color c  = nk_rgb_cf(s->tint);
 
         SDL_snprintf(line, sizeof(line), "#%02x%02x%02x", c.r, c.g, c.b);
 
-        REAKTOR_ROW(.w = at.w, .h = 132.0f,
+        REAKTOR_ROW(.h = 132.0f,
                     .gap = ctx->style.window.spacing.x) {
             reaktor_colour_pick(&(reaktor_colour_spec){
                 .name = "Colour picker", .value = &s->tint,
@@ -1076,38 +1038,42 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
  * sibling for the zebra, `th, td` for the cell padding.
  *
  * The row background is painted onto the canvas before the cells are emitted,
- * because a row is not a widget and has no bounds of its own. The first
- * cell's bounds give the top and the height; the width is the content region,
- * which is exactly what the row spans. */
+ * because a row is not a widget and has no bounds of its own - so it asks the
+ * container it is, through reaktor_box_rect. Until that container has been
+ * placed, which is its first frame, there is no background and no cells.
+ *
+ * The three colours and the font are still pushed rather than declared: a
+ * label takes a palette token, and these are computed - a readable foreground
+ * for whatever thead resolved to. Pushed style is ambient, and a declared
+ * label draws through nk_label like every other one, so it lands. */
 static void
 grid_row(App *app, struct nk_context *ctx, const char *const *cells, int n,
          const float *weights, struct nk_color bg, struct nk_color fg,
          int header, float pad)
 {
-    struct nk_rect first;
     int i;
-
-    nk_layout_row_begin(ctx, NK_DYNAMIC, 26.0f, n);
-    nk_layout_row_push(ctx, weights[0]);
-    first = nk_widget_bounds(ctx);
-
-    if (bg.a) {
-        nk_fill_rect(nk_window_get_canvas(ctx),
-                     nk_rect(first.x, first.y, content_w(ctx), first.h),
-                     0.0f, bg);
-    }
 
     nk_style_push_font(ctx, reaktor_font(app, 13, header));
     nk_style_push_color(ctx, &ctx->style.text.color, fg);
     nk_style_push_vec2(ctx, &ctx->style.text.padding, nk_vec2(pad, 0.0f));
-    for (i = 0; i < n; i++) {
-        if (i) nk_layout_row_push(ctx, weights[i]);
-        nk_label(ctx, cells[i], NK_TEXT_LEFT);
+
+    REAKTOR_ROW(.h = 26.0f, .flags = REAKTOR_LAY_FILL_X) {
+        struct nk_rect row;
+
+        if (bg.a && reaktor_box_rect(&row))
+            nk_fill_rect(nk_window_get_canvas(ctx), row, 0.0f, bg);
+
+        for (i = 0; i < n; i++)
+            reaktor_label(&(reaktor_label_spec){
+                .text = cells[i],
+                .box  = { .weight = weights[i],
+                          .flags  = REAKTOR_LAY_FILL_X |
+                                    REAKTOR_LAY_FILL_Y } });
     }
+
     nk_style_pop_vec2(ctx);
     nk_style_pop_color(ctx);
     nk_style_pop_font(ctx);
-    nk_layout_row_end(ctx);
 }
 
 static void
@@ -1138,7 +1104,7 @@ section_grid(App *app, struct nk_context *ctx)
             "token, because a stylesheet does have tables. thead, tbody tr, "
             "its :nth-child(2n) sibling and the padding on th, td are all "
             "read straight out of tiny.css.");
-    api(app, ctx, "nk_layout_row_begin(NK_DYNAMIC) + nk_fill_rect per row");
+    api(app, ctx, "REAKTOR_ROW with weighted cells + nk_fill_rect per row");
 
     reaktor_style_get("table", &tbl);
     reaktor_style_get("thead", &head_s);
@@ -1170,10 +1136,18 @@ section_grid(App *app, struct nk_context *ctx)
     }
     pad     = cell.matched && cell.pad_x > 0.0f ? cell.pad_x : 8.0f;
 
-    grid_row(app, ctx, head, 3, weights, head_bg, head_fg, 1, pad);
-    for (i = 0; i < 7; i++) {
-        grid_row(app, ctx, rows[i], 3, weights,
-                 (i & 1) ? even : odd, ctx->style.text.color, 0, pad);
+    /* One container for the whole table, not one per row. Two declared blocks
+     * side by side each peek at Nuklear's cursor to find their width, and the
+     * second peeks after the first has closed its space - which answers
+     * whatever the closed space left behind. Adjacent declarations are one
+     * container. */
+    {
+        REAKTOR_COLUMN() {
+            grid_row(app, ctx, head, 3, weights, head_bg, head_fg, 1, pad);
+            for (i = 0; i < 7; i++)
+                grid_row(app, ctx, rows[i], 3, weights,
+                         (i & 1) ? even : odd, ctx->style.text.color, 0, pad);
+        }
     }
     (void)tbl;
 }
@@ -1198,10 +1172,9 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
         static const char *const tokens[3] = {
             "--text-main", "--text-muted", "--links"
         };
-        struct nk_rect at = nk_widget_bounds(ctx);
         int i;
 
-        REAKTOR_COLUMN(.w = at.w, .gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
             REAKTOR_ROW(.h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
                 for (i = 0; i < 3; i++)
@@ -1235,7 +1208,9 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             "rasterised at the size it is drawn, twice over for the "
             "downscale. The stroke colour is substituted into the file before "
             "it is parsed, which is how an icon follows the stylesheet - CSS "
-            "cannot reach inside an SVG.");
+            "cannot reach inside an SVG. The calendar is drawn in --links "
+            "and the rest in the text colour, from the same artwork - the "
+            "colour is the caller's, not the file's.");
     api(app, ctx, "nk_image");
 
     {
@@ -1244,11 +1219,29 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             "heart-outline", "cloud-outline", "calendar-outline",
             "mail-outline", "lock-closed-outline"
         };
-        int k;
+        int            k;
 
-        nk_layout_row_static(ctx, 30.0f, 30, 8);
-        for (k = 0; k < 8; k++)
-            reaktor_image(app, ctx, reaktor_ionicon(app, names[k], 22), 22);
+        /* One of the eight in the link colour, because the same artwork
+         * yields either: the file carries no colour of its own. It is the
+         * calendar on purpose - that is the glyph that used to come out
+         * black, drawing its dots with <circle> and its outline with
+         * attributes, neither of which appicon.c substituted until the fill
+         * moved to the <svg> element and started being inherited. */
+        static const int accent = 5;   /* calendar-outline, below */
+
+        /* This row is 39px shorter than the one it replaces, and the old one
+         * was wrong. nk_spacing computes rows = (index + cols) / columns and
+         * allocates that many, so the last widget of a full row - index 7 of
+         * 8 - wrapped and reserved an entire second row nothing ever drew
+         * into. Every full icon row on this page carried that dead band. */
+        REAKTOR_ROW(.h = 30.0f,
+                    .gap = ctx->style.window.spacing.x) {
+            for (k = 0; k < 8; k++)
+                reaktor_icon(&(reaktor_icon_spec){
+                    .name   = names[k],
+                    .accent = (unsigned char)(k == accent),
+                    .box    = { .w = 30.0f, .h = 30.0f } });
+        }
     }
 
     section(app, ctx, "Charts",
@@ -1284,10 +1277,15 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             "colour as an argument rather than from the style.");
     api(app, ctx, "nk_progress with NK_FIXED  /  nk_rule_horizontal");
 
-    nk_layout_row_dynamic(ctx, 20.0f, 1);
     {
-        nk_size fixed = s->progress;
-        reaktor_progress_bar(app, ctx, &fixed, 100, NK_FIXED);
+        nk_size        fixed = s->progress;
+
+        REAKTOR_ROW(.h = 20.0f)
+            reaktor_progress(&(reaktor_progress_spec){
+                .name  = "Loading",
+                .value = &fixed,
+                .max   = 100,
+                .box   = { .h = 20.0f, .flags = REAKTOR_LAY_FILL_X } });
     }
 
     section_grid(app, ctx);
@@ -1403,94 +1401,151 @@ page_layout(App *app, struct nk_context *ctx, showcase_state *s)
 
     (void)s;
 
-    section(app, ctx, "Rows",
-            "Dynamic rows split the width into equal columns and follow a "
-            "resize. Static rows are given a pixel width per item and do "
-            "not. Both are one call for the whole row, which is what keeps "
-            "immediate mode from turning into layout bookkeeping.");
-    api(app, ctx, "nk_layout_row_dynamic  /  nk_layout_row_static");
+    section(app, ctx, "Rows and columns",
+            "A row lays its children out left to right, a column top to "
+            "bottom, and neither is told how many there are. A child that "
+            "fills takes an equal share of what is left over; one that names "
+            "a width keeps it. The gap is the space between children and "
+            "belongs to the container, not to the boxes either side of it.");
+    api(app, ctx, "REAKTOR_ROW  /  REAKTOR_COLUMN  /  .gap");
 
-    nk_layout_row_dynamic(ctx, ROW, 1);
-    demo_button(app, ctx, "one column, dynamic");
-    nk_layout_row_dynamic(ctx, ROW, 3);
-    for (i = 0; i < 3; i++) demo_button(app, ctx, "third");
-    nk_layout_row_static(ctx, ROW, 90, 4);
-    for (i = 0; i < 4; i++) demo_button(app, ctx, "90px");
+    /* Three declared blocks in a row would each peek at Nuklear's cursor for
+     * their width, and the second peeks after the first has closed its space.
+     * So the page's own sections are columns holding rows - which is also
+     * what the vocabulary is for. */
+    {
+        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+            REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X)
+                reaktor_button(&(reaktor_button_spec){
+                    .label = "one child, filling",
+                    .box   = { .flags = REAKTOR_LAY_FILL_X } });
 
-    section(app, ctx, "Grids",
-            "A grid is a static row repeated: the row API wraps to the next "
-            "line once the items no longer fit, so one call and a loop give a "
-            "grid of any size without any arithmetic here.");
-    api(app, ctx, "nk_layout_row_static, repeated");
+            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X)
+                for (i = 0; i < 3; i++)
+                    reaktor_button(&(reaktor_button_spec){
+                        .label = "an equal share",
+                        .box   = { .flags = REAKTOR_LAY_FILL_X } });
 
-    nk_layout_row_static(ctx, 46.0f, 110, 6);
-    for (i = 0; i < 12; i++) {
-        char lab[16];
-        SDL_snprintf(lab, sizeof(lab), "%d,%d", i / 6 + 1, i % 6 + 1);
-        demo_button(app, ctx, lab);
+            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X)
+                for (i = 0; i < 4; i++)
+                    reaktor_button(&(reaktor_button_spec){
+                        .label = "90px",
+                        .box   = { .w = 90.0f } });
+        }
     }
 
-    section(app, ctx, "Per-column widths",
-            "The push form gives each column its own width, either in pixels "
-            "(NK_STATIC) or as a fraction of the row (NK_DYNAMIC). It is what "
-            "the titlebar above uses to put the controls flush against the "
-            "right edge.");
-    api(app, ctx, "nk_layout_row_begin / nk_layout_row_push");
+    section(app, ctx, "Wrapping",
+            "A row that wraps starts a second line once the next child no "
+            "longer fits, so a grid is a row and a loop rather than any "
+            "arithmetic here. Resize the window and the same twelve boxes "
+            "find a different number of columns.");
+    api(app, ctx, "REAKTOR_LAY_WRAP");
 
-    nk_layout_row_begin(ctx, NK_STATIC, ROW, 3);
-    nk_layout_row_push(ctx, 60.0f);  demo_button(app, ctx, "60");
-    nk_layout_row_push(ctx, 140.0f); demo_button(app, ctx, "140");
-    nk_layout_row_push(ctx, 220.0f); demo_button(app, ctx, "220");
-    nk_layout_row_end(ctx);
+    {
+        REAKTOR_ROW(.gap = 8.0f, .flags = REAKTOR_LAY_WRAP) {
+            for (i = 0; i < 12; i++) {
+                char lab[16];
+                SDL_snprintf(lab, sizeof(lab), "%d", i + 1);
+                reaktor_button(&(reaktor_button_spec){
+                    .label = lab,
+                    .box   = { .w = 110.0f, .h = 46.0f } });
+            }
+        }
+    }
 
-    nk_layout_row_begin(ctx, NK_DYNAMIC, ROW, 3);
-    nk_layout_row_push(ctx, 0.2f); demo_button(app, ctx, "20%");
-    nk_layout_row_push(ctx, 0.5f); demo_button(app, ctx, "50%");
-    nk_layout_row_push(ctx, 0.3f); demo_button(app, ctx, "30%");
-    nk_layout_row_end(ctx);
+    section(app, ctx, "Widths and shares",
+            "A child either names a width in pixels or asks for a share of "
+            "what is left. Shares are relative, not fractions - 2, 5 and 3 "
+            "divide a row exactly as 0.2, 0.5 and 0.3 do - so a row stays "
+            "correct when a child is added to it.");
+    api(app, ctx, ".w = pixels  /  .weight = share");
 
-    section(app, ctx, "Templates",
-            "A template mixes the two: a fixed column keeps its width, a "
-            "variable one has a floor and grows, and a dynamic one takes "
-            "whatever is left. Resize the window and only the last two move.");
-    api(app, ctx, "nk_layout_row_template_push_static / _variable / _dynamic");
+    {
+        static const float w[3]     = { 60.0f, 140.0f, 220.0f };
+        static const float share[3] = { 2.0f, 5.0f, 3.0f };
+        static const char *const share_lab[3] = { "20%", "50%", "30%" };
 
-    nk_layout_row_template_begin(ctx, ROW);
-    nk_layout_row_template_push_static(ctx, 80.0f);
-    nk_layout_row_template_push_variable(ctx, 80.0f);
-    nk_layout_row_template_push_dynamic(ctx);
-    nk_layout_row_template_end(ctx);
-    demo_button(app, ctx, "static 80");
-    demo_button(app, ctx, "variable");
-    demo_button(app, ctx, "dynamic");
+        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X)
+                for (i = 0; i < 3; i++) {
+                    char lab[16];
+                    SDL_snprintf(lab, sizeof(lab), "%d", (int)w[i]);
+                    reaktor_button(&(reaktor_button_spec){
+                        .label = lab, .box = { .w = w[i] } });
+                }
 
-    section(app, ctx, "Absolute placement",
-            "nk_layout_space takes a rect per widget and stacks them in the "
-            "order they are emitted - the escape hatch for the cases a row "
-            "cannot express, such as the login card being centred in the "
-            "window on the first tab.");
-    api(app, ctx, "nk_layout_space_begin / nk_layout_space_push");
+            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X)
+                for (i = 0; i < 3; i++)
+                    reaktor_button(&(reaktor_button_spec){
+                        .label = share_lab[i],
+                        .box   = { .weight = share[i],
+                                   .flags  = REAKTOR_LAY_FILL_X } });
+        }
+    }
+
+    section(app, ctx, "Floors",
+            "The three are one rule, not three: a width a filling child names "
+            "is a floor rather than a size. So a fixed column is a width on "
+            "its own, a column that will not shrink past 80 but grows with "
+            "the window is that same width with a fill, and a column that "
+            "takes whatever is left is a fill with no width at all.");
+    api(app, ctx, ".w alone  /  .w with FILL_X  /  FILL_X alone");
+
+    {
+        REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+            reaktor_button(&(reaktor_button_spec){
+                .label = "fixed 80", .box = { .w = 80.0f } });
+            reaktor_button(&(reaktor_button_spec){
+                .label = "at least 80",
+                .box   = { .w = 80.0f, .flags = REAKTOR_LAY_FILL_X } });
+            reaktor_button(&(reaktor_button_spec){
+                .label = "the rest",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } });
+        }
+    }
+
+    section(app, ctx, "Free placement",
+            "A free container lays nothing out: each child goes where its own "
+            "margins put it, takes no notice of its siblings, and may overlap "
+            "them. It is the escape hatch for what a row cannot say - the "
+            "login card centred in the window on the first tab is one.");
+    api(app, ctx, "REAKTOR_FREE  /  .ml, .mt");
 
     /* They overlap on purpose - that is the point being made, that these are
      * placed rather than laid out and the later one is drawn over the earlier.
      * The step is a third of the height rather than a quarter because at a
      * quarter each box cut the bottom off the label of the one behind it,
      * which reads as a widget drawn wrong rather than as a demonstration. */
-    nk_layout_space_begin(ctx, NK_STATIC, 110.0f, 4);
-    nk_layout_space_push(ctx, nk_rect(0.0f, 0.0f, 130.0f, 44.0f));
-    demo_button(app, ctx, "0, 0");
-    nk_layout_space_push(ctx, nk_rect(60.0f, 33.0f, 130.0f, 44.0f));
-    demo_button(app, ctx, "60, 33");
-    nk_layout_space_push(ctx, nk_rect(120.0f, 66.0f, 130.0f, 44.0f));
-    demo_button(app, ctx, "120, 66");
-    nk_layout_space_push(ctx, nk_rect(300.0f, 10.0f, 160.0f, 86.0f));
-    demo_button(app, ctx, "and anywhere");
-    nk_layout_space_end(ctx);
+    {
+        REAKTOR_FREE(.h = 110.0f) {
+            reaktor_button(&(reaktor_button_spec){
+                .label = "0, 0",
+                .box   = { .w = 130.0f, .h = 44.0f } });
+            reaktor_button(&(reaktor_button_spec){
+                .label = "60, 33",
+                .box   = { .w = 130.0f, .h = 44.0f,
+                           .ml = 60.0f, .mt = 33.0f } });
+            reaktor_button(&(reaktor_button_spec){
+                .label = "120, 66",
+                .box   = { .w = 130.0f, .h = 44.0f,
+                           .ml = 120.0f, .mt = 66.0f } });
+            reaktor_button(&(reaktor_button_spec){
+                .label = "and anywhere",
+                .box   = { .w = 160.0f, .h = 86.0f,
+                           .ml = 300.0f, .mt = 10.0f } });
+        }
+    }
 
     section(app, ctx, "Groups",
             "A group is a window inside a window: it clips, it scrolls, and "
-            "it starts a fresh layout. The card on the login tab, this page's "
-            "body and the titlebar are all groups.");
+            "it starts a fresh layout. It is Nuklear's, not this library's, "
+            "and stays imperative for now - a declared tree belongs to one "
+            "panel, and a group is another. The card on the login tab, this "
+            "page's body and the titlebar are all groups.");
     api(app, ctx, "nk_group_begin  /  nk_group_begin_titled");
 
     nk_layout_row_dynamic(ctx, 150.0f, 2);
@@ -1654,23 +1709,35 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_menubar_begin  /  nk_menu_begin_label  /  "
                   "nk_menu_item_label  /  nk_checkbox_label_align");
 
-    nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-    SDL_snprintf(line, sizeof(line), "last chosen: %s", s->menu_pick);
-    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
-    reaktor_note(app, REAKTOR_A11Y_LABEL, "Last chosen", s->menu_pick, 0,
-                 nk_widget_bounds(ctx));
-    nk_label_colored(ctx, line, NK_TEXT_LEFT,
-                     reaktor_token("--text-muted", ctx->style.text.color));
+    /* Two readouts, so one column. `line` is written just before each is
+     * declared and a declared label draws where it stands, so the buffer is
+     * free again by the time the next one wants it. */
+    {
+        nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+            SDL_snprintf(line, sizeof(line), "last chosen: %s", s->menu_pick);
+            reaktor_label(&(reaktor_label_spec){
+                .text   = line,
+                .name   = "Last chosen",
+                .value  = s->menu_pick,
+                .colour = "--text-muted",
+                .box    = { .h = ROW_SMALL,
+                            .flags = REAKTOR_LAY_FILL_X } });
 
-    /* File > Open opens the platform's picker, which answers on its own
-     * schedule; the shell drains the answer into file_pick each frame. */
-    nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
-    SDL_snprintf(line, sizeof(line), "file picker: %s", s->file_pick);
-    reaktor_note(app, REAKTOR_A11Y_LABEL, "File picker", s->file_pick, 0,
-                 nk_widget_bounds(ctx));
-    nk_label_colored(ctx, line, NK_TEXT_LEFT,
-                     reaktor_token("--text-muted", ctx->style.text.color));
-    nk_style_pop_font(ctx);
+            /* File > Open opens the platform's picker, which answers on its
+             * own schedule; the shell drains the answer into file_pick each
+             * frame. */
+            SDL_snprintf(line, sizeof(line), "file picker: %s", s->file_pick);
+            reaktor_label(&(reaktor_label_spec){
+                .text   = line,
+                .name   = "File picker",
+                .value  = s->file_pick,
+                .colour = "--text-muted",
+                .box    = { .h = ROW_SMALL,
+                            .flags = REAKTOR_LAY_FILL_X } });
+        }
+        nk_style_pop_font(ctx);
+    }
 
     section(app, ctx, "Context menu",
             "The same popup, opened by a right-click inside a rect the caller "
@@ -1679,12 +1746,20 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_contextual_begin");
 
     popup_style_push(ctx);
-    nk_layout_row_dynamic(ctx, 54.0f, 1);
     {
-        struct nk_rect trigger = nk_widget_bounds(ctx);
-        hot(app, ctx, REAKTOR_A11Y_BUTTON,
-            "Right-click anywhere on this button", 0);
-        nk_button_label(ctx, "Right-click anywhere on this button");
+        struct nk_rect trigger = nk_rect(0, 0, 0, 0);
+
+        /* The popup is anchored to the button, so the button's rect is
+         * wanted - and a declared widget does not hand one back. The
+         * container holding it does, and a container with one filling child
+         * in it is that child. */
+        REAKTOR_ROW(.h = 54.0f) {
+            reaktor_box_rect(&trigger);
+            reaktor_button(&(reaktor_button_spec){
+                .label = "Right-click anywhere on this button",
+                .box   = { .flags = REAKTOR_LAY_FILL_X |
+                                    REAKTOR_LAY_FILL_Y } });
+        }
         /* The same width and the same three-row height as the File menu
          * above it: a context menu is the same widget, and two popups of
          * different sizes on one page read as an oversight. */
@@ -1727,28 +1802,44 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
      * the rect being tested was not the button's. The whole button raises the
      * tooltip now, not the words on it. */
     popup_style_push(ctx);
-    nk_layout_row_dynamic(ctx, 34.0f, 2);
     {
         static const char *const one[1] = { "A one-line tooltip." };
-        struct nk_rect b = nk_widget_bounds(ctx);
-
-        reaktor_hot_follow(app, b, 1);
-        nk_button_label(ctx, "Hover for a plain tooltip");
-        if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
-            draw_tooltip(app, ctx, one, 1, -1.0f);
-    }
-
-    {
         static const char *const many[2] = {
             "A tooltip is not limited to a line:",
             "this one carries a progress bar."
         };
-        struct nk_rect b = nk_widget_bounds(ctx);
+        struct nk_rect b;
 
-        reaktor_hot_follow(app, b, 1);
-        nk_button_label(ctx, "Hover for a laid-out one");
-        if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
-            draw_tooltip(app, ctx, many, 2, (float)s->progress / 100.0f);
+        /* A container apiece for the same reason as the context menu above:
+         * the tooltip is positioned against the button that raised it, and a
+         * container is where a rect can be asked for. */
+        REAKTOR_ROW(.h = 34.0f,
+                    .gap = ctx->style.window.spacing.x) {
+            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+                b = nk_rect(0, 0, 0, 0);
+                reaktor_box_rect(&b);
+                reaktor_hot_follow(app, b, 1);
+                reaktor_button(&(reaktor_button_spec){
+                    .label = "Hover for a plain tooltip",
+                    .box   = { .flags = REAKTOR_LAY_FILL_X |
+                                        REAKTOR_LAY_FILL_Y } });
+                if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
+                    draw_tooltip(app, ctx, one, 1, -1.0f);
+            }
+
+            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+                b = nk_rect(0, 0, 0, 0);
+                reaktor_box_rect(&b);
+                reaktor_hot_follow(app, b, 1);
+                reaktor_button(&(reaktor_button_spec){
+                    .label = "Hover for a laid-out one",
+                    .box   = { .flags = REAKTOR_LAY_FILL_X |
+                                        REAKTOR_LAY_FILL_Y } });
+                if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
+                    draw_tooltip(app, ctx, many, 2,
+                                 (float)s->progress / 100.0f);
+            }
+        }
     }
     popup_style_pop(ctx);
 
@@ -1759,14 +1850,21 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
             "without any modality machinery.");
     api(app, ctx, "nk_popup_begin(NK_POPUP_STATIC)  /  nk_popup_close");
 
-    nk_layout_row_template_begin(ctx, 34.0f);
-    nk_layout_row_template_push_static(ctx, 240.0f);
-    nk_layout_row_template_push_static(ctx, 14.0f);
-    nk_layout_row_template_push_dynamic(ctx);
-    nk_layout_row_template_end(ctx);
-    if (reaktor_button_label(app, ctx, "Open a dialog")) s->popup_open = 1;
-    nk_spacer(ctx);
-    nk_label(ctx, s->popup_open ? "open" : "closed", NK_TEXT_LEFT);
+    {
+        REAKTOR_ROW(.h = 34.0f, .gap = 14.0f) {
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = "Open a dialog",
+                    .box   = { .w = 240.0f,
+                               .flags = REAKTOR_LAY_FILL_Y } }))
+                s->popup_open = 1;
+
+            reaktor_label(&(reaktor_label_spec){
+                .text = s->popup_open ? "open" : "closed",
+                .name = "Dialog",
+                .box  = { .flags = REAKTOR_LAY_FILL_X |
+                                   REAKTOR_LAY_CENTER_Y } });
+        }
+    }
 
     popup_style_push(ctx);
     if (s->popup_open) {
@@ -1855,27 +1953,63 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 static void
 diag_row(App *app, struct nk_context *ctx, const char *name, const char *value)
 {
-    struct nk_rect a, b;
+    REAKTOR_ROW(.h = 24.0f, .gap = ctx->style.window.spacing.x,
+                .flags = REAKTOR_LAY_FILL_X) {
+        struct nk_rect r;
+        unsigned       id;
 
-    nk_layout_row_template_begin(ctx, 24.0f);
-    nk_layout_row_template_push_static(ctx, 190.0f);
-    nk_layout_row_template_push_dynamic(ctx);
-    nk_layout_row_template_end(ctx);
+        /* One node for the reading, not one per column, against the whole
+         * row - so a magnifier lands on the reading rather than on half of
+         * it, and a reader is not left to put a name and a value back
+         * together from two unrelated runs of text. The columns below say
+         * nothing for that reason. Marked volatile because every one of
+         * these moves as the pointer does and none of it is worth
+         * announcing - see REAKTOR_A11Y_VOLATILE.
+         *
+         * Reported unconditionally and given its bounds after, rather than
+         * reported only once the row has been placed. An id is computed from
+         * the shape of the tree, so a node that comes and goes renumbers
+         * everything declared after it - and what those boxes are looked up
+         * by is that number. Adding this node only on the frames where the
+         * row had a rect meant the rows below it lost theirs, which lost
+         * this node, which gave them back: the page never stopped moving and
+         * never settled. */
+        id = reaktor_note(app, REAKTOR_A11Y_LABEL, name, value,
+                          REAKTOR_A11Y_VOLATILE, nk_rect(0, 0, 0, 0));
+        if (reaktor_box_rect(&r)) reaktor_note_bounds(app, id, r);
 
-    a = nk_widget_bounds(ctx);
-    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
-    nk_label_colored(ctx, name, NK_TEXT_LEFT,
-                     reaktor_token("--text-muted", ctx->style.text.color));
-    nk_style_pop_font(ctx);
-    b = nk_widget_bounds(ctx);
-    nk_label(ctx, value, NK_TEXT_LEFT);
-    /* Both columns, so a magnifier lands on the whole reading. Reported
-     * after them because the second column's bounds are only known once the
-     * first is drawn; the node still falls between its neighbours, which is
-     * what reading order is. */
-    reaktor_note(app, REAKTOR_A11Y_LABEL, name, value, REAKTOR_A11Y_VOLATILE,
-                 nk_rect(a.x, a.y, (b.x + b.w) - a.x, a.h));
+        nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+        reaktor_label(&(reaktor_label_spec){
+            .text   = name,
+            .name   = name,
+            .colour = "--text-muted",
+            .silent = 1,
+            .box    = { .w = 190.0f, .flags = REAKTOR_LAY_FILL_Y } });
+        nk_style_pop_font(ctx);
+
+        /* Named, though it says nothing: a box is found again next frame by
+         * an id built from its name, and a label with no name of its own is
+         * identified by its text. Every reading on this page has different
+         * text on every frame, so each one was a box the layout had never
+         * seen - it never had a rect, the page never stopped moving, and the
+         * frame that would have been the settled one never came. */
+        reaktor_label(&(reaktor_label_spec){
+            .text   = value,
+            .name   = "value",
+            .silent = 1,
+            .box    = { .flags = REAKTOR_LAY_FILL_X |
+                                 REAKTOR_LAY_FILL_Y } });
+    }
 }
+
+/* A run of readings is one container, for the reason written next to the
+ * table on the Display page: two declared blocks side by side each peek at
+ * Nuklear's cursor to find their width, and the second peeks after the first
+ * has closed its space, which answers whatever the closed space left behind.
+ * Adjacent declarations are one container. */
+#define DIAG_ROWS(ctx)                                                       \
+    REAKTOR_COLUMN(.w = nk_widget_bounds(ctx).w,                             \
+                   .gap = (ctx)->style.window.spacing.y)
 
 static void
 page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
@@ -1895,11 +2029,13 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
             "which grades a curve, and not fills, which would only draw a "
             "hairline. REAKTOR_SW_NOAA=1 drops both.");
 
-    diag_row(app, ctx, "backend", d.renderer);
-    SDL_snprintf(v, sizeof(v), "%s", d.mode);
-    diag_row(app, ctx, "requested", v);
-    diag_row(app, ctx, "vsync", d.vsync ? "on" : "off");
-    diag_row(app, ctx, "anti-aliasing", d.aa);
+    DIAG_ROWS(ctx) {
+        diag_row(app, ctx, "backend", d.renderer);
+        SDL_snprintf(v, sizeof(v), "%s", d.mode);
+        diag_row(app, ctx, "requested", v);
+        diag_row(app, ctx, "vsync", d.vsync ? "on" : "off");
+        diag_row(app, ctx, "anti-aliasing", d.aa);
+    }
 
     section(app, ctx, "Pacing",
             "How often SDL calls the app back. At rest that is \"waitevent\" - "
@@ -1913,30 +2049,32 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
             "is drawn: counted that way the figure would read stale for as "
             "long as the app was quiet. Move the pointer across the page.");
 
-    diag_row(app, ctx, "at rest", d.frame_rate);
-    diag_row(app, ctx, "while dragging", d.drag_rate);
-    /* Milliseconds are the natural unit for a frame, but a quiet app can sit
-     * for minutes: past a second the number stops reading as a duration. */
-    if (d.frame_gap_ms >= 1000.0f)
-        SDL_snprintf(v, sizeof(v), "%.2f s since the last one",
-                     (double)d.frame_gap_ms / 1000.0);
-    else if (d.frame_gap_ms > 0.0f)
-        SDL_snprintf(v, sizeof(v), "%.0f ms since the last one",
-                     (double)d.frame_gap_ms);
-    else SDL_strlcpy(v, "the first", sizeof(v));
-    diag_row(app, ctx, "this frame", v);
-    /* The number that decides how pointer motion is paced. Measured across
-     * every thread of the process, because on a software renderer the frame
-     * is rasterised on threads this app never created and the main thread's
-     * clock sees almost none of it. */
-    if (d.cpu_ms_per_frame > 0.0f)
-        SDL_snprintf(v, sizeof(v), "%.1f ms of CPU, all threads",
-                     (double)d.cpu_ms_per_frame);
-    else SDL_strlcpy(v, "not yet measured", sizeof(v));
-    diag_row(app, ctx, "a drawn frame costs", v);
-    SDL_snprintf(v, sizeof(v), "one per %d ms while the pointer moves",
-                 d.hover_gap_ms);
-    diag_row(app, ctx, "hover redraws", v);
+    DIAG_ROWS(ctx) {
+        diag_row(app, ctx, "at rest", d.frame_rate);
+        diag_row(app, ctx, "while dragging", d.drag_rate);
+        /* Milliseconds are the natural unit for a frame, but a quiet app can sit
+         * for minutes: past a second the number stops reading as a duration. */
+        if (d.frame_gap_ms >= 1000.0f)
+            SDL_snprintf(v, sizeof(v), "%.2f s since the last one",
+                         (double)d.frame_gap_ms / 1000.0);
+        else if (d.frame_gap_ms > 0.0f)
+            SDL_snprintf(v, sizeof(v), "%.0f ms since the last one",
+                         (double)d.frame_gap_ms);
+        else SDL_strlcpy(v, "the first", sizeof(v));
+        diag_row(app, ctx, "this frame", v);
+        /* The number that decides how pointer motion is paced. Measured across
+         * every thread of the process, because on a software renderer the frame
+         * is rasterised on threads this app never created and the main thread's
+         * clock sees almost none of it. */
+        if (d.cpu_ms_per_frame > 0.0f)
+            SDL_snprintf(v, sizeof(v), "%.1f ms of CPU, all threads",
+                         (double)d.cpu_ms_per_frame);
+        else SDL_strlcpy(v, "not yet measured", sizeof(v));
+        diag_row(app, ctx, "a drawn frame costs", v);
+        SDL_snprintf(v, sizeof(v), "one per %d ms while the pointer moves",
+                     d.hover_gap_ms);
+        diag_row(app, ctx, "hover redraws", v);
+    }
 
     section(app, ctx, "Where a frame goes",
             "Split three ways because guessing which one dominates has been "
@@ -1945,11 +2083,13 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
             "present is the whole frame.");
 
     SDL_snprintf(v, sizeof(v), "%.2f ms", (double)d.build_ms);
-    diag_row(app, ctx, "build", v);
-    SDL_snprintf(v, sizeof(v), "%.2f ms", (double)d.render_ms);
-    diag_row(app, ctx, "render", v);
-    SDL_snprintf(v, sizeof(v), "%.2f ms", (double)d.present_ms);
-    diag_row(app, ctx, "present", v);
+    DIAG_ROWS(ctx) {
+        diag_row(app, ctx, "build", v);
+        SDL_snprintf(v, sizeof(v), "%.2f ms", (double)d.render_ms);
+        diag_row(app, ctx, "render", v);
+        SDL_snprintf(v, sizeof(v), "%.2f ms", (double)d.present_ms);
+        diag_row(app, ctx, "present", v);
+    }
 
     section(app, ctx, "Style and text",
             "The stylesheets are parsed by LCUI's libcss on every theme "
@@ -1957,13 +2097,15 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
             "scale.");
 
     SDL_snprintf(v, sizeof(v), "%s", d.dark ? "dark" : "light");
-    diag_row(app, ctx, "scheme", v);
-    SDL_snprintf(v, sizeof(v), "%d, parsed in %.2f ms", d.sheets,
-                 (double)d.style_ms);
-    diag_row(app, ctx, "stylesheets", v);
-    SDL_snprintf(v, sizeof(v), "%.2fx", (double)d.scale);
-    diag_row(app, ctx, "display scale", v);
-    diag_row(app, ctx, "font", d.font);
+    DIAG_ROWS(ctx) {
+        diag_row(app, ctx, "scheme", v);
+        SDL_snprintf(v, sizeof(v), "%d, parsed in %.2f ms", d.sheets,
+                     (double)d.style_ms);
+        diag_row(app, ctx, "stylesheets", v);
+        SDL_snprintf(v, sizeof(v), "%.2fx", (double)d.scale);
+        diag_row(app, ctx, "display scale", v);
+        diag_row(app, ctx, "font", d.font);
+    }
 
     section(app, ctx, "Memory",
             "Where the process's memory has gone. Nuklear's command buffer "
@@ -1980,19 +2122,21 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
 
     SDL_snprintf(v, sizeof(v), "%.0f KB reserved, %.0f KB used by this frame",
                  d.nk_bytes / 1024.0, d.nk_used / 1024.0);
-    diag_row(app, ctx, "Nuklear buffer", v);
-    SDL_snprintf(v, sizeof(v), "%.0f KB in %d rasters", d.icon_bytes / 1024.0,
-                 d.icons);
-    diag_row(app, ctx, "icon cache", v);
-    SDL_snprintf(v, sizeof(v), "%d x %d %s, %.0f KB", d.atlas_w, d.atlas_h,
-                 !d.atlas_bpp ? "none" : d.atlas_bpp == 1 ? "indexed"
-                                                          : "RGBA32",
-                 d.atlas_w * (double)d.atlas_h * d.atlas_bpp / 1024.0);
-    diag_row(app, ctx, "font atlas", v);
-    SDL_snprintf(v, sizeof(v), "%.1f MB", d.private_bytes / 1048576.0);
-    diag_row(app, ctx, "process, private", v);
-    SDL_snprintf(v, sizeof(v), "%.1f MB", d.rss_bytes / 1048576.0);
-    diag_row(app, ctx, "process, resident", v);
+    DIAG_ROWS(ctx) {
+        diag_row(app, ctx, "Nuklear buffer", v);
+        SDL_snprintf(v, sizeof(v), "%.0f KB in %d rasters", d.icon_bytes / 1024.0,
+                     d.icons);
+        diag_row(app, ctx, "icon cache", v);
+        SDL_snprintf(v, sizeof(v), "%d x %d %s, %.0f KB", d.atlas_w, d.atlas_h,
+                     !d.atlas_bpp ? "none" : d.atlas_bpp == 1 ? "indexed"
+                                                              : "RGBA32",
+                     d.atlas_w * (double)d.atlas_h * d.atlas_bpp / 1024.0);
+        diag_row(app, ctx, "font atlas", v);
+        SDL_snprintf(v, sizeof(v), "%.1f MB", d.private_bytes / 1048576.0);
+        diag_row(app, ctx, "process, private", v);
+        SDL_snprintf(v, sizeof(v), "%.1f MB", d.rss_bytes / 1048576.0);
+        diag_row(app, ctx, "process, resident", v);
+    }
 
     section(app, ctx, "What startup costs",
             "Both counters at each step, and the difference each one made. "
@@ -2009,13 +2153,15 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
         SDL_snprintf(v, sizeof(v), "%.1f MB private, %.1f MB resident",
                      d.priv_at[RSS_ENTRY] / 1048576.0,
                      d.rss_at[RSS_ENTRY] / 1048576.0);
-        diag_row(app, ctx, reaktor_rss_names[RSS_ENTRY], v);
-        for (i = RSS_ENTRY + 1; i < RSS_STEPS; i++) {
-            double dp = (d.priv_at[i] - (double)d.priv_at[i - 1]) / 1048576.0;
-            double dr = (d.rss_at[i] - (double)d.rss_at[i - 1]) / 1048576.0;
-            SDL_snprintf(v, sizeof(v), "%+.1f MB private   %+.1f MB resident",
-                         dp, dr);
-            diag_row(app, ctx, reaktor_rss_names[i], v);
+        DIAG_ROWS(ctx) {
+            diag_row(app, ctx, reaktor_rss_names[RSS_ENTRY], v);
+            for (i = RSS_ENTRY + 1; i < RSS_STEPS; i++) {
+                double dp = (d.priv_at[i] - (double)d.priv_at[i - 1]) / 1048576.0;
+                double dr = (d.rss_at[i] - (double)d.rss_at[i - 1]) / 1048576.0;
+                SDL_snprintf(v, sizeof(v), "%+.1f MB private   %+.1f MB resident",
+                             dp, dr);
+                diag_row(app, ctx, reaktor_rss_names[i], v);
+            }
         }
     }
 

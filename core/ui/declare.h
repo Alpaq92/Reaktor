@@ -72,8 +72,18 @@ void reaktor_box_close(void);
          reaktor_box_scope_;                                                 \
          reaktor_box_scope_ = (reaktor_box_close(), 0))
 
+/* Where the innermost open container landed, on screen. Answers 0 before it
+ * has been placed - its first frame - which is the same "draw nothing rather
+ * than somewhere wrong" answer every declared widget gets. For chrome painted
+ * behind a container's children, which no widget owns. */
+int reaktor_box_rect(struct nk_rect *out);
+
 #define REAKTOR_ROW(...)    REAKTOR_BOX_SCOPE_(REAKTOR_LAY_ROW, __VA_ARGS__)
 #define REAKTOR_COLUMN(...) REAKTOR_BOX_SCOPE_(REAKTOR_LAY_COLUMN, __VA_ARGS__)
+/* Neither. Children go where their own `ml` and `mt` put them and take no
+ * notice of one another, so they may overlap - the escape hatch for the cases
+ * a row cannot express. The frame's own root is one of these. */
+#define REAKTOR_FREE(...)   REAKTOR_BOX_SCOPE_(REAKTOR_LAY_FREE, __VA_ARGS__)
 
 /* Nothing, taking up room. A gap between two children is the container's
  * `gap`; this is for the one place a single hole is wanted. */
@@ -126,7 +136,15 @@ int reaktor_button(const reaktor_button_spec *s);
 
 typedef struct reaktor_label_spec {
     const char   *text;
-    const char   *name;        /* when the text is not what should be read */
+    /* When the text is not what should be read - and also what this box is
+     * identified by between frames, so a label whose text changes every
+     * frame needs one even when it reads the same either way. */
+    const char   *name;
+    /* For a label that is a readout rather than prose: the name is what it
+     * measures and this is what it says. A reader meets one node with two
+     * halves rather than a sentence it has to parse - "Last chosen" and
+     * "File > New", not "last chosen: File > New". */
+    const char   *value;
     const char   *style;
     const char   *colour;      /* a palette token, e.g. "--text-muted" */
     reaktor_box   box;
@@ -137,6 +155,14 @@ typedef struct reaktor_label_spec {
      * label had last frame. On its first frame it has none, so it is not
      * drawn at all, which is what every box does on its first frame. */
     unsigned char wrap;
+    /* Reports no node at all, for a label whose text is already covered by a
+     * node the caller reports itself - a reading split across two columns is
+     * one thing to a reader, not two. Not the same as muting: a muted note
+     * answers 0, and the id is what the layout keys a box by, so two muted
+     * siblings would share one slot and one of them would be placed where
+     * the other went. This still gets an id, it just adds no node - the same
+     * answer an icon gets. */
+    unsigned char silent;
 } reaktor_label_spec;
 
 void reaktor_label(const reaktor_label_spec *s);
