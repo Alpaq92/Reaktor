@@ -263,14 +263,21 @@ reaktor_button(const reaktor_button_spec *s)
         return 0;
 
     styled = push_style_font(s->style);
+    if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_REPEATER);
+    if (s->disabled) nk_widget_disable_begin(g_ctx);
     /* The helpers below report themselves - they were written to be called
      * directly by a page. Here the node already exists, so the inner one is
      * muted rather than allowed to arrive as a duplicate. */
     reaktor_note_mute(g_app, 1);
-    if (s->icon)        hit = reaktor_button_icon(g_app, g_ctx, s->icon, s->label);
+    if (s->icon && !s->label)
+        hit = nk_button_image(g_ctx, reaktor_ionicon(g_app, s->icon,
+                                                     (int)(box.h * 0.6f)));
+    else if (s->icon)   hit = reaktor_button_icon(g_app, g_ctx, s->icon, s->label);
     else if (s->accent) hit = reaktor_button_accent(g_app, g_ctx, s->label);
     else                hit = reaktor_button_label(g_app, g_ctx, s->label);
     reaktor_note_mute(g_app, 0);
+    if (s->disabled) nk_widget_disable_end(g_ctx);
+    if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_DEFAULT);
     if (styled) nk_style_pop_font(g_ctx);
 
     if (reaktor_focus_activated(g_app, id)) hit = 1;
@@ -410,4 +417,33 @@ int
 reaktor_frame_settled(void)
 {
     return g_settled_run >= 2;
+}
+
+int
+reaktor_swatch(const reaktor_swatch_spec *s)
+{
+    reaktor_box box;
+    char        hex[10];
+    unsigned    id = 0;
+    int         hit;
+
+    if (!g_app || !s) return 0;
+    box = s->box;
+    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X)) box.w = 40.0f;
+    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y)) box.h = box.w;
+
+    /* The colour is the value: there is no text on it, and "#56c6ff" is the
+     * only thing a reader could be told about a swatch beyond its name. */
+    SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x",
+                 s->fill.r, s->fill.g, s->fill.b);
+    if (!place(REAKTOR_A11Y_BUTTON, s->name, hex, 0u, NULL, &box, &id))
+        return 0;
+
+    reaktor_note_mute(g_app, 1);
+    hit = reaktor_button_color(g_app, g_ctx, s->name, s->fill);
+    reaktor_note_mute(g_app, 0);
+
+    if (reaktor_focus_activated(g_app, id)) hit = 1;
+    if (hit && s->on_press.fn) s->on_press.fn(s->on_press.user);
+    return hit;
 }

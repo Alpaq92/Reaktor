@@ -1080,33 +1080,40 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
      * rather than centring it at its natural size, so the slot has to be
      * square or the glyph is smeared. nk_button_image_label - which is what
      * the window controls use - insets it by image_padding instead. */
-    nk_layout_row_template_begin(ctx, 40.0f);
-    nk_layout_row_template_push_static(ctx, 40.0f);   /* the swatch, square like its neighbour */
-    nk_layout_row_template_push_static(ctx, 40.0f);
-    nk_layout_row_template_push_dynamic(ctx);
-    nk_layout_row_template_push_dynamic(ctx);
-    nk_layout_row_template_end(ctx);
-    compact_push(ctx);
-    if (reaktor_button_color(app, ctx, "Tint swatch", nk_rgb_cf(s->tint)))
-        s->presses++;
-    hot(app, ctx, REAKTOR_A11Y_BUTTON, "Download", 0);
-    if (nk_button_image(ctx,
-                        reaktor_ionicon(app, "cloud-download-outline", 24)))
-        s->presses++;
-    compact_pop(ctx);
+    {
+        /* Two fixed columns and two that share what is left - which is
+         * nk_layout_row_template's static and dynamic, and here is a floor of
+         * 40 beside two boxes that fill. Onlay's weighted tracks are the same
+         * arithmetic; this is the first place the sample asks for them. */
+        struct nk_rect at = nk_widget_bounds(ctx);
 
-    nk_button_set_behavior(ctx, NK_BUTTON_REPEATER);
-    hot(app, ctx, REAKTOR_A11Y_BUTTON, "Hold me", 0);
-    if (nk_button_label(ctx, "Hold me")) s->repeats++;
-    nk_button_set_behavior(ctx, NK_BUTTON_DEFAULT);
+        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 40.0f,
+                    .gap = ctx->style.window.spacing.x) {
+            compact_push(ctx);
+            if (reaktor_swatch(&(reaktor_swatch_spec){
+                    .name = "Tint swatch", .fill = nk_rgb_cf(s->tint),
+                    .box = { .w = 40.0f, .flags = REAKTOR_LAY_FILL_Y } }))
+                s->presses++;
+            if (reaktor_button(&(reaktor_button_spec){
+                    .name = "Download", .icon = "cloud-download-outline",
+                    .box = { .w = 40.0f, .flags = REAKTOR_LAY_FILL_Y } }))
+                s->presses++;
+            compact_pop(ctx);
 
-    nk_widget_disable_begin(ctx);
-    /* Not through hot(): a disabled control takes no pointer, but a reader
-     * should still find it and be told why it cannot be used. */
-    reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, "Disabled",
-                      REAKTOR_A11Y_DISABLED);
-    nk_button_label(ctx, "Disabled");
-    nk_widget_disable_end(ctx);
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = "Hold me", .repeat = 1,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } }))
+                s->repeats++;
+            /* A disabled control takes no pointer, but a reader should still
+             * find it and be told why it cannot be used - which the spec says
+             * once, rather than the page saying it twice. */
+            reaktor_button(&(reaktor_button_spec){
+                .label = "Disabled", .disabled = 1,
+                .box = { .flags = REAKTOR_LAY_FILL_X |
+                                  REAKTOR_LAY_FILL_Y } });
+        }
+    }
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "%d presses, %d repeat ticks",

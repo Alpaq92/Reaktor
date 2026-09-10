@@ -108,6 +108,8 @@ typedef struct reaktor_button_spec {
     reaktor_handler on_press;
     unsigned char   accent;    /* the stylesheet's --links colour */
     unsigned char   disabled;
+    /* Fires for as long as it is held, rather than once on release. */
+    unsigned char   repeat;
 } reaktor_button_spec;
 
 /* Non-zero on the frame it was pressed. */
@@ -129,6 +131,18 @@ typedef struct reaktor_label_spec {
 } reaktor_label_spec;
 
 void reaktor_label(const reaktor_label_spec *s);
+
+/* The button rule with no label and the given fill: a colour swatch that is
+ * otherwise a button. `name` is what a reader is told it is, since there is
+ * no text to read. */
+typedef struct reaktor_swatch_spec {
+    const char     *name;
+    struct nk_color fill;
+    reaktor_box     box;
+    reaktor_handler on_press;
+} reaktor_swatch_spec;
+
+int reaktor_swatch(const reaktor_swatch_spec *s);
 
 /* An Ionicon, drawn at the size of its box. `stroke` is a "#rrggbb" the
  * artwork is recoloured to, or NULL for the accent. */
