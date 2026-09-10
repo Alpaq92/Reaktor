@@ -271,126 +271,6 @@ chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
 }
 
 
-
-/* Nuklear draws neither of the bar's two rounded rects: they are the shape
- * reaktor_fill_round exists for, and its corners are the only ones on the page
- * that are actually curves rather than stairs. So the style items go
- * transparent for the call - which keeps the geometry, the drag and the
- * value - and the track and the fill are drawn here.
- *
- * The rects are nk_do_progress's: the bounds padded by padding plus border,
- * the fill scaled by the value. The fill's corner is the track's, clamped to
- * half its own width, or a bar in its first few per cent would draw a corner
- * wider than the bar. */
-static void
-progress_cell(App *app, struct nk_context *ctx, nk_size *cur, nk_size max,
-              int modifiable)
-{
-    const struct nk_style_progress *st = &ctx->style.progress;
-    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
-    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
-    struct nk_rect b = nk_widget_bounds(ctx);
-    struct nk_vec2 pad = nk_vec2(st->padding.x + st->border,
-                                 st->padding.y + st->border);
-    struct nk_rect fill = nk_rect(b.x + pad.x, b.y + pad.y,
-                                  b.w - 2.0f * pad.x, b.h - 2.0f * pad.y);
-    int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
-    struct nk_style_item track_it = hot ? st->hover : st->normal;
-    struct nk_style_item fill_it = hot ? st->cursor_hover : st->cursor_normal;
-    float track_r = st->rounding, r;
-
-    fill.w *= max ? (float)*cur / (float)max : 0.0f;
-    r = track_r;
-    if (r > fill.w * 0.5f) r = fill.w * 0.5f;
-    if (r < 0.0f) r = 0.0f;
-
-    nk_style_push_style_item(ctx, &ctx->style.progress.normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.active, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_active, clear);
-    nk_progress(ctx, cur, max, modifiable);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-
-    if (track_it.type == NK_STYLE_ITEM_COLOR)
-        reaktor_fill_round(app, cv, b, track_r, track_it.data.color);
-    if (fill.w >= 1.0f && fill_it.type == NK_STYLE_ITEM_COLOR)
-        reaktor_fill_round(app, cv, fill, r, fill_it.data.color);
-}
-
-/* The knob is the same again, and the widget the stylesheet reaches least:
- * CSS has no such control, so Nuklear's own greys stand, and what it draws is
- * a filled circle with a hairline spoke from the middle out. It draws none of
- * it here - every colour is cleared for the call, which keeps the geometry,
- * the drag and the value - and the widget is three Ionicons instead: a face
- * in the surface colour, its rim, and a dot at the value's angle in the link
- * colour, which is what the rest of the page uses to mean "this one".
- *
- * The angle is nk_draw_knob's own, the value's fraction of the range as a
- * full turn zeroed at the given heading, reproduced because Nuklear keeps
- * none of it. The two fractions are placement, picked to sit the dot clear of
- * the rim; the artwork's margin inside its own box is the same for face and
- * dot, so the pair stays in proportion at any size. */
-#define KNOB_DOT   0.22f   /* the dot's box, against the face's */
-#define KNOB_ORBIT 0.23f   /* how far its centre sits from the middle */
-
-static void
-knob_cell(App *app, struct nk_context *ctx, float *val, float lo, float hi,
-          enum nk_heading zero)
-{
-    static const float zero_rads[4] = { NK_PI * 1.5f, 0.0f, NK_PI * 0.5f,
-                                        NK_PI };
-    struct nk_style_knob *st = &ctx->style.knob;
-    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
-    struct nk_rect b = nk_widget_bounds(ctx);
-    struct nk_color face = st->knob_normal;
-    struct nk_color rim  = st->knob_border_color;
-    struct nk_color ink  = st->cursor_normal;
-    struct nk_rect dot;
-    float a, orbit;
-    int i, px = (int)(b.w < b.h ? b.w : b.h);
-    int dot_px = (int)((float)px * KNOB_DOT + 0.5f);
-    struct nk_color *cols[7];
-
-    cols[0] = &st->border_color;    cols[1] = &st->knob_normal;
-    cols[2] = &st->knob_hover;      cols[3] = &st->knob_active;
-    cols[4] = &st->cursor_normal;   cols[5] = &st->cursor_hover;
-    cols[6] = &st->cursor_active;
-
-    nk_style_push_style_item(ctx, &st->normal, clear);
-    nk_style_push_style_item(ctx, &st->hover, clear);
-    nk_style_push_style_item(ctx, &st->active, clear);
-    for (i = 0; i < 7; i++)
-        nk_style_push_color(ctx, cols[i], clear.data.color);
-    nk_style_push_float(ctx, &st->knob_border, 0.0f);
-    nk_knob_float(ctx, lo, val, hi, 0.01f, zero, 0.0f);
-    nk_style_pop_float(ctx);
-    for (i = 0; i < 7; i++)
-        nk_style_pop_color(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-
-    a = (hi > lo) ? (*val - lo) / (hi - lo) : 0.0f;
-    a = a * NK_PI * 2.0f + zero_rads[zero];
-    orbit = (float)px * KNOB_ORBIT;
-    dot = nk_rect(b.x + b.w * 0.5f + orbit * (float)cos((double)a)
-                      - (float)dot_px * 0.5f,
-                  b.y + b.h * 0.5f + orbit * (float)sin((double)a)
-                      - (float)dot_px * 0.5f,
-                  (float)dot_px, (float)dot_px);
-
-    reaktor_glyph_at(app, ctx, b,   REAKTOR_DISC_ROUND,   face, px, 0.0f);
-    reaktor_glyph_at(app, ctx, b,   REAKTOR_DISC_OUTLINE, rim,  px, 0.5f);
-    reaktor_glyph_at(app, ctx, dot, REAKTOR_DISC_ROUND,   ink,  dot_px, 0.0f);
-}
-
 /* A stepper's hover wash, round rather than the square Nuklear draws: the
  * slot is a square the height of the font, so half of it is a circle, and
  * reaktor_fill_round makes it one that is actually round. Nuklear draws none -
@@ -1133,14 +1013,17 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                   "nk_knob_float");
 
     {
+        /* All four ranges in one column. Adjacent declared blocks have to be
+         * one container: a container that has just closed leaves nothing
+         * worth peeking at, and this is the third time that has been the
+         * answer. */
         struct nk_rect at = nk_widget_bounds(ctx);
         char fv[32], iv[32];
 
         SDL_snprintf(fv, sizeof(fv), "%.2f", (double)s->slider_f);
         SDL_snprintf(iv, sizeof(iv), "%d", s->slider_i);
 
-        REAKTOR_COLUMN(.w = at.w,
-                       .gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.w = at.w, .gap = ctx->style.window.spacing.y) {
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
                 reaktor_slider(&(reaktor_slider_spec){
@@ -1165,24 +1048,26 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                     .box = { .flags = REAKTOR_LAY_FILL_X |
                                       REAKTOR_LAY_FILL_Y } });
             }
+            REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                reaktor_progress(&(reaktor_progress_spec){
+                    .name = "Progress", .value = &s->progress, .max = 100,
+                    .modifiable = 1,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+                reaktor_label(&(reaktor_label_spec){
+                    .text = "modifiable - drag it",
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+            }
+            REAKTOR_ROW(.h = 62.0f, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                reaktor_knob(&(reaktor_knob_spec){
+                    .name = "Knob", .value = &s->knob, .lo = 0.0f, .hi = 1.0f,
+                    .box = { .w = 62.0f, .h = 62.0f } });
+            }
         }
     }
-
-    nk_layout_row_dynamic(ctx, ROW, 2);
-    SDL_snprintf(line, sizeof(line), "%d", (int)s->progress);
-    reaktor_note(app, REAKTOR_A11Y_PROGRESS, "Progress", line, 0,
-                 nk_widget_bounds(ctx));
-    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
-    progress_cell(app, ctx, &s->progress, 100, NK_MODIFIABLE);
-    nk_label(ctx, "modifiable - drag it", NK_TEXT_LEFT);
-
-    nk_layout_row_static(ctx, 62.0f, 62, 2);
-    SDL_snprintf(line, sizeof(line), "%.2f", (double)s->knob);
-    reaktor_note(app, REAKTOR_A11Y_SLIDER, "Knob", line, 0,
-                 nk_widget_bounds(ctx));
-    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
-    knob_cell(app, ctx, &s->knob, 0.0f, 1.0f, NK_DOWN);
-    nk_spacer(ctx);
 
     section(app, ctx, "Properties",
             "A property is a labelled number that can be dragged, clicked "
@@ -1561,7 +1446,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_dynamic(ctx, 20.0f, 1);
     {
         nk_size fixed = s->progress;
-        progress_cell(app, ctx, &fixed, 100, NK_FIXED);
+        reaktor_progress_bar(app, ctx, &fixed, 100, NK_FIXED);
     }
 
     section_grid(app, ctx);
@@ -1896,7 +1781,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                             nk_vec2(170.0f, MENU_H(2)))) {
         menu_rows_push(ctx);
         nk_layout_row_dynamic(ctx, MENU_ROW, 1);
-        progress_cell(app, ctx, &s->progress, 100, NK_MODIFIABLE);
+        reaktor_progress_bar(app, ctx, &s->progress, 100, NK_MODIFIABLE);
         if (menu_item(app, ctx, "Reset", 0))
             s->progress = 50;
         menu_rows_pop(ctx);

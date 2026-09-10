@@ -251,6 +251,29 @@ typedef struct reaktor_slider_spec {
 
 void reaktor_slider(const reaktor_slider_spec *s);
 
+/* A progress bar: the same shape as a slider, but reporting rather than
+ * accepting - unless `modifiable`, which lets it be dragged. */
+typedef struct reaktor_progress_spec {
+    const char *name;
+    nk_size    *value;
+    nk_size     max;
+    reaktor_box box;
+    unsigned char modifiable;
+} reaktor_progress_spec;
+
+void reaktor_progress(const reaktor_progress_spec *s);
+
+/* A slider wrapped around a circle, and the one widget here with no
+ * counterpart in CSS at all. */
+typedef struct reaktor_knob_spec {
+    const char *name;
+    float      *value;
+    float       lo, hi;
+    reaktor_box box;
+} reaktor_knob_spec;
+
+void reaktor_knob(const reaktor_knob_spec *s);
+
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */
 typedef struct reaktor_link_spec {

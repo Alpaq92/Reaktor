@@ -681,3 +681,52 @@ reaktor_slider(const reaktor_slider_spec *s)
                                (int)s->hi, (int)s->step);
     reaktor_note_mute(g_app, 0);
 }
+
+void
+reaktor_progress(const reaktor_progress_spec *s)
+{
+    reaktor_box box;
+    char        text[32];
+    unsigned    id = 0;
+
+    if (!g_app || !s || !s->value) return;
+    SDL_snprintf(text, sizeof(text), "%d", (int)*s->value);
+
+    box = s->box;
+    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
+        box.h = g_ctx->style.font->height + 14.0f;
+
+    if (!place(REAKTOR_A11Y_PROGRESS, s->name, text, 0u, NULL, &box, &id))
+        return;
+    reaktor_note_range(g_app, id, (float)*s->value, 0.0f, (float)s->max, 1.0f);
+
+    reaktor_note_mute(g_app, 1);
+    reaktor_progress_bar(g_app, g_ctx, s->value, s->max,
+                         s->modifiable ? NK_MODIFIABLE : NK_FIXED);
+    reaktor_note_mute(g_app, 0);
+}
+
+void
+reaktor_knob(const reaktor_knob_spec *s)
+{
+    reaktor_box box;
+    char        text[32];
+    unsigned    id = 0;
+
+    if (!g_app || !s || !s->value) return;
+    SDL_snprintf(text, sizeof(text), "%.2f", (double)*s->value);
+
+    box = s->box;
+    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X)) box.w = 62.0f;
+    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y)) box.h = box.w;
+
+    /* A slider to a reader: it is a value between two bounds, and nothing in
+     * any platform's vocabulary is shaped like a knob. */
+    if (!place(REAKTOR_A11Y_SLIDER, s->name, text, 0u, NULL, &box, &id))
+        return;
+    reaktor_note_range(g_app, id, *s->value, s->lo, s->hi, 0.0f);
+
+    reaktor_note_mute(g_app, 1);
+    reaktor_knob_dial(g_app, g_ctx, s->value, s->lo, s->hi, NK_DOWN);
+    reaktor_note_mute(g_app, 0);
+}

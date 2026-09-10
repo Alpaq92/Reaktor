@@ -121,6 +121,15 @@ void reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id,
 void reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id,
                             int *val, int lo, int hi, int step);
 
+/* A progress bar, and a knob. Both draw their own geometry for the reason the
+ * slider does: the stylesheet's shape is not Nuklear's, and a circle is the
+ * one thing the software rasteriser cannot draw. A progress bar with
+ * NK_MODIFIABLE can be dragged like a slider. */
+void reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur,
+                          nk_size max, int modifiable);
+void reaktor_knob_dial(App *app, struct nk_context *ctx, float *val,
+                       float lo, float hi, enum nk_heading zero);
+
 /* Text that acts. `active` draws it in the link colour rather than muted. */
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);
