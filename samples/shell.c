@@ -351,8 +351,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
          * from the widget that made it, and the only numbers here are the
          * ones this card is actually built to. */
         REAKTOR_COLUMN(.name = "Proceed with login",
-                       .w = CARD_W, .h = card_h, .ml = at.x, .mt = at.y,
-                       .gap = ROW_GAP) {
+                       .w = CARD_W, .h = card_h, .gap = ROW_GAP) {
             REAKTOR_ROW(.h = ROW_BRAND, .gap = 10, .flags = REAKTOR_LAY_FILL_X,
                         .ml = CARD_PAD_X, .mr = CARD_PAD_X, .mt = CARD_PAD_Y) {
                 reaktor_icon(&(reaktor_icon_spec){

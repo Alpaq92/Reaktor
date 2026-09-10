@@ -166,9 +166,18 @@ typedef struct reaktor_field_spec {
     int        *len;
     int         cap;
     const char *hint;
-    const char *name;
+    const char *name;      /* when the hint is not what should be read */
     const char *style;
+    /* What the field will accept. NULL takes anything printable; the rest
+     * are Nuklear's - nk_filter_decimal, nk_filter_hex and the others. A
+     * field that refuses what it cannot use says so as it is typed, which
+     * beats a message after the fact. */
+    nk_plugin_filter filter;
     reaktor_box box;
+    /* Several lines rather than one. Nuklear breaks on newlines only - there
+     * is no wrapping in an edit box - so this is a notes field, not a
+     * paragraph editor. */
+    unsigned char multiline;
 } reaktor_field_spec;
 
 void reaktor_field(const reaktor_field_spec *s);
@@ -224,6 +233,23 @@ typedef struct reaktor_select_spec {
 } reaktor_select_spec;
 
 int reaktor_select(const reaktor_select_spec *s);
+
+/* A slider. Writes a float of the caller's, or an int of the caller's - set
+ * exactly one. The numbers go to the accessibility tree as well as to the
+ * screen: ARIA wants valuemin and valuemax, UI Automation wants
+ * IRangeValueProvider, and neither can get them out of the text a reader
+ * hears. `text` is that text, when the value should be read as something
+ * other than the number. */
+typedef struct reaktor_slider_spec {
+    const char *name;
+    const char *text;
+    float      *value;
+    int        *ivalue;
+    float       lo, hi, step;
+    reaktor_box box;
+} reaktor_slider_spec;
+
+void reaktor_slider(const reaktor_slider_spec *s);
 
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */

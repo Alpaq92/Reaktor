@@ -65,7 +65,7 @@ head_and_note(App *app, struct nk_context *ctx, const char *title,
     /* The gap Nuklear would have put between two rows, which is what these
      * were before they became one box. Read from the style rather than
      * written down, because the page pushes its own spacing. */
-    REAKTOR_COLUMN(.name = title, .ml = at.x, .mt = at.y, .w = at.w,
+    REAKTOR_COLUMN(.name = title, .w = at.w,
                    .gap = ctx->style.window.spacing.y) {
         reaktor_label(&(reaktor_label_spec){
             .text = title, .style = ".section-title",
@@ -271,111 +271,6 @@ chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
 }
 
 
-/* The knob is the accent and so is the fill it sits on the end of, so it
- * vanished into the bar. A shade off the fill tells them apart and keeps them
- * the same colour - and darker rather than lighter, which reads as the part
- * to take hold of on either scheme. */
-#define KNOB_SHADE 0.16f
-
-static struct nk_color
-shaded(struct nk_color c, float amount)
-{
-    unsigned char rgba[4];
-
-    rgba[0] = c.r; rgba[1] = c.g; rgba[2] = c.b; rgba[3] = c.a;
-    reaktor_style_darken(rgba, amount);
-    return nk_rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
-}
-
-/* Nuklear draws none of a slider either. Its bar and fill are rounded rects
- * whose caps it steps through in whole pixels, and its knob is one more
- * nk_fill_circle - so the styles go transparent for the call, which keeps the
- * geometry, the drag and the value, and all three are drawn afterwards, with
- * the value the drag has just produced rather than the previous frame's.
- *
- * The rects are nk_do_slider's: the bounds inset by padding, a bar of
- * bar_height centred in it, as much of it filled as the value, and the knob a
- * cursor_size square on the same centre line. */
-static void
-slider_cell(App *app, struct nk_context *ctx, unsigned id, float *val,
-            float lo, float hi, float step)
-{
-    const struct nk_style_slider *st = &ctx->style.slider;
-    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
-    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
-    struct nk_rect b = nk_widget_bounds(ctx);
-    int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
-    const struct nk_style_item *ci = hot ? &st->cursor_hover
-                                         : &st->cursor_normal;
-    struct nk_color track = hot ? st->bar_hover : st->bar_normal;
-    struct nk_color filled = st->bar_filled;
-    struct nk_color knob = shaded(ci->type == NK_STYLE_ITEM_COLOR
-                                 ? ci->data.color : filled, KNOB_SHADE);
-    float cap = st->bar_height * 0.5f;
-    struct nk_rect in, bar, fl, kn;
-    float t;
-
-    nk_style_push_color(ctx, &ctx->style.slider.bar_normal, clear.data.color);
-    nk_style_push_color(ctx, &ctx->style.slider.bar_hover, clear.data.color);
-    nk_style_push_color(ctx, &ctx->style.slider.bar_active, clear.data.color);
-    nk_style_push_color(ctx, &ctx->style.slider.bar_filled, clear.data.color);
-    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_active, clear);
-    nk_slider_float(ctx, lo, val, hi, step);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_color(ctx);
-    nk_style_pop_color(ctx);
-    nk_style_pop_color(ctx);
-    nk_style_pop_color(ctx);
-
-    /* The arrows, if this is what has focus: applied here rather than in the
-     * shell, which knows neither the bounds nor the grain of the value. */
-    {
-        int steps = reaktor_focus_step(app, id);
-
-        if (steps) {
-            *val += step * (float)steps;
-            if (*val < lo) *val = lo;
-            if (*val > hi) *val = hi;
-        }
-    }
-    /* And the same three numbers to the tree, after the arrows rather than
-     * before, so a client reads the value it has just been given. */
-    reaktor_note_range(app, id, *val, lo, hi, step);
-
-    in  = nk_rect(b.x + st->padding.x, b.y + st->padding.y,
-                  b.w - 2.0f * st->padding.x, b.h - 2.0f * st->padding.y);
-    bar = nk_rect(in.x, in.y + in.h * 0.5f - cap, in.w, st->bar_height);
-    t   = (hi > lo) ? (*val - lo) / (hi - lo) : 0.0f;
-    if (t < 0.0f) t = 0.0f;
-    if (t > 1.0f) t = 1.0f;
-    fl  = nk_rect(bar.x, bar.y, bar.w * t, bar.h);
-    kn  = nk_rect(in.x + in.w * t - st->cursor_size.x * 0.5f,
-                  in.y + in.h * 0.5f - st->cursor_size.y * 0.5f,
-                  st->cursor_size.x, st->cursor_size.y);
-
-    reaktor_fill_round(app, cv, bar, cap, track);
-    if (fl.w >= 1.0f) reaktor_fill_round(app, cv, fl, cap, filled);
-    reaktor_glyph_at(app, ctx, kn, REAKTOR_DISC_ROUND, knob,
-             (int)(st->cursor_size.x < st->cursor_size.y ? st->cursor_size.x
-                                                         : st->cursor_size.y),
-             0.0f);
-}
-
-/* nk_slider_int's own few lines, with the aligned call in the middle. */
-static void
-slider_cell_int(App *app, struct nk_context *ctx, unsigned id, int *val,
-                int lo, int hi, int step)
-{
-    float f = (float)*val;
-
-    slider_cell(app, ctx, id, &f, (float)lo, (float)hi, (float)step);
-    /* Rounded, not truncated: a step that arrives as 39.999999 is 40. */
-    *val = (int)(f + (f < 0.0f ? -0.5f : 0.5f));
-}
 
 /* Nuklear draws neither of the bar's two rounded rects: they are the shape
  * reaktor_fill_round exists for, and its corners are the only ones on the page
@@ -893,7 +788,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
          * columns rather than a number. */
         struct nk_rect at = nk_widget_bounds(ctx);
 
-        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 38.0f,
+        REAKTOR_ROW(.w = at.w, .h = 38.0f,
                     .gap = ctx->style.window.spacing.x) {
             if (reaktor_button(&(reaktor_button_spec){
                     .label = "Default",
@@ -930,7 +825,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
         };
         int row, col;
 
-        REAKTOR_COLUMN(.ml = at.x, .mt = at.y, .w = at.w,
+        REAKTOR_COLUMN(.w = at.w,
                        .gap = ctx->style.window.spacing.y) {
             for (row = 0; row * 4 < ICON_N; row++) {
                 REAKTOR_ROW(.h = 38.0f, .flags = REAKTOR_LAY_FILL_X,
@@ -986,7 +881,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
          * arithmetic; this is the first place the sample asks for them. */
         struct nk_rect at = nk_widget_bounds(ctx);
 
-        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 40.0f,
+        REAKTOR_ROW(.w = at.w, .h = 40.0f,
                     .gap = ctx->style.window.spacing.x) {
             compact_push(ctx);
             if (reaktor_swatch(&(reaktor_swatch_spec){
@@ -1050,7 +945,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
             { "read", 1u }, { "write", 2u }, { "execute", 4u }
         };
 
-        REAKTOR_COLUMN(.ml = at.x, .mt = at.y, .w = at.w,
+        REAKTOR_COLUMN(.w = at.w,
                        .gap = ctx->style.window.spacing.y) {
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
@@ -1095,7 +990,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
         struct nk_rect at = nk_widget_bounds(ctx);
         static const char *const names[3] = { "Never", "On Wi-Fi", "Always" };
 
-        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = ROW,
+        REAKTOR_ROW(.w = at.w, .h = ROW,
                     .gap = ctx->style.window.spacing.x) {
             for (i = 0; i < 3; i++) {
                 reaktor_radio(&(reaktor_radio_spec){
@@ -1121,7 +1016,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
          * and nothing filling, so the row ends where they do. */
         struct nk_rect at = nk_widget_bounds(ctx);
 
-        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 32.0f,
+        REAKTOR_ROW(.w = at.w, .h = 32.0f,
                     .gap = ctx->style.window.spacing.x) {
             for (i = 0; i < 4; i++) {
                 char lab[16];
@@ -1148,7 +1043,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
          * how it places it is the library's problem now, not this page's. */
         struct nk_rect at = nk_widget_bounds(ctx);
 
-        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 32.0f,
+        REAKTOR_ROW(.w = at.w, .h = 32.0f,
                     .gap = ctx->style.window.spacing.x) {
             reaktor_select(&(reaktor_select_spec){
                 .label = "With a symbol", .on = &s->sel_row,
@@ -1185,21 +1080,48 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
             "have to validate later.");
     api(app, ctx, "nk_edit_string with nk_filter_default / _decimal / _hex");
 
-    nk_layout_row_dynamic(ctx, 36.0f, 1);
-    reaktor_field_text(app, ctx, NK_EDIT_FIELD, s->name, &s->name_len,
-                  SC_TEXT_CAP, "Full name", nk_filter_default);
+    {
+        struct nk_rect at = nk_widget_bounds(ctx);
 
-    nk_layout_row_dynamic(ctx, 36.0f, 2);
-    reaktor_field_text(app, ctx, NK_EDIT_FIELD, s->digits, &s->digits_len,
-                  SC_TEXT_CAP, "Digits only", nk_filter_decimal);
-    reaktor_field_text(app, ctx, NK_EDIT_FIELD, s->hex, &s->hex_len,
-                  SC_TEXT_CAP, "Hex only", nk_filter_hex);
+        REAKTOR_COLUMN(.w = at.w,
+                       .gap = ctx->style.window.spacing.y) {
+            reaktor_field(&(reaktor_field_spec){
+                .buf = s->name, .len = &s->name_len, .cap = SC_TEXT_CAP,
+                .hint = "Full name", .filter = nk_filter_default,
+                .box = { .h = 36.0f, .flags = REAKTOR_LAY_FILL_X } });
+
+            REAKTOR_ROW(.h = 36.0f, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                reaktor_field(&(reaktor_field_spec){
+                    .buf = s->digits, .len = &s->digits_len,
+                    .cap = SC_TEXT_CAP, .hint = "Digits only",
+                    .filter = nk_filter_decimal,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+                reaktor_field(&(reaktor_field_spec){
+                    .buf = s->hex, .len = &s->hex_len,
+                    .cap = SC_TEXT_CAP, .hint = "Hex only",
+                    .filter = nk_filter_hex,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+            }
+        }
+    }
 
     api(app, ctx, "nk_edit_string with NK_EDIT_BOX "
                   "(Nuklear breaks lines on newlines only - there is no wrap)");
-    nk_layout_row_dynamic(ctx, 92.0f, 1);
-    reaktor_field_text(app, ctx, NK_EDIT_BOX, s->note, &s->note_len,
-                  SC_BOX_CAP, NULL, nk_filter_default);
+    {
+        struct nk_rect at = nk_widget_bounds(ctx);
+
+        REAKTOR_ROW(.w = at.w, .h = 92.0f) {
+            reaktor_field(&(reaktor_field_spec){
+                .buf = s->note, .len = &s->note_len, .cap = SC_BOX_CAP,
+                .name = "Notes", .multiline = 1,
+                .filter = nk_filter_default,
+                .box = { .flags = REAKTOR_LAY_FILL_X |
+                                  REAKTOR_LAY_FILL_Y } });
+        }
+    }
 
     section(app, ctx, "Ranges",
             "A slider steps a value between two bounds; a progress bar is the "
@@ -1210,21 +1132,41 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_slider_float  /  nk_slider_int  /  nk_progress  /  "
                   "nk_knob_float");
 
-    nk_layout_row_dynamic(ctx, ROW, 2);
-    SDL_snprintf(line, sizeof(line), "%.2f", (double)s->slider_f);
-    id = reaktor_note(app, REAKTOR_A11Y_SLIDER, "Float", line, 0,
-                      nk_widget_bounds(ctx));
-    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
-    slider_cell(app, ctx, id, &s->slider_f, 0.0f, 1.0f, 0.01f);
-    nk_label(ctx, line, NK_TEXT_LEFT);
+    {
+        struct nk_rect at = nk_widget_bounds(ctx);
+        char fv[32], iv[32];
 
-    nk_layout_row_dynamic(ctx, ROW, 2);
-    SDL_snprintf(line, sizeof(line), "%d", s->slider_i);
-    id = reaktor_note(app, REAKTOR_A11Y_SLIDER, "Integer", line, 0,
-                      nk_widget_bounds(ctx));
-    hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
-    slider_cell_int(app, ctx, id, &s->slider_i, 0, 100, 1);
-    nk_label(ctx, line, NK_TEXT_LEFT);
+        SDL_snprintf(fv, sizeof(fv), "%.2f", (double)s->slider_f);
+        SDL_snprintf(iv, sizeof(iv), "%d", s->slider_i);
+
+        REAKTOR_COLUMN(.w = at.w,
+                       .gap = ctx->style.window.spacing.y) {
+            REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                reaktor_slider(&(reaktor_slider_spec){
+                    .name = "Float", .value = &s->slider_f,
+                    .lo = 0.0f, .hi = 1.0f, .step = 0.01f,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+                reaktor_label(&(reaktor_label_spec){
+                    .text = fv,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+            }
+            REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                reaktor_slider(&(reaktor_slider_spec){
+                    .name = "Integer", .ivalue = &s->slider_i,
+                    .lo = 0.0f, .hi = 100.0f, .step = 1.0f,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+                reaktor_label(&(reaktor_label_spec){
+                    .text = iv,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } });
+            }
+        }
+    }
 
     nk_layout_row_dynamic(ctx, ROW, 2);
     SDL_snprintf(line, sizeof(line), "%d", (int)s->progress);
@@ -1386,7 +1328,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                                  nk_vec2(nk_widget_width(ctx), 130.0f))) {
             nk_layout_row_dynamic(ctx, 26.0f, 1);
             nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
-            slider_cell(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
+            reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
             nk_checkbox_label(ctx, "with a layout in it", &s->check_spell);
             nk_combo_end(ctx);
         }
@@ -1944,7 +1886,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                                 NK_WIDGET_RIGHT, NK_TEXT_LEFT);
         nk_spacer(ctx);
         nk_layout_row_dynamic(ctx, MENU_ROW, 1);
-        slider_cell(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
+        reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
         menu_rows_pop(ctx);
         nk_menu_end(ctx);
     }

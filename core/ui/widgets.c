@@ -252,6 +252,111 @@ reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
 /* --- first-run values ---------------------------------------------------- */
 
 
+/* Nuklear draws none of a slider either. Its bar and fill are rounded rects
+ * whose caps it steps through in whole pixels, and its knob is one more
+ * nk_fill_circle - so the styles go transparent for the call, which keeps the
+ * geometry, the drag and the value, and all three are drawn afterwards, with
+ * the value the drag has just produced rather than the previous frame's.
+ *
+ * The rects are nk_do_slider's: the bounds inset by padding, a bar of
+ * bar_height centred in it, as much of it filled as the value, and the knob a
+ * cursor_size square on the same centre line. */
+/* The knob is the accent and so is the fill it sits on the end of, so it
+ * vanished into the bar. A shade off the fill tells them apart and keeps them
+ * the same colour - and darker rather than lighter, which reads as the part
+ * to take hold of on either scheme. */
+#define KNOB_SHADE 0.16f
+static struct nk_color
+shaded(struct nk_color c, float amount)
+{
+    unsigned char rgba[4];
+
+    rgba[0] = c.r; rgba[1] = c.g; rgba[2] = c.b; rgba[3] = c.a;
+    reaktor_style_darken(rgba, amount);
+    return nk_rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
+}
+
+void
+reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
+            float lo, float hi, float step)
+{
+    const struct nk_style_slider *st = &ctx->style.slider;
+    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    struct nk_rect b = nk_widget_bounds(ctx);
+    int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
+    const struct nk_style_item *ci = hot ? &st->cursor_hover
+                                         : &st->cursor_normal;
+    struct nk_color track = hot ? st->bar_hover : st->bar_normal;
+    struct nk_color filled = st->bar_filled;
+    struct nk_color knob = shaded(ci->type == NK_STYLE_ITEM_COLOR
+                                 ? ci->data.color : filled, KNOB_SHADE);
+    float cap = st->bar_height * 0.5f;
+    struct nk_rect in, bar, fl, kn;
+    float t;
+
+    nk_style_push_color(ctx, &ctx->style.slider.bar_normal, clear.data.color);
+    nk_style_push_color(ctx, &ctx->style.slider.bar_hover, clear.data.color);
+    nk_style_push_color(ctx, &ctx->style.slider.bar_active, clear.data.color);
+    nk_style_push_color(ctx, &ctx->style.slider.bar_filled, clear.data.color);
+    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_normal, clear);
+    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_active, clear);
+    nk_slider_float(ctx, lo, val, hi, step);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
+
+    /* The arrows, if this is what has focus: applied here rather than in the
+     * shell, which knows neither the bounds nor the grain of the value. */
+    {
+        int steps = reaktor_focus_step(app, id);
+
+        if (steps) {
+            *val += step * (float)steps;
+            if (*val < lo) *val = lo;
+            if (*val > hi) *val = hi;
+        }
+    }
+    /* And the same three numbers to the tree, after the arrows rather than
+     * before, so a client reads the value it has just been given. */
+    reaktor_note_range(app, id, *val, lo, hi, step);
+
+    in  = nk_rect(b.x + st->padding.x, b.y + st->padding.y,
+                  b.w - 2.0f * st->padding.x, b.h - 2.0f * st->padding.y);
+    bar = nk_rect(in.x, in.y + in.h * 0.5f - cap, in.w, st->bar_height);
+    t   = (hi > lo) ? (*val - lo) / (hi - lo) : 0.0f;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    fl  = nk_rect(bar.x, bar.y, bar.w * t, bar.h);
+    kn  = nk_rect(in.x + in.w * t - st->cursor_size.x * 0.5f,
+                  in.y + in.h * 0.5f - st->cursor_size.y * 0.5f,
+                  st->cursor_size.x, st->cursor_size.y);
+
+    reaktor_fill_round(app, cv, bar, cap, track);
+    if (fl.w >= 1.0f) reaktor_fill_round(app, cv, fl, cap, filled);
+    reaktor_glyph_at(app, ctx, kn, REAKTOR_DISC_ROUND, knob,
+             (int)(st->cursor_size.x < st->cursor_size.y ? st->cursor_size.x
+                                                         : st->cursor_size.y),
+             0.0f);
+}
+
+/* nk_slider_int's own few lines, with the aligned call in the middle. */
+void
+reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id, int *val,
+                int lo, int hi, int step)
+{
+    float f = (float)*val;
+
+    reaktor_slider_bar(app, ctx, id, &f, (float)lo, (float)hi, (float)step);
+    /* Rounded, not truncated: a step that arrives as 39.999999 is 40. */
+    *val = (int)(f + (f < 0.0f ? -0.5f : 0.5f));
+}
+
 int
 reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
 {

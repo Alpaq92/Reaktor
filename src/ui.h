@@ -112,6 +112,15 @@ void reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
 int reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
                         int on);
 
+/* A slider that draws its own track and knob. Nuklear's is a filled bar with
+ * a square cursor; the stylesheet asks for a rounded rail with a round grip,
+ * and a circle is the one shape the software rasteriser cannot draw. `id` is
+ * the node it reports as, so the arrow keys can move it. */
+void reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id,
+                        float *val, float lo, float hi, float step);
+void reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id,
+                            int *val, int lo, int hi, int step);
+
 /* Text that acts. `active` draws it in the link colour rather than muted. */
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);

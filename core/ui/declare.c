@@ -451,8 +451,9 @@ reaktor_field(const reaktor_field_spec *s)
                s->buf[0] ? s->buf : NULL, 0u, NULL, &box, &id))
         return;
     reaktor_note_mute(g_app, 1);
-    (void)reaktor_field_text(g_app, g_ctx, NK_EDIT_FIELD, s->buf, s->len,
-                             s->cap, s->hint, NULL);
+    (void)reaktor_field_text(g_app, g_ctx,
+                             s->multiline ? NK_EDIT_BOX : NK_EDIT_FIELD,
+                             s->buf, s->len, s->cap, s->hint, s->filter);
     reaktor_note_mute(g_app, 0);
 }
 
@@ -644,4 +645,39 @@ reaktor_select(const reaktor_select_spec *s)
         reaktor_note_mute(g_app, 0);
     }
     return hit;
+}
+
+void
+reaktor_slider(const reaktor_slider_spec *s)
+{
+    reaktor_box box;
+    char        text[32];
+    unsigned    id = 0;
+    float       now;
+
+    if (!g_app || !s || (!s->value && !s->ivalue)) return;
+    now = s->value ? *s->value : (float)*s->ivalue;
+
+    if (s->text) SDL_strlcpy(text, s->text, sizeof(text));
+    else if (s->value) SDL_snprintf(text, sizeof(text), "%.2f", (double)now);
+    else SDL_snprintf(text, sizeof(text), "%d", *s->ivalue);
+
+    box = s->box;
+    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
+        box.h = g_ctx->style.font->height + 14.0f;
+
+    if (!place(REAKTOR_A11Y_SLIDER, s->name, text, 0u, NULL, &box, &id))
+        return;
+
+    /* The numbers behind the text, for a client that computes rather than
+     * reads - see reaktor_note_range. */
+    reaktor_note_range(g_app, id, now, s->lo, s->hi, s->step);
+
+    reaktor_note_mute(g_app, 1);
+    if (s->value)
+        reaktor_slider_bar(g_app, g_ctx, id, s->value, s->lo, s->hi, s->step);
+    else
+        reaktor_slider_bar_int(g_app, g_ctx, id, s->ivalue, (int)s->lo,
+                               (int)s->hi, (int)s->step);
+    reaktor_note_mute(g_app, 0);
 }
