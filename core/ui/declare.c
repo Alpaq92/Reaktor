@@ -223,10 +223,15 @@ size_to_text(reaktor_box *box, const char *text, const char *selector,
         if (st.matched && st.font_px > 0)
             f = pick_font(g_app, st.font_px, st.bold);
     }
-    if (box->w <= 0.0f && text)
+    /* Only on an axis nothing else decides. A box that fills has its size
+     * chosen for it, and an intrinsic size there is not a preference but a
+     * floor - which is why three buttons in a row came out as wide as their
+     * labels plus a share each, rather than as three equal columns. A caller
+     * that does want a floor sets it, and this leaves it alone. */
+    if (box->w <= 0.0f && text && !(box->flags & REAKTOR_LAY_FILL_X))
         box->w = f->width(f->userdata, f->height, text, (int)strlen(text))
                + 2.0f * pad_x;
-    if (box->h <= 0.0f)
+    if (box->h <= 0.0f && !(box->flags & REAKTOR_LAY_FILL_Y))
         box->h = f->height + 2.0f * pad_y;
 }
 
@@ -304,10 +309,11 @@ reaktor_label(const reaktor_label_spec *s)
         if (!reaktor_layout_rect(&g_app->lay, id, &prev) || prev.h != box.h)
             g_unsettled++;
     } else {
-        if (box.w <= 0.0f)
+        if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X))
             box.w = f->width(f->userdata, f->height, s->text,
                              (int)strlen(s->text));
-        if (box.h <= 0.0f) box.h = f->height;
+        if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
+            box.h = f->height;
     }
 
     if (!emit(id, NULL, &box)) return;

@@ -988,11 +988,28 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
             "press\".");
     api(app, ctx, "nk_button_label  /  nk_button_image_label");
 
-    nk_layout_row_dynamic(ctx, 38.0f, 3);
-    if (reaktor_button_label(app, ctx, "Default")) s->presses++;
-    if (reaktor_button_accent(app, ctx, "Primary")) s->presses++;
-    if (reaktor_button_icon(app, ctx, "key-outline", "With icon"))
-        s->presses++;
+    {
+        /* Where nk_layout_row_dynamic(ctx, 38, 3) put three equal columns:
+         * one row, three boxes that fill, and the gap Nuklear puts between
+         * columns rather than a number. */
+        struct nk_rect at = nk_widget_bounds(ctx);
+
+        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 38.0f,
+                    .gap = ctx->style.window.spacing.x) {
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = "Default",
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } })) s->presses++;
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = "Primary", .accent = 1,
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } })) s->presses++;
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = "With icon", .icon = "key-outline",
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } })) s->presses++;
+        }
+    }
 
     section(app, ctx, "Icons",
             "Every icon is an Ionicon, read out of the submodule and "
@@ -1003,18 +1020,50 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
             "icon's name to a reader as well as to the eye.");
     api(app, ctx, "nk_button_image_label  /  reaktor_button_icon");
 
-    nk_layout_row_dynamic(ctx, 38.0f, 4);
-    for (i = 0; i < ICON_N; i++)
-        if (reaktor_button_icon(app, ctx, g_icons[i].icon, g_icons[i].label))
-            s->presses++;
+    {
+        /* Nuklear starts a new row when a dynamic one fills up; a declared
+         * grid says so, as a column of rows. */
+        struct nk_rect at = nk_widget_bounds(ctx);
+        static const struct { const char *icon, *label; } nav[3] = {
+            { "chevron-back-outline",    "Back" },
+            { "chevron-forward-outline", "Forward" },
+            { "menu-outline",            "Menu" }
+        };
+        int row, col;
 
-    nk_layout_row_dynamic(ctx, 38.0f, 3);
-    if (reaktor_button_icon(app, ctx, "chevron-back-outline", "Back"))
-        s->presses++;
-    if (reaktor_button_icon(app, ctx, "chevron-forward-outline", "Forward"))
-        s->presses++;
-    if (reaktor_button_icon(app, ctx, "menu-outline", "Menu"))
-        s->presses++;
+        REAKTOR_COLUMN(.ml = at.x, .mt = at.y, .w = at.w,
+                       .gap = ctx->style.window.spacing.y) {
+            for (row = 0; row * 4 < ICON_N; row++) {
+                REAKTOR_ROW(.h = 38.0f, .flags = REAKTOR_LAY_FILL_X,
+                            .gap = ctx->style.window.spacing.x) {
+                    for (col = 0; col < 4; col++) {
+                        int k = row * 4 + col;
+
+                        if (k >= ICON_N) break;
+                        if (reaktor_button(&(reaktor_button_spec){
+                                .label = g_icons[k].label,
+                                .icon  = g_icons[k].icon,
+                                .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                  REAKTOR_LAY_FILL_Y } }))
+                            s->presses++;
+                    }
+                }
+            }
+
+            /* In the same column rather than a block of its own: a container
+             * that has just closed leaves nothing useful to peek at, and one
+             * column of rows needs no peeking at all. */
+            REAKTOR_ROW(.h = 38.0f, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                for (i = 0; i < 3; i++)
+                    if (reaktor_button(&(reaktor_button_spec){
+                            .label = nav[i].label, .icon = nav[i].icon,
+                            .box = { .flags = REAKTOR_LAY_FILL_X |
+                                              REAKTOR_LAY_FILL_Y } }))
+                        s->presses++;
+            }
+        }
+    }
 
     section(app, ctx, "Colour, image, repeat and disabled",
             "nk_button_color paints a swatch and nothing else. A repeater "
