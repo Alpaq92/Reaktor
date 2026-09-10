@@ -581,3 +581,31 @@ reaktor_radio(const reaktor_radio_spec *s)
     if (hit) *s->choice = s->value;
     return hit;
 }
+
+int
+reaktor_select(const reaktor_select_spec *s)
+{
+    reaktor_box box;
+    unsigned    id = 0;
+    nk_bool     was;
+    int         hit;
+
+    if (!g_app || !s || !s->on) return 0;
+    was = *s->on;
+
+    box = s->box;
+    size_to_text(&box, s->label, NULL, 0.0f, 0.0f);
+
+    if (!place(REAKTOR_A11Y_LISTITEM, s->name ? s->name : s->label, NULL,
+               was ? REAKTOR_A11Y_SELECTED : 0u, NULL, &box, &id))
+        return 0;
+
+    if (reaktor_focus_activated(g_app, id)) *s->on = !*s->on;
+
+    reaktor_note_mute(g_app, 1);
+    hit = nk_selectable_label(g_ctx, s->label,
+                              s->centred ? NK_TEXT_CENTERED : NK_TEXT_LEFT,
+                              s->on);
+    reaktor_note_mute(g_app, 0);
+    return hit;
+}

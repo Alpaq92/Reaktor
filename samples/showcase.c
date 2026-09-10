@@ -1116,13 +1116,22 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "nk_selectable_label  /  nk_selectable_symbol_label  /  "
                   "nk_selectable_image_label");
 
-    nk_layout_row_static(ctx, 32.0f, 140, 4);
-    for (i = 0; i < 4; i++) {
-        char lab[16];
-        SDL_snprintf(lab, sizeof(lab), "Tile %d", i + 1);
-        hot(app, ctx, REAKTOR_A11Y_LISTITEM, lab,
-            s->sel_tile[i] ? REAKTOR_A11Y_SELECTED : 0u);
-        nk_selectable_label(ctx, lab, NK_TEXT_CENTERED, &s->sel_tile[i]);
+    {
+        /* nk_layout_row_static's fixed columns: four boxes of a stated width
+         * and nothing filling, so the row ends where they do. */
+        struct nk_rect at = nk_widget_bounds(ctx);
+
+        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 32.0f,
+                    .gap = ctx->style.window.spacing.x) {
+            for (i = 0; i < 4; i++) {
+                char lab[16];
+
+                SDL_snprintf(lab, sizeof(lab), "Tile %d", i + 1);
+                reaktor_select(&(reaktor_select_spec){
+                    .label = lab, .on = &s->sel_tile[i], .centred = 1,
+                    .box = { .w = 140.0f, .flags = REAKTOR_LAY_FILL_Y } });
+            }
+        }
     }
 
     /* Sized to their contents rather than stretched across half the window,

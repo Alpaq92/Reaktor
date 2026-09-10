@@ -204,6 +204,19 @@ typedef struct reaktor_radio_spec {
 
 int reaktor_radio(const reaktor_radio_spec *s);
 
+/* A label that holds a pressed state - the widget a list or a tile grid is
+ * built out of. Reported as a list item, because that is what it is to a
+ * reader whatever it looks like. Answers whether it was clicked. */
+typedef struct reaktor_select_spec {
+    const char   *label;
+    const char   *name;
+    nk_bool      *on;
+    reaktor_box   box;
+    unsigned char centred;
+} reaktor_select_spec;
+
+int reaktor_select(const reaktor_select_spec *s);
+
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */
 typedef struct reaktor_link_spec {
