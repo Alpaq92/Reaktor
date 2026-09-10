@@ -1036,17 +1036,31 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
             "above are reading.");
     api(app, ctx, "nk_color_pick");
 
-    nk_layout_row_static(ctx, 132.0f, 210, 2);
-    hot(app, ctx, REAKTOR_A11Y_GROUP, "Colour picker", 0);
-    nk_color_pick(ctx, &s->tint, NK_RGB);
-    if (nk_group_begin(ctx, "swatch", NK_WINDOW_NO_SCROLLBAR)) {
-        struct nk_color c = nk_rgb_cf(s->tint);
-        nk_layout_row_dynamic(ctx, 44.0f, 1);
-        nk_button_color(ctx, c);
-        nk_layout_row_dynamic(ctx, 22.0f, 1);
+    {
+        /* The picker and, beside it, what it is picking. The second cell was
+         * a group of its own only so two things could be stacked in it,
+         * which is what a column is. */
+        struct nk_rect  at = nk_widget_bounds(ctx);
+        struct nk_color c  = nk_rgb_cf(s->tint);
+
         SDL_snprintf(line, sizeof(line), "#%02x%02x%02x", c.r, c.g, c.b);
-        nk_label(ctx, line, NK_TEXT_CENTERED);
-        nk_group_end(ctx);
+
+        REAKTOR_ROW(.w = at.w, .h = 132.0f,
+                    .gap = ctx->style.window.spacing.x) {
+            reaktor_colour_pick(&(reaktor_colour_spec){
+                .name = "Colour picker", .value = &s->tint,
+                .box = { .w = 210.0f, .h = 132.0f } });
+
+            REAKTOR_COLUMN(.w = 210.0f,
+                           .gap = ctx->style.window.spacing.y) {
+                reaktor_swatch(&(reaktor_swatch_spec){
+                    .name = "Chosen colour", .fill = c,
+                    .box = { .h = 44.0f, .flags = REAKTOR_LAY_FILL_X } });
+                reaktor_label(&(reaktor_label_spec){
+                    .text = line, .centred = 1,
+                    .box = { .h = 22.0f, .flags = REAKTOR_LAY_FILL_X } });
+            }
+        }
     }
 
     nk_layout_row_dynamic(ctx, 8.0f, 1);

@@ -325,6 +325,18 @@ void reaktor_combo_close(void);
 /* One choice in an open combo. Answers whether it was picked. */
 int reaktor_combo_item(const char *label, int chosen);
 
+/* The one widget Nuklear draws as a continuous field rather than from the
+ * style: a saturation-value square with a hue bar. Reported as a group with
+ * its colour as the value, because there is no role in any platform's
+ * vocabulary for "pick a colour by eye". */
+typedef struct reaktor_colour_spec {
+    const char       *name;
+    struct nk_colorf *value;
+    reaktor_box       box;
+} reaktor_colour_spec;
+
+void reaktor_colour_pick(const reaktor_colour_spec *s);
+
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */
 typedef struct reaktor_link_spec {

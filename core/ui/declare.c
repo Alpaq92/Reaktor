@@ -852,3 +852,27 @@ reaktor_combo_item(const char *label, int chosen)
     hit = nk_combo_item_label(g_ctx, label, NK_TEXT_LEFT);
     return hit;
 }
+
+void
+reaktor_colour_pick(const reaktor_colour_spec *s)
+{
+    reaktor_box     box;
+    struct nk_color c;
+    char            hex[10];
+    unsigned        id = 0;
+
+    if (!g_app || !s || !s->value) return;
+    c = nk_rgb_cf(*s->value);
+    SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x", c.r, c.g, c.b);
+
+    box = s->box;
+    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X)) box.w = 210.0f;
+    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y)) box.h = 132.0f;
+
+    if (!place(REAKTOR_A11Y_GROUP, s->name, hex, 0u, NULL, &box, &id))
+        return;
+
+    reaktor_note_mute(g_app, 1);
+    nk_color_pick(g_ctx, s->value, NK_RGB);
+    reaktor_note_mute(g_app, 0);
+}
