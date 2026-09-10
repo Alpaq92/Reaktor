@@ -395,4 +395,125 @@ void note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
 void draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
                const reaktor_style *s);
 
+/* --- the imperative widget surface --------------------------------------
+ *
+ * These were in ui.h, which is what a page includes. They are not there any
+ * more, because no page calls them: every one is what a declared widget draws
+ * through, and `core/ui/declare.c` is the only caller left.
+ *
+ * That is the whole of stage 08, and it is a move rather than the deletion the
+ * plan expected. Deleting them would mean reimplementing each widget inside
+ * declare.c, and the reason the declarative layer could be trusted from the
+ * first page was precisely that it did not: behaviour is inherited from code
+ * that already worked, and a bug fixed here is fixed for both.
+ *
+ * What did happen is the part that mattered. A page can no longer reach them,
+ * so a page can no longer drift back into drawing imperatively by accident,
+ * and the header a page reads is 47 declarations shorter than it was - the
+ * public surface is the declarative one.
+ *
+ * The exceptions, and why: what stays in ui.h is what a page still legitimately
+ * asks the shell for - the palette and the fonts, the file dialog, the
+ * diagnostics - plus the accessibility calls and the hand-drawn chrome that
+ * the widgets with no spec still need. Those widgets are groups, trees, list
+ * views, charts and the insides of popups, and they are stage 10's problem,
+ * not something to pretend away here. */
+
+/* The same as reaktor_ionicon, stroked in a colour of the caller's choosing -
+ * for an icon that sits on something other than the page, such as a row
+ * filled with the accent. reaktor_on gives the colour that reads on a given
+ * background. */
+struct nk_image reaktor_ionicon_exact(App *app, const char *name, int px,
+                                      struct nk_color stroke, float sw);
+struct nk_image reaktor_ionicon_col(App *app, const char *name, int px,
+                                    struct nk_color stroke);
+
+/* Draws an image at exactly px, centred in the current widget slot. nk_image
+ * stretches to fill its slot instead, so the size asked for is ignored. */
+void reaktor_image(App *app, struct nk_context *ctx, struct nk_image im,
+                   int px);
+
+/* Cuts a button's vertical padding to what its row can hold, for the one
+ * widget about to be drawn, and puts it back. Only the icon-only button needs
+ * it now: everything else draws through css_button, and push_button_style
+ * bounds the padding itself - it has to, because it pushes the stylesheet's
+ * value afterwards and would otherwise undo this. */
+int  reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b);
+void reaktor_unfit_label(struct nk_context *ctx, int fitted);
+
+/* One Ionicon centred in `slot` at exactly px, no resampling - which is what
+ * keeps a rim a line rather than a smear. `sw` multiplies the artwork's own
+ * stroke; 0 takes the hairline rule. The disc names below go with it: a
+ * circle is the one shape the software rasteriser cannot draw, so every
+ * circle in this tree is a glyph. */
+void reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
+                      const char *name, struct nk_color col, int px, float sw);
+#define REAKTOR_DISC_ROUND   "ellipse"
+#define REAKTOR_DISC_RING    "radio-button-off"
+#define REAKTOR_DISC_OUTLINE "ellipse-outline"
+
+/* A radio, drawn as a glyph rather than as Nuklear's three filled circles -
+ * see the note on the definition. `on` is whether this one is the chosen one;
+ * answers whether it was clicked. */
+int reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
+                        int on);
+
+/* The int-valued slider, and the knob. See ui.h on reaktor_slider_bar and
+ * reaktor_progress_bar for why either draws its own geometry. */
+void reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id,
+                            int *val, int lo, int hi, int step);
+void reaktor_knob_dial(App *app, struct nk_context *ctx, float *val,
+                       float lo, float hi, enum nk_heading zero);
+
+/* The chrome around a property stepper. Nuklear draws its increment and
+ * decrement as square washes with a text arrow; the stylesheet asks for a
+ * round wash and a chevron glyph, and neither is something nk_property can
+ * be told. Push, draw the property, pop, then lay the chrome over it. */
+void reaktor_property_push(struct nk_context *ctx);
+void reaktor_property_pop(struct nk_context *ctx);
+void reaktor_property_chrome(App *app, struct nk_context *ctx,
+                             struct nk_rect b);
+
+/* A combo box's own drawing. Nuklear's header has a text arrow and a square
+ * swatch with a literal zero rounding; the stylesheet asks for a chevron and
+ * the same radius as everything else, and neither is a style field. So the
+ * header is drawn, and then this is laid over it. `content` is the region
+ * inside the header a swatch or a glyph belongs in. */
+struct nk_rect reaktor_combo_content(struct nk_context *ctx, struct nk_rect h);
+void reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h,
+                          float border);
+
+/* Text that acts. `active` draws it in the link colour rather than muted. */
+int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
+                       int active);
+int reaktor_button_icon(App *app, struct nk_context *ctx,
+                        const char *ionicon, const char *label);
+/* The button rule with no label and the given fill: a colour swatch that is
+ * otherwise a button. `name` is what a reader is told it is. */
+int reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
+                         struct nk_color fill);
+
+/* A text field styled from tiny.css's `input` rule, with `hint` painted into
+ * it while it is empty. Nuklear has no placeholder of its own. */
+nk_flags reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
+                       char *buf, int *len, int cap, const char *hint,
+                       nk_plugin_filter filter);
+
+/* How many steps the arrows asked this node for, taken once and only while it
+ * has focus. A range answers its own arrows: the shell knows a node's value
+ * only as the text a reader would hear, and nothing of its bounds or its
+ * grain. Every other role lets the arrows move focus instead. */
+int reaktor_focus_step(App *app, unsigned id);
+
+/* The numbers behind a range's value text, for the node `id` names - what a
+ * platform needs to offer a slider as something to set rather than only to
+ * read. See reaktor_a11y_set_range. */
+void reaktor_note_range(App *app, unsigned id, float num, float lo, float hi,
+                        float step);
+
+/* Stops reports being recorded while a widget that already reports itself is
+ * drawn by one that has reported it. Nested, so it is safe to bracket a call
+ * that brackets another. */
+void reaktor_note_mute(App *app, int on);
+
 #endif /* REAKTOR_INTERNAL_H */
