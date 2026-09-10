@@ -730,3 +730,48 @@ reaktor_knob(const reaktor_knob_spec *s)
     reaktor_knob_dial(g_app, g_ctx, s->value, s->lo, s->hi, NK_DOWN);
     reaktor_note_mute(g_app, 0);
 }
+
+void
+reaktor_property(const reaktor_property_spec *s)
+{
+    reaktor_box    box;
+    struct nk_rect r;
+    char           text[32];
+    unsigned       id = 0;
+    double         now;
+
+    if (!g_app || !s || (!s->ivalue && !s->fvalue && !s->dvalue)) return;
+    now = s->ivalue ? (double)*s->ivalue
+        : s->fvalue ? (double)*s->fvalue : *s->dvalue;
+
+    if (s->ivalue) SDL_snprintf(text, sizeof(text), "%d", *s->ivalue);
+    else SDL_snprintf(text, sizeof(text), "%.2f", now);
+
+    box = s->box;
+    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
+        box.h = g_ctx->style.font->height + 14.0f;
+
+    if (!place(REAKTOR_A11Y_SPINBUTTON, s->name ? s->name : s->label, text,
+               0u, NULL, &box, &id))
+        return;
+    reaktor_note_range(g_app, id, (float)now, (float)s->lo, (float)s->hi,
+                       (float)s->step);
+
+    /* The rect it was just pushed into, which the chrome is drawn over. */
+    r = nk_widget_bounds(g_ctx);
+
+    reaktor_note_mute(g_app, 1);
+    reaktor_property_push(g_ctx);
+    if (s->ivalue)
+        nk_property_int(g_ctx, s->label, (int)s->lo, s->ivalue, (int)s->hi,
+                        (int)s->step, s->grain);
+    else if (s->fvalue)
+        nk_property_float(g_ctx, s->label, (float)s->lo, s->fvalue,
+                          (float)s->hi, (float)s->step, s->grain);
+    else
+        nk_property_double(g_ctx, s->label, s->lo, s->dvalue, s->hi,
+                           s->step, s->grain);
+    reaktor_property_pop(g_ctx);
+    reaktor_property_chrome(g_app, g_ctx, r);
+    reaktor_note_mute(g_app, 0);
+}

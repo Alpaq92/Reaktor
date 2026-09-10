@@ -274,6 +274,24 @@ typedef struct reaktor_knob_spec {
 
 void reaktor_knob(const reaktor_knob_spec *s);
 
+/* A property: a labelled number with steppers either side, which HTML calls
+ * input[type=number] and no stylesheet in the running has a rule for. Writes
+ * an int, a float or a double of the caller's - set exactly one. `step` is
+ * one press of a stepper; `grain` is how far the pointer has to be dragged
+ * to move it by that much. */
+typedef struct reaktor_property_spec {
+    const char *label;      /* shown, and read - "Columns:" */
+    const char *name;
+    int        *ivalue;
+    float      *fvalue;
+    double     *dvalue;
+    double      lo, hi, step;
+    float       grain;
+    reaktor_box box;
+} reaktor_property_spec;
+
+void reaktor_property(const reaktor_property_spec *s);
+
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */
 typedef struct reaktor_link_spec {

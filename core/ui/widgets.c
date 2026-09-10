@@ -476,6 +476,89 @@ reaktor_knob_dial(App *app, struct nk_context *ctx, float *val, float lo, float 
     reaktor_glyph_at(app, ctx, dot, REAKTOR_DISC_ROUND,   ink,  dot_px, 0.0f);
 }
 
+/* A chevron where Nuklear would have drawn one of its own. nk_draw_symbol's
+ * chevron is two one-pixel lines corner to corner of whatever box it is
+ * handed - thin, and half the size of the combo's - so tree headers and
+ * property steppers hand Nuklear NK_SYMBOL_NONE and get the Ionicon here,
+ * centred in the slot Nuklear sized. */
+#define CHEVRON_PX 14
+void
+reaktor_chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
+           const char *name, struct nk_color col)
+{
+    struct nk_rect r;
+    struct nk_image im = reaktor_ionicon_col(app, name, CHEVRON_PX, col);
+
+    r.w = r.h = (float)CHEVRON_PX;
+    r.x = slot.x + (slot.w - r.w) * 0.5f;
+    r.y = slot.y + (slot.h - r.h) * 0.5f;
+    nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
+}
+
+
+/* A stepper's hover wash, round rather than the square Nuklear draws: the
+ * slot is a square the height of the font, so half of it is a circle, and
+ * reaktor_fill_round makes it one that is actually round. Nuklear draws none -
+ * see stepper_push. */
+static void
+stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
+{
+    struct nk_color wash;
+
+    if (!nk_input_is_mouse_hovering_rect(&ctx->input, sq)) return;
+    wash = reaktor_token("--background-hover", ctx->style.property.hover.type
+                         == NK_STYLE_ITEM_COLOR
+                         ? ctx->style.property.hover.data.color
+                         : ctx->style.text.color);
+    reaktor_fill_round(app, nk_window_get_canvas(ctx), sq, sq.w * 0.5f, wash);
+}
+
+/* The two steppers of a property, placed the way nk_do_property places
+ * them: a font-height square inside the border and padding at each end.
+ * `b` is the bounds captured before the property was emitted. */
+void
+reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
+{
+    const struct nk_style_property *st = &ctx->style.property;
+    float h = ctx->style.font->height;
+    struct nk_rect l, r;
+
+    l.w = l.h = r.w = r.h = h;
+    l.x = b.x + st->border + st->padding.x;
+    l.y = b.y + st->border + b.h * 0.5f - h * 0.5f;
+    r.x = b.x + b.w - (h + st->padding.x);
+    r.y = l.y;
+    stepper_wash(app, ctx, l);
+    stepper_wash(app, ctx, r);
+    reaktor_chevron_at(app, ctx, l, "chevron-back-outline",    st->dec_button.text_normal);
+    reaktor_chevron_at(app, ctx, r, "chevron-forward-outline", st->inc_button.text_normal);
+}
+
+/* Nuklear's own stepper wash, off for the length of one property: it is a
+ * square, and stepper_wash draws a circle over the same slot afterwards,
+ * which would leave the square's corners standing. Not turned off in the
+ * theme, because the colour picker's three properties have no chevrons and
+ * so no wash drawn for them - there, Nuklear's is all there is. */
+void
+reaktor_property_push(struct nk_context *ctx)
+{
+    struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+
+    nk_style_push_style_item(ctx, &ctx->style.property.dec_button.hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.property.dec_button.active, clear);
+    nk_style_push_style_item(ctx, &ctx->style.property.inc_button.hover, clear);
+    nk_style_push_style_item(ctx, &ctx->style.property.inc_button.active, clear);
+}
+
+void
+reaktor_property_pop(struct nk_context *ctx)
+{
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+}
+
 int
 reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
 {

@@ -130,6 +130,19 @@ void reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur,
 void reaktor_knob_dial(App *app, struct nk_context *ctx, float *val,
                        float lo, float hi, enum nk_heading zero);
 
+/* A chevron centred in `slot`, at the one size they are drawn. */
+void reaktor_chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
+                        const char *name, struct nk_color col);
+
+/* The chrome around a property stepper. Nuklear draws its increment and
+ * decrement as square washes with a text arrow; the stylesheet asks for a
+ * round wash and a chevron glyph, and neither is something nk_property can
+ * be told. Push, draw the property, pop, then lay the chrome over it. */
+void reaktor_property_push(struct nk_context *ctx);
+void reaktor_property_pop(struct nk_context *ctx);
+void reaktor_property_chrome(App *app, struct nk_context *ctx,
+                             struct nk_rect b);
+
 /* Text that acts. `active` draws it in the link colour rather than muted. */
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);
