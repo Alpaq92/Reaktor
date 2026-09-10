@@ -256,23 +256,6 @@ combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
  * centred in the slot Nuklear sized. */
 #define CHEVRON_PX 14
 
-/* A button that exists only to be looked at. Same as nk_button_label, plus
- * the hover registration every interactive widget owes the shell now that the
- * page-wide backstop no longer forces a frame. */
-static int
-demo_button(App *app, struct nk_context *ctx, const char *label)
-{
-    unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
-    int fitted = reaktor_fit_label(app, ctx, nk_widget_bounds(ctx));
-    int hit = nk_button_label(ctx, label);
-
-    reaktor_unfit_label(ctx, fitted);
-
-    /* Both, always: `||` would short-circuit and leave the activation for the
-     * frame to turn into a second press. */
-    if (reaktor_focus_activated(app, id)) hit = 1;
-    return hit;
-}
 
 static void
 chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
@@ -743,6 +726,24 @@ hot(App *app, struct nk_context *ctx, unsigned char role, const char *name,
      * every other caller ignores. */
     if (role == REAKTOR_A11Y_NONE) return 0;
     return reaktor_note(app, role, name, NULL, state, b);
+}
+
+/* A button that exists only to be looked at. Same as nk_button_label, plus
+ * the hover registration every interactive widget owes the shell now that the
+ * page-wide backstop no longer forces a frame. */
+static int
+demo_button(App *app, struct nk_context *ctx, const char *label)
+{
+    unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
+    int fitted = reaktor_fit_label(app, ctx, nk_widget_bounds(ctx));
+    int hit = nk_button_label(ctx, label);
+
+    reaktor_unfit_label(ctx, fitted);
+
+    /* Both, always: `||` would short-circuit and leave the activation for the
+     * frame to turn into a second press. */
+    if (reaktor_focus_activated(app, id)) hit = 1;
+    return hit;
 }
 
 /* Checkboxes and radios sit the way the Edit menu sits them: label at the

@@ -248,23 +248,6 @@ reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
     return clicked;
 }
 
-/* A button that exists only to be looked at. Same as nk_button_label, plus
- * the hover registration every interactive widget owes the shell now that the
- * page-wide backstop no longer forces a frame. */
-static int
-demo_button(App *app, struct nk_context *ctx, const char *label)
-{
-    unsigned id = hot(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
-    int fitted = reaktor_fit_label(app, ctx, nk_widget_bounds(ctx));
-    int hit = nk_button_label(ctx, label);
-
-    reaktor_unfit_label(ctx, fitted);
-
-    /* Both, always: `||` would short-circuit and leave the activation for the
-     * frame to turn into a second press. */
-    if (reaktor_focus_activated(app, id)) hit = 1;
-    return hit;
-}
 
 /* --- first-run values ---------------------------------------------------- */
 

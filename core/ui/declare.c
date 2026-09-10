@@ -33,6 +33,17 @@ static int                g_space;   /* a Nuklear space is open */
 static int                g_unsettled;
 static int                g_settled_run;
 
+/* The width each open container will hand its children, innermost last.
+ *
+ * A wrapped paragraph needs a width before it can have a height, and asking
+ * the layout means asking about last frame - which on the first frame is
+ * nothing, so the paragraph came out one line tall and everything below it
+ * rode up until the frame after. That is a visible jump, and it is avoidable:
+ * the container's width is known the moment it is declared, so a child that
+ * fills can be measured against it straight away. */
+static float              g_width[REAKTOR_LAY_DEPTH + 1];
+static int                g_widths;
+
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
 {
@@ -41,6 +52,8 @@ reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
     g_depth     = 0;
     g_space     = 0;
     g_unsettled = 0;
+    g_width[0]  = area.w;
+    g_widths    = 1;
     reaktor_layout_begin(&app->lay, area);
 }
 
@@ -107,6 +120,13 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
                            nk_rect(0, 0, 0, 0));
     reaktor_layout_open(&g_app->lay, id, &box);
 
+    if (g_widths < (int)(sizeof(g_width) / sizeof(g_width[0]))) {
+        float w = box.w > 0.0f ? box.w : g_width[g_widths - 1];
+
+        w -= box.ml + box.mr;
+        g_width[g_widths++] = w > 0.0f ? w : 0.0f;
+    }
+
     {
         struct nk_rect r;
 
@@ -131,6 +151,7 @@ reaktor_box_close(void)
 {
     if (!g_app) return;
     if (g_depth > 0) g_depth--;
+    if (g_widths > 1) g_widths--;
     if (g_depth == 0 && g_space) {
         nk_layout_space_end(g_ctx);
         g_space = 0;
@@ -312,7 +333,11 @@ reaktor_label(const reaktor_label_spec *s)
         /* As many lines as this width takes, at the width it had last frame.
          * The +2 is the same slack the imperative caption used: a wrap breaks
          * on words, so the last line is short and one more may be started. */
-        float avail = width_of(id) - 4.0f;
+        /* This label's own width if the layout has one, and the width its
+         * container is about to hand it if not - which is what makes the
+         * first drawn frame the right height rather than one line. */
+        float own   = width_of(id);
+        float avail = (own > 0.0f ? own : g_width[g_widths - 1]) - 4.0f;
         float tw    = f->width(f->userdata, f->height, s->text,
                                (int)strlen(s->text));
         int   lines = (avail > 1.0f && tw > avail) ? (int)(tw / avail) + 2 : 1;
