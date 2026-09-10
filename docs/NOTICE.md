@@ -1,109 +1,100 @@
 # Third-party notices
 
-Reaktor itself is MIT (see [LICENSE](../LICENSE)). Everything it is built on is
-a git submodule under `third_party/`, used as it ships. Each licence below was
-read from that project's own licence file in the pinned revision, not from its
-README or its website.
+Reaktor is MIT ([LICENSE](../LICENSE)). Everything it is built on is a git
+submodule under `third_party/`, used as it ships. Each licence below was read
+from that project's own licence file at the pinned revision, not from its
+README. `git submodule status` prints the current pins.
 
-Refresh the pinned revisions with `git submodule status`.
+| Component | Used for | Licence |
+| --- | --- | --- |
+| [SDL](https://github.com/libsdl-org/SDL) | Window, input, renderer, system theme, file dialog | zlib |
+| [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) | Immediate-mode widgets, font baking, the SDL3 backend | MIT **or** public domain, your choice |
+| [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parse, match, cascade) and `yutil` | MIT |
+| [Onlay](https://github.com/Alpaq92/Onlay) | Computing the rectangles — a fork of [randrew/layout](https://github.com/randrew/layout) | MIT |
+| [tiny.css](https://github.com/ihsan6133/tiny.css) | The stylesheet the whole look comes from | MIT |
+| [simple.css](https://github.com/kevquirk/simple.css) | The override sheet the Styling page swaps in | MIT |
+| [Ionicons](https://github.com/ionic-team/ionicons) | Every icon, read as SVG at runtime | MIT |
+| [plutosvg](https://github.com/sammycage/plutosvg) | Rasterising those SVGs | MIT |
+| [plutovg](https://github.com/sammycage/plutovg) | The canvas plutosvg draws on (nested submodule) | MIT |
 
-| Component | Used for | Licence | Pinned at |
-| --- | --- | --- | --- |
-| [SDL](https://github.com/libsdl-org/SDL) | Window, input, renderer, system theme, file dialog | zlib | `release-3.4.16` |
-| [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) | Immediate-mode widgets, layout, font baking, SDL3 backend | MIT **or** public domain (Unlicense), your choice | `master` |
-| [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parser, selector matching, cascade) and `yutil` (containers, strings) | MIT | `develop` |
-| [tiny.css](https://github.com/ihsan6133/tiny.css) | The stylesheet the whole look comes from | MIT | `main` |
-| [Ionicons](https://github.com/ionic-team/ionicons) | Every icon in the app, read as SVG at runtime | MIT | `v8.1.0` |
-| [plutosvg](https://github.com/sammycage/plutosvg) | Rasterising those SVGs | MIT | `v0.0.8` |
-| [plutovg](https://github.com/sammycage/plutovg) | The 2D canvas plutosvg draws on (nested submodule) | MIT | tracked by plutosvg |
+Only two of LCUI's libraries are built — `libcss` and `yutil` — not the
+toolkit. SDL is built static, with audio, joystick, haptic, HID, sensor,
+camera, power, GPU, tray and offscreen disabled, along with the render backends
+this application can never select.
 
 ## The one dependency that is not a submodule
 
 `libdbus`, on Linux and the BSDs, and only if it is there: the AT-SPI bridge
-(`src/sys/a11y_atspi.c`) speaks D-Bus, and D-Bus on a freedesktop desktop is a
-system library that every application already links. CMake asks pkg-config for
-`dbus-1`; if it is missing the bridge is simply not built and the app is not
-served, which is the same thing that happens on a desktop with no
-accessibility bus running.
+speaks D-Bus, and D-Bus on a freedesktop desktop is a system library every
+application already links. CMake asks pkg-config for `dbus-1`; if it is missing
+the bridge is not built and the app is not served — the same thing that happens
+on a desktop with no accessibility bus running.
 
-| Component | Used for | Licence | Version |
-| --- | --- | --- | --- |
-| [libdbus](https://gitlab.freedesktop.org/dbus/dbus) | Speaking AT-SPI on Linux and the BSDs | **Academic Free License 2.1** or GPL-2.0-or-later, your choice — taken here under AFL-2.1 | whatever the system has |
+| Component | Licence |
+| --- | --- |
+| [libdbus](https://gitlab.freedesktop.org/dbus/dbus) | **AFL-2.1** or GPL-2.0-or-later, your choice — taken here under AFL-2.1 |
 
-AFL-2.1 is an MIT/X11-shaped permissive licence with an attribution
-requirement, which this table satisfies, and a patent-termination clause. It is
-not GPL-compatible, which does not matter to an MIT project and would matter to
-a downstream that was GPL. The alternative was ATK, which is the provider half
-of the GNOME stack, is LGPL, and is being retired in favour of speaking AT-SPI
-directly — so the licence question and the maintenance question pointed the
-same way.
+AFL-2.1 is an MIT-shaped permissive licence with an attribution requirement,
+which this table satisfies, and a patent-termination clause. It is not
+GPL-compatible, which does not matter to an MIT project and would matter to a
+GPL downstream. The alternative was ATK, which is LGPL and is being retired in
+favour of speaking AT-SPI directly — so the licence question and the
+maintenance question pointed the same way.
 
 ## The one vendored source file
 
-`src/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
+`core/render/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
 `third_party/nuklear/demo/sdl3_renderer/` and covered by Nuklear's licence
-above — MIT or public domain, at your option. It differs from upstream in a
-handful of hunks, each marked `REAKTOR`: the font atlas is baked and uploaded
-8-bit indexed rather than RGBA32; untextured geometry samples a 1x1 white
-texture of its own instead of a texel in the atlas; on the software renderer
-every vertex is put on the pixel grid; on hardware, glyph quads are; and
-`nk_sdl_render_ex` feathers fills and strokes independently. The reasoning for
-each is in [DEVELOPMENT.md](DEVELOPMENT.md).
+above. Every deviation from upstream is marked `REAKTOR`: the atlas is baked
+and uploaded 8-bit indexed rather than RGBA32; untextured geometry samples a
+1×1 white texture of its own; vertices are put on the pixel grid; and
+`nk_sdl_render_ex` feathers fills and strokes independently.
 
-It could not stay an include from the submodule because the first of those is
-chosen inside `nk_sdl_font_stash_end`, and this project does not edit
-submodules. The cost is that the file no longer tracks upstream: when Nuklear's
-backend changes it has to be re-vendored and the hunks re-applied.
-
-Only two of LCUI's libraries are built — `libcss` and `yutil` — not the
-toolkit. SDL is built static, with the audio, joystick, haptic, HID, sensor,
-camera, power, GPU, tray and offscreen subsystems disabled, along with the
-render backends this application can never select.
+It could not stay an include because the first of those is chosen inside
+`nk_sdl_font_stash_end`, and this project does not edit submodules. The cost is
+that it no longer tracks upstream: when Nuklear's backend changes it has to be
+re-vendored and the hunks re-applied.
 
 ## Fonts
 
-Fonts are the one exception to this project's submodule rule: the faces below are
-vendored as files under `assets/fonts/`. That is deliberate. The UI face used to be
-Karla, taken from `third_party/nuklear/extra_font/` — and the Nuklear submodule
-ships that `.ttf` with no licence anywhere near it, so its terms could only be read
-off a different project. A dependency whose licence has to be inferred is not one
-to build a distributable on.
+Fonts are the one exception to the submodule rule, and the reason is a licence.
+The UI face used to be Karla, taken from inside the Nuklear submodule — which
+ships that `.ttf` with no licence anywhere near it, so its terms could only be
+read off a different project. A dependency whose licence has to be inferred is
+not one to build a distributable on.
 
-| Font | Role | Licence | Where the terms are |
+| Font | Role | Licence | Terms |
 | --- | --- | --- | --- |
-| **Aileron** | The UI face. Regular is baked at five sizes; Bold at one, for the title. | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
+| **Aileron** | The UI face — Regular at five sizes, Bold for the title | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
 
-Aileron is by Sora Sagano of DOT COLON. Its download ships no licence file either,
-so rather than repeat Karla's problem the terms were traced to their source and
-written down: the font's own `name` table carries `copyright: No Rights Reserved.`
-alongside the designer and foundry, and dotcolon.net/font/aileron states the same
-beside a CC0 link. Metadata inside the file the designer built is better provenance
-than a text file next to it, and `Aileron-Notice.txt` records both, says plainly
-that the project assembled it, and reproduces the CC0 legal code it refers to.
+Aileron is by Sora Sagano of DOT COLON. Its download ships no licence file
+either, so the terms were traced to their source: the font's own `name` table
+carries `copyright: No Rights Reserved.` beside the designer and foundry, and
+dotcolon.net/font/aileron says the same next to a CC0 link. Metadata inside the
+file the designer built is better provenance than a text file beside it, and
+`Aileron-Notice.txt` records both, says plainly that this project assembled it,
+and reproduces the CC0 legal code.
 
-Aileron is an OTF. Nuklear bakes through stb_truetype, which reads CFF outlines as
-well as TrueType ones, so the format costs nothing. Switching face is one line —
-`FONT_FILE` in `src/main.c`.
-
-Seven other faces were built and looked at before this one: Jupiteroid, Liber
-Struct, Vegur, Tenderness, Seshat and Medio (all CC0), plus Karla, Public Sans and
-IBM Plex Sans (all OFL). None is in the tree — everything shipped here is CC0.
+It is an OTF; Nuklear bakes through stb_truetype, which reads CFF outlines, so
+the format costs nothing. Switching face is one line — `FONT_FILE` in
+`core/render/draw.c`.
 
 ## The mark
 
-`branding/` is original work, not vendored: the icon in its one ink, as SVG,
-PNG and `.ico`. It is covered by this project's own MIT licence. Its colours are USWDS system tokens, which are public domain
-(a U.S. Government work); the shapes are not taken from anywhere.
+`assets/icons/` is original work under this project's MIT licence: the icon in its
+one ink, as SVG, PNG and `.ico`. Its colours are USWDS system tokens, which are
+public domain as a U.S. Government work; the shapes are not taken from
+anywhere.
 
 ## What is redistributed
 
-A native build links SDL, libcss, yutil, plutosvg and plutovg statically, and
-compiles Nuklear into the binary. That binary therefore carries the zlib and
-MIT terms above, all of which are satisfied by shipping this file with it.
+A native build links SDL, libcss, yutil, plutosvg and plutovg statically and
+compiles Nuklear and Onlay into the binary, so it carries the zlib and MIT
+terms above — all satisfied by shipping this file with it.
 
-The application does **not** embed the stylesheet, the icons, the mark or the
-font: it opens them at runtime from the submodule checkout, resolved relative to the
-`.reaktor-root` marker. A distributable build has to ship those files alongside
-the binary. The WebAssembly build is the exception — Emscripten packages the
-handful of files actually referenced into `reaktor.data`, which is why that
-bundle needs no checkout beside it.
+The application does **not** embed the stylesheets, the icons, the mark or the
+font. It opens them at runtime from the submodule checkout, resolved against
+the `.reaktor-root` marker, so a distributable build ships those files beside
+the binary. The WebAssembly build is the exception: Emscripten packages the
+files actually referenced into the `.data` bundle, which is why it needs no
+checkout beside it.
