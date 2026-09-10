@@ -602,10 +602,46 @@ reaktor_select(const reaktor_select_spec *s)
 
     if (reaktor_focus_activated(g_app, id)) *s->on = !*s->on;
 
-    reaktor_note_mute(g_app, 1);
-    hit = nk_selectable_label(g_ctx, s->label,
-                              s->centred ? NK_TEXT_CENTERED : NK_TEXT_LEFT,
-                              s->on);
-    reaktor_note_mute(g_app, 0);
+    {
+        nk_flags align = s->centred ? NK_TEXT_CENTERED : NK_TEXT_LEFT;
+        struct nk_rect b = nk_widget_bounds(g_ctx);
+
+        reaktor_note_mute(g_app, 1);
+        if (s->icon) {
+            /* The ink follows the selection, so the glyph is rasterised at
+             * the colour this row is about to be drawn in. */
+            struct nk_color accent = reaktor_token("--links",
+                                                   g_ctx->style.text.color);
+            struct nk_color ink = *s->on
+                ? reaktor_on(accent)
+                : reaktor_token("--text-muted", g_ctx->style.text.color);
+
+            hit = nk_selectable_image_label(g_ctx,
+                      reaktor_ionicon_col(g_app, s->icon, 16, ink),
+                      s->label, align, s->on);
+        } else if (s->disc) {
+            /* NK_SYMBOL_NONE and the disc drawn into the slot Nuklear sized
+             * for it: a circle is the one shape the software rasteriser
+             * cannot draw, and nk_do_selectable_symbol's icon rect sits at
+             * twice the style's padding from the left edge for any alignment
+             * but NK_TEXT_LEFT, as tall as the row less that padding. */
+            const struct nk_style_selectable *st = &g_ctx->style.selectable;
+            struct nk_rect icon;
+
+            hit = nk_selectable_symbol_label(g_ctx, NK_SYMBOL_NONE, s->label,
+                                             align, s->on);
+            icon.y = b.y + st->padding.y + st->image_padding.y;
+            icon.x = b.x + 2.0f * st->padding.x + st->image_padding.x;
+            icon.w = icon.h = b.h - 2.0f * st->padding.y;
+            icon.w -= 2.0f * st->image_padding.x;
+            icon.h -= 2.0f * st->image_padding.y;
+            reaktor_glyph_at(g_app, g_ctx, icon, REAKTOR_DISC_ROUND,
+                             *s->on ? st->text_pressed : st->text_normal,
+                             (int)(icon.w < icon.h ? icon.w : icon.h), 0.0f);
+        } else {
+            hit = nk_selectable_label(g_ctx, s->label, align, s->on);
+        }
+        reaktor_note_mute(g_app, 0);
+    }
     return hit;
 }

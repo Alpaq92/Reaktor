@@ -211,6 +211,14 @@ typedef struct reaktor_select_spec {
     const char   *label;
     const char   *name;
     nk_bool      *on;
+    /* An Ionicon on the row, following the selection: a selected row is
+     * filled with the accent and its label switches to whatever reads on it,
+     * so the glyph has to make the same move or it is the one thing on the
+     * row that does not. */
+    const char   *icon;
+    /* Or a filled disc, drawn into the slot Nuklear sizes for a symbol -
+     * see the note on the implementation for why it is not a symbol. */
+    unsigned char disc;
     reaktor_box   box;
     unsigned char centred;
 } reaktor_select_spec;

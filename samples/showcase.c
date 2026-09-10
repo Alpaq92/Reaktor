@@ -1143,45 +1143,22 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
      * the glyph. So "glyph, then label beside it" is not expressible; glyph
      * left with the label centred is the arrangement that reads as one
      * control rather than two things at opposite ends. */
-    nk_layout_row_static(ctx, 32.0f, 190, 2);
-    hot(app, ctx, REAKTOR_A11Y_LISTITEM, "With a symbol",
-        s->sel_row ? REAKTOR_A11Y_SELECTED : 0u);
     {
-        /* NK_SYMBOL_NONE and the disc drawn into the slot Nuklear sized for
-         * it - nk_do_selectable_symbol's icon rect, which for any alignment
-         * but NK_TEXT_LEFT sits at twice the style's padding from the left
-         * edge and is as tall as the row less that padding. */
-        const struct nk_style_selectable *st = &ctx->style.selectable;
-        struct nk_rect b = nk_widget_bounds(ctx);
-        struct nk_rect icon;
+        /* Two selectables that carry a glyph. Which one Nuklear can draw and
+         * how it places it is the library's problem now, not this page's. */
+        struct nk_rect at = nk_widget_bounds(ctx);
 
-        nk_selectable_symbol_label(ctx, NK_SYMBOL_NONE, "With a symbol",
-                                   NK_TEXT_CENTERED, &s->sel_row);
-
-        icon.y = b.y + st->padding.y + st->image_padding.y;
-        icon.x = b.x + 2.0f * st->padding.x + st->image_padding.x;
-        icon.w = icon.h = b.h - 2.0f * st->padding.y;
-        icon.w -= 2.0f * st->image_padding.x;
-        icon.h -= 2.0f * st->image_padding.y;
-        reaktor_glyph_at(app, ctx, icon, REAKTOR_DISC_ROUND,
-                 s->sel_row ? st->text_pressed : st->text_normal,
-                 (int)(icon.w < icon.h ? icon.w : icon.h), 0.0f);
-    }
-    hot(app, ctx, REAKTOR_A11Y_LISTITEM, "With an image",
-        s->toggle ? REAKTOR_A11Y_SELECTED : 0u);
-    {
-        /* Selected, the row is filled with the accent and the label switches
-         * to whatever reads on it; the icon has to make the same move or it
-         * is the one thing on the row that does not. */
-            struct nk_color accent = reaktor_token("--links",
-                                                   ctx->style.text.color);
-        struct nk_color ink = s->toggle
-            ? reaktor_on(accent)
-            : reaktor_token("--text-muted", ctx->style.text.color);
-
-        nk_selectable_image_label(ctx,
-            reaktor_ionicon_col(app, "star-outline", 16, ink),
-            "With an image", NK_TEXT_CENTERED, &s->toggle);
+        REAKTOR_ROW(.ml = at.x, .mt = at.y, .w = at.w, .h = 32.0f,
+                    .gap = ctx->style.window.spacing.x) {
+            reaktor_select(&(reaktor_select_spec){
+                .label = "With a symbol", .on = &s->sel_row,
+                .disc = 1, .centred = 1,
+                .box = { .w = 190.0f, .flags = REAKTOR_LAY_FILL_Y } });
+            reaktor_select(&(reaktor_select_spec){
+                .label = "With an image", .on = &s->toggle,
+                .icon = "star-outline", .centred = 1,
+                .box = { .w = 190.0f, .flags = REAKTOR_LAY_FILL_Y } });
+        }
     }
 
     nk_layout_row_dynamic(ctx, 8.0f, 1);
