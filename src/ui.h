@@ -143,6 +143,15 @@ void reaktor_property_pop(struct nk_context *ctx);
 void reaktor_property_chrome(App *app, struct nk_context *ctx,
                              struct nk_rect b);
 
+/* A combo box's own drawing. Nuklear's header has a text arrow and a square
+ * swatch with a literal zero rounding; the stylesheet asks for a chevron and
+ * the same radius as everything else, and neither is a style field. So the
+ * header is drawn, and then this is laid over it. `content` is the region
+ * inside the header a swatch or a glyph belongs in. */
+struct nk_rect reaktor_combo_content(struct nk_context *ctx, struct nk_rect h);
+void reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h,
+                          float border);
+
 /* Text that acts. `active` draws it in the link colour rather than muted. */
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);

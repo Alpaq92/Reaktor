@@ -559,6 +559,65 @@ reaktor_property_pop(struct nk_context *ctx)
     nk_style_pop_style_item(ctx);
 }
 
+#define COMBO_MARGIN   12.0f
+/* How far a combo's chevron sits from its right edge, and how much clear
+ * space is left to its left. */
+#define COMBO_ARROW    15.0f
+#define COMBO_GAP      12.0f
+/* Where a combo's swatch or content may go: from its left inset to the clear
+ * space before the arrow. */
+struct nk_rect
+reaktor_combo_content(struct nk_context *ctx, struct nk_rect h)
+{
+    struct nk_rect r;
+
+    /* Exactly the label's x: nk_combo_begin_text puts its text at
+     * header.x + content_padding.x, and the swatch in the combo beside it
+     * should start on the same line rather than two pixels off it. */
+    r.x = h.x + ctx->style.combo.content_padding.x;
+    r.y = h.y + ctx->style.combo.content_padding.y + 2.0f;
+    r.h = h.h - 2.0f * (ctx->style.combo.content_padding.y + 2.0f);
+    r.w = (h.x + h.w - COMBO_MARGIN - COMBO_ARROW - COMBO_GAP) - r.x;
+    if (r.w < 0.0f) r.w = 0.0f;
+    return r;
+}
+
+/* The combo's frame and drop arrow, both drawn here.
+ *
+ * The arrow because Nuklear builds its chevron from the corners of whatever
+ * box it is handed, so the angle is that box's aspect and nothing else; this
+ * is the Ionicon the rest of the app uses, at a fixed size, hard against the
+ * right edge.
+ *
+ * The frame because nk_stroke_rect is biased - a 2px border measured one
+ * pixel down the left edge and two down the right. Stroking it here, inset by
+ * half its own width so the line lands wholly inside the widget, puts the
+ * same number of pixels on every side. `h` is the bounds captured before the
+ * combo was emitted. */
+void
+reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
+{
+    struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+    float px = COMBO_ARROW;
+    struct nk_rect r;
+    struct nk_image im;
+
+    if (border > 0.0f) {
+        struct nk_rect f = nk_rect(h.x + border * 0.5f, h.y + border * 0.5f,
+                                   h.w - border, h.h - border);
+        nk_stroke_rect(canvas, f, ctx->style.combo.rounding, border,
+                       ctx->style.combo.border_color);
+    }
+
+    r.x = h.x + h.w - COMBO_MARGIN - px;
+    r.y = h.y + (h.h - px) * 0.5f;
+    r.w = r.h = px;
+    im = reaktor_ionicon(app, "chevron-down-outline", (int)px);
+    nk_draw_image(canvas, r, &im, nk_rgb(255, 255, 255));
+}
+
+
+
 int
 reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
 {

@@ -775,3 +775,80 @@ reaktor_property(const reaktor_property_spec *s)
     reaktor_property_chrome(g_app, g_ctx, r);
     reaktor_note_mute(g_app, 0);
 }
+
+int
+reaktor_combo_open(const reaktor_combo_spec *s)
+{
+    reaktor_box    box;
+    struct nk_rect h;
+    unsigned       id = 0;
+    float          cw;
+    int            open;
+
+    if (!g_app || !s) return 0;
+    box = s->box;
+    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
+        box.h = g_ctx->style.font->height + 18.0f;
+
+    if (!place(REAKTOR_A11Y_COMBOBOX, s->name ? s->name : s->label, s->label,
+               0u, NULL, &box, &id))
+        return 0;
+
+    /* The popup takes an explicit size, so "as wide as the box" has to be
+     * asked for - nk_widget_width is the box about to be emitted. */
+    h  = nk_widget_bounds(g_ctx);
+    cw = nk_widget_width(g_ctx);
+
+    reaktor_note_mute(g_app, 1);
+    if (s->disc)
+        open = nk_combo_begin_symbol_label(g_ctx, s->label, NK_SYMBOL_NONE,
+                                           nk_vec2(cw, s->body_h));
+    else
+        open = nk_combo_begin_label(g_ctx, s->swatch ? "" : s->label,
+                                    nk_vec2(cw, s->body_h));
+    reaktor_note_mute(g_app, 0);
+
+    /* Drawn over the header whether the body opens or not, which is why it is
+     * here and not beside the close. */
+    if (s->disc) {
+        struct nk_rect im = reaktor_combo_content(g_ctx, h);
+
+        im.w = im.h = h.h - 2.0f * g_ctx->style.combo.content_padding.y;
+        im.x = h.x + g_ctx->style.combo.content_padding.x;
+        im.y = h.y + g_ctx->style.combo.content_padding.y;
+        reaktor_glyph_at(g_app, g_ctx, im, REAKTOR_DISC_ROUND,
+                         g_ctx->style.combo.symbol_normal, (int)im.w, 0.0f);
+    } else if (s->swatch) {
+        /* nk_combo_begin_color draws its swatch with a literal zero rounding
+         * - not a style field - so a square block sits inside a box with an
+         * 8px radius. There is no way to ask it for anything else. */
+        struct nk_rect sw = reaktor_combo_content(g_ctx, h);
+        float r = g_ctx->style.combo.rounding;
+
+        nk_fill_rect(nk_window_get_canvas(g_ctx), sw,
+                     r > sw.h * 0.5f ? sw.h * 0.5f : r, *s->swatch);
+    }
+    reaktor_combo_chrome(g_app, g_ctx, h, 2.0f);
+    return open;
+}
+
+void
+reaktor_combo_close(void)
+{
+    if (g_ctx) nk_combo_end(g_ctx);
+}
+
+int
+reaktor_combo_item(const char *label, int chosen)
+{
+    struct nk_rect b;
+    int            hit;
+
+    if (!g_app || !label) return 0;
+    b = nk_widget_bounds(g_ctx);
+    reaktor_hot_top(g_app, b, 1, 1);
+    reaktor_note(g_app, REAKTOR_A11Y_LISTITEM, label, NULL,
+                 chosen ? REAKTOR_A11Y_SELECTED : 0u, b);
+    hit = nk_combo_item_label(g_ctx, label, NK_TEXT_LEFT);
+    return hit;
+}

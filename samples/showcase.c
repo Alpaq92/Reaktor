@@ -191,65 +191,6 @@ menu_rows_pop(struct nk_context *ctx)
     nk_style_pop_vec2(ctx);
 }
 
-/* How far a combo's chevron sits from its right edge, and how much clear
- * space is left to its left. */
-#define COMBO_ARROW    15.0f
-#define COMBO_MARGIN   12.0f
-#define COMBO_GAP      12.0f
-
-/* Where a combo's swatch or content may go: from its left inset to the clear
- * space before the arrow. */
-static struct nk_rect
-combo_content(struct nk_context *ctx, struct nk_rect h)
-{
-    struct nk_rect r;
-
-    /* Exactly the label's x: nk_combo_begin_text puts its text at
-     * header.x + content_padding.x, and the swatch in the combo beside it
-     * should start on the same line rather than two pixels off it. */
-    r.x = h.x + ctx->style.combo.content_padding.x;
-    r.y = h.y + ctx->style.combo.content_padding.y + 2.0f;
-    r.h = h.h - 2.0f * (ctx->style.combo.content_padding.y + 2.0f);
-    r.w = (h.x + h.w - COMBO_MARGIN - COMBO_ARROW - COMBO_GAP) - r.x;
-    if (r.w < 0.0f) r.w = 0.0f;
-    return r;
-}
-
-/* The combo's frame and drop arrow, both drawn here.
- *
- * The arrow because Nuklear builds its chevron from the corners of whatever
- * box it is handed, so the angle is that box's aspect and nothing else; this
- * is the Ionicon the rest of the app uses, at a fixed size, hard against the
- * right edge.
- *
- * The frame because nk_stroke_rect is biased - a 2px border measured one
- * pixel down the left edge and two down the right. Stroking it here, inset by
- * half its own width so the line lands wholly inside the widget, puts the
- * same number of pixels on every side. `h` is the bounds captured before the
- * combo was emitted. */
-static void
-combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
-{
-    struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
-    float px = COMBO_ARROW;
-    struct nk_rect r;
-    struct nk_image im;
-
-    if (border > 0.0f) {
-        struct nk_rect f = nk_rect(h.x + border * 0.5f, h.y + border * 0.5f,
-                                   h.w - border, h.h - border);
-        nk_stroke_rect(canvas, f, ctx->style.combo.rounding, border,
-                       ctx->style.combo.border_color);
-    }
-
-    r.x = h.x + h.w - COMBO_MARGIN - px;
-    r.y = h.y + (h.h - px) * 0.5f;
-    r.w = r.h = px;
-    im = reaktor_ionicon(app, "chevron-down-outline", (int)px);
-    nk_draw_image(canvas, r, &im, nk_rgb(255, 255, 255));
-}
-
-
 
 /* The slot nk_tree_push is about to lay out for its header.
  *
@@ -1029,101 +970,62 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
      * rect stroke puts 1px down one edge and 2px down the other. A whole
      * number of pixels makes the frame even. */
     popup_style_push(ctx);
-    nk_layout_row_static(ctx, ROW_TALL, 440, 2);
-    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Size", 0);
     {
-        /* The popup takes an explicit size, so "as wide as the box" has to
-         * be asked for - nk_widget_width is the box that is about to be
-         * emitted. */
-        struct nk_rect h = nk_widget_bounds(ctx);
-        float cw = nk_widget_width(ctx);
-        s->combo_size = nk_combo(ctx, sizes, 3, s->combo_size, 26,
-                                 nk_vec2(cw, 130.0f));
-        combo_chrome(app, ctx, h, 2.0f);
-    }
+        /* Four combos, two to a row. Each one's body is a block, because what
+         * a combo contains is whatever is put in it. */
+        struct nk_rect at = nk_widget_bounds(ctx);
+        int i;
 
-    /* nk_combo_begin_symbol_text sizes the leading glyph as a square of the
-     * row's height less twice combo.content_padding.y - so at the 4px the
-     * `select` rule asks for, a 34px row gives a 26px circle. The padding is
-     * the only handle on it. */
-    nk_style_push_vec2(ctx, &ctx->style.combo.content_padding,
-                       nk_vec2(ctx->style.combo.content_padding.x, 9.0f));
-    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Size, with a symbol", 0);
-    {
-        struct nk_rect h = nk_widget_bounds(ctx);
-
-        /* The disc goes in nk_combo_begin_symbol_text's own slot: the header
-         * inset by content_padding, square on its height. */
-        struct nk_rect im =
-            nk_rect(h.x + ctx->style.combo.content_padding.x,
-                    h.y + ctx->style.combo.content_padding.y,
-                    h.h - 2.0f * ctx->style.combo.content_padding.y,
-                    h.h - 2.0f * ctx->style.combo.content_padding.y);
-
-        if (nk_combo_begin_symbol_label(ctx, sizes[s->combo_size],
-                                        NK_SYMBOL_NONE,
-                                        nk_vec2(nk_widget_width(ctx),
-                                                130.0f))) {
-            int i;
-            nk_layout_row_dynamic(ctx, 26.0f, 1);
-            for (i = 0; i < 3; i++) {
-                struct nk_rect ib = nk_widget_bounds(ctx);
-                reaktor_hot_top(app, ib, 1, 1);
-                reaktor_note(app, REAKTOR_A11Y_LISTITEM, sizes[i], NULL,
-                             i == s->combo_size ? REAKTOR_A11Y_SELECTED : 0u,
-                             ib);
-                if (nk_combo_item_label(ctx, sizes[i], NK_TEXT_LEFT))
-                    s->combo_size = i;
+        REAKTOR_COLUMN(.w = at.w, .gap = ctx->style.window.spacing.y) {
+            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x) {
+                REAKTOR_COMBO(.label = sizes[s->combo_size], .name = "Size",
+                              .body_h = 130.0f,
+                              .box = { .w = 440.0f,
+                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                    nk_layout_row_dynamic(ctx, 26.0f, 1);
+                    for (i = 0; i < 3; i++)
+                        if (reaktor_combo_item(sizes[i], i == s->combo_size))
+                            s->combo_size = i;
+                }
+                REAKTOR_COMBO(.label = sizes[s->combo_symbol],
+                              .name = "Size, with a symbol",
+                              .body_h = 130.0f, .disc = 1,
+                              .box = { .w = 440.0f,
+                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                    nk_layout_row_dynamic(ctx, 26.0f, 1);
+                    for (i = 0; i < 3; i++)
+                        if (reaktor_combo_item(sizes[i], i == s->combo_symbol))
+                            s->combo_symbol = i;
+                }
             }
-            nk_combo_end(ctx);
+            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x) {
+                struct nk_color tint = nk_rgb_cf(s->tint);
+
+                REAKTOR_COMBO(.name = "Tint", .body_h = 150.0f,
+                              .swatch = &tint,
+                              .box = { .w = 440.0f,
+                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                    nk_layout_row_dynamic(ctx, 26.0f, 1);
+                    nk_property_float(ctx, "R:", 0.0f, &s->tint.r, 1.0f,
+                                      0.01f, 0.005f);
+                    nk_property_float(ctx, "G:", 0.0f, &s->tint.g, 1.0f,
+                                      0.01f, 0.005f);
+                    nk_property_float(ctx, "B:", 0.0f, &s->tint.b, 1.0f,
+                                      0.01f, 0.005f);
+                }
+                REAKTOR_COMBO(.label = "Anything at all",
+                              .name = "Anything at all", .body_h = 130.0f,
+                              .box = { .w = 440.0f,
+                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                    nk_layout_row_dynamic(ctx, 26.0f, 1);
+                    nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
+                    reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f,
+                                       0.01f);
+                    nk_checkbox_label(ctx, "with a layout in it",
+                                      &s->check_spell);
+                }
+            }
         }
-        reaktor_glyph_at(app, ctx, im, REAKTOR_DISC_ROUND, ctx->style.combo.symbol_normal,
-                 (int)im.w, 0.0f);
-        combo_chrome(app, ctx, h, 2.0f);
-    }
-    nk_style_pop_vec2(ctx);
-
-    nk_layout_row_static(ctx, ROW_TALL, 440, 2);
-    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Tint", 0);
-    {
-        /* nk_combo_begin_label with an empty label, and the swatch painted
-         * here.
-         *
-         * nk_combo_begin_color would be the obvious call, and it draws its
-         * swatch with nk_fill_rect(..., 0, ...) - the rounding is a literal
-         * zero in Nuklear, not a style field - so a square block sits inside
-         * a box with an 8px radius. There is no way to ask it for anything
-         * else, so the swatch is ours. */
-        struct nk_rect h = nk_widget_bounds(ctx);
-        float r = ctx->style.combo.rounding;
-        struct nk_rect sw = combo_content(ctx, h);
-
-        if (nk_combo_begin_label(ctx, "",
-                                 nk_vec2(nk_widget_width(ctx), 150.0f))) {
-            nk_layout_row_dynamic(ctx, 26.0f, 1);
-            nk_property_float(ctx, "R:", 0.0f, &s->tint.r, 1.0f, 0.01f, 0.005f);
-            nk_property_float(ctx, "G:", 0.0f, &s->tint.g, 1.0f, 0.01f, 0.005f);
-            nk_property_float(ctx, "B:", 0.0f, &s->tint.b, 1.0f, 0.01f, 0.005f);
-            nk_combo_end(ctx);
-        }
-        nk_fill_rect(nk_window_get_canvas(ctx), sw,
-                     r > sw.h * 0.5f ? sw.h * 0.5f : r, nk_rgb_cf(s->tint));
-        combo_chrome(app, ctx, h, 2.0f);
-    }
-
-    hot(app, ctx, REAKTOR_A11Y_COMBOBOX, "Anything at all", 0);
-    {
-        struct nk_rect h = nk_widget_bounds(ctx);
-
-        if (nk_combo_begin_label(ctx, "Anything at all",
-                                 nk_vec2(nk_widget_width(ctx), 130.0f))) {
-            nk_layout_row_dynamic(ctx, 26.0f, 1);
-            nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
-            reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
-            nk_checkbox_label(ctx, "with a layout in it", &s->check_spell);
-            nk_combo_end(ctx);
-        }
-        combo_chrome(app, ctx, h, 2.0f);
     }
     popup_style_pop(ctx);
 

@@ -292,6 +292,39 @@ typedef struct reaktor_property_spec {
 
 void reaktor_property(const reaktor_property_spec *s);
 
+/* A combo box, and the first thing here that opens a scope.
+ *
+ * What a combo contains is whatever the caller puts in it - a list of
+ * choices, three properties, a slider and a checkbox - so there is no list of
+ * strings to hand it. The body is a block, and it runs only while the combo
+ * is open:
+ *
+ *     REAKTOR_COMBO(.label = sizes[pick], .name = "Size", .body_h = 130) {
+ *         for (i = 0; i < 3; i++)
+ *             if (reaktor_combo_item(sizes[i], i == pick)) pick = i;
+ *     }
+ *
+ * The body is drawn with Nuklear's own layout for now: it lives in a popup
+ * panel of its own, and the declared tree belongs to the panel underneath.
+ *
+ * Same rule as the container scopes: do not return or break out of the body. */
+typedef struct reaktor_combo_spec {
+    const char     *label;      /* what the closed header shows */
+    const char     *name;       /* what a reader is told it is */
+    float           body_h;
+    reaktor_box     box;
+    unsigned char   disc;       /* a filled disc in the leading slot */
+    const struct nk_color *swatch;  /* or a colour block in it */
+} reaktor_combo_spec;
+
+int  reaktor_combo_open(const reaktor_combo_spec *s);
+void reaktor_combo_close(void);
+
+#define REAKTOR_COMBO(...)                                                       for (int reaktor_combo_scope_ =                                                       reaktor_combo_open(&(reaktor_combo_spec){ __VA_ARGS__ });                reaktor_combo_scope_;                                                        reaktor_combo_scope_ = (reaktor_combo_close(), 0))
+
+/* One choice in an open combo. Answers whether it was picked. */
+int reaktor_combo_item(const char *label, int chosen);
+
 /* Text that acts. Reported as a link rather than a button, because that is
  * what it looks like and what it should be read as. */
 typedef struct reaktor_link_spec {
