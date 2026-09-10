@@ -15,6 +15,7 @@
 #include <SDL3/SDL_main.h>
 #include "internal.h"
 #include "declare.h"
+#include "anim.h"
 #include "sample.h"
 
 int
@@ -1086,6 +1087,35 @@ SDL_AppIterate(void *appstate)
     focus_resolve(app);
     reaktor_a11y_platform_push(&app->a11y, app->focus_id);
     a11y_dump_once(app);
+
+    /* Animation, after the diff and before the frame is decided.
+     *
+     * After, because the diff is what says a node is gone and an entry with
+     * it - see anim.h on why that signal was already there. Before, because
+     * whether anything is still moving is what decides if this frame asks for
+     * another one, and that has to be known before the frame ends.
+     *
+     * The gap is measured rather than assumed: this application sleeps in
+     * SDL_WaitEvent, so a frame can follow the last one by a millisecond or
+     * by a minute, and an animation advances by the time that actually
+     * passed. reaktor_anim_tick caps it, so a long sleep does not teleport a
+     * run that was mid-flight. */
+    {
+        int n = 0;
+        const reaktor_a11y_change *c = reaktor_a11y_changes(&app->a11y, &n);
+        reaktor_anim_evict(c, n);
+    }
+    if (reaktor_anim_tick(app->frame_gap_ms) > 0) {
+        /* Exactly what a hover does: ask for the next frame and let the main
+         * loop decide when. A page with nothing moving asks for nothing,
+         * which is what keeps a still window at zero frames a second. */
+        SDL_Event e;
+
+        app->dirty = 1;
+        SDL_zero(e);
+        e.type = SDL_EVENT_USER;
+        SDL_PushEvent(&e);
+    }
 
     /* SDL3 delivers SDL_EVENT_TEXT_INPUT only while text input is started for
      * the window, and the backend starts it from whether Nuklear has an active

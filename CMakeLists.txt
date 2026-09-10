@@ -250,6 +250,15 @@ endif()
 # onlaytest's job; this is what the shim owes on top of it:
 #     build/laytest
 if(NOT EMSCRIPTEN)
+    # The easing curves and the table that remembers a value, with no window
+    # and no frame - which is what dropping App out of anim.h bought.
+    add_executable(animtest tools/animtest.c core/anim/anim.c)
+    target_include_directories(animtest PRIVATE core/anim core/a11y core/render
+                                                platform)
+    target_link_libraries(animtest PRIVATE SDL3::SDL3)
+    set_target_properties(animtest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
     add_executable(laytest tools/laytest.c core/ui/layout.c)
     target_include_directories(laytest PRIVATE core/ui core/render)
     target_link_libraries(laytest PRIVATE onlay)
@@ -366,6 +375,7 @@ endif()
 
 add_executable(reaktor WIN32
     core/a11y/a11y.c
+    core/anim/anim.c
     core/base/metrics.c
     core/css/style.c
     core/css/cssflat.c
@@ -388,6 +398,7 @@ add_executable(reaktor WIN32
 
 target_include_directories(reaktor PRIVATE
     core/a11y
+    core/anim
     core/base
     core/css
     core/render

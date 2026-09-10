@@ -40,8 +40,8 @@ static const reaktor_shortcut SHORTCUTS[] = {
     { REAKTOR_MOD_CMD  | REAKTOR_MOD_ALT,      SDLK_RIGHT, 0,          ACT_NEXT_PAGE,   "Next page" },
     { REAKTOR_MOD_CTRL | REAKTOR_MOD_SHIFT,    SDLK_TAB,   0,          ACT_PREV_PAGE,   "Previous page" },
     { REAKTOR_MOD_CMD  | REAKTOR_MOD_ALT,      SDLK_LEFT,  0,          ACT_PREV_PAGE,   "Previous page" },
-    { REAKTOR_MOD_CTRL,                        SDLK_1,     SDLK_1 + 6, ACT_GOTO_PAGE,   "Go to page" },
-    { REAKTOR_MOD_CMD,                         SDLK_1,     SDLK_1 + 6, ACT_GOTO_PAGE,   "Go to page" }
+    { REAKTOR_MOD_CTRL,                        SDLK_1,     SDLK_1 + 7, ACT_GOTO_PAGE,   "Go to page" },
+    { REAKTOR_MOD_CMD,                         SDLK_1,     SDLK_1 + 7, ACT_GOTO_PAGE,   "Go to page" }
 };
 #define SHORTCUT_N ((int)(sizeof(SHORTCUTS) / sizeof(SHORTCUTS[0])))
 

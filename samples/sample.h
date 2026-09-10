@@ -19,6 +19,7 @@ enum {
     TAB_DISPLAY,
     TAB_LAYOUT,
     TAB_POPUPS,
+    TAB_ANIM,
     TAB_DIAG,
     TAB_COUNT
 };
@@ -69,6 +70,15 @@ typedef struct showcase_state {
     float series[SC_SERIES_N];
     int   list_sel;
     nk_bool tree_leaf[3];
+
+    /* animation */
+    int   anim_slot;        /* which of the three stops is the target */
+    int   anim_curve;
+    int   anim_ms;
+    /* Where the run in flight is, read off the track and drawn on the plot
+     * further down the page - one number, two places, rather than two. */
+    float anim_head;
+    nk_bool anim_play;      /* which end the curve preview is running to */
 
     /* popups */
     int  popup_open;

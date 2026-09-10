@@ -78,6 +78,13 @@ void reaktor_box_close(void);
  * behind a container's children, which no widget owns. */
 int reaktor_box_rect(struct nk_rect *out);
 
+/* The node the innermost open container reports as, or 0 outside one. What
+ * anything keyed per widget wants: the layout engine finds last frame's rect
+ * by this id, and an animation remembers a value by it. Unlike the rect, it
+ * is known the moment the container opens - it comes from the shape of the
+ * tree rather than from anything on screen. */
+unsigned reaktor_box_id(void);
+
 #define REAKTOR_ROW(...)    REAKTOR_BOX_SCOPE_(REAKTOR_LAY_ROW, __VA_ARGS__)
 #define REAKTOR_COLUMN(...) REAKTOR_BOX_SCOPE_(REAKTOR_LAY_COLUMN, __VA_ARGS__)
 /* Neither. Children go where their own `ml` and `mt` put them and take no

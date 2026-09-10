@@ -20,6 +20,7 @@
 #include "ui.h"
 #include "sample.h"
 #include "declare.h"
+#include "anim.h"
 #include "style.h"
 
 /* A menu row, and the height of a popup holding n of them: the rows, the
@@ -37,7 +38,8 @@ const char *const reaktor_rss_names[RSS_STEPS] = {
 };
 
 const char *const reaktor_tab_names[TAB_COUNT] = {
-    "Login", "Buttons", "Inputs", "Display", "Layout", "Popups", "Diagnostics"
+    "Login", "Buttons", "Inputs", "Display", "Layout", "Popups", "Animation",
+    "Diagnostics"
 };
 
 /* --- page furniture ------------------------------------------------------ */
@@ -426,6 +428,13 @@ static void
 seed(showcase_state *s)
 {
     int i;
+
+    /* 320ms and a cubic out: long enough to read as motion rather than as a
+     * jump, and a curve that arrives calm, which is what a thing settling
+     * into place should do. */
+    s->anim_ms    = 320;
+    s->anim_curve = REAKTOR_EASE_CUBIC_OUT;
+    s->anim_slot  = 0;
 
     SDL_strlcpy(s->name, "Ada Lovelace", sizeof(s->name));
     s->name_len = (int)strlen(s->name);
@@ -1940,6 +1949,244 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     nk_spacer(ctx);
 }
 
+/* --- animation ----------------------------------------------------------- */
+
+/* One easing curve drawn into `slot`. Sampled from reaktor_ease_at rather
+ * than solved here, because that is the only definition of these curves and a
+ * second one could disagree with it - which is the whole reason it is
+ * exposed. `head` marks where a run currently is, or is negative for none. */
+static void
+ease_plot(App *app, struct nk_context *ctx, struct nk_rect slot,
+          unsigned char curve, float head, int strong)
+{
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    struct nk_color line = reaktor_token(strong ? "--links" : "--text-muted",
+                                         nk_rgb(0, 112, 224));
+    struct nk_color grid = reaktor_token("--background-hover",
+                                         nk_rgba(128, 128, 128, 90));
+    /* Back, elastic and bounce leave the 0..1 range on the way, so the box is
+     * drawn with room above and below rather than clipping the part of them
+     * that is the point. */
+    const float over = 0.28f;
+    const float span = 1.0f + 2.0f * over;
+    const float pad  = 4.0f;
+    float w = slot.w - 2.0f * pad, h = slot.h - 2.0f * pad;
+    float px = 0.0f, py = 0.0f;
+    int   i;
+
+    /* The 0 and 1 lines, so an overshoot reads as one. */
+    {
+        float y0 = slot.y + pad + h * (over + 1.0f) / span;
+        float y1 = slot.y + pad + h * over / span;
+        nk_stroke_line(cv, slot.x + pad, y0, slot.x + pad + w, y0, 1.0f, grid);
+        nk_stroke_line(cv, slot.x + pad, y1, slot.x + pad + w, y1, 1.0f, grid);
+    }
+
+    for (i = 0; i <= 24; i++) {
+        float t = (float)i / 24.0f;
+        float x = slot.x + pad + t * w;
+        float y = slot.y + pad
+                + h * (over + 1.0f - reaktor_ease_at(curve, t)) / span;
+
+        if (i) nk_stroke_line(cv, px, py, x, y, strong ? 1.8f : 1.2f, line);
+        px = x;
+        py = y;
+    }
+
+    if (head >= 0.0f && head <= 1.0f) {
+        float x = slot.x + pad + head * w;
+        float y = slot.y + pad
+                + h * (over + 1.0f - reaktor_ease_at(curve, head)) / span;
+        reaktor_fill_round(app, cv, nk_rect(x - 3.5f, y - 3.5f, 7.0f, 7.0f),
+                           3.5f,
+                           reaktor_token("--text-bright",
+                                         nk_rgb(255, 255, 255)));
+    }
+}
+
+/* A block on a track at `where` along it, 0 to 1. The whole demonstration in
+ * one helper, so the two tracks below differ only in the number handed to
+ * them - which is the comparison being made. */
+static void
+track_at(App *app, struct nk_context *ctx, struct nk_rect r, float where,
+         int lit)
+{
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    const float box = 40.0f, inset = 5.0f;
+
+    reaktor_fill_round(app, cv, r, 6.0f,
+                       reaktor_token("--background-alt", nk_rgb(48, 48, 48)));
+    reaktor_fill_round(app, cv,
+                       nk_rect(r.x + inset
+                               + where * (r.w - box - 2.0f * inset),
+                               r.y + inset, box, r.h - 2.0f * inset),
+                       5.0f,
+                       lit ? reaktor_token("--links", nk_rgb(0, 112, 224))
+                           : reaktor_token("--text-muted",
+                                           nk_rgb(140, 140, 140)));
+}
+
+static void
+page_animation(App *app, struct nk_context *ctx, showcase_state *s)
+{
+    /* Where the block goes, as a fraction of the track: fractions rather than
+     * pixels, because the track is as wide as the window happens to be. */
+    static const float stop[3] = { 0.0f, 0.5f, 1.0f };
+    static const char *const stop_name[3] = { "Left", "Centre", "Right" };
+    unsigned char curve = (unsigned char)s->anim_curve;
+    float ms = (float)s->anim_ms;
+    int   i;
+
+    section(app, ctx, "The same change, twice",
+            "Both blocks are told to go to the same place by the same button. "
+            "The top one is simply put there, which is what a frame does "
+            "without help. The bottom one is given the time to travel, and "
+            "the difference is the whole subject of this page: the eye "
+            "follows a thing that moves and has to re-find a thing that "
+            "jumps. Press one stop and then another before it arrives - it "
+            "redirects from where it is rather than starting again.");
+    api(app, ctx, "reaktor_animate(id, channel, to, ms, curve)");
+
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        for (i = 0; i < 3; i++)
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = stop_name[i],
+                    .accent = (unsigned char)(s->anim_slot == i),
+                    .box = { .flags = REAKTOR_LAY_FILL_X |
+                                      REAKTOR_LAY_FILL_Y } }))
+                s->anim_slot = i;
+    }
+
+    REAKTOR_COLUMN(.gap = 6.0f) {
+        REAKTOR_ROW(.h = 44.0f, .gap = 12.0f, .flags = REAKTOR_LAY_FILL_X) {
+            reaktor_label(&(reaktor_label_spec){
+                .text = "instant", .colour = "--text-muted",
+                .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
+            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+                struct nk_rect r;
+                if (reaktor_box_rect(&r))
+                    track_at(app, ctx, r, stop[s->anim_slot], 0);
+            }
+        }
+
+        REAKTOR_ROW(.h = 44.0f, .gap = 12.0f, .flags = REAKTOR_LAY_FILL_X) {
+            reaktor_label(&(reaktor_label_spec){
+                .text = "eased", .colour = "--text-bright",
+                .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
+            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+                /* The container's own node is the key. Nothing here invents
+                 * an identity: the one it uses is the one the accessibility
+                 * tree and the layout engine already agree on, and it is
+                 * known the moment the container opens - a frame before its
+                 * rect is. */
+                unsigned id = reaktor_box_id();
+                float where = reaktor_animate(id, 0, stop[s->anim_slot],
+                                              ms, curve);
+                struct nk_rect r;
+
+                if (reaktor_box_rect(&r))
+                    track_at(app, ctx, r, where, 1);
+            }
+        }
+    }
+
+    section(app, ctx, "Pick a curve by looking at it",
+            "Thirty-one of them, drawn from the same function that runs them. "
+            "A curve is a shape, and a list of names is a poor way to choose "
+            "one - so the shapes are the control. In accelerates away from "
+            "rest, out arrives calm, in-out does both: for something "
+            "appearing, out is almost always right, and a page that eases "
+            "everything in-out reads as sluggish because the slow middle is "
+            "where the eye is. The last three leave the 0 and 1 lines on "
+            "purpose. Pick one and press Play: the dot travels the cell you "
+            "chose, which is the value arriving.");
+    api(app, ctx, "reaktor_ease_at(curve, t)  /  REAKTOR_EASE_*");
+
+    /* The section's own control, so choosing a curve and seeing it run do not
+     * happen in two different places on the page. Its own animated value too,
+     * keyed on this row rather than on the tracks above: the two demonstrate
+     * different things and should not fight over one number.
+     *
+     * Above the grid rather than below it, because the marker drawn on the
+     * selected cell is this run's progress - read here, drawn there, and in
+     * that order it is this frame's rather than last frame's. */
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+                .flags = REAKTOR_LAY_PACK_CENTER) {
+        unsigned id = reaktor_box_id();
+
+        /* The value itself is not drawn here - the marker travelling the
+         * selected cell in the grid below is what shows it. The call still
+         * has to happen, because it is what starts the run that the marker
+         * then reports. */
+        reaktor_animate(id, 0, s->anim_play ? 1.0f : 0.0f, ms, curve);
+        s->anim_head = reaktor_anim_progress(id, 0);
+
+        /* Not accented, though it is the action of the section. The combo
+         * beside it takes tiny.css's `select` rule and this takes `button`,
+         * and the two carry the same 0.5rem radius and the same 2px border -
+         * so they are the same box. An accent fill is edge to edge where the
+         * combo's dark fill is barely off the page, and the solid one then
+         * reads as the taller of two boxes that measure the same. */
+        if (reaktor_button(&(reaktor_button_spec){
+                .label  = "Play",
+                .name   = "Run the selected curve",
+                .box = { .w = 96.0f, .flags = REAKTOR_LAY_FILL_Y } }))
+            s->anim_play = !s->anim_play;
+
+        /* The grid shows what a curve does and names nothing; this names
+         * them and shows nothing. Neither is enough on its own, and they
+         * are the same selection either way. */
+        REAKTOR_COMBO(.label = reaktor_ease_name(curve), .name = "Curve",
+                      .body_h = 300.0f,
+                      .box = { .w = 190.0f,
+                               .flags = REAKTOR_LAY_FILL_Y }) {
+            /* A combo body is Nuklear's own panel rather than a declared
+             * tree - see the note on REAKTOR_COMBO - so it needs a row
+             * before anything in it is laid out. Without this the list
+             * opens and draws nothing, which is exactly what it did. */
+            nk_layout_row_dynamic(ctx, 26.0f, 1);
+            for (i = 0; i < REAKTOR_EASE_COUNT; i++)
+                if (reaktor_combo_item(reaktor_ease_name((unsigned char)i),
+                                       i == s->anim_curve))
+                    s->anim_curve = i;
+        }
+
+        reaktor_property(&(reaktor_property_spec){
+            .label = "ms:", .name = "Duration",
+            .ivalue = &s->anim_ms, .lo = 60, .hi = 3000, .step = 20,
+            .grain = 4.0f,
+            .box = { .w = 200.0f, .flags = REAKTOR_LAY_FILL_Y } });
+    }
+
+    REAKTOR_ROW(.gap = 6.0f, .flags = REAKTOR_LAY_WRAP) {
+        for (i = 0; i < REAKTOR_EASE_COUNT; i++) {
+            REAKTOR_ROW(.w = 104.0f, .h = 52.0f) {
+                struct nk_rect r;
+                int on = (i == s->anim_curve);
+
+                /* A swatch is the button rule with no label, which is exactly
+                 * a cell that can be clicked and reports what it is. The
+                 * curve is drawn over it afterwards. */
+                if (reaktor_swatch(&(reaktor_swatch_spec){
+                        .name = reaktor_ease_name((unsigned char)i),
+                        .fill = reaktor_token(on ? "--background-hover"
+                                                 : "--background-alt",
+                                              nk_rgb(48, 48, 48)),
+                        .box = { .flags = REAKTOR_LAY_FILL_X |
+                                          REAKTOR_LAY_FILL_Y } }))
+                    s->anim_curve = i;
+
+                if (reaktor_box_rect(&r))
+                    ease_plot(app, ctx, r, (unsigned char)i,
+                              on ? s->anim_head : -1.0f, on);
+            }
+        }
+    }
+
+    nk_layout_row_dynamic(ctx, 8.0f, 1);
+    nk_spacer(ctx);
+}
+
 /* --- diagnostics --------------------------------------------------------- */
 
 /* One labelled reading. Two columns, so the values line up down the page
@@ -2206,6 +2453,7 @@ reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
     case TAB_DISPLAY: page_display(app, ctx, s); break;
     case TAB_LAYOUT:  page_layout(app, ctx, s);  break;
     case TAB_POPUPS:  page_popups(app, ctx, s);  break;
+    case TAB_ANIM:    page_animation(app, ctx, s); break;
     case TAB_DIAG:    page_diagnostics(app, ctx, s); break;
     default: break;
     }

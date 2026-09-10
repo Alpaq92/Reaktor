@@ -602,12 +602,16 @@ reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float b
     struct nk_rect r;
     struct nk_image im;
 
-    if (border > 0.0f) {
-        struct nk_rect f = nk_rect(h.x + border * 0.5f, h.y + border * 0.5f,
-                                   h.w - border, h.h - border);
-        nk_stroke_rect(canvas, f, ctx->style.combo.rounding, border,
+    /* On the bounds, not inset into them, because that is where Nuklear puts
+     * a button's border - nk_draw_button strokes the widget rect itself, so a
+     * 2px stroke sits half outside it. Inset by half instead, a combo came
+     * out two pixels shorter and one pixel lower than a button of exactly the
+     * same rect, and side by side in a row that reads as the wrong height
+     * rather than as a different border. Measured at 34 rows against 32 on a
+     * pair both declared 30 tall. */
+    if (border > 0.0f)
+        nk_stroke_rect(canvas, h, ctx->style.combo.rounding, border,
                        ctx->style.combo.border_color);
-    }
 
     r.x = h.x + h.w - COMBO_MARGIN - px;
     r.y = h.y + (h.h - px) * 0.5f;

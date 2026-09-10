@@ -452,6 +452,11 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     /* Clear air between the scheme switch and the titlebar switch: they do
      * unrelated things and should not read as one row of five words. */
     const float TAB_SEP = 26.0f;
+    /* And air after the last of them, so the switch is not hard against the
+     * window edge. Both of these give way when the strip runs out of room -
+     * see the measurement below. */
+    const float TAB_EDGE = 14.0f;
+    float sep = TAB_SEP, edge = TAB_EDGE;
     int i;
 
     (void)win_w;
@@ -494,9 +499,22 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
 #endif
         /* The group pads either side, and Nuklear inserts 4px between each
          * column: tabs, spacer, three scheme links, separator, switch. */
-        rest = (float)win_w - used - sw_w - TAB_SEP - 2.0f * 4.0f
+        rest = (float)win_w - used - sw_w - sep - edge - 2.0f * 4.0f
              - (float)(TAB_COUNT + 5) * 4.0f;
-        if (rest < 0.0f) rest = 0.0f;
+
+        /* Out of room. The strip is measured, not wrapped, so when the tabs
+         * grow past what the window holds the leftover goes negative and
+         * everything after it used to be pushed off the right edge - which is
+         * what adding an eighth page did: the titlebar switch ended 10px past
+         * the window and was clipped mid-word.
+         *
+         * The two pieces of clear air are what give way, in that order, and
+         * only as far as they have to. Past that the tabs genuinely do not
+         * fit and the window is simply too narrow, which is a different
+         * problem and not one to solve by silently overlapping them. */
+        if (rest < 0.0f) { sep += rest; rest = 0.0f; }
+        if (sep < 8.0f)  { edge += sep - 8.0f; sep = 8.0f; }
+        if (edge < 4.0f) edge = 4.0f;
     }
 
     nk_style_push_font(ctx, font);
@@ -597,7 +615,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         nk_style_pop_style_item(ctx);
     }
 
-    nk_layout_row_push(ctx, TAB_SEP);
+    nk_layout_row_push(ctx, sep);
     nk_spacing(ctx, 1);
     reaktor_note_pop(app);
 

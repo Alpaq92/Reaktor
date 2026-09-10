@@ -93,6 +93,10 @@ static float              g_ox, g_oy;
  * fill - has to ask. Index 0 is unused: depth 0 means no container is open. */
 static struct nk_rect     g_boxrect[REAKTOR_LAY_DEPTH + 1];
 static unsigned char      g_boxok[REAKTOR_LAY_DEPTH + 1];
+/* And the node each one reports as. The id is what anything keyed per widget
+ * uses - the layout engine finds last frame's rect by it, the platform
+ * bridges name a node by it, and an animation remembers a value by it. */
+static unsigned           g_boxid[REAKTOR_LAY_DEPTH + 1];
 
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
@@ -215,6 +219,7 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     id = reaktor_note_push(g_app, REAKTOR_A11Y_GROUP, box.name, NULL, 0u,
                            nk_rect(0, 0, 0, 0));
     reaktor_layout_open(&g_app->lay, id, &box);
+    if (g_depth < REAKTOR_LAY_DEPTH) g_boxid[g_depth + 1] = id;
 
     if (g_widths < (int)(sizeof(g_width) / sizeof(g_width[0]))) {
         float w = box.w > 0.0f ? box.w : g_width[g_widths - 1];
@@ -248,6 +253,13 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
         }
     }
     g_depth++;
+}
+
+unsigned
+reaktor_box_id(void)
+{
+    if (g_depth <= 0 || g_depth > REAKTOR_LAY_DEPTH) return 0;
+    return g_boxid[g_depth];
 }
 
 int
