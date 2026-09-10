@@ -99,6 +99,10 @@ typedef struct reaktor_handler {
 
 /* --- widgets ------------------------------------------------------------ */
 
+/* Which edge text sits against. Left is the default because it is what a
+ * label does when nobody says otherwise. */
+enum { REAKTOR_LEFT = 0, REAKTOR_CENTRE, REAKTOR_RIGHT };
+
 /* Common to the specs below. `name` is what a screen reader hears when the
  * visible text is not enough. `style` is a CSS selector - ".card-title" - and
  * supplies the type; without one the widget takes the frame's font. `box`
@@ -126,7 +130,7 @@ typedef struct reaktor_label_spec {
     const char   *style;
     const char   *colour;      /* a palette token, e.g. "--text-muted" */
     reaktor_box   box;
-    unsigned char centred;
+    unsigned char align;       /* REAKTOR_LEFT, _CENTRE or _RIGHT */
     /* Wrap to the width the layout gives it, and be as tall as that takes.
      * Which is circular - the height is wanted before the width is known -
      * and the frame of lag is what breaks it: the width used is the one this

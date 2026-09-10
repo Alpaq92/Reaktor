@@ -394,18 +394,24 @@ reaktor_label(const reaktor_label_spec *s)
 
     if (!emit(id, NULL, &box)) return;
 
-    styled = push_style_font(s->style);
-    if (s->colour) {
-        struct nk_color c = reaktor_token(s->colour, g_ctx->style.text.color);
-        if (s->wrap) nk_label_colored_wrap(g_ctx, s->text, c);
-        else nk_label_colored(g_ctx, s->text,
-                              s->centred ? NK_TEXT_CENTERED : NK_TEXT_LEFT, c);
-    } else if (s->wrap) {
-        nk_label_wrap(g_ctx, s->text);
-    } else {
-        nk_label(g_ctx, s->text, s->centred ? NK_TEXT_CENTERED : NK_TEXT_LEFT);
+    {
+        nk_flags a = s->align == REAKTOR_CENTRE ? NK_TEXT_CENTERED
+                   : s->align == REAKTOR_RIGHT  ? NK_TEXT_RIGHT
+                                                : NK_TEXT_LEFT;
+
+        styled = push_style_font(s->style);
+        if (s->colour) {
+            struct nk_color c = reaktor_token(s->colour,
+                                              g_ctx->style.text.color);
+            if (s->wrap) nk_label_colored_wrap(g_ctx, s->text, c);
+            else         nk_label_colored(g_ctx, s->text, a, c);
+        } else if (s->wrap) {
+            nk_label_wrap(g_ctx, s->text);
+        } else {
+            nk_label(g_ctx, s->text, a);
+        }
+        if (styled) nk_style_pop_font(g_ctx);
     }
-    if (styled) nk_style_pop_font(g_ctx);
 }
 
 void

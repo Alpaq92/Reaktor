@@ -1057,7 +1057,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                     .name = "Chosen colour", .fill = c,
                     .box = { .h = 44.0f, .flags = REAKTOR_LAY_FILL_X } });
                 reaktor_label(&(reaktor_label_spec){
-                    .text = line, .centred = 1,
+                    .text = line, .align = REAKTOR_CENTRE,
                     .box = { .h = 22.0f, .flags = REAKTOR_LAY_FILL_X } });
             }
         }
@@ -1193,23 +1193,42 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
             "height in advance - Nuklear cannot grow the row after the fact.");
     api(app, ctx, "nk_label  /  nk_label_colored  /  nk_label_wrap  /  nk_text");
 
-    nk_layout_row_dynamic(ctx, ROW_SMALL, 3);
-    nk_label(ctx, "left", NK_TEXT_LEFT);
-    nk_label(ctx, "centered", NK_TEXT_CENTERED);
-    nk_label(ctx, "right", NK_TEXT_RIGHT);
+    {
+        static const char *const edges[3] = { "left", "centered", "right" };
+        static const char *const tokens[3] = {
+            "--text-main", "--text-muted", "--links"
+        };
+        struct nk_rect at = nk_widget_bounds(ctx);
+        int i;
 
-    nk_layout_row_dynamic(ctx, ROW_SMALL, 3);
-    nk_label_colored(ctx, "--text-main", NK_TEXT_LEFT,
-                     reaktor_token("--text-main", ctx->style.text.color));
-    nk_label_colored(ctx, "--text-muted", NK_TEXT_CENTERED,
-                     reaktor_token("--text-muted", ctx->style.text.color));
-    nk_label_colored(ctx, "--links", NK_TEXT_RIGHT,
-                     reaktor_token("--links", ctx->style.text.color));
-
-    nk_layout_row_dynamic(ctx, 40.0f, 1);
-    nk_label_wrap(ctx, "nk_label_wrap breaks on words inside the row it was "
-                       "given, which is why the paragraphs on these pages "
-                       "measure their own height first.");
+        REAKTOR_COLUMN(.w = at.w, .gap = ctx->style.window.spacing.y) {
+            REAKTOR_ROW(.h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                for (i = 0; i < 3; i++)
+                    reaktor_label(&(reaktor_label_spec){
+                        .text = edges[i], .align = (unsigned char)i,
+                        .box = { .flags = REAKTOR_LAY_FILL_X |
+                                          REAKTOR_LAY_FILL_Y } });
+            }
+            /* The same three alignments, each naming the palette token it is
+             * drawn in - which is the point of the row. */
+            REAKTOR_ROW(.h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                        .gap = ctx->style.window.spacing.x) {
+                for (i = 0; i < 3; i++)
+                    reaktor_label(&(reaktor_label_spec){
+                        .text = tokens[i], .colour = tokens[i],
+                        .align = (unsigned char)i,
+                        .box = { .flags = REAKTOR_LAY_FILL_X |
+                                          REAKTOR_LAY_FILL_Y } });
+            }
+            reaktor_label(&(reaktor_label_spec){
+                .text = "nk_label_wrap breaks on words inside the row it was "
+                        "given, which is why the paragraphs on these pages "
+                        "measure their own height first.",
+                .wrap = 1,
+                .box = { .h = 40.0f, .flags = REAKTOR_LAY_FILL_X } });
+        }
+    }
 
     section(app, ctx, "Images",
             "Every icon here is an SVG read out of the Ionicons submodule and "

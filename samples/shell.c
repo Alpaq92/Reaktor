@@ -380,7 +380,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
                          .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
             reaktor_label(&(reaktor_label_spec){
-                .text = "or", .style = ".card-note", .centred = 1,
+                .text = "or", .style = ".card-note", .align = REAKTOR_CENTRE,
                 .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
                          .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
@@ -412,7 +412,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
 
                 for (i = 0; i < CONTACT_ROWS; i++)
                     reaktor_label(&(reaktor_label_spec){
-                        .text = lines[i], .style = ".card-link", .centred = 1,
+                        .text = lines[i], .style = ".card-link", .align = REAKTOR_CENTRE,
                         .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
                                  .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
             }
