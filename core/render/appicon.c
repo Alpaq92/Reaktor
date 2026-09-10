@@ -1,27 +1,3 @@
-/* appicon.c - an SVG loaded, optionally recoloured, and rasterised, at runtime.
- *
- * Three callers, and only one of them is Ionicons. The app's own mark is
- * branding/reaktor-icon.svg: draw.c rasterises it for the window icon and
- * tools/mkicon.c derives the .ico the executable carries from the same file.
- * Both pass no colours and get the artwork as it was authored. The third
- * caller is the widget icon cache, which asks for Ionicons glyphs and does
- * recolour them, once per theme.
- *
- * That recolouring is the only reason this is not four lines of plutosvg.
- * Most Ionicons "-outline" glyphs carry style="fill:none;stroke:#000;...",
- * but not all of them: 35 of the 421 spell the same thing as the attributes
- * fill="none" stroke="#000", and 82 draw their solid parts with <circle> or
- * <rect> rather than <path>. calendar-outline does both, so nothing in it was
- * substituted and it rendered black on a dark background.
- *
- * So the fill is set on the <svg> element rather than on the shapes. fill is
- * an inherited property: every shape that does not name one of its own picks
- * it up, whichever element it is, and every shape that says fill:none or
- * fill="none" still overrides it. That is one rule instead of one per tag,
- * and it is what the per-<path> substitution was approximating.
- *
- * Applied to the file loaded from the submodule - no path data or colour
- * value is copied into this tree. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,10 +6,8 @@
 #include "appicon.h"
 #include "plutosvg.h"
 
-/* Was MAX_PATH; kept local so this file needs no platform header. */
 #define REAKTOR_PATH_MAX 1024
 
-/* Appends src to dst, respecting cap. Returns 0 if it would overflow. */
 static int str_append(char *dst, size_t cap, size_t *len, const char *src,
                       size_t n)
 {
@@ -44,13 +18,12 @@ static int str_append(char *dst, size_t cap, size_t *len, const char *src,
     return 1;
 }
 
-/* Replaces every occurrence of find with repl. Returns 0 on overflow. */
 static int str_replace_all(const char *in, char *out, size_t cap,
                            const char *find, const char *repl)
 {
     size_t len = 0;
     size_t flen = strlen(find);
-    if (flen == 0) return 0;   /* empty needle would never advance */
+    if (flen == 0) return 0;
     size_t rlen = strlen(repl);
     const char *p = in;
 
@@ -65,10 +38,6 @@ static int str_replace_all(const char *in, char *out, size_t cap,
     return str_append(out, cap, &len, p, strlen(p));
 }
 
-/* Multiplies every stroke-width the artwork declares by k. A multiplier, not
- * a width: an Ionicons glyph happens to carry a 32-unit stroke on a 512-unit
- * viewBox, but nothing here should know that, and scaling keeps the number
- * where it belongs - in the submodule. Returns 0 on overflow. */
 static int str_scale_stroke(const char *in, char *out, size_t cap, float k)
 {
     static const char key[] = "stroke-width:";
@@ -89,11 +58,7 @@ static int str_scale_stroke(const char *in, char *out, size_t cap, float k)
         if (!str_append(out, cap, &len, key, klen)) return 0;
         num = hit + klen;
         w = strtod(num, &end);
-        if (end == num) { p = num; continue; }   /* not a number after all */
-        /* Rounded to whole viewBox units: the result is integral for every
-         * width Ionicons uses, and printing no fraction sidesteps a locale
-         * that would spell the decimal point with a comma. Any unit suffix
-         * ("px") is left where it stands. */
+        if (end == num) { p = num; continue; }
         snprintf(repl, sizeof(repl), "%ld", (long)(w * (double)k + 0.5));
         if (!str_append(out, cap, &len, repl, strlen(repl))) return 0;
         p = end;
@@ -101,15 +66,13 @@ static int str_scale_stroke(const char *in, char *out, size_t cap, float k)
     return str_append(out, cap, &len, p, strlen(p));
 }
 
-/* Un-premultiplies plutovg's ARGB32 output. Windows icon bitmaps are sampled
- * as straight alpha, so premultiplied pixels would render too dark. */
 void reaktor_unpremultiply(unsigned char *px, int w, int h, int stride)
 {
     int x, y;
     for (y = 0; y < h; y++) {
         unsigned char *row = px + (size_t)y * stride;
         for (x = 0; x < w; x++) {
-            unsigned char *p = row + x * 4;   /* B, G, R, A */
+            unsigned char *p = row + x * 4;
             unsigned a = p[3];
             if (a == 0) {
                 p[0] = p[1] = p[2] = 0;
@@ -122,9 +85,6 @@ void reaktor_unpremultiply(unsigned char *px, int w, int h, int stride)
     }
 }
 
-/* Loads any SVG under the repo root, optionally recolours it from
- * Open-Color, and rasterises to a surface the caller owns. A NULL family
- * leaves that channel as the artwork has it. */
 plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
                                             const char *outline_colour,
                                             const char *inside_colour,
@@ -148,12 +108,6 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
     svg = reaktor_read_file(path, NULL);
     if (!svg) { fprintf(stderr, "svg: cannot read %s\n", path); return NULL; }
 
-    /* A channel is a literal "#rrggbb", which is what lets an icon follow the
-     * active stylesheet - the caller passes whatever --links or --text-muted
-     * resolved to this frame. This used to accept an Open-Color family and
-     * shade as well, and that was exactly the problem: a fixed palette shade
-     * cannot track a theme, and it left the card's icons near-black against a
-     * dark background. */
     if (outline_colour) {
         snprintf(outline_hex, sizeof(outline_hex), "%s", outline_colour);
     }
@@ -174,8 +128,6 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
     stage3 = (char *)malloc(cap);
     if (!stage0 || !stage1 || !stage2 || !stage3) { fprintf(stderr, "svg: alloc failed\n"); goto done; }
 
-    /* Each requested channel is one substitution pass; an unrequested one is
-     * skipped outright rather than matched against a sentinel. */
     src = svg;
     if (stroke_scale > 0.0f && stroke_scale != 1.0f) {
         if (!str_scale_stroke(src, stage0, cap, stroke_scale)) goto done;
@@ -187,13 +139,11 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
         src = stage1;
     }
     if (outline_colour) {
-        /* Both spellings of the same thing, because the set uses both. */
         if (!str_replace_all(src, stage2, cap, "stroke:#000", stroke_decl))
             goto done;
         if (!str_replace_all(stage2, stage3, cap, "stroke=\"#000\"",
                              stroke_attr))
             goto done;
-        /* And one inherited fill for every shape that names none. */
         if (!str_replace_all(stage3, stage2, cap, "<svg ", svg_open)) {
             fprintf(stderr, "svg: replace overflow\n");
             goto done;
@@ -210,8 +160,6 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
     if (!surf) fprintf(stderr, "svg: render_to_surface failed at %dpx\n", size);
 
 done:
-    /* The surface is self-contained, so the document and the staged SVG text
-     * can be released here. */
     if (doc) plutosvg_document_destroy(doc);
     free(stage3);
     free(stage2);

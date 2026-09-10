@@ -1,19 +1,7 @@
-/* draw.c - images, the rounded-rect primitive, fonts, and the window icon.
- *
- * Lifted out of main.c unchanged. Everything here was already one section or
- * another of that file; the only edits were the ones a file boundary forces.
- */
 #include "internal.h"
 
-/* --- images -------------------------------------------------------------
- * An icon path may carry "?stroke=#rrggbb&fill=#rrggbb" to recolour the SVG at
- * load time, since CSS cannot reach inside one, and "&sw=<k>" to multiply the
- * declared stroke - what a glyph at titlebar size needs to stop reading as a
- * hairline. The query string is the cache key, so two weights are two slots. */
+static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19 };
 
-/* A "#rrggbb" out of the query string. It used to take an Open-Color family
- * and shade, which is why a palette submodule was carried; the stylesheet's
- * own tokens do the job and follow the theme. */
 static int
 parse_colour(const char *spec, char *out, size_t cap)
 {
@@ -30,16 +18,11 @@ img_cache_clear(App *app)
     for (i = 0; i < app->img_count; i++)
         if (app->img[i].tex) SDL_DestroyTexture(app->img[i].tex);
     app->img_count = 0;
-    /* The disc masks are white and tinted when drawn, so they outlive a
-     * scheme change - but not the renderer, and this is where that is torn
-     * down. */
     for (i = 0; i < app->round_count; i++)
         if (app->round[i].tex) SDL_DestroyTexture(app->round[i].tex);
     app->round_count = 0;
 }
 
-/* Rasterised at the size actually drawn, times the display scale, so slots are
- * keyed by src *and* size. Returns NULL on error. */
 static struct img_slot *
 img_lookup(App *app, const char *src, int px)
 {
@@ -81,7 +64,6 @@ img_lookup(App *app, const char *src, int px)
     surf = reaktor_svg_surface_path(rel, px, ocol[0] ? ocol : NULL,
                                     icol[0] ? icol : NULL, swk);
 
-    /* Cache the failure too, so a bad src is not retried every frame. */
     SDL_strlcpy(app->img[app->img_count].src, src,
                 sizeof(app->img[app->img_count].src));
     app->img[app->img_count].px  = px;
@@ -112,12 +94,6 @@ img_lookup(App *app, const char *src, int px)
     return &app->img[app->img_count++];
 }
 
-/* `over` is how far above the drawn size the artwork is rasterised: a linear
- * filter downscales cleanly and upscales blurrily, and the widget rect is
- * often taller than the nominal size, so an image goes in at twice. One is
- * for a caller that draws at exactly px and needs the edge where plutovg put
- * it - a resample is a blur, and on a rim one pixel wide it reads as a smear
- * three pixels across rather than a line. */
 struct nk_image
 icon_over(App *app, const char *src, int px, float over)
 {
@@ -125,9 +101,6 @@ icon_over(App *app, const char *src, int px, float over)
     struct img_slot *slot = img_lookup(app, src, raster);
 
     if (!slot) return nk_image_id(0);
-    /* A sub-image with real dimensions, not nk_image_ptr, which leaves w, h
-     * and the source region zero. Widgets fill those in themselves;
-     * nk_draw_image does not, and a degenerate region drew a white quad. */
     return nk_subimage_ptr(slot->tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
                            nk_rect(0.0f, 0.0f, (float)slot->w, (float)slot->h));
 }
@@ -138,8 +111,6 @@ icon(App *app, const char *src, int px)
     return icon_over(app, src, px, 2.0f);
 }
 
-/* Draws an image centred at exactly px, and consumes the widget slot. nk_image
- * stretches to fill its rect, so the raster size asked for changes nothing. */
 void
 image_centred(struct nk_context *ctx, struct nk_image im, int px)
 {
@@ -152,25 +123,10 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
     nk_spacing(ctx, 1);
 }
 
-/* --- a rounded rect that is actually round -------------------------------
- *
- * Nuklear fills one as a polygon, and with fill feathering off - which is what
- * the software renderer wants, see nk_sdl_render_ex - the arc steps in whole
- * pixels. A stroke over it grades the step, but only by a fixed half: the pass
- * that puts every vertex on the pixel grid quantises the stroke's feather onto
- * the same staircase, so the corner reads as stairs with a halo rather than a
- * curve. Every curve on a page went to a texture for this reason; a rounded
- * rect is the one that has no artwork to go to.
- *
- * So the mask is computed instead. One disc of 2r, white, its alpha the
- * coverage of the circle - sampled four by four, which is finer than the eye
- * asks of a corner - and each quadrant of it drawn into a corner as a
- * sub-image, with three plain rects for what is left. Exact at any radius,
- * identical on both backends, and one texture per radius for the session. */
 static struct nk_image
 round_mask(App *app, int r)
 {
-    const int ss = 4;                       /* samples per axis */
+    const int ss = 4;
     int d = 2 * r, x, y, i;
     SDL_Surface *surf;
     SDL_Texture *tex;
@@ -203,7 +159,7 @@ round_mask(App *app, int r)
                         if (fx * fx + fy * fy <= (float)r * (float)r) hit++;
                     }
                 }
-                p[0] = p[1] = p[2] = 255;   /* B, G, R - tinted when drawn */
+                p[0] = p[1] = p[2] = 255;
                 p[3] = (unsigned char)((hit * 255) / (ss * ss));
             }
         }
@@ -212,7 +168,6 @@ round_mask(App *app, int r)
     }
     if (tex) {
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-        /* Drawn one to one, so nothing is sampled between texels. */
         SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
     }
     app->round[app->round_count].r   = r;
@@ -261,10 +216,6 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
             q = nk_subimage_handle(h, (nk_ushort)d, (nk_ushort)d, from[i]);
             nk_draw_image(cv, corner[i], &q, col);
         }
-        /* The cross between the four caps: a band the full width and two
-         * short ones above and below it. Either can be empty - at a radius of
-         * half the height the shape is a pill, at half of both a disc - and a
-         * zero-extent rect is not something to hand the rasteriser. */
         if (b.h > d)
             nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, b.h - d), 0.0f, col);
         if (b.w > d) {
@@ -275,52 +226,9 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     }
 }
 
-/* --- fonts --------------------------------------------------------------- */
-/* Nuklear's default is ProggyClean, a 13px bitmap font; baking a TTF through
- * stb_truetype is what makes text look like text.
- *
- * Aileron, CC0, vendored under assets/fonts/ - the one exception to this
- * project's submodule rule. Its download has no licence file, so the terms are
- * read off the font's own name table into Aileron-Notice.txt. An OTF:
- * stb_truetype reads CFF outlines too. See docs/NOTICE.md. */
 #define FONT_FILE      "assets/fonts/Aileron-Regular.otf"
 #define FONT_BOLD_FILE "assets/fonts/Aileron-Bold.otf"
 
-/* Letters centred on their line box read low, and this is where that is
- * corrected - once, on the glyph table this application baked, because the
- * Nuklear submodule is read as it is shipped.
- *
- * Two things put them there. Nuklear bakes each glyph's vertical offset as
- * its outline plus the ascent plus a half pixel, so every glyph is drawn
- * half a pixel below where the metrics say it goes. And a line box is
- * ascent + descent, which reserves room under the baseline for descenders
- * whether or not the string has any - so the letters of a string that does
- * not sit above the middle of the box that was centred.
- *
- * Measured on Aileron at 16px, against a line box of 0..16 whose middle is
- * 8.00: a capital runs 3.43..13.43, middle 8.43, and an x runs 5.43..13.43,
- * middle 9.43. So capitals were half a pixel low and lowercase a pixel and a
- * half.
- *
- * The band to centre is the x-height one, not the cap one, and the reason is
- * that this is measured in whole pixels rather than in fractions. Every
- * vertex is snapped to the grid before it is drawn - see the two snapping
- * passes in nk_sdl3_renderer.h - so a correction of less than a pixel does
- * not survive to the screen: centring the cap band moved a capital's quad
- * from 339.43 to 339.00 and it landed on row 339 either way. In whole rows a
- * capital was already centred and lowercase was one row low, which is the
- * one that shows, because almost every label in this application is
- * lowercase with at most a leading capital.
- *
- * Centring the x-height instead lifts everything by that row. Capitals then
- * sit a row high, which is the trade and the right way round: the eye reads
- * the mass of the lowercase, not the one tall letter at the front. CSS calls
- * the family of these rules `text-box-edge`; this is its `ex` variant rather
- * than the more usual `cap`.
- *
- * Applied to the outlines rather than to any one widget, so a button, a
- * label and a menu item are all corrected by the same amount and go on
- * agreeing with each other. */
 static void
 centre_glyphs_optically(struct nk_font *f)
 {
@@ -329,13 +237,9 @@ centre_glyphs_optically(struct nk_font *f)
     nk_rune i;
 
     if (!f || !f->glyphs || f->info.glyph_count == 0) return;
-    /* An x, because it has no ascender and no descender: its top and bottom
-     * are the x-height and the baseline exactly. */
     ex = nk_font_find_glyph(f, 'x');
     if (!ex) return;
 
-    /* In baked units: info.height is the size the outlines were rasterised
-     * at, which on a scaled display is not the size they are reported at. */
     shift = f->info.height * 0.5f - (ex->y0 + ex->y1) * 0.5f;
     if (shift > -0.01f && shift < 0.01f) return;
 
@@ -345,10 +249,6 @@ centre_glyphs_optically(struct nk_font *f)
     }
 }
 
-/* Nearest baked size. The bold is baked at one size only, TITLE_PX, for the
- * title: a whole second family would put another FONT_STEPS glyph sets in the
- * atlas and roughly double the largest allocation here. A bold asked for at
- * any other size gets the regular. */
 const struct nk_user_font *
 pick_font(App *app, int px, int bold)
 {
@@ -365,8 +265,6 @@ pick_font(App *app, int px, int bold)
     return app->ctx->style.font;
 }
 
-/* Rebuilds the atlas at the current scale. Layout stays in logical px and
- * never learns that this happened. */
 void
 rebuild_font(App *app)
 {
@@ -375,11 +273,6 @@ rebuild_font(App *app)
     char path[1024];
     int have_font;
 
-    /* nk_sdl_font_stash_begin calls nk_font_atlas_init, which zeroes the atlas
-     * struct - so a second bake drops the previous configs, blobs, fonts and
-     * glyphs unfreed, visible only on a display-scale change. The clear frees
-     * the nk_font ctx->style.font points at, so the path is resolved first:
-     * with nothing to bake, the working atlas is worth keeping. */
     have_font = reaktor_path(path, sizeof(path), FONT_FILE);
     if (app->atlas && !have_font) {
         SDL_Log("could not resolve %s; keeping the font already baked",
@@ -399,13 +292,8 @@ rebuild_font(App *app)
         struct nk_font_config cfg = nk_font_config(0);
         int i;
 
-        /* No oversampling: it rasterises each glyph at several sub-pixel
-         * offsets and costs exactly its area. The 3x2 default made the atlas
-         * 1024x512 - two megabytes - against 1024x128 here. */
         cfg.oversample_h = 1;
         cfg.oversample_v = 1;
-        /* nuklear.h pairs these: "align every character to pixel boundary (if
-         * true set oversample (1,1))". */
         cfg.pixel_snap   = 1;
         for (i = 0; i < FONT_STEPS; i++) {
             app->faces[i] = nk_font_atlas_add_from_file(
@@ -413,18 +301,9 @@ rebuild_font(App *app)
             if (g_font_px[i] == FONT_SIZE) font = app->faces[i];
             if (!font) font = app->faces[i];
         }
-        /* Baked at the device size for sharpness, reported at the logical one
-         * so layout never sees the scale. nk_font_text_width and the glyph
-         * quads both derive their scale from the height handed to them, not
-         * from font->scale, so this one field is the whole of it. */
-        for (i = 0; i < FONT_STEPS; i++)
-            if (app->faces[i])
-                app->faces[i]->handle.height = (float)g_font_px[i];
-        /* The bold, one size, from the file beside the regular: the path
-         * already resolved above, with its basename swapped. */
         {
             const char *slash = SDL_strrchr(path, '/');
-            const char *bslash = SDL_strrchr(path, 92);   /* a backslash */
+            const char *bslash = SDL_strrchr(path, 92);
             const char *base = SDL_strrchr(FONT_BOLD_FILE, '/') + 1;
             char bpath[1024];
 
@@ -433,8 +312,6 @@ rebuild_font(App *app)
                          slash ? (int)(slash - path + 1) : 0, path, base);
             app->face_bold = nk_font_atlas_add_from_file(
                 atlas, bpath, (float)reaktor_px(TITLE_PX), &cfg);
-            if (app->face_bold)
-                app->face_bold->handle.height = (float)TITLE_PX;
         }
         if (!font)
             SDL_snprintf(app->font_status, sizeof(app->font_status),
@@ -444,11 +321,8 @@ rebuild_font(App *app)
                      "FALLBACK - could not resolve %s", FONT_FILE);
     }
 
-    /* A silent fallback would be indistinguishable from "the font never
-     * loaded", so the outcome is always recorded and shown in diagnostics. */
     if (!font) {
         font = nk_font_atlas_add_default(atlas, (float)reaktor_px(FONT_SIZE), NULL);
-        if (font) font->handle.height = (float)FONT_SIZE;
     } else {
         SDL_snprintf(app->font_status, sizeof(app->font_status),
                      "Aileron, %d sizes %d-%dpx%s", FONT_STEPS,
@@ -458,8 +332,19 @@ rebuild_font(App *app)
 
     nk_sdl_font_stash_end(app->ctx);
 
-    /* After the bake, because it reads the baked outlines, and before
-     * anything measures or draws with them. */
+    {
+        int i, is_face = 0;
+
+        for (i = 0; i < FONT_STEPS; i++)
+            if (app->faces[i]) {
+                app->faces[i]->handle.height = (float)g_font_px[i];
+                if (app->faces[i] == font) is_face = 1;
+            }
+        if (app->face_bold)
+            app->face_bold->handle.height = (float)TITLE_PX;
+        if (font && !is_face) font->handle.height = (float)FONT_SIZE;
+    }
+
     {
         int i, done = 0;
 
@@ -468,18 +353,11 @@ rebuild_font(App *app)
             if (app->faces[i] == font) done = 1;
         }
         centre_glyphs_optically(app->face_bold);
-        /* Only if it is not one of those already - the fallback path, where
-         * every face is null and this is Nuklear's own default. Shifting a
-         * face twice would move the letters past centre the other way. */
         if (font && !done) centre_glyphs_optically(font);
     }
 
-    /* The bake keeps a copy of the whole font file per face - five of the same
-     * 27 KB - and nothing reads them once stb_truetype has the outlines. */
     nk_font_atlas_cleanup(atlas);
 
-    /* Off the texture, not the atlas: nk_font_atlas_end clears the baked
-     * dimensions when it releases the staging buffers. */
     app->atlas_w = app->atlas_h = app->atlas_bpp = 0;
     if (font && font->texture.ptr) {
         SDL_Texture *tex = (SDL_Texture *)font->texture.ptr;
@@ -488,19 +366,11 @@ rebuild_font(App *app)
             app->atlas_w = (int)tw;
             app->atlas_h = (int)th;
         }
-        /* Asked, not assumed: the backend picks the format and can fall back,
-         * so a hard-coded value would report a quarter of the real size. */
         app->atlas_bpp = SDL_BYTESPERPIXEL(tex->format);
     }
     if (font) nk_style_set_font(app->ctx, &font->handle);
 }
 
-/* The paint boundary. Everything above lays out in logical pixels; this is
- * where they become device ones, so a HiDPI display draws the same geometry
- * into more pixels rather than the same pixels into a corner of the window.
- * The font atlas is baked at the device size and its faces then report their
- * logical height, so glyph quads stay logical while sampling a sharp texture -
- * see rebuild_font. */
 void
 apply_render_scale(App *app)
 {
@@ -508,10 +378,6 @@ apply_render_scale(App *app)
     SDL_SetRenderScale(app->ren, s, s);
 }
 
-/* --- window icon ------------------------------------------------------- */
-/* SDL_SetWindowIcon is portable, so this replaces the Win32 HICON path. What
- * Explorer shows is a separate thing: branding/reaktor-icon.ico, linked as a
- * resource, because a file has an icon before it has a process. */
 void
 set_window_icon(SDL_Window *win)
 {
@@ -527,8 +393,6 @@ set_window_icon(SDL_Window *win)
     stride = plutovg_surface_get_stride(svg);
     reaktor_unpremultiply(plutovg_surface_get_data(svg), w, h, stride);
 
-    /* plutovg's ARGB32 is B,G,R,A in memory on little-endian, which is what
-     * SDL calls ARGB8888. */
     ico = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_ARGB8888,
                                 plutovg_surface_get_data(svg), stride);
     if (ico) {
@@ -537,4 +401,3 @@ set_window_icon(SDL_Window *win)
     }
     plutovg_surface_destroy(svg);
 }
-

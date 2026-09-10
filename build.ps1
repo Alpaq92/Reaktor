@@ -1,8 +1,3 @@
-# build.ps1 - CMake wrapper for Windows; build.sh elsewhere. Finds MSVC and
-# the CMake/Ninja inside VS Build Tools, so nothing need be on PATH.
-#
-#     .\build.ps1                 # everything
-#     .\build.ps1 -Target NAME    # one target
 param([string]$Target = "")
 
 $ErrorActionPreference = "Stop"
@@ -25,8 +20,6 @@ if (-not (Test-Path (Join-Path $root "third_party\SDL\CMakeLists.txt"))) {
     throw "submodules missing - run: git submodule update --init --recursive"
 }
 
-# A temp .bat keeps vcvars and cmake in one cmd session, and avoids PowerShell
-# mangling the quoting of paths that contain spaces.
 $bat = Join-Path $env:TEMP "reaktor_build.bat"
 @(
   '@echo off',
@@ -39,8 +32,6 @@ $bat = Join-Path $env:TEMP "reaktor_build.bat"
   'exit /b %ERRORLEVEL%'
 ) | Set-Content -Path $bat -Encoding ascii
 
-# PowerShell 5.1 turns a native command's stderr into ErrorRecords, so a mere
-# CMake *warning* would trip $ErrorActionPreference='Stop'. Exit code is truth.
 $prev = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 & cmd.exe /c $bat
@@ -50,4 +41,4 @@ $ErrorActionPreference = $prev
 if ($rc -ne 0) { throw "build failed ($rc)" }
 Write-Host ""
 if ($Target) { Write-Host "built target: $Target" }
-else { Write-Host "built: $outDir\reaktor.exe" }
+else { Write-Host "built: $outDir\showcase.exe (plus simple.exe and notepad.exe)" }

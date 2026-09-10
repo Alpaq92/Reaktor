@@ -4,8 +4,7 @@
 #     ./build.sh                 # everything
 #     ./build.sh --target NAME   # one target
 #     ./build.sh --debug         # -DCMAKE_BUILD_TYPE=Debug
-#
-# Anything after -- goes to the configure step untouched.
+#     --                         # pass the rest to cmake
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -21,7 +20,7 @@ while [ $# -gt 0 ]; do
             target="$1" ;;
         --debug)   buildtype="Debug" ;;
         --release) buildtype="Release" ;;
-        --help|-h) sed -n '2,16p' "$0" | cut -c 3-; exit 0 ;;
+        --help|-h) sed -n '2,7p' "$0" | cut -c 3-; exit 0 ;;
         --)        shift; break ;;
         *) echo "build.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
     esac
@@ -36,8 +35,6 @@ if [ ! -f "$root/third_party/SDL/CMakeLists.txt" ]; then
     exit 1
 fi
 
-# Ninja if it is there; otherwise CMake's default generator, which is make
-# everywhere this runs. Neither is required to be installed.
 if command -v ninja >/dev/null 2>&1; then
     set -- -G Ninja "$@"
 fi
@@ -51,5 +48,5 @@ if [ -n "$target" ]; then
 else
     cmake --build "$out" --parallel
     echo
-    echo "built: $out/reaktor"
+    echo "built: $out/showcase (plus simple and notepad)"
 fi

@@ -1,11 +1,3 @@
-/* util.c - path resolution and whole-file reading.
- *
- * Everything the app needs from third_party/ is read from disk at runtime, so
- * these two functions are the whole of the I/O layer - and the only place in
- * the tree that has to know what a filesystem looks like on each platform.
- *
- * Paths are joined with '/' everywhere, including Windows: every Win32 file
- * API and the CRT accept it, and one separator means one code path. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +7,6 @@
 #  include <windows.h>
 #  include <psapi.h>
 #elif defined(__EMSCRIPTEN__)
-/* nothing: the root is fixed, see below */
 #else
 #  include <unistd.h>
 #  include <sys/stat.h>
@@ -25,19 +16,11 @@
 #    include <stdint.h>
 #    include <malloc/malloc.h>
 #  endif
-/* The BSDs have no /proc, so both questions Linux answers by reading a file -
- * where am I installed, and how much memory am I using - are asked of the
- * kernel directly instead.
- *
- * All three answer the memory one. FreeBSD and NetBSD answer the other
- * outright; OpenBSD does not expose a process's executable path at all, on
- * purpose, so there it is reconstructed from argv[0] and checked before it is
- * believed. See the branches below for what each one costs. */
 #  if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #    include <sys/types.h>
 #    include <sys/sysctl.h>
 #    if defined(__FreeBSD__)
-#      include <sys/user.h>   /* struct kinfo_proc; the others put it above */
+#      include <sys/user.h>
 #    endif
 #  endif
 #endif
@@ -56,17 +39,28 @@ static int copy_out(char *out, size_t cap, const char *src)
 
 int reaktor_root(char *out, size_t cap)
 {
-    /* Explicit override wins: needed for installed layouts, and for running
-     * the binary from anywhere. */
-    const char *env = getenv("REAKTOR_ROOT");
-    if (env && *env) return copy_out(out, cap, env);
+    const char *env;
+
+    /* Resolved once. Finding it means a getenv, a query for the executable's
+     * own path, then an fopen probe for .reaktor-root at every level up the
+     * tree - and the answer cannot change while the process runs. Every asset
+     * the app opens goes through here, and a theme switch empties the icon
+     * cache and re-resolves for each icon on screen. */
+    static char cached[REAKTOR_PATH_CAP];
+    static int  resolved;
+
+    if (resolved) return copy_out(out, cap, cached);
+
+    env = getenv("REAKTOR_ROOT");
+    if (env && *env) {
+        if (!copy_out(cached, sizeof(cached), env)) return 0;
+        resolved = 1;
+        return copy_out(out, cap, cached);
+    }
 
 #if defined(__EMSCRIPTEN__)
-    /* There is no executable to walk up from, and no ambiguity to resolve:
-     * the assets are packaged into the virtual filesystem at exactly the
-     * paths the rest of the code already asks for, so the root is its root.
-     * "" rather than "/" because reaktor_path inserts the separator. */
-    return copy_out(out, cap, "");
+    resolved = 1;
+    return copy_out(out, cap, cached);
 #else
     {
         char exe[REAKTOR_PATH_CAP];
@@ -76,7 +70,6 @@ int reaktor_root(char *out, size_t cap)
 #  if defined(_WIN32)
         DWORD n = GetModuleFileNameA(NULL, exe, (DWORD)sizeof(exe));
         if (n == 0 || n >= sizeof(exe)) return 0;
-        /* Normalise, so the walk below only has to look for one separator. */
         for (i = 0; exe[i]; i++) if (exe[i] == '\\') exe[i] = '/';
 #  elif defined(__APPLE__)
         {
@@ -84,12 +77,6 @@ int reaktor_root(char *out, size_t cap)
             if (_NSGetExecutablePath(exe, &n) != 0) return 0;
         }
         (void)i;
-        /* Inside a .app bundle the executable lives at
-         *   Something.app/Contents/MacOS/reaktor
-         * and the assets belong under Contents/Resources. Detect that shape
-         * from the path suffix and hand back the resource dir directly, so
-         * the walk below never runs and a bundle can sit anywhere on disk
-         * without a .reaktor-root file next to it. */
         {
             size_t exelen = strlen(exe);
             const char *tail = "/Contents/MacOS/";
@@ -124,9 +111,6 @@ int reaktor_root(char *out, size_t cap)
         (void)i;
 #  elif defined(__FreeBSD__) || defined(__NetBSD__)
         {
-            /* The same question, spelled two ways: FreeBSD hangs
-             * KERN_PROC_PATHNAME off KERN_PROC, NetBSD off KERN_PROC_ARGS.
-             * -1 is this process in both. */
 #    if defined(__FreeBSD__)
             int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1 };
 #    else
@@ -134,9 +118,6 @@ int reaktor_root(char *out, size_t cap)
 #    endif
             size_t n = sizeof(exe);
 
-            /* A kernel that will not answer leaves the working directory,
-             * which is what every platform without this call already uses -
-             * so being wrong here costs the old behaviour, not the app. */
             if (sysctl(mib, 4, exe, &n, NULL, 0) != 0 || n == 0) {
                 if (!getcwd(exe, sizeof(exe))) return 0;
             }
@@ -145,16 +126,6 @@ int reaktor_root(char *out, size_t cap)
         (void)i;
 #  elif defined(__OpenBSD__)
         {
-            /* OpenBSD will not tell a process where its own executable is,
-             * and that is a decision rather than a gap. What is left is
-             * argv[0], which the kernel does not promise is a path at all -
-             * so it is resolved, then checked on disk, and anything that does
-             * not check out leaves the working directory, which is what this
-             * platform used before. REAKTOR_ROOT still overrides both.
-             *
-             * Good enough for the case that matters: started from a shell,
-             * argv[0] is either a path or a name the shell found on PATH, and
-             * both lead to the right file. */
             int    mib[4] = { CTL_KERN, KERN_PROC_ARGS, 0, KERN_PROC_ARGV };
             char   args[REAKTOR_PATH_CAP * 2];
             size_t n = sizeof(args);
@@ -162,16 +133,12 @@ int reaktor_root(char *out, size_t cap)
 
             exe[0] = '\0';
             mib[2] = (int)getpid();
-            /* The buffer comes back as a NULL-terminated array of pointers
-             * into itself, with the strings following them. */
             if (sysctl(mib, 4, args, &n, NULL, 0) == 0 && n > sizeof(char *)) {
                 const char *a0 = ((char **)(void *)args)[0];
 
                 if (a0 && *a0 && strchr(a0, '/')) {
                     real = realpath(a0, NULL);
                 } else if (a0 && *a0) {
-                    /* A bare name means the shell searched PATH; do the same,
-                     * and stop at the first entry that could have been run. */
                     const char *p = getenv("PATH");
                     size_t      a0len = strlen(a0);
 
@@ -203,29 +170,10 @@ int reaktor_root(char *out, size_t cap)
         }
         (void)i;
 #  else
-        /* No executable path without a platform call. The working directory
-         * is the honest fallback, and REAKTOR_ROOT covers the rest. */
         if (!getcwd(exe, sizeof(exe))) return 0;
         (void)i;
 #  endif
 
-        /* Walk up looking for the .reaktor-root sentinel.
-         *
-         * This used to probe for a "third_party" directory, which broke under
-         * CMake: add_subdirectory(third_party/SDL) mirrors that path into the
-         * build tree, so build/third_party existed and the walk stopped one
-         * level too early. A dedicated marker cannot be shadowed that way.
-         *
-         * Probe first, strip second - and not the other way round, which cost
-         * the starting directory its turn. That is invisible on Windows, where
-         * the walk starts at reaktor.exe and the first strip is what turns a
-         * file into the directory holding it. It is the whole of the bug
-         * everywhere else, where the walk starts at the working directory: run
-         * from the repository root, the one directory that carries the marker
-         * was the one directory never tested, and the app came up with no
-         * stylesheet and no icons. Probing the start costs Windows one fopen
-         * of "...reaktor.exe/.reaktor-root", which cannot succeed, and every
-         * probe after it is the one it always made. */
         for (;;) {
             char *slash;
 
@@ -234,10 +182,14 @@ int reaktor_root(char *out, size_t cap)
             probe[sizeof(probe) - 1] = '\0';
             {
                 FILE *f = fopen(probe, "rb");
-                if (f) { fclose(f); return copy_out(out, cap, exe); }
+                if (f) {
+                    fclose(f);
+                    if (!copy_out(cached, sizeof(cached), exe)) return 0;
+                    resolved = 1;
+                    return copy_out(out, cap, cached);
+                }
             }
 
-            /* Stop once we have chewed back past the root. */
             slash = strrchr(exe, '/');
             if (!slash) return 0;
             *slash = '\0';
@@ -284,11 +236,6 @@ char *reaktor_read_file(const char *path, size_t *len)
 
 void reaktor_free(void *p) { free(p); }
 
-/* macOS-specific: libmalloc caches freed pages by default rather than
- * returning them to the kernel; on a resident-set-conscious app that is
- * pure footprint. Ask each zone to give back what it can. No-op on
- * Windows, Linux and Emscripten - glibc's arena and Windows's heap
- * decommit their own way, so there is nothing to prompt. */
 void reaktor_release_free_memory(void)
 {
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
@@ -297,10 +244,6 @@ void reaktor_release_free_memory(void)
 }
 
 #if defined(_WIN32)
-/* Both counters come from one call. <psapi.h> maps GetProcessMemoryInfo to
- * K32GetProcessMemoryInfo, which kernel32 exports, so this needs no import
- * library and no runtime lookup. The EX form is a superset - PrivateUsage is
- * appended after the fields the plain struct has. */
 static int win_mem(PROCESS_MEMORY_COUNTERS_EX *out)
 {
     out->cb = sizeof(*out);
@@ -310,10 +253,6 @@ static int win_mem(PROCESS_MEMORY_COUNTERS_EX *out)
 }
 #endif
 
-/* CPU time this process has used, all threads, in milliseconds. It is the
- * only honest measure of what a frame costs on a machine that rasterises in
- * software: the work lands on threads the app never created, so wall-clock
- * on the main thread misses nearly all of it. */
 double reaktor_process_cpu_ms(void)
 {
 #if defined(_WIN32)
@@ -322,9 +261,9 @@ double reaktor_process_cpu_ms(void)
     if (!GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u)) return 0.0;
     ku.LowPart = k.dwLowDateTime; ku.HighPart = k.dwHighDateTime;
     uu.LowPart = u.dwLowDateTime; uu.HighPart = u.dwHighDateTime;
-    return (double)(ku.QuadPart + uu.QuadPart) / 10000.0;   /* 100 ns units */
+    return (double)(ku.QuadPart + uu.QuadPart) / 10000.0;
 #elif defined(__EMSCRIPTEN__)
-    return 0.0;      /* no process to ask about; the browser owns the threads */
+    return 0.0;
 #else
     struct rusage ru;
     if (getrusage(RUSAGE_SELF, &ru) != 0) return 0.0;
@@ -355,9 +294,6 @@ void reaktor_process_memory(size_t *rss, size_t *priv)
                 *rss = (size_t)resident * (size_t)sysconf(_SC_PAGESIZE);
             fclose(f);
         }
-        /* The nearest thing Linux has to Windows' commit. The kernel
-         * synthesises this file by walking every mapping, so both wanted rows
-         * are taken on one pass and the loop stops as soon as it has them. */
         f = fopen("/proc/self/smaps_rollup", "r");
         if (f) {
             char line[256];
@@ -377,10 +313,6 @@ void reaktor_process_memory(size_t *rss, size_t *priv)
     }
 #elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
     {
-        /* Resident pages, from the process table - all three BSDs answer this
-         * one. None of them offers Windows' commit or Linux's Private_Clean
-         * and Private_Dirty, and a number invented here would read as a
-         * measurement, so priv stays 0 and the page renders it as unknown. */
 #  if defined(__FreeBSD__)
         struct kinfo_proc kp;
         int    mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, 0 };
@@ -390,10 +322,6 @@ void reaktor_process_memory(size_t *rss, size_t *priv)
         if (sysctl(mib, 4, &kp, &n, NULL, 0) == 0 && n >= sizeof(kp))
             *rss = (size_t)kp.ki_rssize * (size_t)sysconf(_SC_PAGESIZE);
 #  else
-        /* NetBSD and OpenBSD make the identical request and answer with the
-         * identical field; only the two names below differ. Both want the
-         * struct's size and a count as the last two levels, so one call
-         * serves whatever version of the struct the kernel has. */
 #    if defined(__NetBSD__)
 #      define REAKTOR_KINFO struct kinfo_proc2
 #      define REAKTOR_KWHAT KERN_PROC2

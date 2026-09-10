@@ -1,16 +1,3 @@
-/* a11ytest.c - the model's own tests, and its benchmark.
- *
- * What matters here is not that the tree can be built but that it is *stable*:
- * that ids name the same element across frames, and that the diff reports what
- * actually changed and nothing else. A tree that renumbers itself would have a
- * screen reader announce the whole window every frame.
- *
- * The expected text is in this file rather than beside it, so there is no
- * second thing to keep in sync. Exits non-zero on the first mismatch.
- *
- *     build/a11ytest            the checks
- *     build/a11ytest --bench    what describing a frame costs
- */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -36,7 +23,6 @@ check(const char *what, int got, int want)
     failures++;
 }
 
-/* The dump, into a buffer, so it can be compared rather than eyeballed. */
 static void
 dump_to(reaktor_a11y *a, char *out, size_t cap)
 {
@@ -68,9 +54,6 @@ check_text(const char *what, const char *got, const char *want)
     failures++;
 }
 
-/* One screen, described twice with a difference the diff has to find. `tab`
- * says which tab is selected; `with_link` adds a node above the button, to
- * test that inserting one does not renumber the ones below. */
 static void
 build(reaktor_a11y *a, int tab, int with_link, int checked)
 {
@@ -103,10 +86,6 @@ build(reaktor_a11y *a, int tab, int with_link, int checked)
     reaktor_a11y_end(a);
 }
 
-/* The same shape with the page group under a given name. The app names that
- * group after the tab, and an id is derived from the name - so changing tabs
- * replaces the whole page rather than restating it, which is the case the
- * subtree rule exists for. */
 static void
 build_page(reaktor_a11y *a, const char *group)
 {
@@ -121,7 +100,6 @@ build_page(reaktor_a11y *a, const char *group)
     reaktor_a11y_end(a);
 }
 
-/* Ids of the nodes after the insertion point, so two frames can be compared. */
 static void
 ids_of(reaktor_a11y *a, unsigned out[3])
 {
@@ -136,12 +114,6 @@ ids_of(reaktor_a11y *a, unsigned out[3])
             out[k++] = t[i].id;
 }
 
-/* A page the size of the busiest real one - the Buttons tab reports 80 nodes -
- * described over and over, so the cost of describing a frame can be measured
- * on its own rather than inferred from a frame time that is mostly rendering.
- *
- *     build/a11ytest --bench
- */
 static void
 bench(void)
 {
@@ -155,8 +127,6 @@ bench(void)
     double ms, best = 0.0;
     int f, i, n = 0, run;
 
-    /* Best of five. This is a scheduler-noisy box, and the interesting number
-     * is what the work costs, not what else the machine was doing. */
     for (run = 0; run < runs; run++) {
     t0 = clock();
     for (f = 0; f < frames; f++) {
@@ -173,8 +143,6 @@ bench(void)
         for (i = 0; i < 24; i++)
             reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, labels[i % 8], NULL, 0,
                              r(20, (float)(100 + i * 40), 298, 38));
-        /* Twenty-one identically-roled, differently-named buttons and a run of
-         * unnamed ones: the two shapes the id scheme has to tell apart. */
         for (i = 0; i < 21; i++)
             reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, NULL, NULL, 0,
                              r((float)(20 + i * 42), 507, 34, 34));
@@ -194,7 +162,7 @@ bench(void)
 
 int main(int argc, char **argv)
 {
-    static reaktor_a11y a;      /* 600 KB of arenas; not a stack object */
+    static reaktor_a11y a;
     static char text[8192];
     unsigned before[3], after[3];
     int n, i, added, removed, restated, renamed;
@@ -212,7 +180,6 @@ int main(int argc, char **argv)
 
     if (argc > 1 && strcmp(argv[1], "--bench") == 0) { bench(); return 0; }
 
-    /* 1. The tree serialises the way the plan says it does. */
     build(&a, 0, 0, 0);
     dump_to(&a, text, sizeof(text));
     check_text("dump", text, want);
@@ -220,21 +187,13 @@ int main(int argc, char **argv)
     reaktor_a11y_tree(&a, &n);
     check("node count", n, 9);
 
-    /* Everything is new on the first frame, and that is one change, not nine:
-     * a subtree is reported by its root and a client re-reads what hangs off
-     * it. The whole tree arriving is the largest case of that. */
     reaktor_a11y_changes(&a, &n);
     check("first frame changes", n, 1);
 
-    /* 2. The same screen again changes nothing at all. This is the property
-     *    the whole design rests on: a reader must not hear the screen rebuild
-     *    itself every frame. */
     build(&a, 0, 0, 0);
     reaktor_a11y_changes(&a, &n);
     check("identical frame changes", n, 0);
 
-    /* 3. Selecting another tab is two state changes and nothing else - not a
-     *    removal and an addition, which is what an unstable id would give. */
     build(&a, 1, 0, 0);
     {
         const reaktor_a11y_change *c = reaktor_a11y_changes(&a, &n);
@@ -251,7 +210,6 @@ int main(int argc, char **argv)
         check("tab switch: renamed",  renamed,  0);
     }
 
-    /* 4. Ticking a checkbox is one state change. */
     build(&a, 1, 0, 1);
     {
         const reaktor_a11y_change *c = reaktor_a11y_changes(&a, &n);
@@ -262,9 +220,6 @@ int main(int argc, char **argv)
         check("checkbox: restated", restated, 1);
     }
 
-    /* 4b. Keyboard focus is a state like any other: naming a node is one
-     *     state change on the next frame, moving it is two, clearing it one.
-     *     Phase 3 hangs off this. */
     {
         const reaktor_a11y_node *t = reaktor_a11y_tree(&a, &n);
         unsigned btn = 0, box = 0;
@@ -296,9 +251,6 @@ int main(int argc, char **argv)
         check("focus: clear is one change", n, 1);
     }
 
-    /* 5. Inserting a node above three others leaves their ids alone. An id
-     *    derived from call order would fail this, and every widget below the
-     *    insertion would be announced as new. */
     build(&a, 1, 0, 1);
     ids_of(&a, before);
     build(&a, 1, 1, 1);
@@ -307,7 +259,6 @@ int main(int argc, char **argv)
         check("id stable across an insertion above",
               (int)(before[i] == after[i] && before[i] != 0), 1);
 
-    /* And the insertion itself is reported, once. */
     {
         const reaktor_a11y_change *c = reaktor_a11y_changes(&a, &n);
         added = 0;
@@ -317,7 +268,6 @@ int main(int argc, char **argv)
         check("insertion: total changes", n, 1);
     }
 
-    /* 6. Removing it again is one removal. */
     build(&a, 1, 0, 1);
     {
         const reaktor_a11y_change *c = reaktor_a11y_changes(&a, &n);
@@ -328,10 +278,6 @@ int main(int argc, char **argv)
         check("removal: total changes", n, 1);
     }
 
-    /* 6b. A page replaced wholesale is one addition and one removal - the two
-     *     group nodes - and not one of each per widget inside them. A client
-     *     re-reads a subtree when its root changes, so reporting the contents
-     *     as well is noise, and on a real page it is a hundred lines of it. */
     build_page(&a, "Buttons");
     build_page(&a, "Popups");
     {
@@ -346,10 +292,6 @@ int main(int argc, char **argv)
         check("page swap: total changes",  n,       2);
     }
 
-    /* 7. Unlabelled siblings of the same role are told apart by order, which
-     *    is the documented limit of the scheme: they keep their identities
-     *    frame to frame, but inserting another one above them does shift the
-     *    rest. Asserted so the limit is known rather than discovered. */
     reaktor_a11y_begin(&a, "w", r(0, 0, 10, 10));
     for (i = 0; i < 4; i++)
         reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, NULL, NULL, 0,
@@ -364,8 +306,6 @@ int main(int argc, char **argv)
         check("unlabelled siblings get distinct ids", dup, 0);
     }
 
-    /* 8. Overflow is counted and survived, not trapped. A tree that is
-     *    slightly wrong beats a frame that does not draw. */
     a.overflow_nodes = 0;
     reaktor_a11y_begin(&a, "w", r(0, 0, 10, 10));
     for (i = 0; i < REAKTOR_A11Y_MAX_NODES + 64; i++)

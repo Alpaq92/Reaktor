@@ -1,7 +1,3 @@
-/* a11y_snapshot.c - see a11y_snapshot.h.
- *
- * Portable: SDL for the lock and the wake, and nothing else. The platform
- * headers live next door in the bridges that include this. */
 #include "a11y_snapshot.h"
 
 #include <string.h>
@@ -11,14 +7,11 @@ typedef struct snap_node {
     unsigned      id, parent;
     unsigned char role, level;
     unsigned      state;
-    int           name, value, keys; /* offsets into `str`, -1 for none */
+    int           name, value, keys;
     float         x, y, w, h;
     float         num, lo, hi, step;
 } snap_node;
 
-/* Twice the model's own arena: the same strings, and the model interns while
- * this does not - two nodes with the same name cost it twice. Overflowing
- * loses a name rather than a node, which is the right way round. */
 #define SNAP_POOL (REAKTOR_A11Y_POOL * 2)
 
 static struct {
@@ -52,9 +45,6 @@ intern(const char *s)
     return at;
 }
 
-/* Under the lock. Linear, because a client asks about one element at a time
- * and the tree is a few hundred entries; the model's own hash exists for the
- * per-frame diff, which is quadratic without it. */
 static int
 find(unsigned id)
 {
@@ -116,7 +106,6 @@ reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id)
     return 1;
 }
 
-/* The one place a string leaves the arena, and it leaves by copy. */
 static const char *
 copy_text(int at, char **buf, size_t *left)
 {
@@ -194,8 +183,6 @@ reaktor_snap_sibling(unsigned id, int back)
     i = find(id);
     if (i >= 0) {
         parent = g.node[i].parent;
-        /* One pass, both directions: the node before it in the parent's run,
-         * or the one after. */
         for (k = 0; k < g.count; k++) {
             if (g.node[k].parent != parent) continue;
             if (g.node[k].id == id) {
@@ -275,9 +262,6 @@ reaktor_snap_focusable(unsigned char role, unsigned state)
     }
 }
 
-/* Waking the loop is the other half of recording the request: with nothing
- * else happening the app is asleep in SDL_WaitEvent, and an id nobody looks
- * at is a press that does nothing. */
 static void
 request(unsigned *slot, unsigned id)
 {
@@ -308,8 +292,6 @@ reaktor_snap_drain(void)
     g.want_focus = g.want_activate = 0;
     SDL_UnlockMutex(g.lock);
 
-    /* The same two calls a reader's move and press make on the web, which are
-     * the same ones Tab and Enter make - see reader_focus in main.c. */
     if (focus && g.focus_action) g.focus_action(g.user, focus);
     if (activate && g.activate)  g.activate(g.user, activate);
 }

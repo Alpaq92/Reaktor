@@ -1,12 +1,8 @@
-/* keys.c - see keys.h. */
 #include <stdio.h>
 #include <string.h>
 
 #include "keys.h"
 
-/* Modifiers that say something about what the user pressed. Caps Lock, Num
- * Lock and Scroll Lock are states of the keyboard rather than keys being held,
- * and AltGr is a layout, so a binding must not be sensitive to any of them. */
 #define MEANINGFUL (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)
 
 static unsigned
@@ -49,24 +45,15 @@ reaktor_shortcut_match(const reaktor_shortcut *table, int count,
     return -1;
 }
 
-/* ARIA's names, not SDL's: a reader is told "Control", never "Left Ctrl". The
- * order is fixed so the same chord always reads the same way. */
 int
 reaktor_chord_text(unsigned mods, SDL_Keycode key, char *out, int cap)
 {
-    /* ARIA does not care in what order the modifiers come, so this is chosen
-     * for the person hearing it: the command modifier leads, which is how
-     * every platform writes its own - Ctrl+Shift+Tab, Cmd+Shift+T. Ordering
-     * Shift ahead of Meta instead would have spelled one action's two rows
-     * "Control+Shift+Tab" and "Shift+Meta+Tab", which reads as two different
-     * chords. */
     static const struct { unsigned bit; const char *name; } MODS[] = {
         { REAKTOR_MOD_CTRL,  "Control" },
         { REAKTOR_MOD_CMD,   "Meta"    },
         { REAKTOR_MOD_ALT,   "Alt"     },
         { REAKTOR_MOD_SHIFT, "Shift"   }
     };
-    /* SDL names a few keys differently from the web platform. */
     static const struct { SDL_Keycode key; const char *name; } NAMED[] = {
         { SDLK_RETURN,   "Enter"      },
         { SDLK_KP_ENTER, "Enter"      },
@@ -120,7 +107,6 @@ reaktor_shortcut_text(const reaktor_shortcut *table, int count,
         len = reaktor_chord_text(r->mods, r->key + (SDL_Keycode)index,
                                  chord, (int)sizeof(chord));
         if (!len) continue;
-        /* Stop rather than truncate: half a chord is worse than one fewer. */
         if (n + (n ? 1 : 0) + len >= cap) break;
         if (n) out[n++] = ' ';
         memcpy(out + n, chord, (size_t)len + 1);

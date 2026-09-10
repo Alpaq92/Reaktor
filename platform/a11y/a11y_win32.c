@@ -1,33 +1,3 @@
-/* a11y_win32.c - phase 4b of docs/ACCESSIBILITY.md: the tree, served to
- * Windows UI Automation.
- *
- * UIA is a client/server protocol. A provider answers questions about elements
- * - what are your children, what is your name, what is your bounding rectangle
- * - and raises events when they change. Narrator, Magnifier, Voice Access and
- * every automation tool are clients of it.
- *
- * Two things make this different from the web bridge, and only one of them
- * is Windows's:
- *
- * **COM from C.** An interface is a struct whose first member is a pointer to
- * a table of function pointers, and an object that implements several of them
- * embeds one such struct each, so QueryInterface can hand out an interior
- * pointer per interface. Every method recovers the object from the interface
- * pointer it was called on. It is mechanical, and it is this file's bulk.
- *
- * **Identity has to be stable.** A client holds a provider across frames and
- * compares elements by runtime id. The model already gives every node an id
- * that survives a redraw (see a11y.c), so a provider wraps one of those
- * numbers and nothing else; it asks the snapshot afresh on every call, and a
- * node that has gone answers with nothing rather than with stale geometry.
- *
- * The other half - the snapshot itself, and getting a client's request from
- * its thread to the app's - is not Windows's problem at all, and lives in
- * a11y_snapshot.c where the other bridges share it.
- *
- * Value-only to start, as ACCESSIBILITY.md suggests: a text field reports its
- * text through IValueProvider, and ITextProvider - which is what a client
- * needs for caret and range queries - is not here yet. */
 #include "a11y.h"
 
 #ifdef _WIN32
@@ -44,18 +14,12 @@
 
 #include <SDL3/SDL.h>
 
-/* What the window needs to remember for itself: the rest is shared. */
 static struct {
     HWND    hwnd;
     WNDPROC prev_proc;
-    /* Whether a client has ever asked for the tree. Until one has, no event is
-     * raised, because raising one with nobody listening walks it for nothing. */
     int     wanted;
 } g;
 
-/* --- roles ---------------------------------------------------------------
- * Reaktor's vocabulary onto UIA's. Every one of these is a control type UIA
- * has had since Windows 7; nothing here needs a newer client. */
 static long
 control_type(unsigned char role)
 {
@@ -84,14 +48,6 @@ control_type(unsigned char role)
     }
 }
 
-/* --- the provider object -------------------------------------------------
- *
- * One object per element a client is holding. Three interfaces are embedded
- * rather than inherited - C has no inheritance - so each has its own vtable
- * pointer at its own offset, and QueryInterface hands out the address of the
- * member. Every method starts by recovering the object from whichever member
- * it was called through. */
-
 typedef struct Provider {
     IRawElementProviderSimple       simple;
     IRawElementProviderFragment     fragment;
@@ -102,13 +58,11 @@ typedef struct Provider {
     ISelectionItemProvider          selection;
     IRangeValueProvider             range;
     LONG                            ref;
-    /* The node this stands for. Zero is the fragment root: the window itself,
-     * which is the one element that exists whether or not a frame has been
-     * drawn. */
     unsigned                        id;
 } Provider;
 
 static Provider *provider_new(unsigned id);
+static unsigned  g_last_focus;
 
 #define FROM_SIMPLE(p)   ((Provider *)((char *)(p) - offsetof(Provider, simple)))
 #define FROM_FRAGMENT(p) ((Provider *)((char *)(p) - offsetof(Provider, fragment)))
@@ -119,18 +73,12 @@ static Provider *provider_new(unsigned id);
 #define FROM_SELECT(p)   ((Provider *)((char *)(p) - offsetof(Provider, selection)))
 #define FROM_RANGE(p)    ((Provider *)((char *)(p) - offsetof(Provider, range)))
 
-/* The root stands for the window and answers even before the first frame; any
- * other id has to be in the snapshot to answer at all. */
 static int
 provider_is_root(const Provider *p)
 {
     return p->id == 0;
 }
 
-/* A pattern belongs to a role, and the snapshot is what says which role a
- * node has - so support is asked of the tree rather than remembered on the
- * object, which would go stale the moment a page changed under a client that
- * was still holding it. */
 static int
 node_of(unsigned id, reaktor_snap_node *out, char *buf, size_t cap)
 {
@@ -209,8 +157,6 @@ provider_release(Provider *p)
     return (ULONG)n;
 }
 
-/* Each interface repeats IUnknown, because each has its own vtable and a
- * client may hold any one of them. They all reach the same refcount. */
 #define IUNKNOWN_FOR(NAME, IFACE, RECOVER)                                    \
     static HRESULT STDMETHODCALLTYPE                                          \
     NAME##_QueryInterface(IFACE *self, REFIID iid, void **out)                \
@@ -231,17 +177,11 @@ IUNKNOWN_FOR(toggle,   IToggleProvider,                 FROM_TOGGLE)
 IUNKNOWN_FOR(select,   ISelectionItemProvider,          FROM_SELECT)
 IUNKNOWN_FOR(range,    IRangeValueProvider,             FROM_RANGE)
 
-/* --- IRawElementProviderSimple ------------------------------------------ */
-
 static HRESULT STDMETHODCALLTYPE
 simple_get_ProviderOptions(IRawElementProviderSimple *self,
                            enum ProviderOptions *out)
 {
     (void)self;
-    /* Server-side: the provider runs in the application's own process, which
-     * is what lets it answer without a cross-process hop per property.
-     * UseComThreading makes UIA marshal calls onto this object's apartment
-     * rather than calling it on an arbitrary RPC thread. */
     *out = ProviderOptions_ServerSideProvider | ProviderOptions_UseComThreading;
     return S_OK;
 }
@@ -261,8 +201,6 @@ simple_GetPatternProvider(IRawElementProviderSimple *self, PATTERNID pattern,
 
     *out = NULL;
     if (!iid) return S_OK;
-    /* A pattern the element does not support is not an error: UIA asks every
-     * element about every pattern and reads null as "does not have it". */
     if (FAILED(provider_qi(p, iid, (void **)out))) *out = NULL;
     return S_OK;
 }
@@ -304,8 +242,6 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
 
     VariantInit(out);
     if (provider_is_root(p)) {
-        /* if rather than switch throughout: the SDK spells a property id
-         * `const long`, which C does not accept as a case label. */
         if (prop == UIA_NamePropertyId) {
             str_variant(out, "Reaktor");
         } else if (prop == UIA_ControlTypePropertyId) {
@@ -326,8 +262,6 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
             out->lVal = control_type(n.role);
         } else if (prop == UIA_AutomationIdPropertyId) {
             char id[24];
-            /* The model's id, which survives a redraw - so a test can name an
-             * element and find it again on the next frame. */
             sprintf(id, "%u", n.id);
             str_variant(out, id);
         } else if (prop == UIA_IsEnabledPropertyId) {
@@ -344,14 +278,7 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
         } else if (prop == UIA_ValueValuePropertyId) {
             str_variant(out, n.value);
         } else if (prop == UIA_AcceleratorKeyPropertyId) {
-            /* What Narrator reads out after the name. Setting it does not
-             * make the key work - the binding is the application's - which is
-             * the whole point of the property. */
             str_variant(out, n.keys);
-        /* The last two are a pattern's properties as well. A client that
-         * asks through IToggleProvider or ISelectionItemProvider gets them
-         * there; one that asks for the property directly, which several do,
-         * gets the same answer here. */
         } else if (prop == UIA_ToggleToggleStatePropertyId) {
                 if (n.role == REAKTOR_A11Y_CHECKBOX ||
                     n.role == REAKTOR_A11Y_RADIO) {
@@ -374,9 +301,6 @@ simple_get_HostRawElementProvider(IRawElementProviderSimple *self,
     Provider *p = FROM_SIMPLE(self);
 
     *out = NULL;
-    /* Only the root has a host: the HWND provider, which supplies everything
-     * a window has by virtue of being a window - its rectangle, its process,
-     * its runtime id. A child element has no window of its own. */
     if (!provider_is_root(p)) return S_OK;
     return UiaHostProviderFromHwnd(g.hwnd, out);
 }
@@ -387,8 +311,6 @@ static IRawElementProviderSimpleVtbl g_simple_vtbl = {
     simple_GetPropertyValue, simple_get_HostRawElementProvider
 };
 
-/* --- IRawElementProviderFragment ---------------------------------------- */
-
 static HRESULT STDMETHODCALLTYPE
 fragment_Navigate(IRawElementProviderFragment *self,
                   enum NavigateDirection dir, IRawElementProviderFragment **out)
@@ -398,14 +320,11 @@ fragment_Navigate(IRawElementProviderFragment *self,
 
     *out = NULL;
     if (provider_is_root(p)) {
-        /* The root's children are the model's roots - nodes with no parent. */
         if (dir == NavigateDirection_FirstChild) to = reaktor_snap_child(0, 0);
         else if (dir == NavigateDirection_LastChild) to = reaktor_snap_child(0, 1);
     } else {
         switch (dir) {
         case NavigateDirection_Parent:
-            /* A node whose parent is 0 is a child of the fragment root, and
-             * the root is what Parent has to answer with - not nothing. */
             to = reaktor_snap_parent(p->id);
             if (!to) {
                 Provider *r = provider_new(0);
@@ -441,8 +360,6 @@ fragment_GetRuntimeId(IRawElementProviderFragment *self, SAFEARRAY **out)
     LONG k;
 
     *out = NULL;
-    /* The root has none of its own: it defers to the HWND provider, which is
-     * what makes the window identify as this window. */
     if (provider_is_root(p)) return S_OK;
 
     data[0] = UiaAppendRuntimeId;
@@ -464,14 +381,11 @@ fragment_get_BoundingRectangle(IRawElementProviderFragment *self,
     POINT origin;
 
     out->left = out->top = out->width = out->height = 0.0;
-    /* The root's rectangle comes from the HWND provider, so an empty one here
-     * is the right answer rather than a missing one. */
     if (provider_is_root(p)) return S_OK;
     if (!node_of(p->id, &n, buf, sizeof(buf))) return S_OK;
     out->left = n.x; out->top = n.y;
     out->width = n.w; out->height = n.h;
 
-    /* The model works in window coordinates; UIA wants the screen's. */
     origin.x = origin.y = 0;
     if (ClientToScreen(g.hwnd, &origin)) {
         out->left += origin.x;
@@ -485,7 +399,7 @@ fragment_GetEmbeddedFragmentRoots(IRawElementProviderFragment *self,
                                   SAFEARRAY **out)
 {
     (void)self;
-    *out = NULL;   /* one fragment, one root */
+    *out = NULL;
     return S_OK;
 }
 
@@ -518,8 +432,6 @@ static IRawElementProviderFragmentVtbl g_fragment_vtbl = {
     fragment_GetEmbeddedFragmentRoots, fragment_SetFocus,
     fragment_get_FragmentRoot
 };
-
-/* --- IRawElementProviderFragmentRoot ------------------------------------ */
 
 static HRESULT STDMETHODCALLTYPE
 root_ElementProviderFromPoint(IRawElementProviderFragmentRoot *self,
@@ -566,8 +478,6 @@ static IRawElementProviderFragmentRootVtbl g_root_vtbl = {
     root_ElementProviderFromPoint, root_GetFocus
 };
 
-/* --- IInvokeProvider, IValueProvider ------------------------------------ */
-
 static HRESULT STDMETHODCALLTYPE
 invoke_Invoke(IInvokeProvider *self)
 {
@@ -583,10 +493,6 @@ static HRESULT STDMETHODCALLTYPE
 value_SetValue(IValueProvider *self, LPCWSTR val)
 {
     (void)self; (void)val;
-    /* Read-only for now: setting a field's text means driving Nuklear's editor
-     * from another thread, which is phase 4b's second half along with
-     * ITextProvider. Reported honestly through IsReadOnly below, so a client
-     * does not offer what does not work. */
     return UIA_E_NOTSUPPORTED;
 }
 
@@ -600,7 +506,7 @@ value_get_Value(IValueProvider *self, BSTR *out)
     *out = NULL;
     hr = simple_GetPropertyValue(&p->simple, UIA_ValueValuePropertyId, &v);
     if (FAILED(hr)) return hr;
-    if (v.vt == VT_BSTR) *out = v.bstrVal;   /* ownership moves to the caller */
+    if (v.vt == VT_BSTR) *out = v.bstrVal;
     else VariantClear(&v);
     return S_OK;
 }
@@ -617,14 +523,6 @@ static IValueProviderVtbl g_value_vtbl = {
     value_QueryInterface, value_AddRef, value_Release,
     value_SetValue, value_get_Value, value_get_IsReadOnly
 };
-
-/* --- IToggleProvider, ISelectionItemProvider, IRangeValueProvider --------
- *
- * All three change the value by making the press that changes it: a checkbox
- * ticks when it is clicked, a tab selects, and Nuklear has no way to set
- * either from outside. So Toggle and Select are Invoke under another name -
- * which is honest, since it is the same thing a reader's press and the
- * keyboard's Enter both do. */
 
 static HRESULT STDMETHODCALLTYPE
 toggle_Toggle(IToggleProvider *self)
@@ -661,8 +559,6 @@ select_Select(ISelectionItemProvider *self)
 static HRESULT STDMETHODCALLTYPE
 select_AddToSelection(ISelectionItemProvider *self)
 {
-    /* One at a time everywhere this appears - a tab strip, a radio group, a
-     * list of one choice - so adding is selecting. */
     return select_Select(self);
 }
 
@@ -670,7 +566,6 @@ static HRESULT STDMETHODCALLTYPE
 select_RemoveFromSelection(ISelectionItemProvider *self)
 {
     (void)self;
-    /* Nothing here can be deselected without something else being selected. */
     return UIA_E_INVALIDOPERATION;
 }
 
@@ -709,16 +604,10 @@ static ISelectionItemProviderVtbl g_select_vtbl = {
     select_get_IsSelected, select_get_SelectionContainer
 };
 
-/* The range is the one of the three that can be set without a press: the
- * widget takes steps from the shell already (reaktor_focus_step), so a client
- * asking for a value becomes focus plus that many steps. */
 static HRESULT STDMETHODCALLTYPE
 range_SetValue(IRangeValueProvider *self, double val)
 {
     (void)self; (void)val;
-    /* Not yet: the step channel carries a count, not a destination, and
-     * turning one into the other means the shell knowing the grain it has
-     * deliberately left to the widget. IsReadOnly says so. */
     return UIA_E_NOTSUPPORTED;
 }
 
@@ -755,7 +644,7 @@ range_get_LargeChange(IRangeValueProvider *self, double *out)
 {
     HRESULT hr = range_field(self, offsetof(reaktor_snap_node, step), out);
 
-    *out *= 10.0;   /* what Page Up would be worth, if it were bound */
+    *out *= 10.0;
     return hr;
 }
 
@@ -793,12 +682,6 @@ provider_new(unsigned id)
     return p;
 }
 
-/* --- the window ---------------------------------------------------------
- *
- * WM_GETOBJECT is a question asked of the window procedure, and the answer is
- * its return value - which a message hook cannot give, since SDL's hook only
- * says whether to keep processing a message. So the window is subclassed and
- * everything else handed straight on. */
 static LRESULT CALLBACK
 wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -817,8 +700,6 @@ wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return CallWindowProcW(g.prev_proc, h, msg, wp, lp);
 }
 
-/* --- the seam ----------------------------------------------------------- */
-
 void
 reaktor_a11y_platform_init(reaktor_a11y_action activate,
                            reaktor_a11y_action focus, void *user)
@@ -828,8 +709,6 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
 
     if (!reaktor_snap_init(activate, focus, user)) return;
 
-    /* Asked for rather than guessed: the shell has exactly one window by the
-     * time this runs, but its id is SDL's business. */
     wins = SDL_GetWindows(&count);
     if (wins && count > 0)
         g.hwnd = (HWND)SDL_GetPointerProperty(
@@ -858,9 +737,6 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
     if (!reaktor_snap_update(a, focus_id)) return;
 
-    /* Events only once a client has asked for the tree, and only while one is
-     * listening. Structure first, because a client that has not walked the
-     * new tree cannot be told which element took focus. */
     if (!g.wanted || !UiaClientsAreListening()) return;
     {
         int m, i, structural = 0;
@@ -872,11 +748,6 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
                 structural = 1;
                 break;
             }
-        /* ChildrenInvalidated, not ChildrenBulkAdded: a frame that only
-         * removed something was claiming additions. Raised on the root, which
-         * is what a client needs to know to re-walk; naming the parent that
-         * actually changed wants the change to carry it, and the removals
-         * point into the tree that has just been swapped out. */
         if (structural) {
             Provider *r = provider_new(0);
 
@@ -887,14 +758,22 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
             IRawElementProviderSimple_Release(&r->simple);
         }
     }
-    if (focus_id) {
-        Provider *f = provider_new(focus_id);
+    /* On a change, not on every push. A push happens whenever the diff is
+     * non-empty - any frame where a label's text or a widget's rect moved -
+     * and re-announcing the same focus to a listening client on each of them
+     * is both a lie and a COM object per frame. The AT-SPI and web bridges
+     * already guard it this way. */
+    if (focus_id != g_last_focus) {
+        g_last_focus = focus_id;
+        if (focus_id) {
+            Provider *f = provider_new(focus_id);
 
-        if (!f) return;
-        UiaRaiseAutomationEvent((IRawElementProviderSimple *)&f->simple,
-                                UIA_AutomationFocusChangedEventId);
-        IRawElementProviderSimple_Release(&f->simple);
+            if (!f) return;
+            UiaRaiseAutomationEvent((IRawElementProviderSimple *)&f->simple,
+                                    UIA_AutomationFocusChangedEventId);
+            IRawElementProviderSimple_Release(&f->simple);
+        }
     }
 }
 
-#endif /* _WIN32 */
+#endif

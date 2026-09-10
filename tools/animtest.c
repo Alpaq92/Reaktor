@@ -1,19 +1,3 @@
-/* animtest.c - the easing curves and the table that remembers a value.
- *
- *     build/animtest
- *
- * The curves are checked for the properties every one of them must have
- * rather than against transcribed sample values: a table of expected numbers
- * would be this file agreeing with itself, and would have to be regenerated
- * the moment a constant changed. What cannot change is that a curve starts at
- * 0, ends at 1, and that the three which overshoot are the only three that
- * leave the range.
- *
- * The table is checked through the same entry point a page uses, because the
- * behaviour worth pinning is the behaviour a page sees: a value that starts
- * where it is asked to rather than at zero, a target that redirects rather
- * than restarts, and a run that ends.
- */
 #include <stdio.h>
 
 #include <SDL3/SDL.h>
@@ -29,11 +13,6 @@ ok(const char *what, int cond)
     if (!cond) g_fail = 1;
 }
 
-/* Advances by `ms` the way a running application would: in frame-sized
- * slices. reaktor_anim_tick caps a single step at 64ms on purpose - this app
- * sleeps in SDL_WaitEvent, and a frame that arrives a minute later must not
- * teleport a run that was mid-flight - so a test that asks for 100ms in one
- * call is testing the cap rather than the easing. */
 static int
 advance(float ms)
 {
@@ -53,7 +32,6 @@ near(float a, float b)
     return d < 0.001f && d > -0.001f;
 }
 
-/* The three that are meant to leave 0..1 on the way, and nothing else. */
 static int
 overshoots(int c)
 {
@@ -110,8 +88,6 @@ test_curves(void)
     puts("");
     puts("in and out are each other's reflection");
     {
-        /* ease_out(t) == 1 - ease_in(1 - t) is the definition of the pair,
-         * and it holds for every family here that has both. */
         int pairs[] = {
             REAKTOR_EASE_QUAD_IN, REAKTOR_EASE_CUBIC_IN, REAKTOR_EASE_QUART_IN,
             REAKTOR_EASE_QUINT_IN, REAKTOR_EASE_SINE_IN, REAKTOR_EASE_CIRC_IN
@@ -159,7 +135,6 @@ test_table(void)
     advance(100.0f);
     v = reaktor_animate(id, 0, 1.0f, 200.0f, REAKTOR_EASE_LINEAR);
     ok("half way to 1", near(v, 0.5f));
-    /* Now send it back to 0. It must leave from 0.5, not from 0 or 1. */
     reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
     advance(100.0f);
     v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
@@ -176,12 +151,10 @@ test_table(void)
     puts("");
     puts("a long gap between frames does not teleport a run");
     {
-        /* Measured as distance travelled rather than against an absolute,
-         * because the run starts from wherever the value already was. */
         float start = reaktor_animate(id, 0, 1.0f, 1000.0f,
                                       REAKTOR_EASE_LINEAR);
 
-        reaktor_anim_tick(5000.0f);   /* one call: this is the cap itself */
+        reaktor_anim_tick(5000.0f);
         v = reaktor_animate(id, 0, 1.0f, 1000.0f, REAKTOR_EASE_LINEAR);
         ok("five seconds of sleep move it forward", v > start);
         ok("...by one capped step, not by all five seconds",

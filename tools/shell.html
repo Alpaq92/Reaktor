@@ -1,8 +1,6 @@
 <!doctype html>
-<!-- shell.html - the page Emscripten links reaktor.wasm into.
-     Emscripten's stock shell carries a logo, a link and two debug checkboxes;
-     this is the canvas and nothing else, on the same background the app
-     clears to, so the page and the app are one surface. -->
+<!-- emcc --shell-file: the page the wasm build is wrapped in. -->
+
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -14,39 +12,20 @@
   html, body {
     margin: 0;
     height: 100%;
-    /* tiny.css --background-body. Both inks, and not the dark one alone:
-       this used to be hardcoded to #252525, which was invisible while the
-       canvas covered every pixel of the page and stopped being invisible the
-       moment its corners were rounded - a light app with two dark notches cut
-       out of the top. The app has its own switch, so this only has to be
-       right for "system", which is what it defaults to. */
+
     background: #f7f7f7;
     overflow: hidden;
   }
   @media (prefers-color-scheme: dark) {
     html, body { background: #252525; }
   }
-  /* No width or height on the canvas: SDL sizes it to the window it asks
-     for, and the app asks for the page's size. A CSS size here would stretch
-     the rendering instead of resizing it. */
+
   #canvas {
     display: block;
     outline: none;
-    /* Rounded at the top, square at the bottom. On the desktop the window
-       manager rounds the frame and the app never thinks about it; in a page
-       there is no frame, so the canvas was a flush rectangle butting into the
-       corner of the viewport. Top only - the bottom edge is the bottom of the
-       page, and rounding it would cut a notch out of nothing. */
+
     border-radius: 10px 10px 0 0;
-    /* WebKit on macOS (Safari, Orion) sometimes rasterises canvas layers
-       at reduced resolution for performance and upscales at composite
-       time - text baked at 1:1 then comes out visibly blurred. Promoting
-       the canvas to its own composited layer with a 3D transform forces
-       WebKit to keep it at native pixel density. `image-rendering:
-       pixelated` is the belt to `translate3d`'s braces: it also disables
-       the composite-time filter WebKit would otherwise apply. Chrome,
-       Firefox and Edge already do the right thing; these hints are
-       no-ops on them. */
+
     transform: translate3d(0, 0, 0);
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -60,10 +39,7 @@
     color: #c0c0c0;
     font: 14px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI",
           Roboto, sans-serif;
-    /* It covers the canvas, and without this it also swallows every click on
-       it: mousemove is delivered from the document and still reached the app,
-       so the UI highlighted on hover and then ignored every press - which
-       looked like broken input handling and was a stray div. */
+
     pointer-events: none;
   }
 </style>
@@ -85,20 +61,15 @@
         statusEl = null;
       }
     };
-    /* The canvas has to hold focus for keys to reach the app, and a click on
-       it is the browser's own gesture for that. */
+
     Module.canvas.addEventListener('mousedown', function () {
       Module.canvas.focus();
     });
-    /* Tab is the app's - it walks the widgets, see docs/ACCESSIBILITY.md -
-       and the browser's default for it is to move focus off the canvas,
-       after which no key reaches the app at all. SDL still sees the key;
-       only the browser's own use of it is stopped. */
+
     Module.canvas.addEventListener('keydown', function (e) {
       if (e.key === 'Tab') e.preventDefault();
     });
-    /* Emscripten calls setStatus('') when it is ready, but only on some
-       paths; this is the one that always fires. */
+
     Module.onRuntimeInitialized = function () { Module.setStatus(''); };
   </script>
   {{{ SCRIPT }}}

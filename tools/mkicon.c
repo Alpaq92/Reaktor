@@ -1,26 +1,3 @@
-/* mkicon.c - branding/reaktor-icon.ico, rasterised from
- * branding/reaktor-icon.svg.
- *
- * The .svg is the authored mark; the .ico is derived from it, and this is what
- * derives it. It is not part of the build: Explorer reads the icon from a
- * linked resource, so the file has to exist before the linker runs, and a
- * committed .ico is how that is guaranteed on a machine that has not built the
- * tool. Run it when the mark changes:
- *
- *     cmake --build build --target mkicon
- *     build/mkicon
- *
- * The file this replaced had every entry below 256 at 24 bits. A Windows icon
- * carries per-pixel alpha only at 32, so Explorer fell back to the 1-bit AND
- * mask and drew the mark with a hard stepped edge and no transparency - at
- * 16, 24, 32 and 48 pixels, which are the sizes it actually uses. Only the
- * 256 entry, a PNG, was right, which is why the icon looked correct large and
- * wrong everywhere else.
- *
- * So every entry here is 32-bit BGRA with a zeroed mask, except 256, which
- * stays a PNG because at four bytes a pixel it is a quarter-megabyte on its
- * own. plutovg renders premultiplied; Windows wants straight alpha, which is
- * what reaktor_unpremultiply is for. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,20 +5,16 @@
 #include "reaktor.h"
 #include "appicon.h"
 
-#define ICON_SVG "branding/reaktor-icon.svg"
-#define ICON_ICO "branding/reaktor-icon.ico"
-#define ICON_TMP "branding/reaktor-icon.png.tmp"
+#define ICON_SVG "assets/icons/reaktor-icon.svg"
+#define ICON_ICO "assets/icons/reaktor-icon.ico"
+#define ICON_TMP "assets/icons/reaktor-icon.png.tmp"
 
-/* Every size Explorer, the taskbar and the Alt-Tab switcher ask for. 20 and
- * 40 are the two fractional display scaling adds: at 125% and 250% the shell
- * asks for those rather than scaling 16 and 32, and an entry that is missing
- * is resampled from the next one up. They cost about 2.8 KB between them. */
 static const int g_sizes[] = { 16, 20, 24, 32, 40, 48, 64, 128, 256 };
 #define SIZE_N ((int)(sizeof(g_sizes) / sizeof(g_sizes[0])))
 
 struct entry {
     int            size;
-    int            png;      /* payload is a PNG rather than a BMP */
+    int            png;
     unsigned char *data;
     long           len;
 };
@@ -60,9 +33,6 @@ static void put32(unsigned char *p, unsigned v)
     p[3] = (unsigned char)((v >> 24) & 255u);
 }
 
-/* A BITMAPINFOHEADER, the pixels bottom-up, and an all-clear AND mask. The
- * height in the header is twice the image's: the format counts both planes,
- * even when the mask says nothing. */
 static unsigned char *
 bmp32(plutovg_surface_t *surf, int n, long *out_len)
 {
@@ -86,27 +56,6 @@ bmp32(plutovg_surface_t *surf, int n, long *out_len)
                (size_t)n * 4);
     *out_len = len;
     return out;
-}
-
-static unsigned char *
-slurp(const char *path, long *out_len)
-{
-    FILE *f = fopen(path, "rb");
-    unsigned char *buf;
-    long len;
-
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
-    len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    buf = (unsigned char *)malloc((size_t)len);
-    if (buf && fread(buf, 1, (size_t)len, f) != (size_t)len) {
-        free(buf);
-        buf = NULL;
-    }
-    fclose(f);
-    if (buf) *out_len = len;
-    return buf;
 }
 
 int
@@ -139,11 +88,14 @@ main(void)
                               plutovg_surface_get_stride(surf));
         e[i].size = n;
         if (n >= 256) {
-            /* plutovg writes PNG to a file and nothing else, so it goes out
-             * and comes straight back in. */
             e[i].png = 1;
             if (plutovg_surface_write_to_png(surf, tmp))
-                e[i].data = slurp(tmp, &e[i].len);
+                {
+                    size_t got = 0;
+                    e[i].data = (unsigned char *)
+                        reaktor_read_file(tmp, &got);
+                    e[i].len = (long)got;
+                }
             remove(tmp);
         } else {
             e[i].data = bmp32(surf, n, &e[i].len);
@@ -165,14 +117,13 @@ main(void)
             unsigned char dir[16];
 
             put16(hdr + 0, 0u);
-            put16(hdr + 2, 1u);          /* 1 = icon, 2 = cursor */
+            put16(hdr + 2, 1u);
             put16(hdr + 4, (unsigned)SIZE_N);
             fwrite(hdr, 1, sizeof(hdr), f);
 
             offset = 6 + 16L * SIZE_N;
             for (i = 0; i < SIZE_N; i++) {
                 memset(dir, 0, sizeof(dir));
-                /* 256 is written as zero: the field is one byte. */
                 dir[0] = (unsigned char)(e[i].size >= 256 ? 0 : e[i].size);
                 dir[1] = dir[0];
                 put16(dir + 4, 1u);

@@ -1,101 +1,29 @@
-/* declare.c - see declare.h.
- *
- * Every widget here is four steps and no drawing of its own:
- *
- *   1. report itself to the accessibility tree, which answers with an id;
- *   2. declare a box under that id, and ask layout where the same id went on
- *      the previous frame;
- *   3. hand that rect to Nuklear as an absolute placement;
- *   4. draw through the imperative helper that already knows how.
- *
- * Step 4 is why this file is short and why behaviour cannot drift: nothing is
- * reimplemented. Step 1 comes first because the id is what steps 2 and 3 both
- * need, and reaktor_note computes it from the tree's shape rather than from
- * anything on screen - so it is available before the widget knows where it is.
- *
- * Step 3 is the one with a trap in it. nk_layout_space_begin opens a row, and
- * calling it per widget stacks a row per widget and advances the panel's
- * cursor under every one of them. So the *outermost* container opens exactly
- * one space, every widget inside pushes into that, and the rect is converted
- * with nk_layout_space_rect_to_local because a pushed rect is local to the space
- * and ours are the window's.
- */
 #include <stdio.h>
 
 #include "internal.h"
 #include "declare.h"
 
-/* The frame being described. See declare.h on why this is not an argument. */
 static App               *g_app;
 static struct nk_context *g_ctx;
-static int                g_depth;   /* containers open */
-static int                g_space;   /* a Nuklear space is open */
-/* Boxes that had nowhere to go this frame, or that are still changing size.
- * Non-zero means the frame just drawn is not the final one. */
+static int                g_depth;
+static int                g_space;
 static int                g_unsettled;
 static int                g_settled_run;
 
-/* A tree that never stops moving.
- *
- * Settling is normally three frames: a box is measured on the frame that
- * declares it and drawn on the next, and a wrapped paragraph needs one more
- * for the container above it. But two mistakes make it never happen, and
- * both are silent - the page simply never draws, because every frame asks
- * for another one.
- *
- *   - A box is found again next frame by an id built from its parent, its
- *     role and its name. A widget whose name changes every frame is a new
- *     box every frame, so it never has a rect and never settles. A readout
- *     is the usual way in: its text is its name unless it is given one.
- *
- *   - Reporting a node only on the frames where something is known changes
- *     the shape of the tree, and an id is computed from that shape - so the
- *     boxes after it are renumbered, lose their rects, and take the node
- *     away again on the next frame. It oscillates and never converges.
- *
- * So the asking is bounded. Past this many consecutive unsettled frames the
- * frame stops requesting redraws, says what it knows, and lets the page draw
- * whatever it has - a page missing a widget beats an application spinning at
- * 100% that never puts anything on screen. Well above the three a correct
- * page takes, and above the handful a theme change costs. */
+/* Give up asking for another frame after this many. A tree that has
+ * not settled by now is not going to: it is a box whose name changes
+ * every frame, not one still measuring itself. */
 #define REAKTOR_SETTLE_TRIES 16
 static int                g_settle_tries;
-static const char        *g_stuck;    /* first box with no rect this frame */
+static const char        *g_stuck;
 
-/* The width each open container will hand its children, innermost last.
- *
- * A wrapped paragraph needs a width before it can have a height, and asking
- * the layout means asking about last frame - which on the first frame is
- * nothing, so the paragraph came out one line tall and everything below it
- * rode up until the frame after. That is a visible jump, and it is avoidable:
- * the container's width is known the moment it is declared, so a child that
- * fills can be measured against it straight away. */
 static float              g_width[REAKTOR_LAY_DEPTH + 1];
 static int                g_widths;
 
-/* Where the open tree starts, in the layout's own coordinates.
- *
- * Everything below is pushed relative to this rather than converted from it,
- * and that is the whole of what makes scrolling work. A rect pushed into a
- * Nuklear space is local to the space, and the space's screen position moves
- * with the scroll every frame. A rect that has been through the layout is a
- * frame old. Subtracting a fresh screen position from a stale rect leaves the
- * frame's worth of scrolling in the answer - which is a page whose contents
- * trail the scrollbar for as long as it is dragged.
- *
- * So the layout never sees the scroll at all: local coordinates go in, local
- * coordinates come out, and Nuklear applies this frame's scroll to them. */
 static float              g_ox, g_oy;
 
-/* Where each open container landed on screen, innermost last, and whether it
- * has landed at all. A row is not a widget and has no bounds of its own, so
- * anything painted behind a container's children - a table's zebra, a card's
- * fill - has to ask. Index 0 is unused: depth 0 means no container is open. */
 static struct nk_rect     g_boxrect[REAKTOR_LAY_DEPTH + 1];
 static unsigned char      g_boxok[REAKTOR_LAY_DEPTH + 1];
-/* And the node each one reports as. The id is what anything keyed per widget
- * uses - the layout engine finds last frame's rect by it, the platform
- * bridges name a node by it, and an animation remembers a value by it. */
 static unsigned           g_boxid[REAKTOR_LAY_DEPTH + 1];
 
 void
@@ -116,25 +44,17 @@ void
 reaktor_frame_end(void)
 {
     if (!g_app) return;
-    /* A page that left a container open still gets its space closed, because
-     * Nuklear would draw the rest of the frame into it otherwise. */
     if (g_space) { nk_layout_space_end(g_ctx); g_space = 0; }
     reaktor_layout_end(&g_app->lay);
 
-    /* Anything declared for the first time was measured just now and has
-     * nowhere to have been drawn, so the frame that shows it is the next one -
-     * and this application only draws when something asks it to. On a desktop
-     * a stray event usually arrives and hides that; in a browser nothing does,
-     * and the page came up as an empty card that stayed empty. So the frame
-     * that measures asks for the frame that draws. */
-    /* A run, not a flag. A paragraph settles one frame before the container
-     * holding it does, because the container's height is only known once the
-     * paragraph's is - so a single quiet frame is not proof the tree has
-     * stopped moving, and two consecutive ones are. */
     g_settled_run = g_unsettled ? 0 : g_settled_run + 1;
     if (!g_unsettled) {
         g_settle_tries = 0;
     } else if (g_settle_tries < REAKTOR_SETTLE_TRIES) {
+        /* Boxes are placed a frame late, so a tree that has just
+         * grown one needs another frame to draw into. Nothing else
+         * is going to ask for it - the app draws on events only - so
+         * a synthetic event is what wakes the loop. */
         SDL_Event e;
 
         g_settle_tries++;
@@ -143,7 +63,6 @@ reaktor_frame_end(void)
         e.type = SDL_EVENT_USER;
         SDL_PushEvent(&e);
     } else if (g_settle_tries == REAKTOR_SETTLE_TRIES) {
-        /* Once per run of them, not once per frame. */
         g_settle_tries++;
         fprintf(stderr,
                 "reaktor: the declared tree did not settle after %d frames - "
@@ -158,9 +77,6 @@ reaktor_frame_end(void)
     g_ctx = NULL;
 }
 
-/* The type a selector asks for, pushed for one widget. Answers whether
- * anything was pushed, so the caller knows whether to pop. A selector with no
- * rule behind it leaves the frame's own font in place rather than guessing. */
 static int
 push_style_font(const char *selector)
 {
@@ -173,8 +89,6 @@ push_style_font(const char *selector)
     return 1;
 }
 
-/* A rect the layout produced, as Nuklear's space wants it: local to the tree
- * rather than to the window. */
 static struct nk_rect
 in_tree(struct nk_rect r)
 {
@@ -183,8 +97,6 @@ in_tree(struct nk_rect r)
     return r;
 }
 
-/* And where that lands on screen this frame, scroll and all - which is what
- * the accessibility tree reports and what a magnifier follows. */
 static struct nk_rect
 on_screen(struct nk_rect r)
 {
@@ -201,21 +113,12 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     box = *b;
     box.dir = dir;
 
-    /* A tree with no width of its own fills the panel it is in.
-     *
-     * Asked of the panel rather than peeked from the row cursor, and that is
-     * the whole difference. nk_widget_bounds answers where the *next* widget
-     * would go, so a peek taken after another declared tree has closed its
-     * space answers whatever that space left behind - which is how a page
-     * ended up with containers 0 and 27 pixels wide, and why "two declared
-     * blocks side by side must be one container" was a rule anyone writing a
-     * page had to know. The panel's content region does not move with the
-     * cursor, so there is nothing to be stale. */
+    /* The outermost container takes the panel's width. Without this a
+     * root box has no width until something measures it, and two
+     * adjacent declared blocks could not be siblings. */
     if (g_depth == 0 && box.w <= 0.0f)
         box.w = nk_window_get_content_region_size(g_ctx).x;
 
-    /* A container is a group in the tree: no name of its own, and a reader
-     * walks through it to its children. */
     id = reaktor_note_push(g_app, REAKTOR_A11Y_GROUP, box.name, NULL, 0u,
                            nk_rect(0, 0, 0, 0));
     reaktor_layout_open(&g_app->lay, id, &box);
@@ -232,9 +135,6 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
         struct nk_rect r;
 
         if (reaktor_layout_rect(&g_app->lay, id, &r)) {
-            /* One space for the whole tree, opened by whichever container is
-             * outermost. A page that declares nothing opens none, which is
-             * what lets the old API keep working beside this one. */
             if (g_depth == 0) {
                 g_ox = r.x;
                 g_oy = r.y;
@@ -247,6 +147,8 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
                 g_boxok[g_depth + 1]   = 1;
             }
         } else {
+            /* No rect yet: first frame for this box. Recorded rather
+             * than guessed at, and the frame is redrawn. */
             if (g_depth < REAKTOR_LAY_DEPTH) g_boxok[g_depth + 1] = 0;
             if (!g_stuck) g_stuck = box.name ? box.name : "(a container)";
             g_unsettled++;
@@ -285,31 +187,17 @@ reaktor_box_close(void)
     reaktor_note_pop(g_app);
 }
 
-/* Steps 1 to 3, which every widget shares. Answers 0 when layout has not
- * placed this box yet - its first frame, and the frame after the tree changed
- * shape - in which case the caller draws nothing rather than somewhere wrong.
- * `role` of NONE reports no node at all, for a box that is only spacing. */
 static unsigned
 note_of(unsigned char role, const char *name, const char *value, unsigned state)
 {
     return reaktor_note(g_app, role, name, value, state, nk_rect(0, 0, 0, 0));
 }
 
-/* Declares the box under an id already taken, finds where that id went last
- * frame, and hands the rect to Nuklear. Answers 0 when there is nowhere to
- * draw yet - a box's first frame, and the frame after the tree changed shape -
- * in which case the caller draws nothing rather than somewhere wrong.
- *
- * Split from note_of because a wrapped label has to know its width before it
- * can say how tall it is, and the width it gets is the one its id had last
- * frame. So: take the id, measure against it, then declare. */
 static int
 emit(unsigned id, const char *keys, const reaktor_box *b)
 {
     struct nk_rect r;
 
-    /* Declared before anything else can go wrong. A box that is not declared
-     * is not measured, and a box that is not measured never gets a rect. */
     reaktor_layout_leaf(&g_app->lay, id, b);
     if (keys) reaktor_note_keys(g_app, id, keys);
 
@@ -321,7 +209,6 @@ emit(unsigned id, const char *keys, const reaktor_box *b)
     return 1;
 }
 
-/* How wide this id came out last frame, or 0 if it has not been placed. */
 static float
 width_of(unsigned id)
 {
@@ -330,6 +217,8 @@ width_of(unsigned id)
     return reaktor_layout_rect(&g_app->lay, id, &r) ? r.w : 0.0f;
 }
 
+/* Report the widget, claim its slot, and answer whether it has a rect
+ * to draw into. Every widget below starts with this and returns on 0. */
 static int
 place(unsigned char role, const char *name, const char *value, unsigned state,
       const char *keys, const reaktor_box *b, unsigned *out_id)
@@ -344,7 +233,6 @@ place(unsigned char role, const char *name, const char *value, unsigned state,
     return 0;
 }
 
-/* The font a selector asks for, or the frame's own when it names no rule. */
 static const struct nk_user_font *
 style_font(const char *selector)
 {
@@ -358,24 +246,28 @@ style_font(const char *selector)
     return g_ctx->style.font;
 }
 
-/* A box's own size, or what the text needs in the font a selector chose. */
+/* A size for an axis the caller left alone. Zero means "no default here",
+ * and a box that fills an axis keeps whatever the layout gives it. */
+static void
+box_default(reaktor_box *b, float w, float h)
+{
+    if (w > 0.0f && b->w <= 0.0f && !(b->flags & REAKTOR_LAY_FILL_X)) b->w = w;
+    if (h > 0.0f && b->h <= 0.0f && !(b->flags & REAKTOR_LAY_FILL_Y)) b->h = h;
+}
+
+/* The height four widgets settle on when they are given none. */
+static float
+row_height(float extra)
+{
+    return g_ctx->style.font->height + extra;
+}
+
 static void
 size_to_text(reaktor_box *box, const char *text, const char *selector,
              float pad_x, float pad_y)
 {
-    const struct nk_user_font *f = g_ctx->style.font;
-    reaktor_style              st;
+    const struct nk_user_font *f = style_font(selector);
 
-    if (selector) {
-        reaktor_style_get(selector, &st);
-        if (st.matched && st.font_px > 0)
-            f = pick_font(g_app, st.font_px, st.bold);
-    }
-    /* Only on an axis nothing else decides. A box that fills has its size
-     * chosen for it, and an intrinsic size there is not a preference but a
-     * floor - which is why three buttons in a row came out as wide as their
-     * labels plus a share each, rather than as three equal columns. A caller
-     * that does want a floor sets it, and this leaves it alone. */
     if (box->w <= 0.0f && text && !(box->flags & REAKTOR_LAY_FILL_X))
         box->w = f->width(f->userdata, f->height, text, (int)strlen(text))
                + 2.0f * pad_x;
@@ -421,30 +313,13 @@ reaktor_button(const reaktor_button_spec *s)
                s->disabled ? REAKTOR_A11Y_DISABLED : 0u, s->keys, &box, &id))
         return 0;
 
-    /* The rect the layout gave it, which place() has just pushed into the
-     * space - and which nk_widget_bounds answers, because that is the rect
-     * the next widget will be drawn into. Wanted twice below, and neither
-     * time can use the caller's box: a box that fills has no size of its own
-     * on that axis, and size_to_text leaves it alone on purpose. */
     r = nk_widget_bounds(g_ctx);
 
     styled = push_style_font(s->style);
     if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_REPEATER);
     if (s->disabled) nk_widget_disable_begin(g_ctx);
-    /* For the icon-only branch below, which draws through Nuklear directly.
-     * Everything else here goes through css_button, and push_button_style
-     * bounds the padding itself - it has to, because it pushes the
-     * stylesheet's padding after this and would otherwise undo it. */
     fitted = reaktor_fit_label(g_app, g_ctx, r);
-    /* The helpers below report themselves - they were written to be called
-     * directly by a page. Here the node already exists, so the inner one is
-     * muted rather than allowed to arrive as a duplicate. */
     reaktor_note_mute(g_app, 1);
-    /* At 0.6 of the height the layout gave it. Sizing the glyph from the
-     * caller's box instead asked for 0.6 of nothing on a button that fills
-     * its row, and nk_button_image stretched whatever came back across the
-     * whole button - which read as a bad icon rather than as a size asked
-     * for wrong. */
     if (s->icon && !s->label)
         hit = nk_button_image(g_ctx, reaktor_ionicon(g_app, s->icon,
                                                      (int)(r.h * 0.6f)));
@@ -472,25 +347,12 @@ reaktor_label(const reaktor_label_spec *s)
 
     if (!g_app || !s || !s->text) return;
     box = s->box;
-    /* A silent label adds no node, so its name is never read - it is only
-     * ever an identity. Identifying it by its own text would make it a new
-     * box every time that text changed, which for a readout is every frame,
-     * and a box that is new every frame never has a rect to draw into. So a
-     * silent label with no name of its own has none at all, and its siblings
-     * are told apart the way a row of unlabelled buttons is: by how many
-     * with the same parent and role came before it. */
     id  = note_of(s->silent ? REAKTOR_A11Y_NONE : REAKTOR_A11Y_LABEL,
                   s->name ? s->name : (s->silent ? NULL : s->text),
                   s->value, 0u);
     f   = style_font(s->style);
 
     if (s->wrap) {
-        /* As many lines as this width takes, at the width it had last frame.
-         * The +2 is the same slack the imperative caption used: a wrap breaks
-         * on words, so the last line is short and one more may be started. */
-        /* This label's own width if the layout has one, and the width its
-         * container is about to hand it if not - which is what makes the
-         * first drawn frame the right height rather than one line. */
         float own   = width_of(id);
         float avail = (own > 0.0f ? own : g_width[g_widths - 1]) - 4.0f;
         float tw    = f->width(f->userdata, f->height, s->text,
@@ -499,18 +361,13 @@ reaktor_label(const reaktor_label_spec *s)
         struct nk_rect prev;
 
         if (box.h <= 0.0f) box.h = (f->height + 3.0f) * (float)lines;
-        /* The height just worked out is not the height it was drawn at last
-         * time, so the frame being measured is not the one to keep. Without
-         * this the paragraph settles at one line and stays there, because
-         * nothing else has any reason to ask for a redraw. */
         if (!reaktor_layout_rect(&g_app->lay, id, &prev) || prev.h != box.h)
             g_unsettled++;
     } else {
-        if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X))
-            box.w = f->width(f->userdata, f->height, s->text,
-                             (int)strlen(s->text));
-        if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
-            box.h = f->height;
+        box_default(&box,
+                    f->width(f->userdata, f->height, s->text,
+                             (int)strlen(s->text)),
+                    f->height);
     }
 
     if (!emit(id, NULL, &box)) return;
@@ -548,10 +405,6 @@ reaktor_icon(const reaktor_icon_spec *s)
     if (box.h <= 0.0f) box.h = box.w;
     px = (int)box.w;
 
-    /* The bare name, not a path: reaktor_ionicon builds the path, applies the
-     * hairline rule for small sizes and reads the artwork straight out of the
-     * submodule. Handing it a path made it build a second one and the icon
-     * came out blank. */
     im = s->accent
        ? reaktor_ionicon_col(g_app, s->name, px,
                              reaktor_token("--links", g_app->text))
@@ -565,22 +418,19 @@ void
 reaktor_field(const reaktor_field_spec *s)
 {
     reaktor_box box;
-    unsigned    id = 0;
 
     if (!g_app || !s || !s->buf || !s->len) return;
     box = s->box;
     if (box.h <= 0.0f) box.h = g_ctx->style.font->height + 20.0f;
 
-    /* The hint names the field when nothing else does - it is what a sighted
-     * user reads off the empty box - and the value is whatever has been typed
-     * into it, which is nothing until it is. */
     if (!place(REAKTOR_A11Y_TEXTBOX, s->name ? s->name : s->hint,
-               s->buf[0] ? s->buf : NULL, 0u, NULL, &box, &id))
+               s->buf[0] ? s->buf : NULL, 0u, NULL, &box, NULL))
         return;
     reaktor_note_mute(g_app, 1);
     (void)reaktor_field_text(g_app, g_ctx,
                              s->multiline ? NK_EDIT_BOX : NK_EDIT_FIELD,
-                             s->buf, s->len, s->cap, s->hint, s->filter);
+                             s->buf, s->len, s->cap, s->hint, s->filter,
+                             s->pad_x, s->pad_y);
     reaktor_note_mute(g_app, 0);
 }
 
@@ -613,10 +463,6 @@ reaktor_link(const reaktor_link_spec *s)
 int
 reaktor_frame_settled(void)
 {
-    /* Giving up counts. Whoever is waiting for the tree to hold still - the
-     * accessibility dump is the one that matters - would otherwise wait for
-     * a frame that is never coming, and the broken tree is the thing they
-     * wanted to look at. */
     return g_settled_run >= 2 || g_settle_tries > REAKTOR_SETTLE_TRIES;
 }
 
@@ -630,11 +476,9 @@ reaktor_swatch(const reaktor_swatch_spec *s)
 
     if (!g_app || !s) return 0;
     box = s->box;
-    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X)) box.w = 40.0f;
-    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y)) box.h = box.w;
+    box_default(&box, 40.0f, 0.0f);
+    box_default(&box, 0.0f, box.w);
 
-    /* The colour is the value: there is no text on it, and "#56c6ff" is the
-     * only thing a reader could be told about a swatch beyond its name. */
     SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x",
                  s->fill.r, s->fill.g, s->fill.b);
     if (!place(REAKTOR_A11Y_BUTTON, s->name, hex, 0u, NULL, &box, &id))
@@ -668,8 +512,6 @@ reaktor_check(const reaktor_check_spec *s)
                on ? REAKTOR_A11Y_CHECKED : 0u, NULL, &box, &id))
         return 0;
 
-    /* Enter, or a screen reader's press, taken here rather than delivered as
-     * a click on the box - see reaktor_focus_activated. */
     if (reaktor_focus_activated(g_app, id)) on = !on;
 
     reaktor_note_mute(g_app, 1);
@@ -740,8 +582,6 @@ reaktor_select(const reaktor_select_spec *s)
 
         reaktor_note_mute(g_app, 1);
         if (s->icon) {
-            /* The ink follows the selection, so the glyph is rasterised at
-             * the colour this row is about to be drawn in. */
             struct nk_color accent = reaktor_token("--links",
                                                    g_ctx->style.text.color);
             struct nk_color ink = *s->on
@@ -752,11 +592,6 @@ reaktor_select(const reaktor_select_spec *s)
                       reaktor_ionicon_col(g_app, s->icon, 16, ink),
                       s->label, align, s->on);
         } else if (s->disc) {
-            /* NK_SYMBOL_NONE and the disc drawn into the slot Nuklear sized
-             * for it: a circle is the one shape the software rasteriser
-             * cannot draw, and nk_do_selectable_symbol's icon rect sits at
-             * twice the style's padding from the left edge for any alignment
-             * but NK_TEXT_LEFT, as tall as the row less that padding. */
             const struct nk_style_selectable *st = &g_ctx->style.selectable;
             struct nk_rect icon;
 
@@ -794,14 +629,11 @@ reaktor_slider(const reaktor_slider_spec *s)
     else SDL_snprintf(text, sizeof(text), "%d", *s->ivalue);
 
     box = s->box;
-    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
-        box.h = g_ctx->style.font->height + 14.0f;
+    box_default(&box, 0.0f, row_height(14.0f));
 
     if (!place(REAKTOR_A11Y_SLIDER, s->name, text, 0u, NULL, &box, &id))
         return;
 
-    /* The numbers behind the text, for a client that computes rather than
-     * reads - see reaktor_note_range. */
     reaktor_note_range(g_app, id, now, s->lo, s->hi, s->step);
 
     reaktor_note_mute(g_app, 1);
@@ -824,8 +656,7 @@ reaktor_progress(const reaktor_progress_spec *s)
     SDL_snprintf(text, sizeof(text), "%d", (int)*s->value);
 
     box = s->box;
-    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
-        box.h = g_ctx->style.font->height + 14.0f;
+    box_default(&box, 0.0f, row_height(14.0f));
 
     if (!place(REAKTOR_A11Y_PROGRESS, s->name, text, 0u, NULL, &box, &id))
         return;
@@ -848,11 +679,9 @@ reaktor_knob(const reaktor_knob_spec *s)
     SDL_snprintf(text, sizeof(text), "%.2f", (double)*s->value);
 
     box = s->box;
-    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X)) box.w = 62.0f;
-    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y)) box.h = box.w;
+    box_default(&box, 62.0f, 0.0f);
+    box_default(&box, 0.0f, box.w);
 
-    /* A slider to a reader: it is a value between two bounds, and nothing in
-     * any platform's vocabulary is shaped like a knob. */
     if (!place(REAKTOR_A11Y_SLIDER, s->name, text, 0u, NULL, &box, &id))
         return;
     reaktor_note_range(g_app, id, *s->value, s->lo, s->hi, 0.0f);
@@ -879,8 +708,7 @@ reaktor_property(const reaktor_property_spec *s)
     else SDL_snprintf(text, sizeof(text), "%.2f", now);
 
     box = s->box;
-    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
-        box.h = g_ctx->style.font->height + 14.0f;
+    box_default(&box, 0.0f, row_height(14.0f));
 
     if (!place(REAKTOR_A11Y_SPINBUTTON, s->name ? s->name : s->label, text,
                0u, NULL, &box, &id))
@@ -888,7 +716,6 @@ reaktor_property(const reaktor_property_spec *s)
     reaktor_note_range(g_app, id, (float)now, (float)s->lo, (float)s->hi,
                        (float)s->step);
 
-    /* The rect it was just pushed into, which the chrome is drawn over. */
     r = nk_widget_bounds(g_ctx);
 
     reaktor_note_mute(g_app, 1);
@@ -912,21 +739,17 @@ reaktor_combo_open(const reaktor_combo_spec *s)
 {
     reaktor_box    box;
     struct nk_rect h;
-    unsigned       id = 0;
     float          cw;
     int            open;
 
     if (!g_app || !s) return 0;
     box = s->box;
-    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y))
-        box.h = g_ctx->style.font->height + 18.0f;
+    box_default(&box, 0.0f, row_height(18.0f));
 
     if (!place(REAKTOR_A11Y_COMBOBOX, s->name ? s->name : s->label, s->label,
-               0u, NULL, &box, &id))
+               0u, NULL, &box, NULL))
         return 0;
 
-    /* The popup takes an explicit size, so "as wide as the box" has to be
-     * asked for - nk_widget_width is the box about to be emitted. */
     h  = nk_widget_bounds(g_ctx);
     cw = nk_widget_width(g_ctx);
 
@@ -939,8 +762,6 @@ reaktor_combo_open(const reaktor_combo_spec *s)
                                     nk_vec2(cw, s->body_h));
     reaktor_note_mute(g_app, 0);
 
-    /* Drawn over the header whether the body opens or not, which is why it is
-     * here and not beside the close. */
     if (s->disc) {
         struct nk_rect im = reaktor_combo_content(g_ctx, h);
 
@@ -950,9 +771,6 @@ reaktor_combo_open(const reaktor_combo_spec *s)
         reaktor_glyph_at(g_app, g_ctx, im, REAKTOR_DISC_ROUND,
                          g_ctx->style.combo.symbol_normal, (int)im.w, 0.0f);
     } else if (s->swatch) {
-        /* nk_combo_begin_color draws its swatch with a literal zero rounding
-         * - not a style field - so a square block sits inside a box with an
-         * 8px radius. There is no way to ask it for anything else. */
         struct nk_rect sw = reaktor_combo_content(g_ctx, h);
         float r = g_ctx->style.combo.rounding;
 
@@ -990,17 +808,15 @@ reaktor_colour_pick(const reaktor_colour_spec *s)
     reaktor_box     box;
     struct nk_color c;
     char            hex[10];
-    unsigned        id = 0;
 
     if (!g_app || !s || !s->value) return;
     c = nk_rgb_cf(*s->value);
     SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x", c.r, c.g, c.b);
 
     box = s->box;
-    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X)) box.w = 210.0f;
-    if (box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y)) box.h = 132.0f;
+    box_default(&box, 210.0f, 132.0f);
 
-    if (!place(REAKTOR_A11Y_GROUP, s->name, hex, 0u, NULL, &box, &id))
+    if (!place(REAKTOR_A11Y_GROUP, s->name, hex, 0u, NULL, &box, NULL))
         return;
 
     reaktor_note_mute(g_app, 1);

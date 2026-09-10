@@ -1,8 +1,3 @@
-/* keytest.c - chord matching, exhaustively.
- *
- * The accessibility tree cannot check this: a keypress is not a frame, so the
- * golden dumps see nothing of it. This is what stands in for them.
- */
 #include <stdio.h>
 #include <string.h>
 
@@ -48,7 +43,6 @@ test_chord(void)
     ok("...and not a binding on another key",
        reaktor_chord(&e, REAKTOR_MOD_CTRL, SDLK_F1), 0);
 
-    /* The bug in the obvious test: `mod & SDL_KMOD_CTRL` is true here. */
     e = press(SDLK_TAB, (SDL_Keymod)(SDL_KMOD_LCTRL | SDL_KMOD_LALT));
     ok("Ctrl+Alt+Tab does NOT answer Ctrl+Tab",
        reaktor_chord(&e, REAKTOR_MOD_CTRL, SDLK_TAB), 0);
@@ -167,8 +161,6 @@ test_text(void)
     text("all four",
          REAKTOR_MOD_CTRL | REAKTOR_MOD_ALT | REAKTOR_MOD_SHIFT | REAKTOR_MOD_CMD,
          SDLK_A, "Control+Meta+Alt+Shift+A");
-    /* The same action on two platforms must not read as two chords: the
-     * command modifier leads in both. */
     text("Ctrl and Shift", REAKTOR_MOD_CTRL | REAKTOR_MOD_SHIFT, SDLK_TAB,
          "Control+Shift+Tab");
     text("...and Cmd and Shift, the same way round",
@@ -210,8 +202,6 @@ list(const char *what, int action, int index, const char *want)
 static void
 test_list(void)
 {
-    /* Two rows, one action: the shape a chord wanted on both Ctrl and Cmd
-     * takes, and the one ARIA collapses into a single value. */
     static const reaktor_shortcut PAIR[] = {
         { REAKTOR_MOD_CTRL, SDLK_TAB, 0, ACT_NEXT, "Next page" },
         { REAKTOR_MOD_CMD,  SDLK_TAB, 0, ACT_NEXT, "Next page" }

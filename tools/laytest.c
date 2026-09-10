@@ -1,11 +1,3 @@
-/* laytest.c - the Onlay shim: ids in, rects out, one frame later.
- *
- * Onlay's own arithmetic is checked by onlay/test_onlay.c, against the real
- * application's accessibility dump. This checks what the shim owes on top of
- * it: that a box is found by the id the accessibility tree gave it, that the
- * tree's origin is added back, that a frame reads the frame before it, and
- * that a box nobody has laid out yet answers "not yet" instead of a guess.
- */
 #include <stdio.h>
 #include <string.h>
 
@@ -13,7 +5,6 @@
 
 static int g_fail;
 
-/* nk_rect() lives in Nuklear's implementation, which this does not link. */
 static struct nk_rect
 R(float x, float y, float w, float h)
 {
@@ -34,7 +25,6 @@ ok(const char *what, int got, int want)
     }
 }
 
-/* One frame: declare a row of three boxes, two of them filling. */
 static void
 frame(reaktor_layout *l, float gap)
 {
@@ -98,7 +88,6 @@ test_origin(reaktor_layout *l)
        first.w == 100.0f && first.h == 30.0f, 1);
 }
 
-/* Onlay's own default is the opposite of ours, so both are worth pinning. */
 static void
 test_centring(reaktor_layout *l)
 {
@@ -181,8 +170,6 @@ test_wrap(reaktor_layout *l)
     cell.w    = 100.0f;
     cell.h    = 20.0f;
 
-    /* Three fit on a line - 3 * 100 plus two gaps is 320, so two do - and
-     * seven of them make four lines, the last of them short. */
     reaktor_layout_begin(l, R(0.0f, 0.0f, 300.0f, 300.0f));
     reaktor_layout_open(l, 300u, &row);
     for (i = 0; i < 7; i++) reaktor_layout_leaf(l, 301u + (unsigned)i, &cell);
@@ -253,9 +240,6 @@ test_limits(reaktor_layout *l)
         reaktor_box a = { 0 }, b2 = { 0 }, kid = { 0 };
         struct nk_rect ra, rb;
 
-        /* What a page actually does: a card here, a section there. In a
-         * stacking root the second one started below the first and then added
-         * its own offset on top, which is how one section became several. */
         a.dir = REAKTOR_LAY_COLUMN;  a.w = 100.0f; a.ml = 30.0f; a.mt = 40.0f;
         b2.dir = REAKTOR_LAY_COLUMN; b2.w = 100.0f; b2.ml = 30.0f; b2.mt = 200.0f;
         kid.h = 25.0f; kid.flags = REAKTOR_LAY_FILL_X;
@@ -286,7 +270,7 @@ test_limits(reaktor_layout *l)
         struct nk_rect r;
 
         col.dir   = REAKTOR_LAY_COLUMN;
-        col.w     = 200.0f;          /* width given, height left to the children */
+        col.w     = 200.0f;
         col.gap   = 7.0f;
         a.h = 30.0f; a.flags = REAKTOR_LAY_FILL_X;
         c.h = 19.0f; c.flags = REAKTOR_LAY_FILL_X;
@@ -314,7 +298,6 @@ test_limits(reaktor_layout *l)
     reaktor_layout_end(l);
     {
         struct nk_rect r;
-        /* 256 boxes fit, and the root is one of them. */
         ok("the overflow is counted", l->overflow_boxes, 41);
         ok("the boxes that fitted still came out",
            reaktor_layout_rect(l, 1000u, &r), 1);
@@ -332,16 +315,10 @@ test_limits(reaktor_layout *l)
         reaktor_layout_begin(l, R(0.0f, 0.0f, 100.0f, 100.0f));
         for (i = 0; i < REAKTOR_LAY_DEPTH + 5; i++)
             reaktor_layout_open(l, (unsigned)(3000 + i), &b);
-        /* The one that discriminates: an open past the stack must still count.
-         * Stopping at the stack's size is what let a later close pop something
-         * it never pushed, and the closing loop below hides that on its own -
-         * the clamp brings depth back to 1 either way. */
         ok("an open past the stack still counts",
            l->depth, REAKTOR_LAY_DEPTH + 6);
         for (i = 0; i < REAKTOR_LAY_DEPTH + 5; i++)
             reaktor_layout_close(l);
-        /* The whole point: a box declared after all that is still the root's
-         * child, not stranded inside a container that was never popped. */
         reaktor_layout_leaf(l, 3999u, &b);
         reaktor_layout_end(l);
         ok("every open was balanced by its close", l->depth, 1);
@@ -358,8 +335,6 @@ test_limits(reaktor_layout *l)
         reaktor_layout_begin(l, R(0.0f, 0.0f, 100.0f, 100.0f));
         for (i = 0; i < REAKTOR_LAY_MAX; i++)
             reaktor_layout_leaf(l, (unsigned)(4000 + i), &b);
-        /* No room left, so this container has no item at all - and its
-         * children must not be handed one that is not there. */
         reaktor_layout_open(l, 4900u, &b);
         reaktor_layout_leaf(l, 4901u, &b);
         reaktor_layout_close(l);

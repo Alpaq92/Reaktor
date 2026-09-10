@@ -1,36 +1,3 @@
-/* a11y_atspi.c - phase 4c of docs/ACCESSIBILITY.md: the tree, served to
- * AT-SPI, which is the free desktops' - Linux and the BSDs alike, since it
- * is a freedesktop standard and nothing here is Linux-specific.
- *
- * AT-SPI is D-Bus, and this speaks it directly rather than through ATK: ATK is
- * the provider half of the GNOME stack, it is LGPL, and it is being retired in
- * favour of exactly this. libdbus is dual licensed and taken here under the
- * Academic Free License 2.1, which is MIT-shaped - see NOTICE.md.
- *
- * How an application joins the bus, which is the part with no analogue on
- * Windows:
- *
- *   1. The accessibility bus is not the session bus. Its address comes from
- *      calling org.a11y.Bus.GetAddress on the session bus; a desktop with no
- *      accessibility stack running answers with an error, and this stands
- *      down quietly, which is the common case and not a failure.
- *   2. The application registers by calling Embed on the registry with its own
- *      (bus name, object path). The registry answers with the desktop's, which
- *      becomes the root's parent - so the tree hangs off the desktop rather
- *      than floating.
- *   3. Every node is an object at /org/a11y/atspi/accessible/<id>. There are
- *      too many to register one at a time, and they come and go with each
- *      frame, so one fallback handler owns the whole subtree and answers from
- *      the id in the path.
- *
- * Threading is the reason stage 1 exists. A client's calls arrive whenever it
- * likes, so the connection is pumped by a thread of its own; every handler
- * reads a11y_snapshot, which is a copy taken under a lock, and posts what a
- * client asks for back to the app's thread. Nothing here touches the model.
- *
- * The role numbers and interface names below are the wire protocol, the way
- * UIA's control-type ids are: they are what goes on the bus, not values copied
- * out of a vendored header. */
 #include "a11y.h"
 
 #ifdef REAKTOR_HAVE_ATSPI
@@ -38,7 +5,7 @@
 #include "a11y_snapshot.h"
 
 #include <stdio.h>
-#include <stdlib.h>   /* strtoul, for the id in a path */
+#include <stdlib.h>
 #include <string.h>
 #include <dbus/dbus.h>
 #include <SDL3/SDL.h>
@@ -58,7 +25,6 @@
 #define IF_EVENT_OBJECT "org.a11y.atspi.Event.Object"
 #define IF_PROPS        "org.freedesktop.DBus.Properties"
 
-/* AT-SPI's role numbers. The protocol's, not a header's. */
 enum {
     ATSPI_ROLE_INVALID       = 0,
     ATSPI_ROLE_APPLICATION   = 75,
@@ -85,7 +51,6 @@ enum {
     ATSPI_ROLE_TREE_ITEM     = 68
 };
 
-/* State bits, as bit numbers within the two-word set AT-SPI sends. */
 enum {
     ATSPI_STATE_CHECKED    = 5,
     ATSPI_STATE_ENABLED    = 8,
@@ -105,14 +70,12 @@ static struct {
     int             running;
     int             ready;
 
-    char            self[128];      /* our unique name on the a11y bus */
+    char            self[128];
     char            desktop_name[128];
     char            desktop_path[256];
 
     unsigned        last_focus;
 } g;
-
-/* --- names and paths ----------------------------------------------------- */
 
 static void
 path_of(unsigned id, char *out, size_t cap)
@@ -121,8 +84,6 @@ path_of(unsigned id, char *out, size_t cap)
     else     snprintf(out, cap, "%s%u", ATSPI_PREFIX, id);
 }
 
-/* The id a path names, or 0 for the root. Answers -1 for a path that is not
- * ours at all, which is how the fallback handler declines. */
 static long
 id_of(const char *path)
 {
@@ -192,9 +153,6 @@ role_name(unsigned char role)
     }
 }
 
-/* Which nodes take a press. The same set that gets IInvokeProvider on
- * Windows, for the same reason: what the platform offers is what the shell
- * can actually do. */
 static int
 has_action(unsigned char role)
 {
@@ -204,10 +162,6 @@ has_action(unsigned char role)
            role == REAKTOR_A11Y_LISTITEM;
 }
 
-/* --- writing the little types AT-SPI uses -------------------------------- */
-
-/* An object reference is (so): a bus name and an object path. The desktop is
- * named by the registry; anything of ours is named by us. */
 static void
 append_ref(DBusMessageIter *it, const char *name, const char *path)
 {
@@ -229,14 +183,12 @@ append_node_ref(DBusMessageIter *it, unsigned id)
     append_ref(it, name, path);
 }
 
-/* The null reference, which is how "no parent" and "not found" are spelled. */
 static void
 append_null_ref(DBusMessageIter *it)
 {
     append_ref(it, "org.a11y.atspi.Registry", "/org/a11y/atspi/null");
 }
 
-/* One entry of an a{ss}, which is the shape AT-SPI gives object attributes. */
 static void
 append_attribute(DBusMessageIter *arr, const char *key, const char *val)
 {
@@ -288,7 +240,6 @@ append_variant_ref(DBusMessageIter *it, unsigned id)
     dbus_message_iter_close_container(it, &v);
 }
 
-/* The state set: two 32-bit words of bit flags, sent as an array. */
 static void
 append_state(DBusMessageIter *it, const reaktor_snap_node *n)
 {
@@ -347,11 +298,6 @@ append_interfaces(DBusMessageIter *it, const reaktor_snap_node *n, int is_root)
     dbus_message_iter_close_container(it, &arr);
 }
 
-/* --- children ------------------------------------------------------------ */
-
-/* AT-SPI asks for children by index, so the walk the snapshot offers - first,
- * next - is turned into one here. Linear in the parent's children, which is
- * what a client's own traversal costs anyway. */
 static unsigned
 child_at(unsigned parent, int index)
 {
@@ -393,8 +339,6 @@ index_in_parent(unsigned id)
     return -1;
 }
 
-/* --- replies ------------------------------------------------------------- */
-
 static DBusHandlerResult
 send_reply(DBusConnection *c, DBusMessage *m, DBusMessage *r)
 {
@@ -414,8 +358,6 @@ reply_unknown(DBusConnection *c, DBusMessage *m)
     return send_reply(c, m, r);
 }
 
-/* --- org.freedesktop.DBus.Properties ------------------------------------- */
-
 static DBusHandlerResult
 handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
                   const reaktor_snap_node *n)
@@ -425,9 +367,6 @@ handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
     DBusMessageIter it;
 
     if (!dbus_message_has_member(m, "Get")) {
-        /* GetAll is answered as an empty dictionary rather than refused: a
-         * client that asks gets nothing rather than an error it must handle,
-         * and every property it actually wants it asks for by name. */
         if (dbus_message_has_member(m, "GetAll")) {
             DBusMessageIter arr;
 
@@ -521,8 +460,6 @@ handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
     return send_reply(c, m, r);
 }
 
-/* --- org.a11y.atspi.Accessible ------------------------------------------- */
-
 static DBusHandlerResult
 handle_accessible(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
                   const reaktor_snap_node *n)
@@ -589,9 +526,6 @@ handle_accessible(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
     } else if (dbus_message_has_member(m, "GetAttributes")) {
         DBusMessageIter arr;
         dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "{ss}", &arr);
-        /* An object attribute rather than an interface: that is the mapping
-         * the ARIA working group settled on for aria-keyshortcuts, and it is
-         * where a reader on this desktop looks. */
         if (!is_root && n && n->keys)
             append_attribute(&arr, "keyshortcuts", n->keys);
         dbus_message_iter_close_container(&it, &arr);
@@ -604,8 +538,6 @@ handle_accessible(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
     return send_reply(c, m, r);
 }
 
-/* --- org.a11y.atspi.Component -------------------------------------------- */
-
 static DBusHandlerResult
 handle_component(DBusConnection *c, DBusMessage *m, unsigned id,
                  const reaktor_snap_node *n)
@@ -616,11 +548,6 @@ handle_component(DBusConnection *c, DBusMessage *m, unsigned id,
     if (!r) return DBUS_HANDLER_RESULT_HANDLED;
     dbus_message_iter_init_append(r, &it);
 
-    /* Window coordinates are what the model keeps, and what AT-SPI calls
-     * ATSPI_COORD_TYPE_WINDOW. A client asking in screen coordinates gets the
-     * same numbers, which is wrong by the window's origin and is the one
-     * thing here that wants a platform call to fix - X and Wayland answer it
-     * differently, so it waits for a machine to test it on. */
     if (dbus_message_has_member(m, "GetExtents")) {
         DBusMessageIter sub;
         dbus_int32_t v[4];
@@ -666,7 +593,7 @@ handle_component(DBusConnection *c, DBusMessage *m, unsigned id,
         reaktor_snap_request_focus(id);
         dbus_message_iter_append_basic(&it, DBUS_TYPE_BOOLEAN, &ok);
     } else if (dbus_message_has_member(m, "GetLayer")) {
-        dbus_uint32_t layer = 3;    /* ATSPI_LAYER_WIDGET */
+        dbus_uint32_t layer = 3;
         dbus_message_iter_append_basic(&it, DBUS_TYPE_UINT32, &layer);
     } else if (dbus_message_has_member(m, "GetMDIZOrder")) {
         dbus_int16_t z = 0;
@@ -680,8 +607,6 @@ handle_component(DBusConnection *c, DBusMessage *m, unsigned id,
     }
     return send_reply(c, m, r);
 }
-
-/* --- org.a11y.atspi.Action ----------------------------------------------- */
 
 static DBusHandlerResult
 handle_action(DBusConnection *c, DBusMessage *m, unsigned id,
@@ -699,8 +624,6 @@ handle_action(DBusConnection *c, DBusMessage *m, unsigned id,
     } else if (dbus_message_has_member(m, "DoAction")) {
         dbus_bool_t ok = has_action(n->role) ? TRUE : FALSE;
 
-        /* The same request a reader's press makes everywhere else: recorded,
-         * the loop woken, and the widget takes it on the app's own thread. */
         if (ok) reaktor_snap_request_activate(id);
         dbus_message_iter_append_basic(&it, DBUS_TYPE_BOOLEAN, &ok);
     } else if (dbus_message_has_member(m, "GetName") ||
@@ -733,20 +656,13 @@ handle_action(DBusConnection *c, DBusMessage *m, unsigned id,
     return send_reply(c, m, r);
 }
 
-/* --- org.a11y.atspi.Value ------------------------------------------------ */
-
 static DBusHandlerResult
 handle_value(DBusConnection *c, DBusMessage *m)
 {
-    /* Read-only, like IValueProvider on Windows and for the same reason:
-     * setting one means driving Nuklear from outside. SetCurrentValue is
-     * refused rather than silently ignored. */
     DBusMessage *r = dbus_message_new_error(m, DBUS_ERROR_NOT_SUPPORTED,
                                             "value is read-only");
     return send_reply(c, m, r);
 }
-
-/* --- the fallback handler ------------------------------------------------ */
 
 static DBusHandlerResult
 on_message(DBusConnection *c, DBusMessage *m, void *user)
@@ -763,8 +679,6 @@ on_message(DBusConnection *c, DBusMessage *m, void *user)
 
     memset(&n, 0, sizeof(n));
     if (!is_root && !reaktor_snap_get((unsigned)id, &n, buf, sizeof(buf))) {
-        /* A node a client is still holding after the page it was on went
-         * away. An error is the honest answer; a stale one is not. */
         DBusMessage *r = dbus_message_new_error(m, DBUS_ERROR_UNKNOWN_OBJECT,
                                                 "that element is gone");
         return send_reply(c, m, r);
@@ -784,11 +698,6 @@ on_message(DBusConnection *c, DBusMessage *m, void *user)
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-/* --- events -------------------------------------------------------------- */
-
-/* An AT-SPI event is a signal with a fixed shape: two strings, two ints, a
- * variant, and the sender as an object reference. Most of it is unused by
- * most events, which is why this exists once rather than at each call. */
 static void
 emit_event(const char *member, const char *detail, dbus_int32_t d1,
            dbus_int32_t d2, unsigned id)
@@ -816,23 +725,15 @@ emit_event(const char *member, const char *detail, dbus_int32_t d1,
     dbus_message_unref(sig);
 }
 
-/* --- the pump ------------------------------------------------------------ */
-
 static int SDLCALL
 pump(void *user)
 {
     (void)user;
-    /* Blocks until a message arrives or the connection closes, which is what
-     * makes this thread free. Everything it then calls reads the snapshot. */
     while (g.running && dbus_connection_read_write_dispatch(g.bus, 200))
         ;
     return 0;
 }
 
-/* --- joining the bus ----------------------------------------------------- */
-
-/* The accessibility bus's address, from the session bus. A desktop with no
- * accessibility stack has no org.a11y.Bus, and that is not an error. */
 static char *
 a11y_bus_address(void)
 {
@@ -862,8 +763,6 @@ a11y_bus_address(void)
     return out;
 }
 
-/* Embed hands the registry our root and gets the desktop's back, which is
- * what the root then reports as its parent. */
 static void
 embed(void)
 {
@@ -903,8 +802,6 @@ embed(void)
     dbus_message_unref(reply);
 }
 
-/* --- the seam ------------------------------------------------------------ */
-
 void
 reaktor_a11y_platform_init(reaktor_a11y_action activate,
                            reaktor_a11y_action focus, void *user)
@@ -917,8 +814,6 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
 
     if (!reaktor_snap_init(activate, focus, user)) return;
 
-    /* libdbus is used from the pump thread and from the frame, so it has to
-     * be told there is more than one. */
     dbus_threads_init_default();
 
     addr = a11y_bus_address();
@@ -941,15 +836,11 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
         g.bus = NULL;
         return;
     }
-    /* Not exiting on disconnect: this is the app's bus, not the app. */
     dbus_connection_set_exit_on_disconnect(g.bus, FALSE);
 
     unique = dbus_bus_get_unique_name(g.bus);
     SDL_strlcpy(g.self, unique ? unique : "", sizeof(g.self));
 
-    /* One handler for the whole subtree: the nodes are the frame's, and
-     * registering them one at a time would mean registering and unregistering
-     * a hundred object paths whenever a page changed. */
     if (!dbus_connection_register_fallback(g.bus, "/org/a11y/atspi/accessible",
                                            &vtable, NULL)) {
         dbus_connection_close(g.bus);
@@ -984,10 +875,6 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
     if (!reaktor_snap_update(a, focus_id)) return;
     if (!g.ready) return;
 
-    /* Structure first, for the same reason as on Windows: a client that has
-     * not re-walked cannot be told which element took focus. AT-SPI has no
-     * "children invalidated", so a change is announced on the root and the
-     * client re-reads from there. */
     reaktor_a11y_changes(a, &m);
     {
         int i, structural = 0;
@@ -1002,8 +889,6 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
         if (structural) emit_event("ChildrenChanged", "add", 0, 0, 0);
     }
 
-    /* Focus is a state change on the node that has it, and the one that lost
-     * it is told too - a reader that heard only the gain would keep both. */
     if (focus_id != g.last_focus) {
         if (g.last_focus)
             emit_event("StateChanged", "focused", 0, 0, g.last_focus);
@@ -1013,4 +898,4 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
     }
 }
 
-#endif /* REAKTOR_HAVE_ATSPI */
+#endif

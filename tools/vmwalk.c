@@ -1,24 +1,3 @@
-/* vmwalk.c - what a running process's private bytes are actually made of.
- *
- * A memory audit of Reaktor accounted for 0.45 MB of a 9.6 MB process, and
- * runs of the same binary vary by ~2 MB - so nothing under a megabyte is
- * measurable by launching and reading a counter. This walks another process's
- * address space and buckets every committed region. Read-only and
- * out-of-process: VirtualQueryEx and QueryWorkingSetEx allocate nothing in the
- * target and fault nothing in, so measuring does not move what is measured.
- *
- *     vmwalk <pid> [--csv]
- *
- * Windows-only host tool, and not part of the app.
- *
- *   MEM_PRIVATE+COMMIT  charged to private bytes in full, split by what the
- *                       pages look like.
- *   MEM_IMAGE+COMMIT    only written copy-on-write pages are ours, and
- *   MEM_MAPPED+COMMIT   VirtualQueryEx cannot say which - QueryWorkingSetEx
- *                       can, per page, via Valid && !Shared.
- *   MEM_RESERVE         listed separately: a 1 MB stack reserve is not a
- *                       megabyte of cost.
- */
 #define PSAPI_VERSION 2
 #define WIN32_LEAN_AND_MEAN
 
@@ -30,17 +9,12 @@
 #include <string.h>
 
 enum {
-    B_STACK,        /* an allocation containing a guard page */
-    /* Everything the process asked for and writes to: the CRT heap, and the
-     * graphics stack's arenas. This was two buckets split at a 1 MB region
-     * size, which measured as noise - VirtualQuery reports runs of pages, not
-     * allocations, so the same bytes crossed between them whenever a
-     * protection changed. One bucket says what the split could not. */
-    B_HEAP,         /* private read/write */
-    B_JIT,          /* private and executable: a shader or JIT compiler */
-    B_PRIV_OTHER,   /* private, but none of the above - read-only, no-access */
-    B_IMAGE_COW,    /* image pages written since load */
-    B_MAPPED_PRIV,  /* file mappings written since load */
+    B_STACK,
+    B_HEAP,
+    B_JIT,
+    B_PRIV_OTHER,
+    B_IMAGE_COW,
+    B_MAPPED_PRIV,
     B_COUNT
 };
 
@@ -53,14 +27,12 @@ static const char *const g_bucket[B_COUNT] = {
     "mapped pages, private dirty"
 };
 
-/* Big enough that the common region is one call, small enough to stay off the
- * stack in a tool that has no reason to be clever. */
 #define WS_BATCH 4096
 
 typedef struct module_ent {
     unsigned char *base;
     SIZE_T         size;
-    SIZE_T         dirty;      /* bytes of COW-dirty found in this module */
+    SIZE_T         dirty;
     char           name[64];
 } module_ent;
 
@@ -71,10 +43,6 @@ static int        g_mod_n;
 
 static double mb(SIZE_T bytes) { return (double)bytes / 1048576.0; }
 
-/* --- modules -------------------------------------------------------------
- *
- * Only so image-dirty pages can be attributed to the DLL they came from. A
- * process this size has a few dozen, so a linear scan per region is fine. */
 static void collect_modules(HANDLE proc)
 {
     HMODULE mods[MODULES_MAX];
@@ -117,13 +85,6 @@ static module_ent *module_at(unsigned char *addr)
     return NULL;
 }
 
-/* --- the shared/private question -----------------------------------------
- *
- * For image and mapped regions the interesting quantity is how many pages
- * have been written to, because those are the ones that stopped being shared.
- * QueryWorkingSetEx answers it per page, but only for pages that are resident:
- * a private page that has been paged out reports Valid == 0 and is missed.
- * That is a floor, not an estimate, and the caller says so. */
 static SIZE_T private_dirty_bytes(HANDLE proc, unsigned char *base, SIZE_T len,
                                   SIZE_T page)
 {
@@ -154,14 +115,6 @@ static SIZE_T private_dirty_bytes(HANDLE proc, unsigned char *base, SIZE_T len,
     return dirty;
 }
 
-/* --- who owns a thread ---------------------------------------------------
- *
- * A thread's Win32 start address says which module created it, which is the
- * difference between "the graphics stack spun up workers" and "something in
- * this application did". There is no documented API for it: the value comes
- * from NtQueryInformationThread's ThreadQuerySetWin32StartAddress, reached
- * through ntdll by name so nothing links against it. If it is unavailable the
- * listing degrades to thread ids, which is still worth having. */
 typedef LONG (WINAPI *fn_nt_query_thread)(HANDLE, int, PVOID, ULONG, PULONG);
 
 static const char *thread_owner(DWORD tid, unsigned char **out_start)
@@ -184,7 +137,7 @@ static const char *thread_owner(DWORD tid, unsigned char **out_start)
 
     th = OpenThread(THREAD_QUERY_INFORMATION, FALSE, tid);
     if (!th) return "?";
-    if (query(th, 9 /* ThreadQuerySetWin32StartAddress */, &start,
+    if (query(th, 9  , &start,
               sizeof(start), NULL) != 0)
         start = NULL;
     CloseHandle(th);
@@ -217,11 +170,6 @@ static void list_threads(DWORD pid)
     CloseHandle(snap);
 }
 
-/* --- thread stacks -------------------------------------------------------
- *
- * Counted independently of the guard-page heuristic so the two can be
- * cross-checked: a stack whose guard page has already been consumed no longer
- * looks like a stack, and a mismatch is worth seeing rather than hiding. */
 static int count_threads(DWORD pid)
 {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
@@ -239,14 +187,8 @@ static int count_threads(DWORD pid)
     return n;
 }
 
-/* True if any page in this allocation is a guard page, which is what makes an
- * allocation a thread stack rather than a large heap block. */
 static int allocation_has_guard(HANDLE proc, unsigned char *alloc_base)
 {
-    /* Memoised for the allocation just asked about. The main walk visits an
-     * allocation's regions consecutively, so one entry turns what would be a
-     * rescan per region - quadratic on exactly the fragmented processes this
-     * tool is for - into one rescan per allocation. */
     static unsigned char *cached_base;
     static int cached_answer;
     MEMORY_BASIC_INFORMATION mbi;
@@ -296,10 +238,6 @@ int main(int argc, char **argv)
     memset(bucket, 0, sizeof(bucket));
     GetSystemInfo(&si);
 
-    /* PROCESS_VM_READ is required even though nothing here calls
-     * ReadProcessMemory: EnumProcessModulesEx and GetModuleInformation need
-     * it, and without it collect_modules fails silently - every thread then
-     * reports "(not in any module)" and the module table comes out empty. */
     proc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
     if (!proc) {
         fprintf(stderr, "vmwalk: cannot open pid %lu (error %lu)\n",
@@ -356,7 +294,7 @@ int main(int argc, char **argv)
         }
 
         addr = (unsigned char *)mbi.BaseAddress + len;
-        if (len == 0) break;              /* defensive: never spin */
+        if (len == 0) break;
     }
 
     memset(&pmc, 0, sizeof(pmc));

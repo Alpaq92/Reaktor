@@ -1,0 +1,25 @@
+.card-title {
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.card-note {
+    font-size: 16px;
+}
+
+.card-link {
+    font-size: 14px;
+}
+
+.section-title {
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.section-note {
+    font-size: 16px;
+}
+
+.api-line {
+    font-size: 12px;
+}

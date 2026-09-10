@@ -1,21 +1,7 @@
-/* widgets.c - what a page may ask of the shell.
- *
- * Declared in ui.h. Thin on purpose: a page is handed an App * and never sees
- * inside it, so everything it can do passes through here. The accessibility
- * notes and the file picker live here for the same reason.
- *
- * Lifted out of main.c unchanged.
- */
 #include "internal.h"
 #include "declare.h"
 
-/* Non-zero while a widget that reports itself is being drawn by one that
- * has already reported it - see reaktor_note_mute. */
 static int g_note_mute;
-
-/* --- what a page may ask of the shell ------------------------------------
- * Declared in ui.h. Thin on purpose: the point of the indirection is only that
- * showcase.c never sees inside App. */
 
 struct nk_color
 reaktor_col(const unsigned char rgba[4])
@@ -36,9 +22,6 @@ reaktor_font(App *app, int px, int bold)
     return pick_font(app, px, bold);
 }
 
-/* Below about twenty pixels an Ionicon's stroke - a fixed 6.25% of the glyph -
- * falls under one device pixel and greys out. The window controls hit this
- * first; the rule lives here so every small icon comes out solid. */
 #define ICON_HAIRLINE_BELOW 20
 
 struct nk_image
@@ -57,8 +40,6 @@ reaktor_ionicon(App *app, const char *name, int px)
     return icon(app, src, px);
 }
 
-/* Rasterised at exactly the size it is drawn, at an explicit stroke weight:
- * both matter to a rim a pixel wide. `sw` at zero takes the hairline rule. */
 struct nk_image
 reaktor_ionicon_exact(App *app, const char *name, int px,
                       struct nk_color stroke, float sw)
@@ -84,8 +65,6 @@ reaktor_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
     return icon(app, src, px);
 }
 
-/* The label colour for something drawn on `bg`: the stylesheet's own unless it
- * fails the contrast floor, as for the accent button and the selection. */
 struct nk_color
 reaktor_on(struct nk_color bg)
 {
@@ -120,24 +99,7 @@ reaktor_hot_follow(App *app, struct nk_rect r, int cursor)
     hot_push_ex(app, r, cursor, 1, 0, 1);
 }
 
-/* A circle is the one shape the software renderer cannot draw. Nuklear fills
- * one as a polygon and grades its rim with geometry a fraction of a pixel
- * wide; SDL's software rasteriser has no partial coverage, so that geometry
- * lands whole or not at all, and the pass that puts every vertex on the pixel
- * grid - right for a rect's edges, see nk_sdl_render_ex - quantises the arc
- * with it. A radio came out nineteen pixels across and seventeen high, with a
- * rim that jumped between five tones.
- *
- * A texture's alpha is blended per texel on both backends, so every circle on
- * a page is an Ionicon instead, drawn in the slot Nuklear sized. */
-#define DISC_ROUND   "ellipse"
-#define DISC_RING    "radio-button-off"
-#define DISC_OUTLINE "ellipse-outline"
 
-/* One Ionicon centred in `slot`, at exactly px and no resampling - which is
- * what keeps a rim a line rather than a smear. `sw` multiplies the stroke the
- * artwork declares; at zero the hairline rule decides, which is what a
- * chevron wants and twice what a rim does. */
 void
 reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
          const char *name, struct nk_color col, int px, float sw)
@@ -147,8 +109,6 @@ reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
 
     if (px < 1) return;
     im = reaktor_ionicon_exact(app, name, px, col, sw);
-    /* A glyph the cache could not load has no handle, and nk_draw_image would
-     * paint the null texture - a white quad, which is worse than nothing. */
     if (!im.handle.ptr) return;
     r.w = r.h = (float)px;
     r.x = slot.x + (slot.w - r.w) * 0.5f;
@@ -156,33 +116,24 @@ reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
     nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
 }
 
-
-/* Text that acts, reported as a link. Lifted out of the sample when the
- * declarative API needed one: a link is a widget, not a page's business. */
 int
 reaktor_link_label(App *app, struct nk_context *ctx, const char *label, int active)
 {
-    unsigned char c[4];
     struct nk_color col;
     int clicked = 0;
 
-    /* A link does not change colour on hover, only the cursor. */
     {
         struct nk_rect b = nk_widget_bounds(ctx);
 
         hot_push(app, b, 1, 0);
         reaktor_note(app, REAKTOR_A11Y_LINK, label, NULL,
                      active ? REAKTOR_A11Y_SELECTED : 0u, b);
-        /* Released inside, not pressed - the same reason the buttons use
-         * NK_BUTTON_TRIGGER_ON_RELEASE. Checked against clicked_pos, so
-         * letting go elsewhere does not count. */
         if (nk_input_is_mouse_click_in_rect(&ctx->input, NK_BUTTON_LEFT, b))
             clicked = 1;
     }
 
-    col = active && reaktor_style_token("--links", c)
-        ? col_of(c)
-        : (reaktor_style_token("--text-muted", c) ? col_of(c) : app->text);
+    col = active ? reaktor_token("--links", app->text)
+                 : reaktor_token("--text-muted", app->text);
 
     nk_style_push_color(ctx, &ctx->style.text.color, col);
     nk_label(ctx, label, NK_TEXT_CENTERED);
@@ -190,11 +141,6 @@ reaktor_link_label(App *app, struct nk_context *ctx, const char *label, int acti
     return clicked;
 }
 
-/* Nuklear draws a radio as three filled circles - ring, hollow, dot - which
- * is three staircases here. So it draws none of them and the icons go in the
- * rects nk_do_toggle uses: the selector is a font-height square at the right
- * of the cell, the cursor that square inset by padding and border. A checkbox
- * is squares and needs none of this. */
 int
 reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
                     int on)
@@ -209,12 +155,6 @@ reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
     int side, dot_px;
     int clicked = 0;
 
-    /* Nuklear draws nothing for the circle: its fills are pushed transparent
-     * for the call, and the widget keeps its geometry, its label and its
-     * click. border_color has to go with them - nk_draw_option fills the
-     * whole selector with it before the background and does not ask whether
-     * there is a border, so leaving it stood a disc under everything here,
-     * which read as a second rim a pixel outside the real one. */
     nk_style_push_style_item(ctx, &ctx->style.option.normal, clear);
     nk_style_push_style_item(ctx, &ctx->style.option.hover, clear);
     nk_style_push_style_item(ctx, &ctx->style.option.active, clear);
@@ -232,7 +172,6 @@ reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
     nk_style_pop_style_item(ctx);
     nk_style_pop_style_item(ctx);
 
-    /* Then the circle: the hollow, the rim over it, and the dot inside. */
     ring   = nk_rect(r.x + r.w - h, r.y + r.h * 0.5f - h * 0.5f, h, h);
     dot    = nk_rect(ring.x + st->padding.x + st->border,
                      ring.y + st->padding.y + st->border,
@@ -248,23 +187,6 @@ reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
     return clicked;
 }
 
-
-/* --- first-run values ---------------------------------------------------- */
-
-
-/* Nuklear draws none of a slider either. Its bar and fill are rounded rects
- * whose caps it steps through in whole pixels, and its knob is one more
- * nk_fill_circle - so the styles go transparent for the call, which keeps the
- * geometry, the drag and the value, and all three are drawn afterwards, with
- * the value the drag has just produced rather than the previous frame's.
- *
- * The rects are nk_do_slider's: the bounds inset by padding, a bar of
- * bar_height centred in it, as much of it filled as the value, and the knob a
- * cursor_size square on the same centre line. */
-/* The knob is the accent and so is the fill it sits on the end of, so it
- * vanished into the bar. A shade off the fill tells them apart and keeps them
- * the same colour - and darker rather than lighter, which reads as the part
- * to take hold of on either scheme. */
 #define KNOB_SHADE 0.16f
 static struct nk_color
 shaded(struct nk_color c, float amount)
@@ -311,8 +233,6 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
     nk_style_pop_color(ctx);
     nk_style_pop_color(ctx);
 
-    /* The arrows, if this is what has focus: applied here rather than in the
-     * shell, which knows neither the bounds nor the grain of the value. */
     {
         int steps = reaktor_focus_step(app, id);
 
@@ -322,8 +242,6 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
             if (*val > hi) *val = hi;
         }
     }
-    /* And the same three numbers to the tree, after the arrows rather than
-     * before, so a client reads the value it has just been given. */
     reaktor_note_range(app, id, *val, lo, hi, step);
 
     in  = nk_rect(b.x + st->padding.x, b.y + st->padding.y,
@@ -345,7 +263,6 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
              0.0f);
 }
 
-/* nk_slider_int's own few lines, with the aligned call in the middle. */
 void
 reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id, int *val,
                 int lo, int hi, int step)
@@ -353,20 +270,9 @@ reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id, int *val,
     float f = (float)*val;
 
     reaktor_slider_bar(app, ctx, id, &f, (float)lo, (float)hi, (float)step);
-    /* Rounded, not truncated: a step that arrives as 39.999999 is 40. */
     *val = (int)(f + (f < 0.0f ? -0.5f : 0.5f));
 }
 
-/* Nuklear draws neither of the bar's two rounded rects: they are the shape
- * reaktor_fill_round exists for, and its corners are the only ones on the page
- * that are actually curves rather than stairs. So the style items go
- * transparent for the call - which keeps the geometry, the drag and the
- * value - and the track and the fill are drawn here.
- *
- * The rects are nk_do_progress's: the bounds padded by padding plus border,
- * the fill scaled by the value. The fill's corner is the track's, clamped to
- * half its own width, or a bar in its first few per cent would draw a corner
- * wider than the bar. */
 void
 reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max,
               int modifiable)
@@ -409,21 +315,8 @@ reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max
         reaktor_fill_round(app, cv, fill, r, fill_it.data.color);
 }
 
-/* The knob is the same again, and the widget the stylesheet reaches least:
- * CSS has no such control, so Nuklear's own greys stand, and what it draws is
- * a filled circle with a hairline spoke from the middle out. It draws none of
- * it here - every colour is cleared for the call, which keeps the geometry,
- * the drag and the value - and the widget is three Ionicons instead: a face
- * in the surface colour, its rim, and a dot at the value's angle in the link
- * colour, which is what the rest of the page uses to mean "this one".
- *
- * The angle is nk_draw_knob's own, the value's fraction of the range as a
- * full turn zeroed at the given heading, reproduced because Nuklear keeps
- * none of it. The two fractions are placement, picked to sit the dot clear of
- * the rim; the artwork's margin inside its own box is the same for face and
- * dot, so the pair stays in proportion at any size. */
-#define KNOB_DOT   0.22f   /* the dot's box, against the face's */
-#define KNOB_ORBIT 0.23f   /* how far its centre sits from the middle */
+#define KNOB_DOT   0.22f
+#define KNOB_ORBIT 0.23f
 
 void
 reaktor_knob_dial(App *app, struct nk_context *ctx, float *val, float lo, float hi,
@@ -476,11 +369,6 @@ reaktor_knob_dial(App *app, struct nk_context *ctx, float *val, float lo, float 
     reaktor_glyph_at(app, ctx, dot, REAKTOR_DISC_ROUND,   ink,  dot_px, 0.0f);
 }
 
-/* A chevron where Nuklear would have drawn one of its own. nk_draw_symbol's
- * chevron is two one-pixel lines corner to corner of whatever box it is
- * handed - thin, and half the size of the combo's - so tree headers and
- * property steppers hand Nuklear NK_SYMBOL_NONE and get the Ionicon here,
- * centred in the slot Nuklear sized. */
 #define CHEVRON_PX 14
 void
 reaktor_chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
@@ -495,11 +383,6 @@ reaktor_chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
     nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
 }
 
-
-/* A stepper's hover wash, round rather than the square Nuklear draws: the
- * slot is a square the height of the font, so half of it is a circle, and
- * reaktor_fill_round makes it one that is actually round. Nuklear draws none -
- * see stepper_push. */
 static void
 stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
 {
@@ -513,9 +396,6 @@ stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
     reaktor_fill_round(app, nk_window_get_canvas(ctx), sq, sq.w * 0.5f, wash);
 }
 
-/* The two steppers of a property, placed the way nk_do_property places
- * them: a font-height square inside the border and padding at each end.
- * `b` is the bounds captured before the property was emitted. */
 void
 reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
 {
@@ -534,11 +414,6 @@ reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
     reaktor_chevron_at(app, ctx, r, "chevron-forward-outline", st->inc_button.text_normal);
 }
 
-/* Nuklear's own stepper wash, off for the length of one property: it is a
- * square, and stepper_wash draws a circle over the same slot afterwards,
- * which would leave the square's corners standing. Not turned off in the
- * theme, because the colour picker's three properties have no chevrons and
- * so no wash drawn for them - there, Nuklear's is all there is. */
 void
 reaktor_property_push(struct nk_context *ctx)
 {
@@ -560,20 +435,13 @@ reaktor_property_pop(struct nk_context *ctx)
 }
 
 #define COMBO_MARGIN   12.0f
-/* How far a combo's chevron sits from its right edge, and how much clear
- * space is left to its left. */
 #define COMBO_ARROW    15.0f
 #define COMBO_GAP      12.0f
-/* Where a combo's swatch or content may go: from its left inset to the clear
- * space before the arrow. */
 struct nk_rect
 reaktor_combo_content(struct nk_context *ctx, struct nk_rect h)
 {
     struct nk_rect r;
 
-    /* Exactly the label's x: nk_combo_begin_text puts its text at
-     * header.x + content_padding.x, and the swatch in the combo beside it
-     * should start on the same line rather than two pixels off it. */
     r.x = h.x + ctx->style.combo.content_padding.x;
     r.y = h.y + ctx->style.combo.content_padding.y + 2.0f;
     r.h = h.h - 2.0f * (ctx->style.combo.content_padding.y + 2.0f);
@@ -582,18 +450,6 @@ reaktor_combo_content(struct nk_context *ctx, struct nk_rect h)
     return r;
 }
 
-/* The combo's frame and drop arrow, both drawn here.
- *
- * The arrow because Nuklear builds its chevron from the corners of whatever
- * box it is handed, so the angle is that box's aspect and nothing else; this
- * is the Ionicon the rest of the app uses, at a fixed size, hard against the
- * right edge.
- *
- * The frame because nk_stroke_rect is biased - a 2px border measured one
- * pixel down the left edge and two down the right. Stroking it here, inset by
- * half its own width so the line lands wholly inside the widget, puts the
- * same number of pixels on every side. `h` is the bounds captured before the
- * combo was emitted. */
 void
 reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float border)
 {
@@ -602,13 +458,6 @@ reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float b
     struct nk_rect r;
     struct nk_image im;
 
-    /* On the bounds, not inset into them, because that is where Nuklear puts
-     * a button's border - nk_draw_button strokes the widget rect itself, so a
-     * 2px stroke sits half outside it. Inset by half instead, a combo came
-     * out two pixels shorter and one pixel lower than a button of exactly the
-     * same rect, and side by side in a row that reads as the wrong height
-     * rather than as a different border. Measured at 34 rows against 32 on a
-     * pair both declared 30 tall. */
     if (border > 0.0f)
         nk_stroke_rect(canvas, h, ctx->style.combo.rounding, border,
                        ctx->style.combo.border_color);
@@ -619,8 +468,6 @@ reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h, float b
     im = reaktor_ionicon(app, "chevron-down-outline", (int)px);
     nk_draw_image(canvas, r, &im, nk_rgb(255, 255, 255));
 }
-
-
 
 int
 reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
@@ -634,30 +481,6 @@ reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
     return css_button_accent(app, ctx, "button", label, "--links");
 }
 
-
-/* Cut a button's vertical padding to what its row can actually hold, for the
- * one widget about to be drawn.
- *
- * nk_do_button insets the content rect by padding + border + rounding and
- * nk_widget_text then centres the label inside it. The centring is exact for
- * any padding, because content.y + content.h/2 comes back to the button's
- * middle - but only while content.h is what the arithmetic produced. tiny.css
- * asks for 9.6px of padding on top of a 2px border and an 8px radius, which
- * is 39px of inset; on a 30px row the height comes out negative, NK_MAX in
- * nk_widget_text clamps it to zero, and the origin is left below the middle.
- * The label is then centred on the wrong point and sits three to four pixels
- * low - which reads as a row of buttons whose text does not line up with
- * anything, and was reported as exactly that.
- *
- * It is the same arithmetic compact_push() in showcase.c already documents
- * for glyphs, where a content rect with no area shows up as artwork that
- * vanishes rather than as text that sags.
- *
- * Height-aware on purpose, and pushed per widget rather than clamped once in
- * the CSS mapping: a button tall enough for the stylesheet's padding keeps
- * it, and an image inside one is inset by exactly what it was before. Only
- * the rows that were already drawing a degenerate content rect change.
- * Answers whether it pushed; hand that to reaktor_unfit_label. */
 int
 reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b)
 {
@@ -678,9 +501,6 @@ reaktor_unfit_label(struct nk_context *ctx, int fitted)
     if (fitted) nk_style_pop_vec2(ctx);
 }
 
-/* A colour swatch: the button rule exactly as its neighbours draw it, with
- * the fill replaced and no label. Not nk_button_color, which draws its own
- * rect and so keeps none of the rule's geometry. */
 int
 reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
                      struct nk_color fill)
@@ -697,21 +517,6 @@ reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
     hov[0] = fill.r; hov[1] = fill.g; hov[2] = fill.b; hov[3] = fill.a;
     reaktor_style_darken(hov, 0.12f);
 
-    /* Only the colours are pushed. Size, radius and padding stay whatever
-     * the caller has in force, which is what makes this the same button as
-     * the nk_button_image beside it rather than a lookalike - pushing the
-     * `button` rule here instead put the CSS radius and padding over the
-     * caller's, and the two stopped matching.
-     *
-     * The border takes the fill colour too, which is the one deviation and
-     * the reason the corner matches. nk_draw_button fills the bounds in the
-     * border colour and then fills the inset rect in the background, so the
-     * border is a band and the fill's own arc sits at rounding - border.
-     * With a grey rim the outer arc is there and measures identical to the
-     * neighbour's, but grey on the page is a two-step difference nobody
-     * sees: the eye reads the blue, and the blue is the tighter corner.
-     * Colouring the band blue puts the visible edge back on the button's
-     * outer arc, where its neighbour's is. */
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
                              nk_style_item_color(fill));
     nk_style_push_style_item(ctx, &ctx->style.button.hover,
@@ -740,13 +545,10 @@ reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
     return css_button_icon(app, ctx, "button", src, label);
 }
 
-/* The showcase's own fields. nk_edit_string keeps the caret and selection
- * inside Nuklear, so a page can have several; the login field uses
- * nk_edit_buffer because its context menu has to reach that state. */
 nk_flags
 reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
               char *buf, int *len, int cap, const char *hint,
-              nk_plugin_filter filter)
+              nk_plugin_filter filter, float pad_x, float pad_y)
 {
     struct nk_rect bounds = nk_widget_bounds(ctx);
     reaktor_style s;
@@ -757,13 +559,12 @@ reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
     hot_push(app, bounds, 2, 0);
 
     f = push_edit_style(ctx, &s, 0);
+    if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
+    if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;
     state = nk_edit_string(ctx, flags, buf, len, cap, filter);
     pop_style(ctx, f);
     stroke_edit_edge(ctx, bounds, &s);
     note_ime_caret(app, ctx, bounds, state, &ctx->text_edit);
-    /* The hint doubles as the label: it is the only text the field carries,
-     * and an unnamed field is unusable to a reader. A box with no hint gets
-     * its shape instead, which is at least a description. */
     reaktor_note(app, REAKTOR_A11Y_TEXTBOX,
                  hint ? hint : ((flags & NK_EDIT_BOX) ? "Notes" : "Text"), buf,
                  state & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
@@ -771,13 +572,6 @@ reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
     if (hint && *len == 0) draw_hint(ctx, bounds, hint, &s);
     return state;
 }
-
-/* --- the platform file picker ------------------------------------------
- * SDL_ShowOpenFileDialog returns at once and calls back later, possibly from
- * another thread. So the callback touches nothing but this struct: it fills in
- * the answer, publishes it with an atomic store, and pushes an event to wake a
- * main loop that may be parked in SDL_WaitEvent. Nuklear, the renderer and the
- * style are main-thread only and are left to reaktor_file_taken. */
 
 static const SDL_DialogFileFilter g_file_filters[] = {
     { "Stylesheets", "css" },
@@ -799,8 +593,6 @@ file_chosen(void *userdata, const char * const *filelist, int filter)
     else
         SDL_strlcpy(app->file_answer, filelist[0], sizeof(app->file_answer));
 
-    /* Release: everything written above is visible to the thread that sees
-     * this. SDL's atomics are full barriers. */
     SDL_SetAtomicInt(&app->file_ready, 1);
 
     SDL_zero(wake);
@@ -828,18 +620,6 @@ reaktor_file_taken(App *app, char *out, int cap)
     return 1;
 }
 
-/* REAKTOR_A11Y_DUMP=<path> writes the tree once, early, and is how phase 2 is
- * checked: the instrumentation is invisible on screen, so the only way to see
- * whether a widget reported itself is to read the tree. */
-
-/* Frames to let pass before the tree is written out.
- *
- * It was one. A declared box is placed by the layout engine at the end of the
- * frame that declares it - see core/ui/layout.h - so on the very first frame
- * a declared page reports two empty containers and nothing inside them. That
- * is correct behaviour and a useless snapshot. Two frames is what it takes for
- * the first one to have somewhere to be, and every page that draws itself
- * immediately is identical on both. */
 #define A11Y_DUMP_FRAME 2
 
 void
@@ -852,13 +632,7 @@ a11y_dump_once(App *app)
     if (done) return;
     path = SDL_getenv("REAKTOR_A11Y_DUMP");
     if (!path) { done = 1; return; }
-    /* Not just a frame count: a wrapped paragraph needs the frame after the
-     * one that learned its width, and a page with none is settled at once. So
-     * the dump waits for the tree to stop moving rather than for a number. */
     if (++frames < A11Y_DUMP_FRAME || !reaktor_frame_settled()) {
-        /* Dirty alone is not enough: at rest the loop is parked in
-         * SDL_WaitEvent, and nothing here is an event. An empty user event is
-         * what the activation fallback already uses to ask for a frame. */
         SDL_Event e;
 
         app->dirty = 1;
@@ -882,12 +656,6 @@ a11y_dump_once(App *app)
     }
     fclose(f);
 }
-
-/* --- describing the frame ----------------------------------------------- */
-/* Thin forwards onto app->a11y, so App stays opaque to the pages and a11y.h
- * stays free of it. Every report passes through focus_saw, which is how the
- * frame learns where the focused node was drawn without any widget knowing
- * that focus exists. */
 
 static void
 focus_saw(App *app, unsigned id, struct nk_rect b)
@@ -955,9 +723,6 @@ reaktor_note_mute(App *app, int on)
     if (g_note_mute < 0) g_note_mute = 0;
 }
 
-/* nk_widget_bounds answers where the *next* widget goes, so this is called
- * before drawing, not after - which is also when the caller still knows what
- * it is about to draw. */
 unsigned
 reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
                   const char *name, unsigned state)
@@ -972,8 +737,6 @@ reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
     return id;
 }
 
-/* The radius for a popup, tooltip or menu: `dialog`'s, capped, because 1rem is
- * a pill at tooltip height. Pushed around those calls, not set globally. */
 float
 reaktor_popup_rounding(void)
 {
@@ -982,6 +745,87 @@ reaktor_popup_rounding(void)
     if (!dlg.matched) return 6.0f;
     return dlg.rounding > 8.0f ? 8.0f : dlg.rounding;
 }
+
+/* A menu popup's chrome. The row spacing here is not cosmetic: it is the 2
+ * that reaktor_menu_height counts, and a popup opened without it is a row
+ * short of the height it asked for, which leaves the last item on the
+ * clipped edge with nothing to click. */
+void
+reaktor_menu_style_push(struct nk_context *ctx)
+{
+    nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
+                             nk_style_item_color(
+                                 reaktor_token("--background",
+                                               nk_rgb(53, 53, 53))));
+    nk_style_push_float(ctx, &ctx->style.window.rounding,
+                        reaktor_popup_rounding());
+    nk_style_push_vec2(ctx, &ctx->style.window.spacing,
+                       nk_vec2(4.0f, REAKTOR_MENU_GAP));
+}
+
+void
+reaktor_menu_style_pop(struct nk_context *ctx)
+{
+    nk_style_pop_vec2(ctx);
+    nk_style_pop_float(ctx);
+    nk_style_pop_style_item(ctx);
+}
+
+float
+reaktor_menu_height(int rows)
+{
+    return rows * REAKTOR_MENU_ROW + (rows - 1) * REAKTOR_MENU_GAP + 10.0f;
+}
+
+/* One menu row: the pointer cursor, the accessibility node and the item
+ * itself, plus an accelerator drawn at the right edge when there is one. */
+int
+reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,
+                  const char *accel, int contextual)
+{
+    struct nk_rect b = nk_widget_bounds(ctx);
+    int hit;
+
+    reaktor_hot_top(app, b, 1, 1);
+    reaktor_note(app, REAKTOR_A11Y_MENUITEM, label, NULL, 0u, b);
+
+    hit = contextual ? nk_contextual_item_label(ctx, label, NK_TEXT_LEFT)
+                     : nk_menu_item_label(ctx, label, NK_TEXT_LEFT);
+
+    if (accel && *accel) {
+        const struct nk_user_font *f = ctx->style.font;
+        int n = (int)SDL_strlen(accel);
+        float w = f->width(f->userdata, f->height, accel, n);
+        struct nk_rect r = nk_rect(b.x + b.w - w - 6.0f,
+                                   b.y + (b.h - f->height) * 0.5f,
+                                   w, f->height);
+
+        nk_draw_text(nk_window_get_canvas(ctx), r, accel, n, f,
+                     nk_rgba(0, 0, 0, 0),
+                     reaktor_token("--text-muted", nk_rgb(160, 160, 160)));
+    }
+    return hit;
+}
+int
+reaktor_css_override(App *app, int on)
+{
+    int off = !on;
+
+    if (off != app->css_override_off) {
+        app->css_override_off = off;
+        load_theme(app);
+        apply_widget_style(app);
+        app->dirty = 1;
+    }
+    return !app->css_override_off;
+}
+
+int
+reaktor_css_override_on(App *app)
+{
+    return !app->css_override_off;
+}
+
 void
 reaktor_diagnostics(App *app, reaktor_diag *out)
 {
@@ -991,22 +835,18 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     out->drag_rate  = app->drag_rate;
     out->font       = app->font_status;
     out->vsync      = app->vsync_on;
-    /* what the frame is drawn with, not what was asked for - see the note at
-     * nk_sdl_render_ex in the frame body */
     out->aa = !app->aa ? "off"
             : !app->renderer_is_sw ? "on"
             : app->sw_noaa ? "off (software renderer)"
             : "strokes only (software renderer)";
     out->dark       = app->dark;
-    out->sheets     = SHEET_COUNT;
+    out->sheets     = app->sheets;
     out->scale      = reaktor_scale();
     out->style_ms   = app->style_ms_x100 / 100.0f;
     out->frame_gap_ms = app->frame_gap_ms;
     out->cpu_ms_per_frame = app->cpu_ms_per_frame;
     out->hover_gap_ms     = (int)g_hover_gap_ms;
 
-    /* Nuklear grows this to fit the busiest frame it has been asked to draw
-     * and keeps it; `used` is what the last frame actually needed. */
     out->nk_bytes = (unsigned long)app->ctx->memory.size;
     out->nk_used  = (unsigned long)app->ctx->memory.allocated;
 
@@ -1020,8 +860,18 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     }
 
     {
-        size_t rss = 0, priv = 0;
-        reaktor_process_memory(&rss, &priv);
+        /* Sampled twice a second, not per frame. On Linux this parses
+         * /proc/self/statm and /proc/self/smaps_rollup, and the second makes
+         * the kernel walk every mapping - on the one page whose job is to
+         * report honest frame timings, which it would then be inflating. */
+        static size_t   rss, priv;
+        static unsigned taken;
+        unsigned        now = SDL_GetTicks();
+
+        if (!taken || now - taken >= 500) {
+            reaktor_process_memory(&rss, &priv);
+            taken = now ? now : 1u;
+        }
         out->rss_bytes     = (unsigned long)rss;
         out->private_bytes = (unsigned long)priv;
     }
@@ -1031,8 +881,8 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     {
         int i;
         for (i = 0; i < RSS_STEPS; i++) {
-            out->rss_at[i]  = (unsigned long)g_rss[i];
-            out->priv_at[i] = (unsigned long)g_priv[i];
+            out->rss_at[i]  = (unsigned long)reaktor_rss[i];
+            out->priv_at[i] = (unsigned long)reaktor_priv[i];
         }
     }
     out->build_ms   = app->build_ms_x100 / 100.0f;

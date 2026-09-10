@@ -1,5 +1,3 @@
-# build-wasm.ps1 - the same sources, linked to a web page. build-wasm.sh
-# elsewhere. Output: build-wasm/reaktor.html plus its .js, .wasm and .data.
 param([switch]$Serve)
 
 $ErrorActionPreference = "Stop"
@@ -13,8 +11,6 @@ if (-not (Test-Path $toolchain)) {
     throw "emsdk not found at $emsdk - clone https://github.com/emscripten-core/emsdk, run 'emsdk install latest' then 'emsdk activate latest', or set EMSDK"
 }
 
-# CMake and Ninja come from VS Build Tools, the same ones the native build
-# uses; only the compiler is different here.
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found - install Visual Studio Build Tools" }
 $vsPath = & $vswhere -latest -products * -property installationPath
@@ -28,9 +24,6 @@ if (-not (Test-Path (Join-Path $root "third_party\SDL\CMakeLists.txt"))) {
     throw "submodules missing - run: git submodule update --init --recursive"
 }
 
-# emcmake exists only to set CMAKE_TOOLCHAIN_FILE and a couple of cache
-# variables; passing the toolchain directly is the same thing without a second
-# process and without emsdk_env's stderr banner tripping the error preference.
 $prev = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 
@@ -47,7 +40,7 @@ $ErrorActionPreference = $prev
 if ($rc -ne 0) { throw "wasm build failed ($rc)" }
 
 Write-Host ""
-Write-Host "built: $outDir\reaktor.html"
+Write-Host "built: $outDir\showcase.html (plus simple.html and notepad.html)"
 Write-Host "a file:// page cannot fetch the .wasm, so serve it:"
 Write-Host "  python -m http.server -d build-wasm 8000"
 

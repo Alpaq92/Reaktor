@@ -1,12 +1,10 @@
-/* cssflat.c - see cssflat.h for why this pass exists. */
 #include "cssflat.h"
+#include "reaktor.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-
-/* --- growable text ------------------------------------------------------- */
 
 typedef struct buf {
     char  *p;
@@ -38,10 +36,8 @@ static int buf_add(buf *b, const char *s, size_t n)
 static int buf_str(buf *b, const char *s) { return buf_add(b, s, strlen(s)); }
 static int buf_ch(buf *b, char c)         { return buf_add(b, &c, 1); }
 
-/* --- custom property map -------------------------------------------------- */
-
 typedef struct var_entry {
-    char *name;                 /* including the leading "--" */
+    char *name;
     char *value;
 } var_entry;
 
@@ -60,8 +56,6 @@ static var_entry *vars_find(reaktor_cssvars *m, const char *name, size_t nlen)
     return NULL;
 }
 
-/* Later declarations replace earlier ones, which is what makes the theme block
- * override :root simply by appearing after it in the file. */
 static int vars_set(reaktor_cssvars *m, const char *name, size_t nlen,
                     const char *value, size_t vlen)
 {
@@ -151,12 +145,6 @@ void reaktor_cssvars_free(reaktor_cssvars *m)
     free(m);
 }
 
-/* --- var() substitution --------------------------------------------------- */
-
-/* Writes `src` into `out` with every var(--name[, fallback]) replaced.
- * Returns 0 if a reference resolves to nothing and has no fallback, which is
- * the caller's cue to drop the declaration entirely - the same thing a browser
- * does with an unresolvable var, and better than emitting a broken value. */
 static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
                       buf *out)
 {
@@ -173,7 +161,6 @@ static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
             continue;
         }
 
-        /* Find this var()'s closing parenthesis, allowing nesting. */
         j = i + 4;
         depth = 1;
         while (j < len && depth) {
@@ -181,7 +168,7 @@ static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
             else if (src[j] == ')') depth--;
             if (depth) j++;
         }
-        if (depth) return 0;                       /* unbalanced */
+        if (depth) return 0;
 
         name_s = i + 4;
         while (name_s < j && isspace((unsigned char)src[name_s])) name_s++;
@@ -207,7 +194,6 @@ static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
         if (val) {
             if (!buf_str(out, val)) return 0;
         } else if (at) {
-            /* The fallback may itself contain var(). */
             if (!subst_vars(m, src + fb_s, fb_e - fb_s, out)) return 0;
         } else {
             return 0;
@@ -217,25 +203,12 @@ static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
     return 1;
 }
 
-/* --- unit conversion ------------------------------------------------------ */
-
-/* LCUI's length parser accepts px, %, dp, sp and pt, and nothing else
- * (lib/css/src/data_types.c) - there is no rem and no em. milligram is written
- * almost entirely in rem, on the html { font-size: 62.5% } that makes 1rem
- * exactly 10px, so a stylesheet handed over untouched loses every length it
- * has. They are resolved here, in the same pass that resolves var().
- *
- * em is resolved against the root as well. The only em in these stylesheets is
- * body's font-size, and body's parent *is* the root element, so the two agree;
- * anything nested deeper would need real inheritance, which LCUI does not
- * implement either. */
 static int num_start_ok(const char *s, size_t i)
 {
     char c;
 
     if (i == 0) return 1;
     c = s[i - 1];
-    /* Inside an identifier or a hex colour, digits are not a length. */
     return !(isalnum((unsigned char)c) || c == '#' || c == '_');
 }
 
@@ -264,7 +237,7 @@ static void convert_units(const char *s, size_t len, float root_px, buf *out)
                  (j + 2 == len || !isalpha((unsigned char)s[j + 2])))
             unit_len = 2;
 
-        if (!unit_len) {                     /* a plain number - leave it */
+        if (!unit_len) {
             buf_add(out, s + ns, j - ns);
             i = j;
             continue;
@@ -278,11 +251,6 @@ static void convert_units(const char *s, size_t len, float root_px, buf *out)
     }
 }
 
-/* --- source scanning ------------------------------------------------------ */
-
-/* Comments are removed up front so nothing downstream has to consider them.
- * Open-Color's headings contain box-drawing characters, which LCUI's parser
- * reports as property names when it meets them. */
 static void strip_comments(char *s)
 {
     char *r = s, *w = s;
@@ -300,36 +268,12 @@ static void strip_comments(char *s)
     *w = 0;
 }
 
-static char *read_file(const char *path)
-{
-    FILE *f = fopen(path, "rb");
-    char *b;
-    long n;
-    size_t got;
-
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
-    n = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (n < 0) { fclose(f); return NULL; }
-    b = (char *)malloc((size_t)n + 1);
-    if (!b) { fclose(f); return NULL; }
-    got = fread(b, 1, (size_t)n, f);
-    b[got] = 0;
-    fclose(f);
-    return b;
-}
-
 static void trim(const char *s, size_t *start, size_t *end)
 {
     while (*start < *end && isspace((unsigned char)s[*start])) (*start)++;
     while (*end > *start && isspace((unsigned char)s[*end - 1])) (*end)--;
 }
 
-/* True for the selectors LCUI's parser cannot represent: attribute selectors,
- * pseudo-elements, the universal selector and child/sibling combinators. A
- * selector list is filtered part by part, so `.button, input[type='submit']`
- * keeps the half that works. */
 static int selector_unsupported(const char *s, size_t len)
 {
     size_t i;
@@ -343,8 +287,6 @@ static int selector_unsupported(const char *s, size_t len)
     return len == 0;
 }
 
-/* Does this selector list contain the theme block we are resolving? Matching
- * is textual because the attribute selector never reaches the engine. */
 static int is_theme_selector(const char *s, size_t len, const char *theme)
 {
     char want[64];
@@ -367,7 +309,6 @@ static int is_root_selector(const char *s, size_t len)
     return 0;
 }
 
-/* Walks one declaration block, calling back per `prop: value` pair. */
 typedef void (*decl_fn)(void *ctx, const char *p, size_t plen,
                         const char *v, size_t vlen);
 
@@ -407,7 +348,6 @@ static void collect_one(void *c, const char *p, size_t plen,
         vars_set(ctx->m, p, plen, v, vlen);
 }
 
-/* Picks up html { font-size: ... }, which is what one rem is worth. */
 typedef struct root_ctx { float px; } root_ctx;
 
 static void root_one(void *c, const char *p, size_t plen,
@@ -438,16 +378,12 @@ static void emit_one(void *c, const char *p, size_t plen,
     emit_ctx *ctx = (emit_ctx *)c;
     buf tmp, conv;
 
-    if (plen > 2 && p[0] == '-' && p[1] == '-') return;   /* resolved already */
+    if (plen > 2 && p[0] == '-' && p[1] == '-') return;
 
     memset(&tmp, 0, sizeof(tmp));
     if (!subst_vars(ctx->m, v, vlen, &tmp)) { free(tmp.p); return; }
 
     memset(&conv, 0, sizeof(conv));
-    /* A percentage font-size is the root's own declaration - the 62.5% that
-     * sets up the rem scale - and LCUI would resolve it against nothing, so
-     * it becomes the pixel size it stands for. Percentages on every other
-     * property are real and stay. */
     if (plen == 9 && strncmp(p, "font-size", 9) == 0 &&
         tmp.len > 1 && tmp.p[tmp.len - 1] == '%') {
         char px[64];
@@ -466,7 +402,58 @@ static void emit_one(void *c, const char *p, size_t plen,
     free(conv.p);
 }
 
-/* --- the pass ------------------------------------------------------------- */
+static void
+unwrap_color_scheme(char *src, const char *theme)
+{
+    const char *want = (theme && *theme) ? theme : "light";
+    size_t i = 0, len = strlen(src);
+
+    while (i < len) {
+        size_t at, prelude_e, body_s, depth;
+        int    keep;
+
+        if (src[i] != '@' || strncmp(src + i, "@media", 6) != 0) { i++; continue; }
+        at = i;
+
+        prelude_e = at;
+        while (prelude_e < len && src[prelude_e] != '{' && src[prelude_e] != '}')
+            prelude_e++;
+        if (prelude_e >= len || src[prelude_e] != '{') break;
+
+        {
+            size_t n = prelude_e - at;
+            char   low[256];
+            size_t k;
+
+            if (n >= sizeof(low)) n = sizeof(low) - 1;
+            for (k = 0; k < n; k++) {
+                char c = src[at + k];
+                low[k] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+            }
+            low[n] = '\0';
+            keep = strstr(low, "prefers-color-scheme") != NULL &&
+                   strstr(low, want) != NULL;
+        }
+
+        body_s = prelude_e + 1;
+        depth = 1;
+        i = body_s;
+        while (i < len && depth) {
+            if (src[i] == '{') depth++;
+            else if (src[i] == '}') depth--;
+            if (depth) i++;
+        }
+        if (i >= len) break;
+
+        if (keep) {
+            memset(src + at, ' ', prelude_e - at + 1);
+            src[i] = ' ';
+        } else {
+            memset(src + at, ' ', i - at + 1);
+        }
+        i++;
+    }
+}
 
 static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
 {
@@ -479,9 +466,9 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
 
     if (!m) { free(src); return NULL; }
     strip_comments(src);
+    unwrap_color_scheme(src, theme);
     len = strlen(src);
 
-    /* Pass 1: gather custom properties from :root and the active theme. */
     i = 0;
     while (i < len) {
         size_t sel_s, sel_e, body_s, body_e, depth;
@@ -512,9 +499,6 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
             each_decl(src, body_s, body_e, root_one, &root);
     }
 
-    /* Resolve references between custom properties. --app-surface names
-     * --oc-violet-0, so one substitution pass is not enough; four is well
-     * clear of the depth this project uses and terminates on a cycle. */
     for (pass = 0; pass < 4; pass++) {
         size_t k;
         int changed = 0;
@@ -534,7 +518,6 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
         if (!changed) break;
     }
 
-    /* Pass 2: emit everything else, with var() resolved. */
     memset(&out, 0, sizeof(out));
     buf_str(&out, "/* Flattened by cssflat.c: custom properties resolved,\n"
                   "   @media and unsupported selectors removed. */\n");
@@ -562,12 +545,9 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
         trim(src, &sel_s, &sel_e);
         if (sel_e <= sel_s) continue;
 
-        /* @media, @supports and friends: LCUI implements none of them, and
-         * their bodies are nested blocks this emitter does not descend into. */
         if (src[sel_s] == '@') continue;
         if (is_root_selector(src + sel_s, sel_e - sel_s)) continue;
 
-        /* Keep only the parts of the selector list LCUI can parse. */
         {
             buf sel;
             memset(&sel, 0, sizeof(sel));
@@ -591,9 +571,6 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
             ctx.wrote = 0;
             ctx.root_px = root.px;
             {
-                /* Emit into a scratch buffer first: a block whose every
-                 * declaration was a custom property must not leave an empty
-                 * rule behind. */
                 buf body;
                 emit_ctx bctx;
                 memset(&body, 0, sizeof(body));
@@ -625,7 +602,7 @@ char *reaktor_css_flatten(const char *const *paths, int count,
 
     memset(&all, 0, sizeof(all));
     for (i = 0; i < count; i++) {
-        char *t = read_file(paths[i]);
+        char *t = reaktor_read_file(paths[i], NULL);
         if (!t) { free(all.p); return NULL; }
         if (!buf_str(&all, t) || !buf_str(&all, "\n")) {
             free(t); free(all.p);

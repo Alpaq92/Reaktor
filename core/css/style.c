@@ -1,4 +1,3 @@
-/* style.c - see style.h. */
 #include "style.h"
 #include "cssflat.h"
 
@@ -13,10 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* A selector is resolved on every frame Nuklear draws, and the answer only
- * changes when the stylesheets are reloaded, so results are memoised. The set
- * of selectors a screen uses is a couple of dozen at most, which is why a
- * linear scan is the right shape here. */
 #define CACHE_MAX 64
 
 typedef struct cache_entry {
@@ -29,18 +24,19 @@ static struct {
     cache_entry    cache[CACHE_MAX];
     int            cache_n;
     css_metrics_t  metrics;
-    reaktor_cssvars *vars;      /* the palette, kept for reaktor_style_token */
+    reaktor_cssvars *vars;
 } g;
 
 static void rgba_of(css_color_value_t c, unsigned char out[4])
 {
-    out[0] = (unsigned char)((c >> 16) & 0xff);   /* 0xAARRGGBB */
+    out[0] = (unsigned char)((c >> 16) & 0xff);
     out[1] = (unsigned char)((c >> 8) & 0xff);
     out[2] = (unsigned char)(c & 0xff);
     out[3] = (unsigned char)((c >> 24) & 0xff);
 }
 
-int reaktor_style_init(const char *const *css_paths, int count)
+int reaktor_style_init(const char *const *css_paths, int count,
+                       const char *theme)
 {
     char *flat;
     css_parser_t *parser;
@@ -53,32 +49,18 @@ int reaktor_style_init(const char *const *css_paths, int count)
         g.metrics.scale = 1.0f;
         g.ready = 1;
     } else {
-        /* Parsing adds rules to libcss's global store and nothing takes the
-         * previous sheet's rules back out, so without this a scheme change
-         * stacks a second copy of tiny.css on top of the first - measured at
-         * about 95 KB per switch, and it never levels off. Only the rule
-         * store is rebuilt: the keyword, property and value registries are
-         * fixed tables that do not grow with a parse. */
         css_destroy_library();
         css_init_library();
     }
     g.cache_n = 0;
 
-    /* The custom properties are kept, not discarded: tiny.css puts its whole
-     * palette in :root, and the surfaces Nuklear paints itself - the window
-     * background, the card - read from the same declarations its rules do.
-     *
-     * No [data-theme] block to select: tiny.css ships light and dark as two
-     * :root files, so the theme is chosen by which one the caller passes. */
     reaktor_cssvars_free(g.vars);
     g.vars = NULL;
-    flat = reaktor_css_flatten(css_paths, count, NULL, &g.vars);
+    flat = reaktor_css_flatten(css_paths, count, theme, &g.vars);
     if (!flat) return 0;
 
     parser = css_parser_create("reaktor");
     if (!parser) { free(flat); return 0; }
-    /* css_parser_parse consumes at most its buffer per call and returns how
-     * much it took, so it is driven to the end of the string. */
     {
         const char *cur = flat;
         size_t len = 1;
@@ -130,15 +112,12 @@ static void resolve(const char *selector, reaktor_style *out)
     sel = css_selector_create(selector);
     if (!sel) return;
 
-    decl = css_select_style(sel);          /* caller owns the result */
+    decl = css_select_style(sel);
     css_selector_destroy(sel);
     if (!decl) return;
 
     memset(&computed, 0, sizeof(computed));
     css_cascade_style(decl, &computed);
-    /* Resolves percentages and any remaining relative lengths. There is no
-     * parent here - each widget is styled on its own - so a zeroed one stands
-     * in, which is also why cssflat resolves em before the engine sees it. */
     css_compute_absolute_values(&no_parent, &computed, &g.metrics);
 
     rgba_of(computed.background_color, out->bg);
@@ -161,9 +140,6 @@ static void resolve(const char *selector, reaktor_style *out)
         out->bold = 0;
         break;
     }
-    /* An empty declaration list means nothing in the stylesheets selected
-     * this, which the caller needs to tell apart from "selected, and every
-     * value happens to be zero". */
     out->matched = decl->length > 0;
 
     css_style_decl_destroy(decl);

@@ -1,9 +1,3 @@
-/* a11y.c - see a11y.h, and docs/ACCESSIBILITY.md for where this is going.
- *
- * Two fixed arenas, front and back. The frame fills the front, the diff reads
- * both, they swap. No allocation, no strdup, no tree pointers: a node names its
- * parent by id and the array is already in draw order, which is reading order,
- * so the "tree" is a flat list that happens to be sorted correctly. */
 #include <string.h>
 
 #include "a11y.h"
@@ -21,8 +15,6 @@ reaktor_a11y_role_name(unsigned char role)
     return role < REAKTOR_A11Y_ROLE_COUNT ? g_role_names[role] : "?";
 }
 
-/* FNV-1a. The id has to be stable across frames and cheap enough to run per
- * widget; it does not have to be cryptographic. */
 static unsigned
 hash_str(unsigned h, const char *s)
 {
@@ -34,16 +26,6 @@ hash_str(unsigned h, const char *s)
     return h;
 }
 
-/* Interns into the pool and answers the stored copy, or NULL when it is full -
- * a node with no name still describes its role and bounds, which is more
- * useful than dropping it.
- *
- * `h` is the hash the caller already computed for the id, so a name is walked
- * once per frame rather than four times: it used to be hashed, strlen'd,
- * copied, and then strcmp'd again by the diff. Now the pool spans frames, so a
- * name that was here last frame is not copied at all, and - the part that
- * matters - two equal strings are one pointer, which is what lets the diff
- * compare names with == instead of strcmp. */
 static const char *
 intern(reaktor_a11y *a, const char *s, unsigned h)
 {
@@ -54,14 +36,10 @@ intern(reaktor_a11y *a, const char *s, unsigned h)
     for (;;) {
         reaktor_a11y_slot *sl = &a->strings[i];
 
-        if (sl->gen != a->pool_gen) {       /* stale means empty */
+        if (sl->gen != a->pool_gen) {
             size_t n = strlen(s) + 1;
-            /* Refuse rather than probe forever. The reset at the top of the
-             * next frame is what actually recovers the room; this is the
-             * guard for a single frame that floods it. */
             if (a->pool_entries >= REAKTOR_A11Y_SLOTS ||
                 a->pool_used + (int)n > REAKTOR_A11Y_POOL) {
-                a->overflow_strings++;
                 return NULL;
             }
             memcpy(a->pool + a->pool_used, s, n);
@@ -72,23 +50,14 @@ intern(reaktor_a11y *a, const char *s, unsigned h)
             a->pool_entries++;
             return a->pool + sl->val;
         }
-        /* The strcmp only runs on a hash hit, which is either the same string
-         * or a collision - so it is one pass over a string that is about to be
-         * reused, not a pass over every string. */
         if (sl->key == h && strcmp(a->pool + sl->val, s) == 0)
             return a->pool + sl->val;
         i = (i + 1) & mask;
     }
 }
 
-/* Pointer equality, because interning guarantees it: equal strings share a
- * slot, distinct strings get distinct ones even when their hashes collide. */
 #define same_str(x, y) ((x) == (y))
 
-/* Open addressing, linear probing, stamped by generation so a frame starts
- * without clearing anything. Load never passes half - the tables are twice the
- * node arena - so a probe is one or two slots. Answers the slot for `key`,
- * fresh if it was not there. Never NULL: the arena cannot fill. */
 static reaktor_a11y_slot *
 slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 {
@@ -96,7 +65,7 @@ slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 
     for (;;) {
         reaktor_a11y_slot *sl = &tab[i];
-        if (sl->gen != gen) {          /* stale means empty */
+        if (sl->gen != gen) {
             sl->gen = gen;
             sl->key = key;
             sl->val = 0;
@@ -107,10 +76,6 @@ slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
     }
 }
 
-/* Lookup that does not insert. The diff asks about ids that are not there -
- * that is what "added" and "removed" mean - and inserting on a miss would let
- * two passes over 512 nodes each fill a 1024-slot table and probe forever.
- * Answers 0 for absent, which is why the index stores i + 1. */
 static int
 slot_get(const reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 {
@@ -147,31 +112,15 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
 
     parent = a->depth > 0 ? a->parent[a->depth - 1] : 0u;
 
-    /* Identity: parent, role and name, plus how many siblings with the same
-     * three have already been emitted this frame. That last term is what lets
-     * a row of unlabelled buttons keep their identities, and what stops an
-     * inserted widget from renaming everything after it.
-     *
-     * The count used to come from scanning every node emitted so far, with a
-     * strcmp each - quadratic in widgets, and the strcmp made the constant
-     * large. It is a table now, keyed by the same hash the id is built from. */
     nh   = hash_str(2166136261u, name);
-    /* The role mixes in as a number. It used to hash its own name, which
-     * walked a string per widget for no information a small integer did not
-     * already carry. */
     base = nh ^ ((unsigned)role * 0x9e3779b9u);
     base ^= parent + 0x9e3779b9u + (base << 6) + (base >> 2);
 
     sl = slot_of(a->bucket, a->bucket_gen, base);
     id = base ^ ((unsigned)sl->val * 0x85ebca6bu);
     sl->val++;
-    if (id == 0) id = 1;   /* 0 is the window's parent, so it cannot be a node */
+    if (id == 0) id = 1;
 
-    /* Decorative: an icon that repeats its label, a box that is only spacing.
-     * The id is still computed and the occurrence counter still advances, so
-     * ids stay stable either way - but nothing is added, because a reader has
-     * no use for a node with no role and no name, and every bridge would have
-     * to filter it out again. */
     if (role == REAKTOR_A11Y_NONE) return id;
 
     if (id == a->focus_id) state |= REAKTOR_A11Y_FOCUSED;
@@ -197,8 +146,6 @@ reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
     int f = a->front, i;
 
     if (!a->building || !id) return;
-    /* Backwards: the caller is decorating the node it has just reported, so
-     * this is the last entry or close to it. */
     for (i = a->count[f] - 1; i >= 0; i--) {
         reaktor_a11y_node *n = &a->node[f][i];
 
@@ -256,18 +203,8 @@ reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
     a->change_count = 0;
     a->building    = 1;
     a->bucket_gen++;
-    /* Generation 0 is what a zeroed struct already holds, so every slot would
-     * read as occupied with key 0 and the first probe would walk a full table
-     * forever. The other two tables step their generation before use and so
-     * are never at 0; this one does not, so it starts here. */
     if (a->pool_gen == 0) a->pool_gen = 1;
 
-    /* Start the pool over when it is nearly full. Everything pointing into it
-     * goes with it, which is the previous frame's tree, so the next diff
-     * reports the whole screen once - the price of never copying a name twice,
-     * paid only by a page that churns thousands of distinct strings. Done here
-     * rather than mid-frame, where nodes already emitted would be left holding
-     * offsets about to be overwritten. */
     if (a->pool_used > REAKTOR_A11Y_POOL - REAKTOR_A11Y_POOL / 4 ||
         a->pool_entries >= REAKTOR_A11Y_SLOTS) {
         a->pool_used    = 0;
@@ -276,8 +213,6 @@ reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
         a->count[0] = a->count[1] = 0;
     }
 
-    /* The window is the root, emitted here so no caller has to remember to,
-     * and pushed so everything after it has a parent. */
     reaktor_a11y_push(a, REAKTOR_A11Y_WINDOW, window_name, NULL, 0, bounds);
 }
 
@@ -294,9 +229,6 @@ reaktor_a11y_push(reaktor_a11y *a, unsigned char role, const char *name,
 {
     unsigned id = emit(a, role, name, value, state, bounds);
 
-    /* Past the limit the node is still emitted flat rather than dropped, and
-     * the pop that follows is absorbed below. Nesting deeper than this means a
-     * bug, not a page. */
     if (a->depth < REAKTOR_A11Y_MAX_DEPTH)
         a->parent[a->depth] = id;
     a->depth++;
@@ -308,8 +240,6 @@ reaktor_a11y_pop(reaktor_a11y *a)
 {
     if (a->depth > 0) a->depth--;
 }
-
-/* --- the diff ----------------------------------------------------------- */
 
 static void
 change(reaktor_a11y *a, unsigned char kind, unsigned id, int index)
@@ -333,24 +263,10 @@ reaktor_a11y_end(reaktor_a11y *a)
     a->building = 0;
     a->depth    = 0;
 
-    /* An id to index table for the frame just described. The ancestor walk
-     * below needs it, and so does the suppression in the diff; the diff
-     * builds the same table for the previous frame afterwards, on the next
-     * generation. */
     a->index_gen++;
     for (i = 0; i < ncur; i++)
         slot_of(a->index, a->index_gen, cur[i].id)->val = i + 1;
 
-    /* A page scrolls, so plenty of what was reported is out of sight. Those
-     * nodes stay in the tree - a reader should be able to find them and
-     * scroll to them - but they are marked, because a client that draws a
-     * highlight or a magnifier needs to know the bounds are not on screen.
-     *
-     * Against every ancestor, not only the window. A container's bounds are
-     * what it clips its children to - the page's band, a popup's rect - so a
-     * node scrolled out of a list inside a popup is out of sight even though
-     * it is well inside the window, which is what measuring against the root
-     * alone used to miss. */
     for (i = 1; i < ncur; i++) {
         struct nk_rect b = cur[i].bounds;
         unsigned up = cur[i].parent;
@@ -367,14 +283,11 @@ reaktor_a11y_end(reaktor_a11y *a)
                 a->node[f][i].state |= REAKTOR_A11Y_OFFSCREEN;
                 break;
             }
-            if (!up) break;              /* reached the window */
+            if (!up) break;
             up = cur[k].parent;
         }
     }
 
-    /* One table build, then a linear pass. Old nodes the pass matched are
-     * ticked off in `matched`, so finding the removals afterwards is a scan of
-     * a byte array rather than a second table. */
     a->index_gen++;
     for (i = 0; i < nold; i++)
         slot_of(a->index, a->index_gen, old[i].id)->val = i + 1;
@@ -383,10 +296,6 @@ reaktor_a11y_end(reaktor_a11y *a)
     for (i = 0; i < ncur; i++) {
         int j = slot_get(a->index, a->index_gen, cur[i].id) - 1;
         if (j < 0) {
-            /* Only the root of an arrival is reported. A node whose parent is
-             * arriving too is part of that subtree, and a client re-reads a
-             * subtree when its root appears - switching tabs used to be a
-             * hundred unrelated additions where it is one. */
             if (!cur[i].parent ||
                 slot_get(a->index, a->index_gen, cur[i].parent) > 0)
                 change(a, REAKTOR_A11Y_ADDED, cur[i].id, i);
@@ -400,15 +309,10 @@ reaktor_a11y_end(reaktor_a11y *a)
         if (cur[i].state != old[j].state)
             change(a, REAKTOR_A11Y_RESTATED, cur[i].id, i);
         else if (!same_rect(cur[i].bounds, old[j].bounds))
-            /* Only when nothing more interesting happened: a client that has
-             * to re-read a node for its state will re-read its bounds too. */
             change(a, REAKTOR_A11Y_MOVED, cur[i].id, i);
     }
     for (i = 0; i < nold; i++) {
         if (a->matched[i]) continue;
-        /* And only the root of a departure, by the same argument: the parent
-         * is in the old table, so a parent that is also going is one lookup
-         * away. */
         if (old[i].parent) {
             int up = slot_get(a->index, a->index_gen, old[i].parent) - 1;
             if (up >= 0 && !a->matched[up]) continue;
@@ -420,11 +324,6 @@ reaktor_a11y_end(reaktor_a11y *a)
     return a->change_count;
 }
 
-/* --- reading it back ---------------------------------------------------- */
-
-/* After the swap in reaktor_a11y_end the frame just described is the back
- * half, so both of these read 1 - front. Between begin and end they read the
- * half being filled, which is what a caller mid-frame means. */
 const reaktor_a11y_node *
 reaktor_a11y_tree(const reaktor_a11y *a, int *count)
 {
@@ -450,8 +349,6 @@ state_text(unsigned state, char *out, size_t cap)
     size_t len = 0;
     int i;
 
-    /* Each name goes in with a leading space, so the caller prints out + 1 and
-     * gets them separated with none in front. */
     out[0] = '\0';
     for (i = 0; i < (int)(sizeof(names) / sizeof(names[0])); i++) {
         size_t n;

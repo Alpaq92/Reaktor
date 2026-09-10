@@ -1,41 +1,23 @@
-/* anim.c - see anim.h. */
 #include <math.h>
 
 #include <SDL3/SDL.h>
 
 #include "anim.h"
 
-/* Room for every animated value on the busiest page, several times over, and
- * the same failure mode as the other arenas here: a table that is full drops
- * the new entry rather than the frame, so an over-animated page loses an
- * eased value and keeps its layout. Power of two, so the mask below works. */
 #define REAKTOR_ANIM_SLOTS 128
 
 typedef struct reaktor_anim_slot {
-    unsigned key;          /* 0 means empty */
+    unsigned key;
     float    from, to, value;
     float    elapsed, duration;
     unsigned char curve;
     unsigned char moving;
-    unsigned char started;   /* has been asked for at least once */
-    /* Set every frame the entry is asked for, cleared by the eviction pass.
-     * A page that stops drawing a widget without its node being REMOVED -
-     * a tab change, where the whole tree is replaced - would otherwise keep
-     * its entries for the life of the process. */
+    unsigned char started;
     unsigned char seen;
-    unsigned char dead;      /* marked by an eviction pass, swept by compact */
+    unsigned char dead;
 } reaktor_anim_slot;
 
 static reaktor_anim_slot g_slot[REAKTOR_ANIM_SLOTS];
-static int               g_live;
-
-/* --- the curves ---------------------------------------------------------
- *
- * Written out rather than generated from a power, because the standard set is
- * not quite a family: the IN_OUT of an odd power keeps its sign and the even
- * ones do not, and BACK, ELASTIC and BOUNCE are not powers at all. The
- * constants are the ones every implementation of these uses - 1.70158 is the
- * overshoot that makes BACK reach exactly 10% past its target. */
 
 #define PI_F 3.14159265358979323846f
 
@@ -65,7 +47,6 @@ pow_in_out(float t, int n)
 static float
 bounce_out(float t)
 {
-    /* Four arcs of a parabola, each shorter and lower than the last. */
     const float n = 7.5625f, d = 2.75f;
 
     if (t < 1.0f / d)        return n * t * t;
@@ -78,10 +59,10 @@ bounce_out(float t)
 float
 reaktor_ease_at(unsigned char curve, float t)
 {
-    const float c1 = 1.70158f;              /* BACK's overshoot */
-    const float c2 = c1 * 1.525f;           /* and its IN_OUT variant */
+    const float c1 = 1.70158f;
+    const float c2 = c1 * 1.525f;
     const float c3 = c1 + 1.0f;
-    const float e1 = 2.0f * PI_F / 3.0f;    /* ELASTIC's period */
+    const float e1 = 2.0f * PI_F / 3.0f;
     const float e2 = 2.0f * PI_F / 4.5f;
 
     if (t <= 0.0f) return 0.0f;
@@ -173,12 +154,6 @@ reaktor_ease_name(unsigned char curve)
     return curve < REAKTOR_EASE_COUNT ? n[curve] : "?";
 }
 
-/* --- the table ---------------------------------------------------------- */
-
-/* One widget may animate several numbers, so the key is the node's id and the
- * channel mixed. Zero is reserved for "empty", so a key that lands there is
- * nudged rather than rejected - one collision is cheaper than a branch on
- * every lookup for a value the hash reaches once in four billion. */
 static unsigned
 key_of(unsigned id, unsigned channel)
 {
@@ -200,20 +175,13 @@ slot_of(unsigned key, int make)
         if (!s->key) {
             if (!make) return NULL;
             s->key = key;
-            g_live++;
             return s;
         }
         i = (i + 1) & (REAKTOR_ANIM_SLOTS - 1);
     }
-    return NULL;   /* full: the caller gets its target and no easing */
+    return NULL;
 }
 
-/* Open addressing cannot simply blank a slot. A key that probed past it on
- * the way in becomes unreachable behind the hole, and the next lookup walks
- * to the hole, decides the entry is absent and makes a second one for the
- * same thing - which then animates independently of the first. So a pass that
- * removes anything rebuilds the table instead. 128 slots, at most once a
- * frame, and only on the frames where something actually went. */
 static void
 compact(void)
 {
@@ -222,7 +190,6 @@ compact(void)
 
     SDL_memcpy(old, g_slot, sizeof(old));
     SDL_memset(g_slot, 0, sizeof(g_slot));
-    g_live = 0;
     for (i = 0; i < REAKTOR_ANIM_SLOTS; i++) {
         reaktor_anim_slot *s;
 
@@ -232,9 +199,6 @@ compact(void)
     }
 }
 
-/* Where a run is along its curve, 0 to 1, or -1 when nothing is in flight.
- * For anything that wants to show the run rather than be moved by it - the
- * sample's plot marks the head with it. */
 float
 reaktor_anim_progress(unsigned id, unsigned channel)
 {
@@ -255,12 +219,9 @@ reaktor_animate(unsigned id, unsigned channel, float to, float ms,
 
     key = key_of(id, channel);
     s = slot_of(key, 1);
-    if (!s) return to;           /* table full */
+    if (!s) return to;
     s->seen = 1;
 
-    /* First sight: start at the target rather than at zero, so a widget does
-     * not fly in the first time it is drawn. An animation is a *change*, and
-     * nothing has changed yet. */
     if (!s->started) {
         s->started = 1;
         s->from = s->to = s->value = to;
@@ -268,8 +229,6 @@ reaktor_animate(unsigned id, unsigned channel, float to, float ms,
         return to;
     }
 
-    /* A new target starts a run from wherever the value is now, which is what
-     * makes a target that changes mid-flight redirect rather than restart. */
     if (to != s->to) {
         s->from     = s->value;
         s->to       = to;
@@ -287,11 +246,6 @@ reaktor_anim_tick(float dt_ms)
     int i, moving = 0;
 
     if (dt_ms < 0.0f) dt_ms = 0.0f;
-    /* A frame that arrives after a long wait - the app sleeps in
-     * SDL_WaitEvent - must not teleport an animation that was mid-flight. It
-     * is capped at roughly four frames of 60Hz, which is long enough that a
-     * busy frame still advances honestly and short enough that a gap does
-     * not skip the whole run. */
     if (dt_ms > 64.0f) dt_ms = 64.0f;
 
     for (i = 0; i < REAKTOR_ANIM_SLOTS; i++) {
@@ -322,20 +276,12 @@ reaktor_anim_evict(const reaktor_a11y_change *c, int n)
         unsigned ch;
 
         if (c[i].kind != REAKTOR_A11Y_REMOVED) continue;
-        /* Every channel of a node that is gone. Sixteen is more than any one
-         * widget animates, and cheaper than a second index from id to slots.
-         * Marked rather than blanked, so the lookups after it in this same
-         * loop still walk an intact table. */
         for (ch = 0; ch < 16u; ch++) {
             reaktor_anim_slot *s = slot_of(key_of(c[i].id, ch), 0);
             if (s && !s->dead) { s->dead = 1; removed++; }
         }
     }
 
-    /* And the ones nothing asked for this frame. A page swap replaces the
-     * whole tree at once, which the diff reports - but a widget that simply
-     * stops being drawn inside a page that stays does not, and its entry
-     * would otherwise live for the life of the process. */
     for (i = 0; i < REAKTOR_ANIM_SLOTS; i++) {
         reaktor_anim_slot *s = &g_slot[i];
 
@@ -345,10 +291,4 @@ reaktor_anim_evict(const reaktor_a11y_change *c, int n)
     }
 
     if (removed) compact();
-}
-
-int
-reaktor_anim_live(void)
-{
-    return g_live;
 }
