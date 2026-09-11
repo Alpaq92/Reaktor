@@ -9,17 +9,18 @@ controls](assets/rest/screenshot.png)
 
 Tired of C having no cross-platform GUI — nothing like Avalonia, Shaft or
 Freya — and of leaning on toolkits that want hundreds of megabytes just to put
-a dialog on screen? No? I was. So I wrote Reaktor: a complete GUI library,
-kept as small as complete allows. A 2.5 MB binary, about 10 MB of RAM, and no
-GPU required.
+a dialog on screen? No? I was. So I wrote Reaktor: a GUI library that is
+complete without being big. A 2.5 MB binary, about 10 MB of RAM, and no GPU
+required.
 
 > ⚠️ **Reaktor is in active development**, and breaking changes might occur.
 
 ## What it is made of
 
 - **[Nuklear](https://github.com/Immediate-Mode-UI/Nuklear)** draws the
-  widgets. **SDL3** supplies the window, input and renderer. **libcss**, taken
-  from LCUI, parses the stylesheet.
+  widgets. **[SDL3](https://github.com/libsdl-org/SDL)** supplies the window,
+  input and renderer. **libcss**, taken from
+  **[LCUI](https://github.com/lc-soft/LCUI)**, parses the stylesheet.
 - **[Onlay](https://github.com/Alpaq92/Onlay)** computes the rectangles — a
   fork of randrew/layout with weighted tracks, gaps and padding.
 - Every dependency is a submodule, read at runtime as it ships. No values are
