@@ -95,6 +95,15 @@ position.
 - [docs/NOTICE.md](docs/NOTICE.md) — what it depends on, and under what
   license.
 
+## Wanted, not yet built
+
+- **Localization.** Translating what a program says, and letting an
+  application ship more than one language.
+- **Support for non-Latin scripts.** Everything past Western European text —
+  Cyrillic, Greek, CJK, Arabic, Hebrew, the Indic scripts.
+- **Further optimization, and a pass over the code.** Faster frames, and
+  fewer places doing the same job twice.
+
 ## License
 
 MIT. The dependencies keep their own — see [docs/NOTICE.md](docs/NOTICE.md).
