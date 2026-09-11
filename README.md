@@ -100,7 +100,8 @@ position.
 - **Localization.** Translating what a program says, and letting an
   application ship more than one language.
 - **Support for non-Latin scripts.** Everything past Western European text —
-  Cyrillic, Greek, CJK, Arabic, Hebrew, the Indic scripts.
+  Cyrillic, Greek, CJK, Arabic, Hebrew, the Indic scripts, and the shaping
+  they need.
 - **Further optimization, and a pass over the code.** Faster frames, and
   fewer places doing the same job twice.
 
