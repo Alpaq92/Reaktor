@@ -1,20 +1,67 @@
 # Performance
 
-Nuklear builds the frame, SDL's **software rasterizer** draws it, and libcss
-supplies every color from a stylesheet read at runtime. There is no GPU path
-by default on any platform — see
-[the renderer](DOCUMENTATION.md#the-renderer) for why.
+**Every pixel here is drawn by the CPU.** Nuklear turns the widgets into a
+list of shapes, SDL's software rasterizer fills them in, and no graphics card
+is asked for on any platform — [the renderer](DOCUMENTATION.md#the-renderer)
+explains why not. Which should be the expensive way to do this, and isn't,
+because of the other half of the design:
 
-**At rest it draws nothing.** SDL waits for events, and a frame is built only
-when something actually changed. Two consequences explain every number below:
-**CPU is a count of frames**, not a rate, and **memory is flat** once the font
-atlas and the icons are baked.
+**Nothing is drawn until something changes.** SDL sleeps on the event queue,
+and a frame is built only when the picture would actually differ. So the cost
+of running this is not a rate you pay per second — it is a price per frame,
+multiplied by how often the user makes one happen. A window nobody is touching
+costs nothing at all.
+
+That is the sentence to keep in mind for everything below. **CPU is a count of
+frames, not a load**, and **memory is a floor, not a curve** — once the font
+atlas and the icons are baked, nothing else grows.
 
 The four-platform figures were taken on the build that shipped a single
-executable, at 1.00× scale in a 960×680 window. The tree now builds three, and
-the current Windows sizes are `showcase.exe` 2,526,208, `notepad.exe`
-2,365,952 and `simple.exe` 2,338,304 — the runtime is the same library in each,
-so everything below still describes what one of them costs to run.
+executable, at 1.00× scale in a 960×680 window. The tree now builds four, and
+the current Windows sizes are `showcase.exe` 2,531,328, `notepad.exe`
+2,370,560, `simple.exe` 2,341,888 and `bench.exe` 2,322,944 — the runtime is the
+same library in each, so everything below still describes what one of them
+costs to run.
+
+## Against the others
+
+![Two bar charts of drawing 64 rotating boxes at 60 fps. Memory: Reaktor
+6.5 MB, Shaft 46.4 MB, Flutter 50.2 MB, Electron 189.7 MB, Kotlin Multiplatform
+235.1 MB. CPU: Reaktor 24.5%, Shaft 10.8%, Flutter 11.4%, Electron 23.9%,
+Kotlin Multiplatform 18.4%](../assets/rest/benchmark.png)
+
+The workload and the other four bars in each panel are
+[ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s, read off the charts in
+their README; Reaktor's are `samples/bench`, drawing the same thing. All they
+say about the machine is a 2021 MacBook Pro, M1 Max, 64 GB. This is a Windows
+VM with no GPU at all — so read the shape of it and not the last digit.
+
+**That is the whole trade.** Seven times less memory, roughly twice the CPU of
+the nearest one, the same picture at the end — because with no GPU every pixel
+of those boxes is a loop over a scanline. Their README does not say whether
+theirs used one; the machine has it, and Shaft describes its own renderer as
+"Skia or CoreGraphics". A good trade for a dialog or a text editor, where the
+CPU column is multiplied by how often anything moves. A bad one for something
+animating without stopping — which is what this benchmark does, and why it is
+the one published.
+
+### How the CPU bar was measured
+
+Reading the process's own CPU gives a number that cannot be used: seventeen
+runs drew 386 frames at 64.3 fps every time, and were charged anywhere from
+**0.3% to 99.6%** of a core for it. An outside sampler agreed with the process
+every time, so the counter is right — it is the wait being charged, not the
+drawing. `SDL_RenderPresent` absorbs whatever is left of the frame until the
+next vblank, and SDL blocks on the compositor for that when it can and spins
+when it cannot.
+
+`--no-vsync` takes the wait out. Frames run back to back, every millisecond is
+drawing, and the answer holds still: **4.03–4.20 ms per frame** over eight runs.
+Against a 60 fps budget of 16.67 ms, that is the 24.5% in the chart.
+
+```bash
+./build/bench --bench-seconds 6 --no-vsync
+```
 
 ## Size
 
@@ -118,7 +165,9 @@ compares whole frames and nothing finer; its ranges are p10–p90 of 31 samples.
 The accessibility tree adds **4.2 µs** to a drawn frame (82 nodes), below the
 noise in the measurements above. For contrast, the one figure that made the
 software default worth it: on Windows with no GPU, `direct3d11` falls back to
-WARP and the same frame costs **78 ms**.
+WARP and the same frame costs **78 ms**. `--renderer` reproduces that on
+demand — `bench --no-vsync --renderer direct3d11` takes the frame from 4.7 ms
+to 20.3 ms on the same machine.
 
 ## What it needs to run
 

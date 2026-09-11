@@ -120,6 +120,7 @@ struct App {
      * NULL unless the flag was given. */
     const char    *shot_path;
     const char    *dump_path;
+    const char    *renderer_pref;
 
     struct nk_rect field_rect;
     int            field_rect_valid;

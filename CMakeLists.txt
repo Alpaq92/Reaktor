@@ -276,6 +276,15 @@ add_executable(notepad WIN32 samples/notepad/notepad.c ${APP_RESOURCES})
 target_include_directories(notepad PRIVATE samples)
 target_link_libraries(notepad PRIVATE reaktor_runtime)
 
+if(NOT EMSCRIPTEN)
+    # Not WIN32: the answers go to stdout, which wants a console.
+    add_executable(bench samples/bench/bench.c ${APP_RESOURCES})
+    target_include_directories(bench PRIVATE samples)
+    target_link_libraries(bench PRIVATE reaktor_runtime)
+    set_target_properties(bench PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+
 if(EMSCRIPTEN)
     target_compile_options(showcase PRIVATE -Oz)
     target_compile_options(reaktor_runtime PRIVATE -Oz)

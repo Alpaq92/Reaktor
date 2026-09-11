@@ -7,10 +7,11 @@ Using it, and working on it.
 [Styling](#styling) · [Accessibility](#accessibility) ·
 [Animation](#animation) · [Reaching past the library](#reaching-past-the-library)
 
-**Inside** — [The tree](#the-tree) · [The style pipeline](#the-style-pipeline) ·
+**Inside** — [The architecture](#the-architecture) · [The tree](#the-tree) ·
+[The style pipeline](#the-style-pipeline) ·
 [The frame loop](#the-frame-loop) · [Tests](#tests) ·
 [Command-line flags](#command-line-flags) · [The renderer](#the-renderer) ·
-[The web build](#the-web-build) ·
+[The web build](#the-web-build) · [Localization](#localization) ·
 [Nuklear behaviors](#nuklear-behaviors-that-have-already-cost-an-afternoon)
 
 ---
@@ -197,6 +198,31 @@ imperatively inside a declared page.
 
 ---
 
+## The architecture
+
+```mermaid
+flowchart TB
+    app["<b>the application</b><br/>samples/ — showcase, notepad, simple, bench"]
+    rt["<b>runtime/</b><br/>the window, the event loop, a frame per change"]
+    ui["<b>core/ui</b><br/>declare, widgets, layout, keys, focus"]
+    ren["<b>core/render</b><br/>Nuklear, then the SDL3 software rasterizer"]
+    sdl["<b>SDL3</b><br/>window, input, surface, file dialogs"]
+
+    css["<b>core/css</b><br/>cssflat, libcss, style_map"]
+    tree["<b>core/a11y + core/anim</b><br/>the shadow tree, eased values"]
+    plat["<b>platform/</b><br/>UIA, NSAccessibility, AT-SPI, DOM"]
+
+    app --> rt --> ui --> ren --> sdl
+    css -- "every color, size and radius" --> ui
+    ui -- "one node per widget" --> tree
+    tree --> plat
+```
+
+Only the top box is yours. A spec goes into `core/ui`, which asks `core/css`
+what it should look like and `core/ui/layout` where it goes, files a node in
+the shadow tree, and hands Nuklear a draw call — so the right column happens
+whether the application asks for it or not.
+
 ## The tree
 
 ```
@@ -208,24 +234,25 @@ core/a11y      the shadow tree and its diff
 core/anim      eased values keyed by a11y id
 platform/      system theme, and one accessibility bridge per platform
 runtime/       app.c: the window, the event loop, the frame
-samples/       showcase, notepad, simple
+samples/       showcase, notepad, simple, bench
 tools/         the tests, the icon compiler, vmwalk
-external/   eight submodules, read as they ship
+external/      eight submodules, read as they ship
 ```
 
-`runtime/` and `core/` build into `reaktor_runtime`, a static library the three
+`runtime/` and `core/` build into `reaktor_runtime`, a static library the four
 executables link. Nothing in `core/` knows which application it is in.
 
 ## The style pipeline
 
-```
-external/tinycss/src/*.css  ->  core/css/cssflat.c  ->  core/css/style.c
-                                   var(), @media,          libcss: parse,
-                                   [data-theme]            match, compute
-                                        |
-                                        v
-                              core/ui/style_map.c  ->  Nuklear
-                              the one writer of nk_style
+```mermaid
+flowchart LR
+    sheets["<b>the stylesheets</b><br/>external/tinycss/src/*.css<br/>+ the application sheet, + the override"]
+    flat["<b>cssflat.c</b><br/>resolve var()<br/>unwrap @media<br/>[attr=x] becomes .attr-x"]
+    css["<b>style.c</b><br/>libcss:<br/>parse, match, compute"]
+    map["<b>style_map.c</b><br/>the one writer<br/>of nk_style"]
+    nk(["Nuklear draws it"])
+
+    sheets --> flat --> css --> map --> nk
 ```
 
 **`cssflat` exists because libcss is not a browser.** It has no custom
@@ -296,6 +323,7 @@ sees it, so an application's own arguments are unaffected:
 | `--shot <path.bmp>` | Write the window once it settles, then quit |
 | `--a11y-dump <path>` | Write the accessibility tree once it settles |
 | `--theme <system\|light\|dark>` | Which color scheme to open in |
+| `--renderer <name>` | `software` (the default), `auto` to let SDL pick, or a driver name |
 
 The showcase adds two of its own, through `sample_args`:
 
@@ -304,14 +332,26 @@ The showcase adds two of its own, through `sample_args`:
 | `--tab <0-8>` | Login, Buttons, Inputs, Display, Layout, Popups, Animation, Styling, Diagnostics |
 | `--scroll <px>` | How far that page starts scrolled |
 
+And `bench` adds two:
+
+| Flag | Effect |
+| --- | --- |
+| `--bench-seconds <n>` | How long to draw before printing and quitting |
+| `--no-vsync` | Free-run, so the figures measure drawing and not waiting |
+
 ```bash
 ./build/showcase --tab 7 --theme dark --shot styling.bmp --a11y-dump styling.txt
 ```
 
+`--renderer` exists to measure that choice rather than assert it, and it is the
+one flag that can change what the window looks like: the feathering rules in
+`nk_sdl3_renderer.h` are written against the software rasterizer. On a machine
+with no GPU it is a good way to confirm the choice — `--renderer direct3d11`
+lands on WARP and costs four times the frame.
+
 Everything else is a decision the library makes rather than one it asks about:
-the renderer is the software rasterizer on every platform, vsync and
-anti-aliasing are on, frames are drawn on events, and the assets are found by
-walking up to the `.reaktor-root` marker. The showcase's Diagnostics page
+vsync and anti-aliasing are on, frames are drawn on events, and the assets are
+found by walking up to the `.reaktor-root` marker. The showcase's Diagnostics page
 reports what each of those settled on, plus where each frame's milliseconds
 and each megabyte went. Prefer it to a guess: several plausible optimizations
 here turned out to be measurably worse.
@@ -348,6 +388,31 @@ actually name — the list is grepped at configure time, which took the bundle
 from 3.55 MB to 1.30 MB. `tools/shell.html` is the page; its loading overlay
 sets `pointer-events: none`, without which a full-viewport overlay swallows
 every canvas click and the app looks dead.
+
+## Localization
+
+Not supported, and the missing piece is not the one people expect.
+
+Translating the strings is the easy third. The other two are why no amount of
+string work would make a Japanese or Arabic build render:
+
+- **Glyph coverage.** `rebuild_font` never sets `cfg.range`, so Nuklear bakes
+  its default U+0020-U+00FF. Latin-1 and nothing else: no Cyrillic, no Greek,
+  no CJK, no Arabic, no Devanagari. Nuklear ships
+  `nk_font_cyrillic_glyph_ranges`, `nk_font_chinese_glyph_ranges` and
+  `nk_font_korean_glyph_ranges`, so the ranges exist - but the atlas is
+  already 1024x1024 for 8 sizes in two weights, and CJK is thousands of
+  glyphs per size.
+- **Shaping and direction.** Nuklear positions one glyph after another by
+  advance width. That is correct for Latin, Cyrillic and Greek and wrong for
+  Arabic (contextual forms, right-to-left), Hebrew (right-to-left) and the
+  Indic scripts (reordering, conjuncts). There is no shaping engine and no
+  bidi algorithm anywhere in the tree.
+
+What is already in place, for whatever it is worth: the accessibility tree
+carries the same strings the widgets draw, so a translated interface is a
+translated screen reader with no extra work, and the declarative specs take
+`const char *` rather than baking text into the drawing code.
 
 ## Nuklear behaviors that have already cost an afternoon
 

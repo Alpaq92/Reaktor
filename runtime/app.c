@@ -39,6 +39,7 @@ take_flags(App *app, int argc, char **argv)
 
         if (v && SDL_strcmp(a, "--shot") == 0)       { app->shot_path = v; i++; }
         else if (v && SDL_strcmp(a, "--a11y-dump") == 0) { app->dump_path = v; i++; }
+        else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--theme") == 0) {
             if (SDL_strcmp(v, "light") == 0)     app->theme_mode = THEME_LIGHT;
             else if (SDL_strcmp(v, "dark") == 0) app->theme_mode = THEME_DARK;
@@ -255,9 +256,22 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
      * rest, so a GPU buys it nothing it can measure, and one rasterizer
      * everywhere is one set of pixels to reason about - which matters because
      * the feathering rules in nk_sdl3_renderer.h are written against this
-     * one. The detection below only labels what it got. */
-    SDL_strlcpy(app->render_mode, "auto: software", sizeof(app->render_mode));
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+     * one. The detection below only labels what it got.
+     *
+     * --renderer lifts that, for measuring what the choice costs rather than
+     * asserting it. Anything but "software" is handed to SDL as the driver to
+     * try, and "auto" lets it pick; the feathering is then not what these
+     * sources were written against, so the picture may differ. */
+    if (app->renderer_pref && SDL_strcmp(app->renderer_pref, "software") != 0) {
+        SDL_strlcpy(app->render_mode, app->renderer_pref,
+                    sizeof(app->render_mode));
+        if (SDL_strcmp(app->renderer_pref, "auto") != 0)
+            SDL_SetHint(SDL_HINT_RENDER_DRIVER, app->renderer_pref);
+    } else {
+        SDL_strlcpy(app->render_mode, "auto: software",
+                    sizeof(app->render_mode));
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+    }
 
 #ifdef __EMSCRIPTEN__
     app->borderless = 0;

@@ -1,17 +1,19 @@
-# The three applications
+# The four applications
 
-This repository builds three programs. They share `runtime/` and `core/` byte
+This repository builds four programs. They share `runtime/` and `core/` byte
 for byte — the whole of the difference between them is in `samples/`.
 
 | | Size | What it is for |
 | --- | --- | --- |
-| `showcase` | ~2,900 lines | Every widget, both schemes, and how far the CSS seam reaches |
+| `showcase` | ~2,800 lines | Every widget, both schemes, and how far the CSS seam reaches |
 | `notepad` | ~290 lines | A text editor that opens, edits and saves a file |
+| `bench` | ~160 lines | The workload the published figures are measured on |
 | `simple` | ~60 lines | One button that closes the window |
 
 ```bash
 ./build/showcase
 ./build/notepad somefile.txt
+./build/bench --bench-seconds 6 --no-vsync
 ./build/simple
 ```
 
@@ -50,6 +52,33 @@ open and save through the platform's own file dialog, and five keyboard
 shortcuts. It exists because a showcase can hide a lot — a page of widgets
 never has to answer what happens when a document is modified, or where the
 menu's last item lands when the popup is a pixel too short.
+
+## bench
+
+Sixty-four boxes rotating as fast as the display will take them, for however
+many seconds `--bench-seconds` asks for, and then six numbers on stdout:
+
+```
+frames        1472
+fps           245.3
+ms_per_frame  4.04
+cpu_at_60fps  24.3
+cpu_percent   95.3
+private_mb    6.8
+```
+
+Pass `--no-vsync` for those, and read `cpu_at_60fps` rather than `cpu_percent`.
+Left on vsync, `SDL_RenderPresent` spends the rest of the frame waiting for the
+next vblank, and the process is charged for that wait or not depending on
+whether SDL blocks or spins — which is how the same 386 frames come out
+anywhere between 0.3% and 99.6% of a core. Free-running, every millisecond is
+drawing and the number holds to a tenth.
+
+It is deliberately the thing this library is worst at. Every other figure in
+[PERFORMANCE.md](PERFORMANCE.md) is a count of frames, because nothing is drawn
+while nothing changes — an animation that never stops throws that advantage
+away and measures the drawing instead of the design. Both bars of the chart
+there come from this program.
 
 ## simple
 

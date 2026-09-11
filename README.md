@@ -40,6 +40,10 @@ GPU required.
   software rasterizer, no GPU.
 - **Nothing drawn at rest** — 0% of a core while it sits there.
 
+Not yet: **localization**. The font atlas bakes Latin-1 only and there is no
+text shaping or bidi, so anything past Western European scripts does not
+render — see [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md#localization).
+
 ## Build
 
 Needs a C99 compiler, CMake and the submodules.
@@ -82,7 +86,7 @@ position.
 - [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) — the whole of it: the
   declarative API, layout, styling, accessibility and animation, then the tree,
   the tests and the command-line flags.
-- [docs/DEMO.md](docs/DEMO.md) — the three applications in this repository and
+- [docs/DEMO.md](docs/DEMO.md) — the four applications in this repository and
   what each one is for.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — what it costs, measured on four
   platforms.
