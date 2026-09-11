@@ -35,7 +35,7 @@ Reaktor's bars are `samples/bench`; the other four are
 
 **9.6 MB and 6.1% of the machine**, animating without stopping — which is the
 case this design is worst at, since nothing here is free when the picture never
-holds still.
+holds still, frame after frame.
 
 ### How the CPU bar was measured
 
@@ -142,27 +142,23 @@ Forced to redraw at a fixed rate, 960×680:
 | Login | 6.8–6.9 ms/frame | 6.2–6.7 ms/frame | 17.5–20.5 ms/frame | 6.2–8.3 ms/frame |
 | Buttons (the busiest) | 11.5–12.2 ms/frame | 11.7–13.0 ms/frame | 29.6–30.2 ms/frame | 13.4–15.3 ms/frame |
 
-The same rasterizer on all four, so Windows and Linux agreeing is the expected
-result rather than a coincidence; macOS runs the same code but pays another
-pass for it, because SDL's Metal renderer uploads the software bitmap to a
-texture and presents that — the same private-copy-at-every-step pattern that
-dominates the memory table above. Cost is linear in frames: a pointer swept
-across a row of buttons draws one per hover crossing, typing draws one per
-keystroke.
+The same rasterizer on all four, so Windows and Linux agreeing is expected
+rather than lucky. macOS pays an extra pass: SDL's Metal renderer uploads the
+software bitmap to a texture and presents that, the same private copy at every
+step that dominates the memory table. Cost is linear in frames — a pointer
+swept across a row of buttons draws one per hover crossing.
 
 GhostBSD's frame is present, not drawing: 6.7 ms of the Login median's 7.1 and
-11.1 ms of the Buttons median's 14.8 go to the present alone, leaving 0.4 ms
-and 3.4 ms of build and render. Its X server drives VMware's SVGA II with no
-3D, so a frame is a software blit into the virtual framebuffer and then out to
-the host again. The other three columns' splits were not recorded, so the table
-compares whole frames and nothing finer; its ranges are p10–p90 of 31 samples.
+11.1 ms of the Buttons median's 14.8 go to the present alone. Its X server
+drives VMware's SVGA II with no 3D, so a frame is a software blit into the
+virtual framebuffer and then out to the host. The other three columns' splits
+were not recorded; these ranges are p10–p90 of 31 samples.
 
 The accessibility tree adds **4.2 µs** to a drawn frame (82 nodes), below the
-noise in the measurements above. For contrast, the one figure that made the
-software default worth it: on Windows with no GPU, `direct3d11` falls back to
-WARP and the same frame costs **78 ms**. `--renderer` reproduces that on
-demand — `bench --no-vsync --renderer direct3d11` takes the frame from 4.7 ms
-to 20.3 ms on the same machine.
+noise above. And the figure that made the software default worth it: on the
+GPU-less VM, `direct3d11` falls back to WARP and the frame goes from 4.7 ms to
+**20.3 ms**. A machine with a real GPU inverts that — see
+**Against the others**.
 
 ## What it needs to run
 
