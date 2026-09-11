@@ -119,8 +119,14 @@ unsettled frames it stops asking for redraws and prints which box is missing.
 Sheets are read in order and the last one wins, because that is what CSS
 already does with a tie. Nothing merges them.
 
-```
-palette → tiny.css → the application's own → the override, if there is one
+```mermaid
+flowchart LR
+    pal["<b>the palette</b><br/>variables-light.css<br/>variables-dark.css"]
+    tiny["<b>tiny.css</b><br/>what a document<br/>already looks like"]
+    app["<b>the application's own</b><br/>whatever it ships"]
+    over["<b>the override</b><br/>only while the<br/>application asks"]
+
+    pal --> tiny --> app -- "beats everything left of it" --> over
 ```
 
 A widget asks for a selector and gets computed values, or `matched` clear and
