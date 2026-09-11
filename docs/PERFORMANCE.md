@@ -35,7 +35,7 @@ Reaktor's bars are `samples/bench`; the other four are
 
 **9.6 MB and 6.1% of the machine**, animating without stopping — which is the
 case this design is worst at, since nothing here is free when the picture never
-holds still.
+holds still, frame after frame.
 
 ### How the CPU bar was measured
 
