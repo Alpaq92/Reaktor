@@ -105,6 +105,8 @@ position.
   they need.
 - **Further optimization, and a pass over the code.** Faster frames, and
   fewer places doing the same job twice.
+- **Modularity.** A build today is all or nothing. The accessibility bridges,
+  and the libraries they drag in, should be things you can turn off.
 
 ## License
 
