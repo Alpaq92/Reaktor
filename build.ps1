@@ -16,7 +16,7 @@ foreach ($t in @($vcvars, $cmake, $ninja)) {
     if (-not (Test-Path $t)) { throw "missing build tool: $t" }
 }
 
-if (-not (Test-Path (Join-Path $root "third_party\SDL\CMakeLists.txt"))) {
+if (-not (Test-Path (Join-Path $root "external\SDL\CMakeLists.txt"))) {
     throw "submodules missing - run: git submodule update --init --recursive"
 }
 

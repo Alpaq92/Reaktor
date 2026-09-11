@@ -62,7 +62,7 @@ fi
 command -v cmake >/dev/null 2>&1 || {
     echo "build-wasm.sh: cmake not found on PATH" >&2; exit 1; }
 
-if [ ! -f "$root/third_party/SDL/CMakeLists.txt" ]; then
+if [ ! -f "$root/external/SDL/CMakeLists.txt" ]; then
     echo "build-wasm.sh: submodules missing - run: git submodule update --init --recursive" >&2
     exit 1
 fi

@@ -64,7 +64,7 @@ typedef struct reaktor_label_spec {
     const char   *name;
     const char   *value;
     const char   *style;
-    const char   *colour;
+    const char   *color;
     reaktor_box   box;
     unsigned char align;
     unsigned char wrap;
@@ -76,6 +76,7 @@ void reaktor_label(const reaktor_label_spec *s);
 typedef struct reaktor_swatch_spec {
     const char     *name;
     struct nk_color fill;
+    const char *style;
     reaktor_box     box;
     reaktor_handler on_press;
 } reaktor_swatch_spec;
@@ -84,6 +85,7 @@ int reaktor_swatch(const reaktor_swatch_spec *s);
 
 typedef struct reaktor_icon_spec {
     const char   *name;
+    const char *style;
     reaktor_box   box;
     unsigned char accent;
 } reaktor_icon_spec;
@@ -111,6 +113,7 @@ typedef struct reaktor_check_spec {
     nk_bool      *on;
     unsigned     *flags;
     unsigned      bit;
+    const char *style;
     reaktor_box   box;
     unsigned char box_right;
 } reaktor_check_spec;
@@ -122,6 +125,7 @@ typedef struct reaktor_radio_spec {
     const char   *name;
     int          *choice;
     int           value;
+    const char *style;
     reaktor_box   box;
 } reaktor_radio_spec;
 
@@ -133,8 +137,9 @@ typedef struct reaktor_select_spec {
     nk_bool      *on;
     const char   *icon;
     unsigned char disc;
+    const char *style;
     reaktor_box   box;
-    unsigned char centred;
+    unsigned char centered;
 } reaktor_select_spec;
 
 int reaktor_select(const reaktor_select_spec *s);
@@ -145,6 +150,7 @@ typedef struct reaktor_slider_spec {
     float      *value;
     int        *ivalue;
     float       lo, hi, step;
+    const char *style;
     reaktor_box box;
 } reaktor_slider_spec;
 
@@ -154,6 +160,7 @@ typedef struct reaktor_progress_spec {
     const char *name;
     nk_size    *value;
     nk_size     max;
+    const char *style;
     reaktor_box box;
     unsigned char modifiable;
 } reaktor_progress_spec;
@@ -164,6 +171,7 @@ typedef struct reaktor_knob_spec {
     const char *name;
     float      *value;
     float       lo, hi;
+    const char *style;
     reaktor_box box;
 } reaktor_knob_spec;
 
@@ -177,6 +185,7 @@ typedef struct reaktor_property_spec {
     double     *dvalue;
     double      lo, hi, step;
     float       grain;
+    const char *style;
     reaktor_box box;
 } reaktor_property_spec;
 
@@ -186,6 +195,7 @@ typedef struct reaktor_combo_spec {
     const char     *label;
     const char     *name;
     float           body_h;
+    const char *style;
     reaktor_box     box;
     unsigned char   disc;
     const struct nk_color *swatch;
@@ -201,6 +211,7 @@ int reaktor_combo_item(const char *label, int chosen);
 typedef struct reaktor_colour_spec {
     const char       *name;
     struct nk_colorf *value;
+    const char *style;
     reaktor_box       box;
 } reaktor_colour_spec;
 

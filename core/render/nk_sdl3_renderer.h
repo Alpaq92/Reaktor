@@ -2,7 +2,7 @@
 
 /* VENDORED COPY - see docs/NOTICE.md.
  *
- * Nuklear's SDL3 backend, taken from third_party/nuklear/demo/sdl3_renderer/
+ * Nuklear's SDL3 backend, taken from external/nuklear/demo/sdl3_renderer/
  * and changed to bake and upload the font atlas 8-bit indexed rather than
  * RGBA32. It could not stay an include: the format is chosen inside
  * nk_sdl_font_stash_end, and this project does not edit submodules.
@@ -205,7 +205,7 @@ nk_sdl_device_upload_atlas(struct nk_context* ctx, const void *image, int width,
      *
      * A baked glyph is coverage: nk_font_bake_convert writes
      * ((alpha << 24) | 0x00FFFFFF) per pixel, so three of four bytes are a
-     * constant and the colour comes from the vertex. SDL3 has no A8 format,
+     * constant and the color comes from the vertex. SDL3 has no A8 format,
      * so the alpha8 bake goes up as INDEX8 with a palette whose entry i is
      * white at alpha i - the same texture, a quarter the size. Every SDL3
      * backend registers INDEX8.
@@ -299,7 +299,7 @@ nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing AA)
 }
 
 /* REAKTOR: Nuklear feathers fills (shape_AA) and strokes (line_AA) separately,
- * and on a rasteriser with no partial coverage they fail differently. A fill's
+ * and on a rasterizer with no partial coverage they fail differently. A fill's
  * feather is a ring half a pixel outside a fill shrunk by half a pixel; landed
  * whole it is a half-tone column between a panel's border and its fill, and a
  * rule between menu items. A stroke's feather is what grades a border's curve,
@@ -371,7 +371,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
          *
          * SDL's software backend turns each vertex into a whole pixel by
          * truncation - SDL_render_sw.c does (int)(x * scale), and the
-         * rasteriser below it works on integer SDL_Points. There is no partial
+         * rasterizer below it works on integer SDL_Points. There is no partial
          * coverage anywhere in that path, which costs twice over: a rect whose
          * edge lands on .5 covers one row more or less than a GPU would (the
          * tab underline arriving as two lines with a gap, the top row of the
@@ -381,7 +381,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
          *
          * Storing round(x) + 0.5 answers both. SDL's truncation then lands on
          * round(x), which is what a hardware backend does, and the feather
-         * collapses onto the pixel it was fading towards instead of onto its
+         * collapses onto the pixel it was fading toward instead of onto its
          * neighbour. Both are the reason this is not done on hardware, where
          * the same rounding would flatten a feather that would otherwise have
          * blended - see the glyph snapping below. */

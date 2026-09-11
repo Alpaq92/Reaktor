@@ -95,7 +95,7 @@ test_centring(reaktor_layout *l)
     struct nk_rect a, b;
 
     puts("");
-    puts("centring is asked for, never assumed");
+    puts("centering is asked for, never assumed");
     row.dir   = REAKTOR_LAY_ROW;
     row.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y;
     top.w = mid.w = 40.0f;
@@ -112,7 +112,7 @@ test_centring(reaktor_layout *l)
     reaktor_layout_rect(l, 301u, &a);
     reaktor_layout_rect(l, 302u, &b);
     ok("a box that says nothing sits at the top", a.y == 0.0f, 1);
-    ok("one that asks to be centred is centred",
+    ok("one that asks to be centered is centered",
        b.y == (100.0f - 20.0f) / 2.0f, 1);
 }
 

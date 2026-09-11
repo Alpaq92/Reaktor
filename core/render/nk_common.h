@@ -15,6 +15,6 @@
  * one task, so that frame never happens and the button never fires. */
 #define NK_BUTTON_TRIGGER_ON_RELEASE
 
-#include "../../third_party/nuklear/nuklear.h"
+#include "../../external/nuklear/nuklear.h"
 
 #endif

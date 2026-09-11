@@ -40,20 +40,31 @@ hot_push(App *app, struct nk_rect r, int cursor, int repaint)
 static style_frame
 push_button_style(App *app, struct nk_context *ctx, const char *selector)
 {
-    reaktor_style s, hov;
+    reaktor_style s, hov, act;
     unsigned char hover[4], active[4];
     style_frame f = { 0, 0, 0, 0, 0 };
-    char hsel[80];
+    char state[80];
 
     reaktor_style_get(selector, &s);
     if (!s.matched) return f;
 
-    snprintf(hsel, sizeof(hsel), "%s:hover", selector);
-    reaktor_style_get(hsel, &hov);
+    /* The state rules, read rather than computed. :hover used to supply only
+     * a background and :active nothing at all - it was the base color ten
+     * per cent darker, which is a decision a stylesheet is entitled to make
+     * and this was making for it. The darkening is still the fallback, for a
+     * sheet that styles :hover and stops there. */
+    snprintf(state, sizeof(state), "%s:hover", selector);
+    reaktor_style_get(state, &hov);
+    snprintf(state, sizeof(state), "%s:active", selector);
+    reaktor_style_get(state, &act);
 
     memcpy(hover, hov.matched && hov.bg[3] ? hov.bg : s.bg, 4);
-    memcpy(active, hover, 4);
-    reaktor_style_darken(active, 0.10f);
+    if (act.matched && act.bg[3]) {
+        memcpy(active, act.bg, 4);
+    } else {
+        memcpy(active, hover, 4);
+        reaktor_style_darken(active, 0.10f);
+    }
 
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
                              nk_style_item_color(col_of(s.bg)));
@@ -64,8 +75,10 @@ push_button_style(App *app, struct nk_context *ctx, const char *selector)
     f.items = 3;
 
     nk_style_push_color(ctx, &ctx->style.button.text_normal, col_of(s.fg));
-    nk_style_push_color(ctx, &ctx->style.button.text_hover,  col_of(s.fg));
-    nk_style_push_color(ctx, &ctx->style.button.text_active, col_of(s.fg));
+    nk_style_push_color(ctx, &ctx->style.button.text_hover,
+                        col_of(hov.matched && hov.fg[3] ? hov.fg : s.fg));
+    nk_style_push_color(ctx, &ctx->style.button.text_active,
+                        col_of(act.matched && act.fg[3] ? act.fg : s.fg));
     nk_style_push_color(ctx, &ctx->style.button.border_color,
                         col_of(s.border_col));
     f.colors = 4;
@@ -359,7 +372,7 @@ draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
     struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
     const struct nk_user_font *font = ctx->style.font;
     unsigned char muted[4];
-    struct nk_color grey = reaktor_style_token("--text-muted", muted)
+    struct nk_color gray = reaktor_style_token("--text-muted", muted)
                          ? col_of(muted) : nk_rgb(0x9a, 0x9a, 0x9a);
     float pad = s->matched ? s->pad_x : 9.0f;
     struct nk_rect r = nk_rect(bounds.x + pad,
@@ -367,7 +380,7 @@ draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
                                bounds.w - pad * 2.0f, font->height + 2.0f);
 
     nk_draw_text(canvas, r, hint, (int)strlen(hint), font,
-                 nk_rgba(0, 0, 0, 0), grey);
+                 nk_rgba(0, 0, 0, 0), gray);
 }
 
 void

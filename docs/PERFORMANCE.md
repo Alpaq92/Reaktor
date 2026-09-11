@@ -1,7 +1,7 @@
 # Performance
 
-Nuklear builds the frame, SDL's **software rasteriser** draws it, and libcss
-supplies every colour from a stylesheet read at runtime. There is no GPU path
+Nuklear builds the frame, SDL's **software rasterizer** draws it, and libcss
+supplies every color from a stylesheet read at runtime. There is no GPU path
 by default on any platform — see
 [the renderer](DOCUMENTATION.md#the-renderer) for why.
 
@@ -18,7 +18,7 @@ so everything below still describes what one of them costs to run.
 
 ## Size
 
-| Artefact | Bytes |
+| Artifact | Bytes |
 | --- | --- |
 | Windows | 2,473,984 |
 | Linux, stripped | 3,967,504 |
@@ -61,7 +61,7 @@ libLLVM, 10 of Mesa, 30 of heap. Compiling SDL's GL drivers out took it to the
 4.3 MB above; `-DREAKTOR_SDL_GL=ON` puts them back.
 
 **GhostBSD lands beside Linux on both rows**, 0.5 MB apart on resident and 0.8
-on the other, which is what the same rasteriser on the same X11 with the same
+on the other, which is what the same rasterizer on the same X11 with the same
 absent GPU should do. Of its 5.1 MB, 2.5 MB is a single SysV shared segment of
 2,611,200 bytes — 960×680×4, SDL's framebuffer handed to the X server through
 MIT-SHM — leaving 2.6 MB that is genuinely this process's. That one mapping is
@@ -100,7 +100,7 @@ Forced to redraw at a fixed rate, 960×680:
 | Login | 6.8–6.9 ms/frame | 6.2–6.7 ms/frame | 17.5–20.5 ms/frame | 6.2–8.3 ms/frame |
 | Buttons (the busiest) | 11.5–12.2 ms/frame | 11.7–13.0 ms/frame | 29.6–30.2 ms/frame | 13.4–15.3 ms/frame |
 
-The same rasteriser on all four, so Windows and Linux agreeing is the expected
+The same rasterizer on all four, so Windows and Linux agreeing is the expected
 result rather than a coincidence; macOS runs the same code but pays another
 pass for it, because SDL's Metal renderer uploads the software bitmap to a
 texture and presents that — the same private-copy-at-every-step pattern that
@@ -125,9 +125,8 @@ WARP and the same frame costs **78 ms**.
 **No GPU** — a machine that can run a browser can run this. Budget about
 **10 MB of RAM** and a few hundred triangles a frame. Two things a deployment
 does need: the asset files, found by walking up to the `.reaktor-root` marker
-or pointed at by `REAKTOR_ROOT` (the web build packages them into its `.data`
-bundle), and a served web build, since a `file://` page cannot fetch the
-`.wasm`.
+(the web build packages them into its `.data` bundle), and a served web build,
+since a `file://` page cannot fetch the `.wasm`.
 
 ## Where the numbers came from
 

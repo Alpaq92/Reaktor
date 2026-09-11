@@ -1,24 +1,24 @@
-[submodule "third_party/nuklear"]
-	path = third_party/nuklear
+[submodule "external/nuklear"]
+	path = external/nuklear
 	url = https://github.com/Immediate-Mode-UI/Nuklear.git
-[submodule "third_party/plutosvg"]
-	path = third_party/plutosvg
+[submodule "external/plutosvg"]
+	path = external/plutosvg
 	url = https://github.com/sammycage/plutosvg.git
-[submodule "third_party/ionicons"]
-	path = third_party/ionicons
+[submodule "external/ionicons"]
+	path = external/ionicons
 	url = https://github.com/ionic-team/ionicons.git
-[submodule "third_party/SDL"]
-	path = third_party/SDL
+[submodule "external/SDL"]
+	path = external/SDL
 	url = https://github.com/libsdl-org/SDL.git
-[submodule "third_party/lcui"]
-	path = third_party/lcui
+[submodule "external/lcui"]
+	path = external/lcui
 	url = https://github.com/lc-soft/LCUI.git
-[submodule "third_party/tinycss"]
-	path = third_party/tinycss
+[submodule "external/tinycss"]
+	path = external/tinycss
 	url = https://github.com/ihsan6133/tiny.css.git
-[submodule "third_party/simplecss"]
-	path = third_party/simplecss
+[submodule "external/simplecss"]
+	path = external/simplecss
 	url = https://github.com/kevquirk/simple.css
-[submodule "third_party/onlay"]
-	path = third_party/onlay
+[submodule "external/onlay"]
+	path = external/onlay
 	url = https://github.com/Alpaq92/Onlay.git

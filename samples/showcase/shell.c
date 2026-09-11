@@ -57,11 +57,30 @@ static int g_scroll0 = -1;
 int
 sample_tab(void)
 {
-    if (g_tab < 0) {
-        g_tab = env_int("REAKTOR_TAB", TAB_LOGIN);
-        if (g_tab < 0 || g_tab >= TAB_COUNT) g_tab = TAB_LOGIN;
-    }
+    if (g_tab < 0) g_tab = TAB_LOGIN;
     return g_tab;
+}
+
+/* --tab and --scroll open the window on one page, scrolled to one place, so
+ * two runs can be compared without clicking either of them into position.
+ * The runtime has already taken its own flags out of argv. */
+void
+sample_args(App *app, int argc, char **argv)
+{
+    int i;
+
+    for (i = 1; i + 1 < argc; i++) {
+        int n = SDL_atoi(argv[i + 1]);
+
+        if (SDL_strcmp(argv[i], "--tab") == 0) {
+            if (n >= 0 && n < TAB_COUNT) g_tab = n;
+            i++;
+        } else if (SDL_strcmp(argv[i], "--scroll") == 0) {
+            if (n >= 0) g_scroll0 = n;
+            i++;
+        }
+    }
+    (void)app;
 }
 
 void
@@ -115,11 +134,11 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
 
     if (app->dark) {
         SDL_snprintf(src, sizeof(src),
-                     "third_party/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
+                     "external/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
                      glyph, app->icon_hex, (double)GLYPH_STROKE);
     } else {
         SDL_snprintf(src, sizeof(src),
-                     "third_party/ionicons/src/svg/%s.svg"
+                     "external/ionicons/src/svg/%s.svg"
                      "?stroke=#%02x%02x%02x&sw=%.2f",
                      glyph, app->text.r, app->text.g, app->text.b,
                      (double)GLYPH_STROKE);
@@ -168,13 +187,13 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
     }
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
-    if (titlebar_button(app, ctx, "remove-outline", "Minimise", GLYPH_MINIMISE))
+    if (titlebar_button(app, ctx, "remove-outline", "Minimize", GLYPH_MINIMISE))
         SDL_MinimizeWindow(app->win);
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx,
                         maximised ? "copy-outline" : "square-outline",
-                        maximised ? "Restore" : "Maximise",
+                        maximised ? "Restore" : "Maximize",
                         GLYPH_MAXIMISE)) {
         if (maximised) SDL_RestoreWindow(app->win);
         else           SDL_MaximizeWindow(app->win);
@@ -246,7 +265,7 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
                     .box  = { .w = ROW_BRAND, .h = ROW_BRAND } });
                 reaktor_label(&(reaktor_label_spec){
                     .text  = "Proceed with login",
-                    .style = ".card-title",
+                    .style = "h4",
                     .box   = { .flags = REAKTOR_LAY_FILL_X |
                                         REAKTOR_LAY_FILL_Y } });
             }
@@ -359,7 +378,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
         }
         /* Tighter than a tab. A tab's padding is what separates it from the
          * tab beside it; this one stands alone at the end of the strip, so
-         * the same padding just reads as a wide grey slab when it lights up. */
+         * the same padding just reads as a wide gray slab when it lights up. */
         sw_w = font->width(font->userdata, font->height, swl,
                            (int)strlen(swl)) + 2.0f * SW_PAD_X;
 #ifdef __EMSCRIPTEN__
@@ -426,7 +445,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     nk_spacing(ctx, 1);
     reaktor_note_pop(app);
 
-    reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Colour scheme", NULL, 0,
+    reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Color scheme", NULL, 0,
                       strip);
     for (i = 0; i < 3; i++) {
         struct nk_color fg = (i == app->theme_mode) ? accent : muted;
@@ -565,10 +584,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     }
 
     nk_layout_space_push(ctx, nk_rect(0, top, (float)win_w, body_h));
-    if (g_scroll0 < 0) {
-        g_scroll0 = env_int("REAKTOR_SCROLL", 0);
-        if (g_scroll0 < 0) g_scroll0 = 0;
-    }
+    if (g_scroll0 < 0) g_scroll0 = 0;
     if (g_scroll0 > 0) {
         nk_group_set_scroll(ctx, "body", 0, (nk_uint)g_scroll0);
         g_scroll0 = 0;

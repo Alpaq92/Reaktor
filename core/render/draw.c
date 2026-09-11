@@ -1,6 +1,7 @@
 #include "internal.h"
 
-static const int g_font_px[FONT_STEPS] = { 12, 13, 14, 16, 19 };
+static const int g_font_px[FONT_STEPS] =
+    { 12, 14, 16, 19, 23, 28, 34, 41 };
 
 static int
 parse_colour(const char *spec, char *out, size_t cap)
@@ -188,6 +189,27 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     int r;
 
     if (b.w <= 0.0f || b.h <= 0.0f) return;
+
+    /* Snap the whole shape to the pixel grid before it is cut into pieces.
+     *
+     * The renderer snaps every vertex anyway, but it does it per rectangle
+     * and after the arithmetic - so a corner blit ending at b.y+b.h-R and a
+     * band starting at the same fractional number could round to different
+     * rows and leave the one between them unpainted. That is a hairline of
+     * whatever is underneath, straight across the shape, and it showed at
+     * the rounded ends of the progress bar. Snapping first makes every
+     * sub-rectangle an integer, so the pieces meet exactly. */
+    {
+        float x0 = (float)(int)(b.x + 0.5f);
+        float y0 = (float)(int)(b.y + 0.5f);
+        float x1 = (float)(int)(b.x + b.w + 0.5f);
+        float y1 = (float)(int)(b.y + b.h + 0.5f);
+
+        b.x = x0; b.y = y0;
+        b.w = x1 - x0; b.h = y1 - y0;
+        if (b.w <= 0.0f || b.h <= 0.0f) return;
+    }
+
     if (fr > b.w * 0.5f) fr = b.w * 0.5f;
     if (fr > b.h * 0.5f) fr = b.h * 0.5f;
     r = (int)(fr + 0.5f);
@@ -216,12 +238,16 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
             q = nk_subimage_handle(h, (nk_ushort)d, (nk_ushort)d, from[i]);
             nk_draw_image(cv, corner[i], &q, col);
         }
+        /* Three pieces that meet edge to edge, not two that overlap: every
+         * coordinate here is an integer now, so abutting is exact, and a
+         * color with alpha under 255 is painted once rather than composited
+         * twice over the middle. */
         if (b.h > d)
             nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, b.h - d), 0.0f, col);
         if (b.w > d) {
             nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - d, R), 0.0f, col);
-            nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - d, R), 0.0f,
-                         col);
+            nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - d, R),
+                         0.0f, col);
         }
     }
 }
@@ -255,12 +281,14 @@ pick_font(App *app, int px, int bold)
     int best = 0, i, bd = 1 << 30;
 
     if (px <= 0) px = FONT_SIZE;
-    if (bold && px == TITLE_PX && app->face_bold)
-        return &app->face_bold->handle;
     for (i = 0; i < FONT_STEPS; i++) {
         int d = g_font_px[i] > px ? g_font_px[i] - px : px - g_font_px[i];
         if (d < bd) { bd = d; best = i; }
     }
+    /* Bold at the step that was asked for, and the regular face at that same
+     * step if the bold one did not bake - the size is the more important of
+     * the two to get right. */
+    if (bold && app->bolds[best]) return &app->bolds[best]->handle;
     if (app->faces[best]) return &app->faces[best]->handle;
     return app->ctx->style.font;
 }
@@ -283,6 +311,7 @@ rebuild_font(App *app)
     if (app->atlas) {
         nk_font_atlas_clear(app->atlas);
         SDL_memset(app->faces, 0, sizeof(app->faces));
+        SDL_memset(app->bolds, 0, sizeof(app->bolds));
         app->face_bold = NULL;
     }
     atlas = nk_sdl_font_stash_begin(app->ctx);
@@ -310,8 +339,10 @@ rebuild_font(App *app)
             if (bslash > slash) slash = bslash;
             SDL_snprintf(bpath, sizeof(bpath), "%.*s%s",
                          slash ? (int)(slash - path + 1) : 0, path, base);
-            app->face_bold = nk_font_atlas_add_from_file(
-                atlas, bpath, (float)reaktor_px(TITLE_PX), &cfg);
+            for (i = 0; i < FONT_STEPS; i++)
+                app->bolds[i] = nk_font_atlas_add_from_file(
+                    atlas, bpath, (float)reaktor_px(g_font_px[i]), &cfg);
+            app->face_bold = app->bolds[0];
         }
         if (!font)
             SDL_snprintf(app->font_status, sizeof(app->font_status),
@@ -327,7 +358,7 @@ rebuild_font(App *app)
         SDL_snprintf(app->font_status, sizeof(app->font_status),
                      "Aileron, %d sizes %d-%dpx%s", FONT_STEPS,
                      reaktor_px(g_font_px[0]), reaktor_px(g_font_px[FONT_STEPS - 1]),
-                     app->face_bold ? ", bold at one" : "");
+                     app->bolds[0] ? ", bold at each" : "");
     }
 
     nk_sdl_font_stash_end(app->ctx);
@@ -340,8 +371,9 @@ rebuild_font(App *app)
                 app->faces[i]->handle.height = (float)g_font_px[i];
                 if (app->faces[i] == font) is_face = 1;
             }
-        if (app->face_bold)
-            app->face_bold->handle.height = (float)TITLE_PX;
+        for (i = 0; i < FONT_STEPS; i++)
+            if (app->bolds[i])
+                app->bolds[i]->handle.height = (float)g_font_px[i];
         if (font && !is_face) font->handle.height = (float)FONT_SIZE;
     }
 
@@ -352,7 +384,8 @@ rebuild_font(App *app)
             centre_glyphs_optically(app->faces[i]);
             if (app->faces[i] == font) done = 1;
         }
-        centre_glyphs_optically(app->face_bold);
+        for (i = 0; i < FONT_STEPS; i++)
+            centre_glyphs_optically(app->bolds[i]);
         if (font && !done) centre_glyphs_optically(font);
     }
 

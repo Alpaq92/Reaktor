@@ -1,11 +1,11 @@
 # Third-party notices
 
 Reaktor is MIT ([LICENSE](../LICENSE)). Everything it is built on is a git
-submodule under `third_party/`, used as it ships. Each licence below was read
-from that project's own licence file at the pinned revision, not from its
+submodule under `external/`, used as it ships. Each license below was read
+from that project's own license file at the pinned revision, not from its
 README. `git submodule status` prints the current pins.
 
-| Component | Used for | Licence |
+| Component | Used for | License |
 | --- | --- | --- |
 | [SDL](https://github.com/libsdl-org/SDL) | Window, input, renderer, system theme, file dialog | zlib |
 | [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) | Immediate-mode widgets, font baking, the SDL3 backend | MIT **or** public domain, your choice |
@@ -14,7 +14,7 @@ README. `git submodule status` prints the current pins.
 | [tiny.css](https://github.com/ihsan6133/tiny.css) | The stylesheet the whole look comes from | MIT |
 | [simple.css](https://github.com/kevquirk/simple.css) | The override sheet the Styling page swaps in | MIT |
 | [Ionicons](https://github.com/ionic-team/ionicons) | Every icon, read as SVG at runtime | MIT |
-| [plutosvg](https://github.com/sammycage/plutosvg) | Rasterising those SVGs | MIT |
+| [plutosvg](https://github.com/sammycage/plutosvg) | Rasterizing those SVGs | MIT |
 | [plutovg](https://github.com/sammycage/plutovg) | The canvas plutosvg draws on (nested submodule) | MIT |
 
 Only two of LCUI's libraries are built — `libcss` and `yutil` — not the
@@ -30,21 +30,21 @@ application already links. CMake asks pkg-config for `dbus-1`; if it is missing
 the bridge is not built and the app is not served — the same thing that happens
 on a desktop with no accessibility bus running.
 
-| Component | Licence |
+| Component | License |
 | --- | --- |
 | [libdbus](https://gitlab.freedesktop.org/dbus/dbus) | **AFL-2.1** or GPL-2.0-or-later, your choice — taken here under AFL-2.1 |
 
-AFL-2.1 is an MIT-shaped permissive licence with an attribution requirement,
+AFL-2.1 is an MIT-shaped permissive license with an attribution requirement,
 which this table satisfies, and a patent-termination clause. It is not
 GPL-compatible, which does not matter to an MIT project and would matter to a
 GPL downstream. The alternative was ATK, which is LGPL and is being retired in
-favour of speaking AT-SPI directly — so the licence question and the
+favour of speaking AT-SPI directly — so the license question and the
 maintenance question pointed the same way.
 
 ## The one vendored source file
 
 `core/render/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
-`third_party/nuklear/demo/sdl3_renderer/` and covered by Nuklear's licence
+`external/nuklear/demo/sdl3_renderer/` and covered by Nuklear's license
 above. Every deviation from upstream is marked `REAKTOR`: the atlas is baked
 and uploaded 8-bit indexed rather than RGBA32; untextured geometry samples a
 1×1 white texture of its own; vertices are put on the pixel grid; and
@@ -57,17 +57,17 @@ re-vendored and the hunks re-applied.
 
 ## Fonts
 
-Fonts are the one exception to the submodule rule, and the reason is a licence.
+Fonts are the one exception to the submodule rule, and the reason is a license.
 The UI face used to be Karla, taken from inside the Nuklear submodule — which
-ships that `.ttf` with no licence anywhere near it, so its terms could only be
-read off a different project. A dependency whose licence has to be inferred is
+ships that `.ttf` with no license anywhere near it, so its terms could only be
+read off a different project. A dependency whose license has to be inferred is
 not one to build a distributable on.
 
-| Font | Role | Licence | Terms |
+| Font | Role | License | Terms |
 | --- | --- | --- | --- |
 | **Aileron** | The UI face — Regular at five sizes, Bold for the title | CC0 1.0 | `assets/fonts/Aileron-Notice.txt` |
 
-Aileron is by Sora Sagano of DOT COLON. Its download ships no licence file
+Aileron is by Sora Sagano of DOT COLON. Its download ships no license file
 either, so the terms were traced to their source: the font's own `name` table
 carries `copyright: No Rights Reserved.` beside the designer and foundry, and
 dotcolon.net/font/aileron says the same next to a CC0 link. Metadata inside the
@@ -81,8 +81,8 @@ the format costs nothing. Switching face is one line — `FONT_FILE` in
 
 ## The mark
 
-`assets/icons/` is original work under this project's MIT licence: the icon in its
-one ink, as SVG, PNG and `.ico`. Its colours are USWDS system tokens, which are
+`assets/icons/` is original work under this project's MIT license: the icon in its
+one ink, as SVG, PNG and `.ico`. Its colors are USWDS system tokens, which are
 public domain as a U.S. Government work; the shapes are not taken from
 anywhere.
 

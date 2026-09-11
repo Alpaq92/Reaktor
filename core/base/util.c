@@ -39,24 +39,16 @@ static int copy_out(char *out, size_t cap, const char *src)
 
 int reaktor_root(char *out, size_t cap)
 {
-    const char *env;
 
-    /* Resolved once. Finding it means a getenv, a query for the executable's
-     * own path, then an fopen probe for .reaktor-root at every level up the
-     * tree - and the answer cannot change while the process runs. Every asset
-     * the app opens goes through here, and a theme switch empties the icon
-     * cache and re-resolves for each icon on screen. */
+    /* Resolved once. Finding it means asking for the executable's own path
+     * and then probing for .reaktor-root at every level up the tree - and the
+     * answer cannot change while the process runs. Every asset the app opens
+     * comes through here, and a theme switch empties the icon cache and would
+     * otherwise re-resolve for each icon on screen. */
     static char cached[REAKTOR_PATH_CAP];
     static int  resolved;
 
     if (resolved) return copy_out(out, cap, cached);
-
-    env = getenv("REAKTOR_ROOT");
-    if (env && *env) {
-        if (!copy_out(cached, sizeof(cached), env)) return 0;
-        resolved = 1;
-        return copy_out(out, cap, cached);
-    }
 
 #if defined(__EMSCRIPTEN__)
     resolved = 1;

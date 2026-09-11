@@ -33,13 +33,13 @@ head_and_note(App *app, struct nk_context *ctx, const char *title,
     (void)app;
     REAKTOR_COLUMN(.name = title,                    .gap = ctx->style.window.spacing.y) {
         reaktor_label(&(reaktor_label_spec){
-            .text = title, .style = ".section-title",
-            .colour = "--text-bright",
-            .box = { .h = 30.0f, .flags = REAKTOR_LAY_FILL_X } });
+            .text = title, .style = "h4",
+            .color = "--text-bright",
+            .box = { .flags = REAKTOR_LAY_FILL_X } });
         if (note)
             reaktor_label(&(reaktor_label_spec){
                 .text = note, .style = ".section-note",
-                .colour = "--text-muted", .wrap = 1,
+                .color = "--text-muted", .wrap = 1,
                 .box = { .flags = REAKTOR_LAY_FILL_X } });
     }
     nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -74,7 +74,7 @@ compact_pop(struct nk_context *ctx)
 static void
 api(App *app, struct nk_context *ctx, const char *text)
 {
-    nk_style_push_font(ctx, reaktor_font(app, 12, 0));
+    nk_style_push_font(ctx, reaktor_style_font(app, ".api-line", 12, 0));
     nk_layout_row_dynamic(ctx, 18.0f, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, text, 0);
     nk_label_colored(ctx, text, NK_TEXT_LEFT,
@@ -136,7 +136,7 @@ static void
 draw_tooltip(App *app, struct nk_context *ctx, const char *const *lines,
              int n, float bar)
 {
-    const struct nk_user_font *f = reaktor_font(app, 13, 0);
+    const struct nk_user_font *f = reaktor_style_font(app, ".tooltip", 13, 0);
     struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
     struct nk_color fill = reaktor_token("--background-hover",
                                          nk_rgb(69, 69, 69));
@@ -284,7 +284,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
 
     section(app, ctx, "Buttons",
             "The fill, border, radius, padding and font all come from "
-            "tiny.css's `button` rule; the hover colour is its "
+            "tiny.css's `button` rule; the hover color is its "
             "--button-hover. The accent is --links, which is the only thing "
             "in a classless stylesheet that means \"this is the one to "
             "press\".");
@@ -310,8 +310,8 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
 
     section(app, ctx, "Icons",
             "Every icon is an Ionicon, read out of the submodule and "
-            "rasterised at the size it is drawn - twice over, for the "
-            "downscale. The stroke colour is substituted into the file "
+            "rasterized at the size it is drawn - twice over, for the "
+            "downscale. The stroke color is substituted into the file "
             "before it is parsed, which is how an icon follows the "
             "stylesheet: CSS cannot reach inside an SVG. The label is the "
             "icon's name to a reader as well as to the eye.");
@@ -355,11 +355,11 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
         }
     }
 
-    section(app, ctx, "Colour, image, repeat and disabled",
+    section(app, ctx, "Color, image, repeat and disabled",
             "nk_button_color paints a swatch and nothing else. A repeater "
             "fires for as long as it is held rather than once on release. "
             "nk_widget_disable_begin swallows the click and multiplies "
-            "every colour by a factor - which reads as \"greyed out\" on a "
+            "every color by a factor - which reads as \"greyed out\" on a "
             "dark palette and, since multiplying can only darken, as a "
             "*darker* button on a light one. Worth knowing before "
             "relying on it to mean unavailable.");
@@ -395,7 +395,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "%d presses, %d repeat ticks",
                  s->presses, s->repeats);
-    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+    nk_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
     nk_label_colored(ctx, line, NK_TEXT_LEFT,
                      reaktor_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
@@ -451,7 +451,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
 
     nk_layout_row_dynamic(ctx, ROW_SMALL, 1);
     SDL_snprintf(line, sizeof(line), "flags = 0x%02x", s->flags);
-    nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+    nk_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
     nk_label_colored(ctx, line, NK_TEXT_LEFT,
                      reaktor_token("--text-muted", ctx->style.text.color));
     nk_style_pop_font(ctx);
@@ -488,7 +488,7 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
 
                 SDL_snprintf(lab, sizeof(lab), "Tile %d", i + 1);
                 reaktor_select(&(reaktor_select_spec){
-                    .label = lab, .on = &s->sel_tile[i], .centred = 1,
+                    .label = lab, .on = &s->sel_tile[i], .centered = 1,
                     .box = { .w = 140.0f, .flags = REAKTOR_LAY_FILL_Y } });
             }
         }
@@ -499,11 +499,11 @@ page_buttons(App *app, struct nk_context *ctx, showcase_state *s)
                     .gap = ctx->style.window.spacing.x) {
             reaktor_select(&(reaktor_select_spec){
                 .label = "With a symbol", .on = &s->sel_row,
-                .disc = 1, .centred = 1,
+                .disc = 1, .centered = 1,
                 .box = { .w = 190.0f, .flags = REAKTOR_LAY_FILL_Y } });
             reaktor_select(&(reaktor_select_spec){
                 .label = "With an image", .on = &s->toggle,
-                .icon = "star-outline", .centred = 1,
+                .icon = "star-outline", .centered = 1,
                 .box = { .w = 190.0f, .flags = REAKTOR_LAY_FILL_Y } });
         }
     }
@@ -521,10 +521,10 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     section(app, ctx, "Text",
             "One rule - tiny.css's `input` - supplies the fill, the radius, "
             "the padding and the border - 2px of transparent until "
-            "`input:focus` colours it. Only the focused field takes that "
-            "colour; the rest get the neutral edge, because the rule assumes "
+            "`input:focus` colors it. Only the focused field takes that "
+            "color; the rest get the neutral edge, because the rule assumes "
             "a field sits on the page and on the login card the field and the "
-            "card are the same colour. A filter rejects a keystroke before it "
+            "card are the same color. A filter rejects a keystroke before it "
             "reaches the buffer, so the field cannot hold a value it would "
             "have to validate later.");
     api(app, ctx, "nk_edit_string with nk_filter_default / _decimal / _hex");
@@ -629,7 +629,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     }
 
     section(app, ctx, "Properties",
-            "A property is a labelled number that can be dragged, clicked "
+            "A property is a labeled number that can be dragged, clicked "
             "through its two steppers, or typed into - the three ways a "
             "person expects to change a number, in one widget.");
     api(app, ctx, "nk_property_int  /  nk_property_float  /  "
@@ -660,7 +660,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
             "nk_combo is the whole widget in one call, for the common case of "
             "picking a string out of an array. The begin/end form opens an "
             "empty popup instead and lets any layout go inside it, which is "
-            "how a combo grows a colour picker or a set of sliders.");
+            "how a combo grows a color picker or a set of sliders.");
     api(app, ctx, "nk_combo  /  nk_combo_begin_label  /  "
                   "nk_combo_begin_symbol_label");
 
@@ -721,7 +721,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
     }
     popup_style_pop(ctx);
 
-    section(app, ctx, "Colour picker",
+    section(app, ctx, "Color picker",
             "The one widget Nuklear draws as a continuous field rather than "
             "from the style: a saturation-value square with a hue bar. Its "
             "value is an nk_colorf, which is what the swatch and the combo "
@@ -736,13 +736,13 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
         REAKTOR_ROW(.h = 132.0f,
                     .gap = ctx->style.window.spacing.x) {
             reaktor_colour_pick(&(reaktor_colour_spec){
-                .name = "Colour picker", .value = &s->tint,
+                .name = "Color picker", .value = &s->tint,
                 .box = { .w = 210.0f, .h = 132.0f } });
 
             REAKTOR_COLUMN(.w = 210.0f,
                            .gap = ctx->style.window.spacing.y) {
                 reaktor_swatch(&(reaktor_swatch_spec){
-                    .name = "Chosen colour", .fill = c,
+                    .name = "Chosen color", .fill = c,
                     .box = { .h = 44.0f, .flags = REAKTOR_LAY_FILL_X } });
                 reaktor_label(&(reaktor_label_spec){
                     .text = line, .align = REAKTOR_CENTRE,
@@ -762,7 +762,8 @@ grid_row(App *app, struct nk_context *ctx, const char *const *cells, int n,
 {
     int i;
 
-    nk_style_push_font(ctx, reaktor_font(app, 13, header));
+    nk_style_push_font(ctx, reaktor_style_font(app, header ? "th" : "td",
+                                               13, header));
     nk_style_push_color(ctx, &ctx->style.text.color, fg);
     nk_style_push_vec2(ctx, &ctx->style.text.padding, nk_vec2(pad, 0.0f));
 
@@ -788,7 +789,7 @@ grid_row(App *app, struct nk_context *ctx, const char *const *cells, int n,
 static void
 section_grid(App *app, struct nk_context *ctx)
 {
-    static const char *const head[3] = { "Submodule", "Licence", "What it does" };
+    static const char *const head[3] = { "Submodule", "License", "What it does" };
     static const char *const rows[7][3] = {
         { "SDL3",      "Zlib",   "window, input, renderer, main loop" },
         { "Nuklear",   "MIT/PD", "the widgets and their layout" },
@@ -807,7 +808,7 @@ section_grid(App *app, struct nk_context *ctx)
 
     section(app, ctx, "Tables",
             "The only widget on these pages that Nuklear does not have - and "
-            "the only one whose every colour comes from a rule rather than a "
+            "the only one whose every color comes from a rule rather than a "
             "token, because a stylesheet does have tables. thead, tbody tr, "
             "its :nth-child(2n) sibling and the padding on th, td are all "
             "read straight out of tiny.css.");
@@ -875,7 +876,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
                         .gap = ctx->style.window.spacing.x) {
                 for (i = 0; i < 3; i++)
                     reaktor_label(&(reaktor_label_spec){
-                        .text = tokens[i], .colour = tokens[i],
+                        .text = tokens[i], .color = tokens[i],
                         .align = (unsigned char)i,
                         .box = { .flags = REAKTOR_LAY_FILL_X |
                                           REAKTOR_LAY_FILL_Y } });
@@ -891,12 +892,12 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
 
     section(app, ctx, "Images",
             "Every icon here is an SVG read out of the Ionicons submodule and "
-            "rasterised at the size it is drawn, twice over for the "
-            "downscale. The stroke colour is substituted into the file before "
+            "rasterized at the size it is drawn, twice over for the "
+            "downscale. The stroke color is substituted into the file before "
             "it is parsed, which is how an icon follows the stylesheet - CSS "
             "cannot reach inside an SVG. The calendar is drawn in --links "
-            "and the rest in the text colour, from the same artwork - the "
-            "colour is the caller's, not the file's.");
+            "and the rest in the text color, from the same artwork - the "
+            "color is the caller's, not the file's.");
     api(app, ctx, "nk_image");
 
     {
@@ -949,7 +950,7 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
     section(app, ctx, "Progress and rules",
             "A fixed progress bar reports; nk_rule_horizontal is the "
             "separator every page on this tab is divided by, and takes its "
-            "colour as an argument rather than from the style.");
+            "color as an argument rather than from the style.");
     api(app, ctx, "nk_progress with NK_FIXED  /  nk_rule_horizontal");
 
     {
@@ -1168,7 +1169,7 @@ page_layout(App *app, struct nk_context *ctx, showcase_state *s)
             "A free container lays nothing out: each child goes where its own "
             "margins put it, takes no notice of its siblings, and may overlap "
             "them. It is the escape hatch for what a row cannot say - the "
-            "login card centred in the window on the first tab is one.");
+            "login card centered in the window on the first tab is one.");
     api(app, ctx, "REAKTOR_FREE  /  .ml, .mt");
 
     {
@@ -1313,20 +1314,20 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
             "has a draggable progress bar in it. An item's glyph and the "
             "Edit menu's checkbox both sit at the right edge: the checkbox "
             "through nk_checkbox_label_align, the glyph painted there, "
-            "because nk_menu_item_symbol_label centres its label whatever "
+            "because nk_menu_item_symbol_label centers its label whatever "
             "alignment it is given.");
     api(app, ctx, "nk_menubar_begin  /  nk_menu_begin_label  /  "
                   "nk_menu_item_label  /  nk_checkbox_label_align");
 
     {
-        nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+        nk_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
         REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
             SDL_snprintf(line, sizeof(line), "last chosen: %s", s->menu_pick);
             reaktor_label(&(reaktor_label_spec){
                 .text   = line,
                 .name   = "Last chosen",
                 .value  = s->menu_pick,
-                .colour = "--text-muted",
+                .color = "--text-muted",
                 .box    = { .h = ROW_SMALL,
                             .flags = REAKTOR_LAY_FILL_X } });
 
@@ -1335,7 +1336,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                 .text   = line,
                 .name   = "File picker",
                 .value  = s->file_pick,
-                .colour = "--text-muted",
+                .color = "--text-muted",
                 .box    = { .h = ROW_SMALL,
                             .flags = REAKTOR_LAY_FILL_X } });
         }
@@ -1466,7 +1467,8 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                            NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR, at)) {
             reaktor_menu_style_push(ctx);
             nk_layout_row_dynamic(ctx, 22.0f, 1);
-            nk_style_push_font(ctx, reaktor_font(app, 16, 1));
+            nk_style_push_font(ctx, reaktor_style_font(app, ".popup-title",
+                                                       16, 1));
             nk_label_colored(ctx, "Close without saving?", NK_TEXT_LEFT,
                              reaktor_token("--text-bright",
                                            ctx->style.text.color));
@@ -1476,7 +1478,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
             nk_spacer(ctx);
 
             nk_layout_row_dynamic(ctx, 44.0f, 1);
-            nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+            nk_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
             nk_label_colored_wrap(ctx,
                 "Everything behind this is inert until the popup is closed - "
                 "which is what makes it modal, with no modality machinery.",
@@ -1580,7 +1582,7 @@ static void
 page_animation(App *app, struct nk_context *ctx, showcase_state *s)
 {
     static const float stop[3] = { 0.0f, 0.5f, 1.0f };
-    static const char *const stop_name[3] = { "Left", "Centre", "Right" };
+    static const char *const stop_name[3] = { "Left", "Center", "Right" };
     unsigned char curve = (unsigned char)s->anim_curve;
     float ms = (float)s->anim_ms;
     int   i;
@@ -1608,7 +1610,7 @@ page_animation(App *app, struct nk_context *ctx, showcase_state *s)
     REAKTOR_COLUMN(.gap = 6.0f) {
         REAKTOR_ROW(.h = 44.0f, .gap = 12.0f, .flags = REAKTOR_LAY_FILL_X) {
             reaktor_label(&(reaktor_label_spec){
-                .text = "instant", .colour = "--text-muted",
+                .text = "instant", .color = "--text-muted",
                 .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
             REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
                 struct nk_rect r;
@@ -1619,7 +1621,7 @@ page_animation(App *app, struct nk_context *ctx, showcase_state *s)
 
         REAKTOR_ROW(.h = 44.0f, .gap = 12.0f, .flags = REAKTOR_LAY_FILL_X) {
             reaktor_label(&(reaktor_label_spec){
-                .text = "eased", .colour = "--text-bright",
+                .text = "eased", .color = "--text-bright",
                 .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
             REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
                 unsigned id = reaktor_box_id();
@@ -1706,17 +1708,32 @@ static void
 rule_says(const char *selector)
 {
     reaktor_style st;
-    char line[140];
+    char line[320];
 
     reaktor_style_get(selector, &st);
     if (st.matched)
         SDL_snprintf(line, sizeof(line),
-                     "%s is #%02x%02x%02x on #%02x%02x%02x, %.0fpx corners, "
-                     "%.0fpx border, %.1f/%.1f padding, %dpx type",
+                     "%s is #%02x%02x%02x on #%02x%02x%02x, corners %.0f, "
+                     "border %.0f, padding %.1f %.1f %.1f %.1f, type %dpx, "
+                     "box %.0fx%.0f min %.0fx%.0f max %.0fx%.0f, "
+                     "margin %.1f %.1f %.1f %.1f, "
+                     "line %.1f",
                      selector, st.fg[0], st.fg[1], st.fg[2],
                      st.bg[0], st.bg[1], st.bg[2],
                      (double)st.rounding, (double)st.border,
-                     (double)st.pad_x, (double)st.pad_y, st.font_px);
+                     (double)st.pad[REAKTOR_SIDE_TOP],
+                     (double)st.pad[REAKTOR_SIDE_RIGHT],
+                     (double)st.pad[REAKTOR_SIDE_BOTTOM],
+                     (double)st.pad[REAKTOR_SIDE_LEFT],
+                     st.font_px,
+                     (double)st.width, (double)st.height,
+                     (double)st.min_width, (double)st.min_height,
+                     (double)st.max_width, (double)st.max_height,
+                     (double)st.margin[REAKTOR_SIDE_TOP],
+                     (double)st.margin[REAKTOR_SIDE_RIGHT],
+                     (double)st.margin[REAKTOR_SIDE_BOTTOM],
+                     (double)st.margin[REAKTOR_SIDE_LEFT],
+                     (double)st.line_height);
     else
         SDL_snprintf(line, sizeof(line), "%s - no sheet has a rule for it",
                      selector);
@@ -1724,7 +1741,7 @@ rule_says(const char *selector)
     reaktor_label(&(reaktor_label_spec){
         .text = line, .name = selector,
         .value = st.matched ? line + strlen(selector) + 4 : "no rule",
-        .colour = st.matched ? "--text-main" : "--text-muted",
+        .color = st.matched ? "--text-main" : "--text-muted",
         .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X } });
 }
 
@@ -1739,7 +1756,7 @@ page_styling(App *app, struct nk_context *ctx, showcase_state *s)
             "in the window follows - the buttons, the fields, the borders, "
             "the corners. That is the only claim this library makes about "
             "styling, and it is either true in front of you or it is not.");
-    api(app, ctx, "third_party/simplecss  /  REAKTOR_CSS=<path>");
+    api(app, ctx, "external/simplecss");
 
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         if (reaktor_check(&(reaktor_check_spec){
@@ -1758,40 +1775,39 @@ page_styling(App *app, struct nk_context *ctx, showcase_state *s)
     api(app, ctx, "the same widgets as everywhere else");
 
     REAKTOR_COLUMN(.gap = 10.0f) {
-        REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+        /* No heights anywhere below. Every widget here takes the size its
+         * rule asks for, and the rows take the height of what is in them -
+         * which is the whole of what this page is claiming. Give any of them
+         * a .h and the sheet stops being able to change it. */
+        REAKTOR_ROW(.gap = ctx->style.window.spacing.x,
                     .flags = REAKTOR_LAY_FILL_X) {
             reaktor_button(&(reaktor_button_spec){
                 .label = "A button",
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL_X } });
             reaktor_button(&(reaktor_button_spec){
                 .label = "An accented one", .accent = 1,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL_X } });
             reaktor_button(&(reaktor_button_spec){
                 .label = "A disabled one", .disabled = 1,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL_X } });
         }
 
-        REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x,
+        REAKTOR_ROW(.gap = ctx->style.window.spacing.x,
                     .flags = REAKTOR_LAY_FILL_X) {
             reaktor_field(&(reaktor_field_spec){
                 .name = "Name", .hint = "a text field",
                 .buf = s->name, .len = &s->name_len, .cap = SC_TEXT_CAP,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL_X } });
             REAKTOR_COMBO(.label = "a combo box", .name = "Combo",
                           .body_h = 110.0f,
-                          .box = { .w = 260.0f,
-                                   .flags = REAKTOR_LAY_FILL_Y }) {
+                          .box = { .w = 260.0f }) {
                 nk_layout_row_dynamic(ctx, 26.0f, 1);
                 reaktor_combo_item("one", 1);
                 reaktor_combo_item("two", 0);
             }
         }
 
-        REAKTOR_ROW(.h = 30.0f, .gap = 20.0f, .flags = REAKTOR_LAY_FILL_X) {
+        REAKTOR_ROW(.gap = 20.0f, .flags = REAKTOR_LAY_FILL_X) {
             reaktor_slider(&(reaktor_slider_spec){
                 .name = "Slider", .value = &s->slider_f,
                 .lo = 0.0f, .hi = 1.0f, .step = 0.01f,
@@ -1800,7 +1816,7 @@ page_styling(App *app, struct nk_context *ctx, showcase_state *s)
             reaktor_progress(&(reaktor_progress_spec){
                 .name = "Progress", .value = &s->progress, .max = 100,
                 .modifiable = 1,
-                .box = { .w = 300.0f, .h = 20.0f,
+                .box = { .w = 300.0f,
                          .flags = REAKTOR_LAY_CENTER_Y } });
         }
     }
@@ -1816,6 +1832,7 @@ page_styling(App *app, struct nk_context *ctx, showcase_state *s)
         rule_says("input");
         rule_says("select");
         rule_says("a");
+        rule_says("h4");
     }
 
     section(app, ctx, "Three sheets, read in order",
@@ -1833,10 +1850,10 @@ page_styling(App *app, struct nk_context *ctx, showcase_state *s)
             .text = "Two controls here have no rule in either sheet - a "
                     "slider and a progress bar are not things a document "
                     "has - so they borrow: the rail from input, the fill "
-                    "from a. Every sheet has a link colour, which is why "
+                    "from a. Every sheet has a link color, which is why "
                     "that is read from the rule rather than from a --links "
                     "token some sheets will not have.",
-            .name = "Controls with no rule", .colour = "--text-muted",
+            .name = "Controls with no rule", .color = "--text-muted",
             .wrap = 1, .box = { .flags = REAKTOR_LAY_FILL_X } });
         reaktor_label(&(reaktor_label_spec){
             .text = "simple.css keeps its dark palette in "
@@ -1846,7 +1863,7 @@ page_styling(App *app, struct nk_context *ctx, showcase_state *s)
                     "is now unwrapped for whichever scheme is active. Width "
                     "queries and print are still dropped: a viewport query "
                     "means nothing to a window that is not a document.",
-            .name = "Media queries", .colour = "--text-muted", .wrap = 1,
+            .name = "Media queries", .color = "--text-muted", .wrap = 1,
             .box = { .flags = REAKTOR_LAY_FILL_X } });
     }
 
@@ -1866,11 +1883,11 @@ diag_row(App *app, struct nk_context *ctx, const char *name, const char *value)
                           REAKTOR_A11Y_VOLATILE, nk_rect(0, 0, 0, 0));
         if (reaktor_box_rect(&r)) reaktor_note_bounds(app, id, r);
 
-        nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+        nk_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
         reaktor_label(&(reaktor_label_spec){
             .text   = name,
             .name   = name,
-            .colour = "--text-muted",
+            .color = "--text-muted",
             .silent = 1,
             .box    = { .w = 190.0f, .flags = REAKTOR_LAY_FILL_Y } });
         nk_style_pop_font(ctx);
@@ -1898,13 +1915,13 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
     reaktor_diagnostics(app, &d);
 
     section(app, ctx, "Rendering",
-            "Which backend SDL settled on, and what the app asked for. "
-            "REAKTOR_RENDERER picks between auto, gpu and software; "
-            "REAKTOR_VSYNC and REAKTOR_AA turn the other two off. "
-            "Anti-aliasing reads what the frame is drawn with: the software "
-            "rasteriser has no partial coverage, so it feathers strokes, "
-            "which grades a curve, and not fills, which would only draw a "
-            "hairline. REAKTOR_SW_NOAA=1 drops both.");
+            "Which backend SDL settled on. It is the software rasterizer "
+            "on every platform: this draws nothing at rest, so a GPU buys it "
+            "nothing it can measure, and one rasterizer everywhere is one set "
+            "of pixels to reason about. Anti-aliasing reads what the frame is "
+            "drawn with - the software rasterizer has no partial coverage, so "
+            "it feathers strokes, which grades a curve, and not fills, which "
+            "would only draw a hairline.");
 
     DIAG_ROWS(ctx) {
         diag_row(app, ctx, "backend", d.renderer);
@@ -1982,7 +1999,7 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
             "Where the process's memory has gone. Nuklear's command buffer "
             "grows to fit the busiest frame it has been asked to draw and is "
             "never handed back, so it records the high-water mark rather than "
-            "the current page; the icon cache holds every SVG rasterised so "
+            "the current page; the icon cache holds every SVG rasterized so "
             "far, at twice the size it is drawn. The font atlas holds every "
             "baked size in one texture, normally 8-bit indexed - a glyph is "
             "coverage, so a byte a pixel and a palette say what four bytes "
@@ -2080,8 +2097,3 @@ reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
     nk_style_pop_vec2(ctx);
 }
 
-void
-sample_args(App *app, int argc, char **argv)
-{
-    (void)app; (void)argc; (void)argv;
-}

@@ -212,7 +212,8 @@ static int num_start_ok(const char *s, size_t i)
     return !(isalnum((unsigned char)c) || c == '#' || c == '_');
 }
 
-static void convert_units(const char *s, size_t len, float root_px, buf *out)
+static void convert_units(const char *s, size_t len, float rem_px, float em_px,
+                          buf *out)
 {
     size_t i = 0;
 
@@ -245,7 +246,8 @@ static void convert_units(const char *s, size_t len, float root_px, buf *out)
         if (j - ns >= sizeof(num)) { buf_add(out, s + ns, j - ns); i = j; continue; }
         memcpy(num, s + ns, j - ns);
         num[j - ns] = 0;
-        snprintf(px, sizeof(px), "%gpx", atof(num) * root_px);
+        snprintf(px, sizeof(px), "%gpx",
+                 atof(num) * (unit_len == 3 ? rem_px : em_px));
         buf_str(out, px);
         i = j + unit_len;
     }
@@ -274,12 +276,65 @@ static void trim(const char *s, size_t *start, size_t *end)
     while (*end > *start && isspace((unsigned char)s[*end - 1])) (*end)--;
 }
 
+/* [name="value"] -> .name-value, in place, for the one shape that carries
+ * real styling in a document sheet. Anything else in brackets is still
+ * unrepresentable and the rule still goes.
+ *
+ * Writes into `out` and answers its length, or 0 if the selector cannot be
+ * rewritten. The result is never longer than the input: [x="y"] is six
+ * characters of punctuation and .x-y is two. */
+static size_t selector_rewrite(const char *s, size_t len, char *out,
+                               size_t cap)
+{
+    size_t i = 0, n = 0;
+
+    while (i < len) {
+        if (s[i] != '[') {
+            if (n + 1 >= cap) return 0;
+            out[n++] = s[i++];
+            continue;
+        }
+        {
+            size_t j = i + 1, eq, ve, vs;
+
+            while (j < len && s[j] != ']' && s[j] != '=') j++;
+            if (j >= len || s[j] != '=') return 0;   /* [attr] alone */
+            /* Only a plain equals. ^= $= *= |= ~= select on part of the
+             * value, which a class cannot express - folding the operator
+             * into the name produced a rule registered under something
+             * nothing could ever match, which is worse than dropping it. */
+            if (j > i + 1 && strchr("^$*|~", s[j - 1])) return 0;
+            eq = j;
+            vs = eq + 1;
+            if (vs < len && (s[vs] == '"' || s[vs] == '\'')) vs++;
+            ve = vs;
+            while (ve < len && s[ve] != ']' && s[ve] != '"' && s[ve] != '\'')
+                ve++;
+            if (ve >= len) return 0;
+            j = ve;
+            while (j < len && s[j] != ']') j++;
+            if (j >= len) return 0;
+
+            if (n + 2 + (eq - i - 1) + (ve - vs) >= cap) return 0;
+            out[n++] = '.';
+            memcpy(out + n, s + i + 1, eq - i - 1);
+            n += eq - i - 1;
+            out[n++] = '-';
+            memcpy(out + n, s + vs, ve - vs);
+            n += ve - vs;
+            i = j + 1;
+        }
+    }
+    out[n] = 0;
+    return n;
+}
+
 static int selector_unsupported(const char *s, size_t len)
 {
     size_t i;
 
     for (i = 0; i < len; i++) {
-        if (s[i] == '[' || s[i] == '*' || s[i] == '>' || s[i] == '+' || s[i] == '~')
+        if (s[i] == '*' || s[i] == '>' || s[i] == '+' || s[i] == '~')
             return 1;
         if (s[i] == ':' && i + 1 < len && s[i + 1] == ':')
             return 1;
@@ -348,28 +403,98 @@ static void collect_one(void *c, const char *p, size_t plen,
         vars_set(ctx->m, p, plen, v, vlen);
 }
 
-typedef struct root_ctx { float px; } root_ctx;
+/* px is the rem base - html's font-size, 16 unless the sheet says otherwise.
+ * em is what an element inherits, which is body's if it sets one. */
+typedef struct root_ctx { float px, em; } root_ctx;
+
+/* A length in px, resolving a unit against the rem base. Used for the two
+ * font-size declarations that establish the bases themselves, so it cannot
+ * call convert_units without going in a circle. */
+static float base_length(const char *v, size_t vlen, float rem_px)
+{
+    char   b[64];
+    size_t i = 0;
+    double n;
+
+    if (vlen == 0 || vlen >= sizeof(b)) return 0.0f;
+    for (i = 0; i < vlen; i++)
+        b[i] = (char)tolower((unsigned char)v[i]);
+    b[vlen] = 0;
+
+    /* The number, and then exactly where it ended. atof would stop at the
+     * first letter and never say so, which is how `1.15rem !important` came
+     * back as 1.15 and was believed. */
+    i = 0;
+    if (b[i] == '-' || b[i] == '+') i++;
+    while (i < vlen && (isdigit((unsigned char)b[i]) || b[i] == '.')) i++;
+    if (i == 0) return 0.0f;
+    n = atof(b);
+
+    /* Only the units this can convert. A sheet may legitimately say pt or
+     * ch or vw; answering 0 leaves the caller on its default, which is a
+     * better wrong answer than treating the number as pixels. */
+    if (strcmp(b + i, "%") == 0)   return (float)(n * rem_px / 100.0);
+    if (strcmp(b + i, "rem") == 0) return (float)(n * rem_px);
+    if (strcmp(b + i, "em") == 0)  return (float)(n * rem_px);
+    if (strcmp(b + i, "px") == 0)  return (float)n;
+    if (b[i] == 0)                 return (float)n;
+    return 0.0f;
+}
+
+/* Whether a selector list names this element on its own - `body` or the
+ * `html, body` a sheet is just as likely to write. An exact four-byte
+ * compare matched only the first spelling and silently missed the second. */
+static int selector_names(const char *src, size_t s, size_t e,
+                          const char *want)
+{
+    size_t wl = strlen(want);
+
+    while (s < e) {
+        size_t ps = s, pe;
+
+        while (s < e && src[s] != ',') s++;
+        pe = s;
+        if (s < e) s++;
+        trim(src, &ps, &pe);
+        if (pe - ps == wl && strncmp(src + ps, want, wl) == 0) return 1;
+    }
+    return 0;
+}
 
 static void root_one(void *c, const char *p, size_t plen,
                      const char *v, size_t vlen)
 {
     root_ctx *ctx = (root_ctx *)c;
-    char buf[64];
+    float n;
 
     if (plen != 9 || strncmp(p, "font-size", 9) != 0) return;
-    if (vlen >= sizeof(buf)) return;
-    memcpy(buf, v, vlen);
-    buf[vlen] = 0;
-    if (vlen && buf[vlen - 1] == '%') ctx->px = (float)(atof(buf) * 16.0 / 100.0);
-    else                              ctx->px = (float)atof(buf);
-    if (ctx->px <= 0.0f) ctx->px = 16.0f;
+    n = base_length(v, vlen, 16.0f);
+    /* html is the rem base. It is the em base only until a body rule says
+     * otherwise - setting both here meant an html rule appearing later in
+     * the concatenated sheets discarded the body size. */
+    if (n > 0.0f) {
+        if (ctx->em == ctx->px) ctx->em = n;
+        ctx->px = n;
+    }
+}
+
+/* body's font-size, which is the one nearly every element inherits. */
+static void body_one(void *c, const char *p, size_t plen,
+                     const char *v, size_t vlen)
+{
+    root_ctx *ctx = (root_ctx *)c;
+    float n;
+
+    if (plen != 9 || strncmp(p, "font-size", 9) != 0) return;
+    n = base_length(v, vlen, ctx->px);
+    if (n > 0.0f) ctx->em = n;
 }
 
 typedef struct emit_ctx {
     const reaktor_cssvars *m;
     buf                 *out;
     int                  wrote;
-    float                root_px;
+    float                rem_px, em_px;
 } emit_ctx;
 
 static void emit_one(void *c, const char *p, size_t plen,
@@ -387,10 +512,12 @@ static void emit_one(void *c, const char *p, size_t plen,
     if (plen == 9 && strncmp(p, "font-size", 9) == 0 &&
         tmp.len > 1 && tmp.p[tmp.len - 1] == '%') {
         char px[64];
-        snprintf(px, sizeof(px), "%gpx", atof(tmp.p) * 16.0 / 100.0);
+        snprintf(px, sizeof(px), "%gpx",
+                 atof(tmp.p) * (double)ctx->em_px / 100.0);
         buf_str(&conv, px);
     } else {
-        convert_units(tmp.p ? tmp.p : "", tmp.len, ctx->root_px, &conv);
+        convert_units(tmp.p ? tmp.p : "", tmp.len,
+                      ctx->rem_px, ctx->em_px, &conv);
     }
 
     buf_add(ctx->out, p, plen);
@@ -463,6 +590,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
     root_ctx root;
 
     root.px = 16.0f;
+    root.em = 16.0f;
 
     if (!m) { free(src); return NULL; }
     strip_comments(src);
@@ -495,8 +623,10 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
             ctx.m = m;
             each_decl(src, body_s, body_e, collect_one, &ctx);
         }
-        if (sel_e - sel_s == 4 && strncmp(src + sel_s, "html", 4) == 0)
+        if (selector_names(src, sel_s, sel_e, "html"))
             each_decl(src, body_s, body_e, root_one, &root);
+        if (selector_names(src, sel_s, sel_e, "body"))
+            each_decl(src, body_s, body_e, body_one, &root);
     }
 
     for (pass = 0; pass < 4; pass++) {
@@ -560,8 +690,18 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
                 if (part < sel_e) part++;
                 trim(src, &ps, &pe);
                 if (selector_unsupported(src + ps, pe - ps)) continue;
-                if (n_emitted) buf_str(&sel, ", ");
-                buf_add(&sel, src + ps, pe - ps);
+                if (memchr(src + ps, '[', pe - ps)) {
+                    char   rw[256];
+                    size_t rn = selector_rewrite(src + ps, pe - ps,
+                                                 rw, sizeof(rw));
+
+                    if (!rn) continue;
+                    if (n_emitted) buf_str(&sel, ", ");
+                    buf_add(&sel, rw, rn);
+                } else {
+                    if (n_emitted) buf_str(&sel, ", ");
+                    buf_add(&sel, src + ps, pe - ps);
+                }
                 n_emitted++;
             }
             if (!n_emitted) { free(sel.p); continue; }
@@ -569,13 +709,15 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
             ctx.m = m;
             ctx.out = &out;
             ctx.wrote = 0;
-            ctx.root_px = root.px;
+            ctx.rem_px = root.px;
+            ctx.em_px  = root.em;
             {
                 buf body;
                 emit_ctx bctx;
                 memset(&body, 0, sizeof(body));
                 bctx.m = m; bctx.out = &body; bctx.wrote = 0;
-                bctx.root_px = root.px;
+                bctx.rem_px = root.px;
+                bctx.em_px  = root.em;
                 each_decl(src, body_s, body_e, emit_one, &bctx);
                 if (bctx.wrote) {
                     buf_add(&out, sel.p, sel.len);

@@ -31,11 +31,11 @@ reaktor_ionicon(App *app, const char *name, int px)
 
     if (px < ICON_HAIRLINE_BELOW)
         SDL_snprintf(src, sizeof(src),
-                     "third_party/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
+                     "external/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
                      name, app->icon_hex, (double)GLYPH_STROKE);
     else
         SDL_snprintf(src, sizeof(src),
-                     "third_party/ionicons/src/svg/%s.svg?stroke=%s",
+                     "external/ionicons/src/svg/%s.svg?stroke=%s",
                      name, app->icon_hex);
     return icon(app, src, px);
 }
@@ -48,7 +48,7 @@ reaktor_ionicon_exact(App *app, const char *name, int px,
 
     if (sw <= 0.0f) sw = px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f;
     SDL_snprintf(src, sizeof(src),
-                 "third_party/ionicons/src/svg/%s.svg?stroke=#%02x%02x%02x"
+                 "external/ionicons/src/svg/%s.svg?stroke=#%02x%02x%02x"
                  "&sw=%.2f", name, stroke.r, stroke.g, stroke.b, (double)sw);
     return icon_over(app, src, px, 1.0f);
 }
@@ -59,7 +59,7 @@ reaktor_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
     char src[192];
 
     SDL_snprintf(src, sizeof(src),
-                 "third_party/ionicons/src/svg/%s.svg?stroke=#%02x%02x%02x"
+                 "external/ionicons/src/svg/%s.svg?stroke=#%02x%02x%02x"
                  "&sw=%.2f", name, stroke.r, stroke.g, stroke.b,
                  px < ICON_HAIRLINE_BELOW ? (double)GLYPH_STROKE : 1.0);
     return icon(app, src, px);
@@ -224,7 +224,9 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
     nk_style_push_style_item(ctx, &ctx->style.slider.cursor_normal, clear);
     nk_style_push_style_item(ctx, &ctx->style.slider.cursor_hover, clear);
     nk_style_push_style_item(ctx, &ctx->style.slider.cursor_active, clear);
+    nk_style_push_float(ctx, &ctx->style.slider.border, 0.0f);
     nk_slider_float(ctx, lo, val, hi, step);
+    nk_style_pop_float(ctx);
     nk_style_pop_style_item(ctx);
     nk_style_pop_style_item(ctx);
     nk_style_pop_style_item(ctx);
@@ -301,7 +303,13 @@ reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max
     nk_style_push_style_item(ctx, &ctx->style.progress.cursor_normal, clear);
     nk_style_push_style_item(ctx, &ctx->style.progress.cursor_hover, clear);
     nk_style_push_style_item(ctx, &ctx->style.progress.cursor_active, clear);
+    /* Both borders: Nuklear strokes the widget and the cursor separately,
+     * and the cursor's is the one that showed as a hairline across the fill. */
+    nk_style_push_float(ctx, &ctx->style.progress.border, 0.0f);
+    nk_style_push_float(ctx, &ctx->style.progress.cursor_border, 0.0f);
     nk_progress(ctx, cur, max, modifiable);
+    nk_style_pop_float(ctx);
+    nk_style_pop_float(ctx);
     nk_style_pop_style_item(ctx);
     nk_style_pop_style_item(ctx);
     nk_style_pop_style_item(ctx);
@@ -475,6 +483,35 @@ reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
     return css_button(app, ctx, "button", label);
 }
 
+/* The same three buttons, painted from a rule the page named. A class the
+ * sheet does not define falls back to `button`, so a selector that is only
+ * meaningful to one stylesheet costs nothing under another. */
+int
+reaktor_button_label_as(App *app, struct nk_context *ctx, const char *sel,
+                        const char *label)
+{
+    return css_button(app, ctx, sel, label);
+}
+
+int
+reaktor_button_accent_as(App *app, struct nk_context *ctx, const char *sel,
+                         const char *label)
+{
+    return css_button_accent(app, ctx, sel, label, "--links");
+}
+
+int
+reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
+                       const char *ionicon, const char *label)
+{
+    char src[192];
+
+    SDL_snprintf(src, sizeof(src),
+                 "external/ionicons/src/svg/%s.svg?stroke=%s",
+                 ionicon, app->icon_hex);
+    return css_button_icon(app, ctx, sel, src, label);
+}
+
 int
 reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
 {
@@ -540,7 +577,7 @@ reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
     char src[192];
 
     SDL_snprintf(src, sizeof(src),
-                 "third_party/ionicons/src/svg/%s.svg?stroke=%s",
+                 "external/ionicons/src/svg/%s.svg?stroke=%s",
                  ionicon, app->icon_hex);
     return css_button_icon(app, ctx, "button", src, label);
 }
@@ -589,7 +626,7 @@ file_chosen(void *userdata, const char * const *filelist, int filter)
         SDL_snprintf(app->file_answer, sizeof(app->file_answer),
                      "unavailable: %s", SDL_GetError());
     else if (!filelist[0])
-        SDL_strlcpy(app->file_answer, "cancelled", sizeof(app->file_answer));
+        SDL_strlcpy(app->file_answer, "canceled", sizeof(app->file_answer));
     else
         SDL_strlcpy(app->file_answer, filelist[0], sizeof(app->file_answer));
 
@@ -630,7 +667,7 @@ a11y_dump_once(App *app)
     FILE *f;
 
     if (done) return;
-    path = SDL_getenv("REAKTOR_A11Y_DUMP");
+    path = app->dump_path;
     if (!path) { done = 1; return; }
     if (++frames < A11Y_DUMP_FRAME || !reaktor_frame_settled()) {
         SDL_Event e;
@@ -735,6 +772,23 @@ reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
     id = reaktor_a11y_add(&app->a11y, role, name, NULL, state, b);
     focus_saw(app, id, b);
     return id;
+}
+
+/* The face a rule asks for, falling back to a size named in the code.
+ *
+ * Every caller of this used to be a bare reaktor_font(app, 13, 0) - a number
+ * the stylesheet could not reach, on a page claiming the look lives in CSS. */
+const struct nk_user_font *
+reaktor_style_font(App *app, const char *selector, int px, int bold)
+{
+    reaktor_style st;
+
+    if (selector) {
+        reaktor_style_get(selector, &st);
+        if (st.matched && st.font_px > 0)
+            return reaktor_font(app, st.font_px, st.bold ? 1 : bold);
+    }
+    return reaktor_font(app, px, bold);
 }
 
 float

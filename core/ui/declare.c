@@ -262,17 +262,129 @@ row_height(float extra)
     return g_ctx->style.font->height + extra;
 }
 
+/* One rule laid over another, the narrower winning wherever it says
+ * anything. There is no "was declared" bit in reaktor_style - a property the
+ * rule omits reads as zero - so a zero is taken as silence. That is wrong for
+ * an authored `padding: 0`, and it is the best this can do until the resolver
+ * carries the declared set. */
 static void
-size_to_text(reaktor_box *box, const char *text, const char *selector,
-             float pad_x, float pad_y)
+overlay(reaktor_style *base, const reaktor_style *over)
 {
-    const struct nk_user_font *f = style_font(selector);
+    int i;
 
-    if (box->w <= 0.0f && text && !(box->flags & REAKTOR_LAY_FILL_X))
-        box->w = f->width(f->userdata, f->height, text, (int)strlen(text))
-               + 2.0f * pad_x;
-    if (box->h <= 0.0f && !(box->flags & REAKTOR_LAY_FILL_Y))
-        box->h = f->height + 2.0f * pad_y;
+    if (!over->matched) return;
+    base->matched = 1;
+    memcpy(base->bg, over->bg, 4);
+    memcpy(base->fg, over->fg, 4);
+    memcpy(base->border_col, over->border_col, 4);
+    for (i = 0; i < 4; i++) {
+        if (over->pad[i] > 0.0f)      base->pad[i]      = over->pad[i];
+        if (over->border_w[i] > 0.0f) base->border_w[i] = over->border_w[i];
+        if (over->radius[i] > 0.0f)   base->radius[i]   = over->radius[i];
+        if (over->margin[i] > 0.0f)   base->margin[i]   = over->margin[i];
+    }
+    if (over->width > 0.0f)       base->width       = over->width;
+    if (over->height > 0.0f)      base->height      = over->height;
+    if (over->min_width > 0.0f)   base->min_width   = over->min_width;
+    if (over->min_height > 0.0f)  base->min_height  = over->min_height;
+    if (over->max_width > 0.0f)   base->max_width   = over->max_width;
+    if (over->max_height > 0.0f)  base->max_height  = over->max_height;
+    if (over->line_height > 0.0f) base->line_height = over->line_height;
+    if (over->font_px > 0)        base->font_px     = over->font_px;
+}
+
+/* The size the sheet asks for, when the page has not asked for one itself.
+ *
+ * `element` is the rule a widget is by default: a button is `button` whether
+ * or not the page named a selector, which is what lets a stylesheet change
+ * how big things are rather than only what color they are. A selector the
+ * page did name is tried first and falls back to the element rule.
+ *
+ * pad_x/pad_y are Nuklear's own padding, used only when no rule matches. */
+/* The selector to style by: what the page named when some sheet defines it,
+ * and the element rule otherwise. A class only one stylesheet knows about
+ * therefore costs nothing under another. */
+static const char *
+rule_or(const char *selector, const char *element)
+{
+    reaktor_style st;
+
+    if (!selector) return element;
+    reaktor_style_get(selector, &st);
+    return st.matched ? selector : element;
+}
+
+static void
+box_from_style(reaktor_box *box, const char *text, const char *selector,
+               const char *element, float pad_x, float pad_y)
+{
+    const char                *sel = element ? element : selector;
+    const struct nk_user_font *f;
+    reaktor_style              st;
+    float                      extra_w, extra_h;
+
+    /* The element rule first, then the page's selector over the top - both,
+     * in that order, the way a sheet is meant to be read. Taking whichever
+     * matched first meant a narrow rule that sets one property threw away
+     * every metric the element rule supplied. */
+    memset(&st, 0, sizeof(st));
+    if (element) reaktor_style_get(element, &st);
+    if (selector) {
+        reaktor_style narrow;
+
+        reaktor_style_get(selector, &narrow);
+        if (narrow.matched) {
+            sel = selector;
+            overlay(&st, &narrow);
+        }
+    }
+    f = style_font(sel);
+
+    if (st.matched) {
+        extra_w = st.pad[REAKTOR_SIDE_LEFT] + st.pad[REAKTOR_SIDE_RIGHT]
+                + st.border_w[REAKTOR_SIDE_LEFT]
+                + st.border_w[REAKTOR_SIDE_RIGHT];
+        extra_h = st.pad[REAKTOR_SIDE_TOP] + st.pad[REAKTOR_SIDE_BOTTOM]
+                + st.border_w[REAKTOR_SIDE_TOP]
+                + st.border_w[REAKTOR_SIDE_BOTTOM];
+    } else {
+        extra_w = 2.0f * pad_x;
+        extra_h = 2.0f * pad_y;
+    }
+
+    if (box->w <= 0.0f && text && !(box->flags & REAKTOR_LAY_FILL_X)) {
+        float w = st.width > 0.0f
+                ? st.width
+                : f->width(f->userdata, f->height, text, (int)strlen(text))
+                  + extra_w;
+        if (w < st.min_width) w = st.min_width;
+        if (st.max_width > 0.0f && w > st.max_width) w = st.max_width;
+        box->w = w;
+    }
+    if (box->h <= 0.0f && !(box->flags & REAKTOR_LAY_FILL_Y)) {
+        /* The content box is the line box, not the font's own height: a
+         * sheet saying line-height 1.5 wants half a line of air around its
+         * text, and that is most of why a document's controls are roomier
+         * than a toolbar's. */
+        float line = st.line_height > 0.0f ? st.line_height : f->height;
+        float h    = st.height > 0.0f ? st.height : line + extra_h;
+        if (h < st.min_height) h = st.min_height;
+        if (st.max_height > 0.0f && h > st.max_height) h = st.max_height;
+        box->h = h;
+    }
+
+    /* And the space around it. A sheet written for a document says how far
+     * apart its controls sit with margins - simple.css puts 0.5rem under
+     * every button, input and select, and that vertical rhythm is most of
+     * what the sheet looks like. Reading the margins and then not applying
+     * them left the widgets the right size in the wrong places. A margin the
+     * page set itself wins, the same way its sizes do. */
+    if (st.matched) {
+        if (box->mt <= 0.0f) box->mt = st.margin[REAKTOR_SIDE_TOP];
+        if (box->mr <= 0.0f) box->mr = st.margin[REAKTOR_SIDE_RIGHT];
+        if (box->mb <= 0.0f) box->mb = st.margin[REAKTOR_SIDE_BOTTOM];
+        if (box->ml <= 0.0f) box->ml = st.margin[REAKTOR_SIDE_LEFT];
+    }
 }
 
 void
@@ -301,13 +413,15 @@ reaktor_button(const reaktor_button_spec *s)
 {
     reaktor_box    box;
     struct nk_rect r;
+    const char    *sel;
     unsigned       id = 0;
     int            hit, styled, fitted;
 
     if (!g_app || !s) return 0;
     box = s->box;
-    size_to_text(&box, s->label, s->style,
-                 g_ctx->style.button.padding.x, g_ctx->style.button.padding.y);
+    box_from_style(&box, s->label, s->style, "button",
+                   g_ctx->style.button.padding.x,
+                   g_ctx->style.button.padding.y);
 
     if (!place(REAKTOR_A11Y_BUTTON, s->name ? s->name : s->label, NULL,
                s->disabled ? REAKTOR_A11Y_DISABLED : 0u, s->keys, &box, &id))
@@ -315,6 +429,9 @@ reaktor_button(const reaktor_button_spec *s)
 
     r = nk_widget_bounds(g_ctx);
 
+    /* The rule this button is painted from: what the page named, if any sheet
+     * defines it, and `button` otherwise. */
+    sel = rule_or(s->style, "button");
     styled = push_style_font(s->style);
     if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_REPEATER);
     if (s->disabled) nk_widget_disable_begin(g_ctx);
@@ -323,9 +440,12 @@ reaktor_button(const reaktor_button_spec *s)
     if (s->icon && !s->label)
         hit = nk_button_image(g_ctx, reaktor_ionicon(g_app, s->icon,
                                                      (int)(r.h * 0.6f)));
-    else if (s->icon)   hit = reaktor_button_icon(g_app, g_ctx, s->icon, s->label);
-    else if (s->accent) hit = reaktor_button_accent(g_app, g_ctx, s->label);
-    else                hit = reaktor_button_label(g_app, g_ctx, s->label);
+    else if (s->icon)
+        hit = reaktor_button_icon_as(g_app, g_ctx, sel, s->icon, s->label);
+    else if (s->accent)
+        hit = reaktor_button_accent_as(g_app, g_ctx, sel, s->label);
+    else
+        hit = reaktor_button_label_as(g_app, g_ctx, sel, s->label);
     reaktor_note_mute(g_app, 0);
     reaktor_unfit_label(g_ctx, fitted);
     if (s->disabled) nk_widget_disable_end(g_ctx);
@@ -378,8 +498,8 @@ reaktor_label(const reaktor_label_spec *s)
                                                 : NK_TEXT_LEFT;
 
         styled = push_style_font(s->style);
-        if (s->colour) {
-            struct nk_color c = reaktor_token(s->colour,
+        if (s->color) {
+            struct nk_color c = reaktor_token(s->color,
                                               g_ctx->style.text.color);
             if (s->wrap) nk_label_colored_wrap(g_ctx, s->text, c);
             else         nk_label_colored(g_ctx, s->text, a, c);
@@ -421,7 +541,7 @@ reaktor_field(const reaktor_field_spec *s)
 
     if (!g_app || !s || !s->buf || !s->len) return;
     box = s->box;
-    if (box.h <= 0.0f) box.h = g_ctx->style.font->height + 20.0f;
+    box_from_style(&box, NULL, s->style, "input", 0.0f, 10.0f);
 
     if (!place(REAKTOR_A11Y_TEXTBOX, s->name ? s->name : s->hint,
                s->buf[0] ? s->buf : NULL, 0u, NULL, &box, NULL))
@@ -443,7 +563,7 @@ reaktor_link(const reaktor_link_spec *s)
 
     if (!g_app || !s || !s->text) return 0;
     box = s->box;
-    size_to_text(&box, s->text, s->style, 0.0f, 0.0f);
+    box_from_style(&box, s->text, s->style, "a", 0.0f, 0.0f);
 
     if (!place(REAKTOR_A11Y_LINK, s->name ? s->name : s->text, NULL,
                s->active ? REAKTOR_A11Y_SELECTED : 0u, NULL, &box, &id))
@@ -499,20 +619,22 @@ reaktor_check(const reaktor_check_spec *s)
     reaktor_box box;
     nk_bool     on, was;
     unsigned    id = 0;
-    int         changed;
+    int         changed, styled;
 
     if (!g_app || !s || (!s->on && !s->flags)) return 0;
     on = s->on ? *s->on : (nk_bool)((*s->flags & s->bit) != 0);
     was = on;
 
     box = s->box;
-    size_to_text(&box, s->label, NULL, 0.0f, 0.0f);
+    box_from_style(&box, s->label, s->style, "input", 0.0f, 0.0f);
 
     if (!place(REAKTOR_A11Y_CHECKBOX, s->name ? s->name : s->label, NULL,
                on ? REAKTOR_A11Y_CHECKED : 0u, NULL, &box, &id))
         return 0;
 
     if (reaktor_focus_activated(g_app, id)) on = !on;
+
+    styled = push_style_font(s->style ? s->style : "input");
 
     reaktor_note_mute(g_app, 1);
     if (s->box_right)
@@ -521,6 +643,7 @@ reaktor_check(const reaktor_check_spec *s)
     else
         nk_checkbox_label(g_ctx, s->label, &on);
     reaktor_note_mute(g_app, 0);
+    if (styled) nk_style_pop_font(g_ctx);
 
     changed = (on != was);
     if (s->on) *s->on = on;
@@ -534,13 +657,13 @@ reaktor_radio(const reaktor_radio_spec *s)
 {
     reaktor_box box;
     unsigned    id = 0;
-    int         on, hit;
+    int         on, hit, styled;
 
     if (!g_app || !s || !s->choice) return 0;
     on = (*s->choice == s->value);
 
     box = s->box;
-    size_to_text(&box, s->label, NULL, 0.0f, 0.0f);
+    box_from_style(&box, s->label, s->style, "input", 0.0f, 0.0f);
 
     if (!place(REAKTOR_A11Y_RADIO, s->name ? s->name : s->label, NULL,
                on ? REAKTOR_A11Y_CHECKED : 0u, NULL, &box, &id))
@@ -548,9 +671,12 @@ reaktor_radio(const reaktor_radio_spec *s)
 
     if (reaktor_focus_activated(g_app, id)) { *s->choice = s->value; on = 1; }
 
+    styled = push_style_font(s->style ? s->style : "input");
+
     reaktor_note_mute(g_app, 1);
     hit = reaktor_radio_label(g_app, g_ctx, s->label, on);
     reaktor_note_mute(g_app, 0);
+    if (styled) nk_style_pop_font(g_ctx);
 
     if (hit) *s->choice = s->value;
     return hit;
@@ -562,13 +688,13 @@ reaktor_select(const reaktor_select_spec *s)
     reaktor_box box;
     unsigned    id = 0;
     nk_bool     was;
-    int         hit;
+    int         hit, styled;
 
     if (!g_app || !s || !s->on) return 0;
     was = *s->on;
 
     box = s->box;
-    size_to_text(&box, s->label, NULL, 0.0f, 0.0f);
+    box_from_style(&box, s->label, s->style, "select", 0.0f, 0.0f);
 
     if (!place(REAKTOR_A11Y_LISTITEM, s->name ? s->name : s->label, NULL,
                was ? REAKTOR_A11Y_SELECTED : 0u, NULL, &box, &id))
@@ -576,8 +702,10 @@ reaktor_select(const reaktor_select_spec *s)
 
     if (reaktor_focus_activated(g_app, id)) *s->on = !*s->on;
 
+    styled = push_style_font(s->style ? s->style : "select");
+
     {
-        nk_flags align = s->centred ? NK_TEXT_CENTERED : NK_TEXT_LEFT;
+        nk_flags align = s->centered ? NK_TEXT_CENTERED : NK_TEXT_LEFT;
         struct nk_rect b = nk_widget_bounds(g_ctx);
 
         reaktor_note_mute(g_app, 1);
@@ -610,6 +738,7 @@ reaktor_select(const reaktor_select_spec *s)
         }
         reaktor_note_mute(g_app, 0);
     }
+    if (styled) nk_style_pop_font(g_ctx);
     return hit;
 }
 
@@ -629,7 +758,9 @@ reaktor_slider(const reaktor_slider_spec *s)
     else SDL_snprintf(text, sizeof(text), "%d", *s->ivalue);
 
     box = s->box;
-    box_default(&box, 0.0f, row_height(14.0f));
+    box_from_style(&box, NULL,
+                   s->style ? s->style : "input.type-range",
+                   "input", 0.0f, 7.0f);
 
     if (!place(REAKTOR_A11Y_SLIDER, s->name, text, 0u, NULL, &box, &id))
         return;
@@ -656,7 +787,7 @@ reaktor_progress(const reaktor_progress_spec *s)
     SDL_snprintf(text, sizeof(text), "%d", (int)*s->value);
 
     box = s->box;
-    box_default(&box, 0.0f, row_height(14.0f));
+    box_from_style(&box, NULL, s->style, "progress", 0.0f, 7.0f);
 
     if (!place(REAKTOR_A11Y_PROGRESS, s->name, text, 0u, NULL, &box, &id))
         return;
@@ -708,7 +839,7 @@ reaktor_property(const reaktor_property_spec *s)
     else SDL_snprintf(text, sizeof(text), "%.2f", now);
 
     box = s->box;
-    box_default(&box, 0.0f, row_height(14.0f));
+    box_from_style(&box, NULL, s->style, "input", 0.0f, 7.0f);
 
     if (!place(REAKTOR_A11Y_SPINBUTTON, s->name ? s->name : s->label, text,
                0u, NULL, &box, &id))
@@ -744,7 +875,7 @@ reaktor_combo_open(const reaktor_combo_spec *s)
 
     if (!g_app || !s) return 0;
     box = s->box;
-    box_default(&box, 0.0f, row_height(18.0f));
+    box_from_style(&box, NULL, s->style, "select", 0.0f, 9.0f);
 
     if (!place(REAKTOR_A11Y_COMBOBOX, s->name ? s->name : s->label, s->label,
                0u, NULL, &box, NULL))

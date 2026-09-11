@@ -56,6 +56,9 @@ void reaktor_chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
                         const char *name, struct nk_color col);
 
 int reaktor_button_accent(App *app, struct nk_context *ctx, const char *label);
+const struct nk_user_font *reaktor_style_font(App *app,
+                                              const char *selector,
+                                              int px, int bold);
 float reaktor_popup_rounding(void);
 
 #define REAKTOR_MENU_ROW 22.0f

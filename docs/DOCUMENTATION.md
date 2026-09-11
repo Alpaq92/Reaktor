@@ -9,9 +9,9 @@ Using it, and working on it.
 
 **Inside** — [The tree](#the-tree) · [The style pipeline](#the-style-pipeline) ·
 [The frame loop](#the-frame-loop) · [Tests](#tests) ·
-[Environment variables](#environment-variables) · [The renderer](#the-renderer) ·
+[Command-line flags](#command-line-flags) · [The renderer](#the-renderer) ·
 [The web build](#the-web-build) ·
-[Nuklear behaviours](#nuklear-behaviours-that-have-already-cost-an-afternoon)
+[Nuklear behaviors](#nuklear-behaviors-that-have-already-cost-an-afternoon)
 
 ---
 
@@ -54,7 +54,7 @@ variable and answering in your scope.
 
 The fifteen specs are in [`core/ui/declare.h`](../core/ui/declare.h): button,
 label, icon, field, link, swatch, check, radio, select, slider, progress,
-knob, property, combo, colour.
+knob, property, combo, color.
 
 Two open a scope rather than answering:
 
@@ -131,23 +131,24 @@ reaktor_style_get("button", &s);
 if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad_x, s.font_px */ }
 ```
 
-`REAKTOR_CSS=<path>` points the override slot somewhere else; an absent file
-is not an error. The showcase's **Styling** page reads simple.css over the top
-of tiny.css at the flick of a checkbox, which is the only honest test of the
-claim that the look is not in the code.
+The override slot is read only while the application asks for it. The
+showcase's **Styling** page reads simple.css over the top of tiny.css at the
+flick of a checkbox, which is the only honest test of the claim that the look
+is not in the code.
 
 Two limits worth knowing:
 
-- **Attribute selectors do not match.** LCUI implements type, class, id and
-  descendant selectors. `input[type=range]` parses, loads and never matches;
-  plain `input` does.
+- **Attribute selectors are rewritten, not matched.** LCUI implements type,
+  class, id and descendant selectors, so `cssflat` turns `input[type=range]`
+  into `input.type-range` and the widget asks for that spelling. An operator
+  form — `[href^="http"]` — still cannot be expressed and is dropped.
 - **Controls a document does not have** — a slider, a progress bar, a knob —
   have no rule to inherit, so they borrow the rule of what they resemble: the
   rail from `input`, the accent from `a`, a knob's body from `button`. Reading
   the accent off the `a` rule rather than a `--links` token is what makes that
   work with a sheet that never declares one.
 
-`prefers-color-scheme` is honoured: the branch matching the active scheme is
+`prefers-color-scheme` is honored: the branch matching the active scheme is
 unwrapped before parsing. Width and print queries are dropped — a viewport
 query means nothing to a window that is not a document.
 
@@ -178,7 +179,7 @@ REAKTOR_COLUMN(.name = "Track", .h = 56.0f) {
 ```
 
 The first call starts at its target and stays there — an animation is a
-*change*, and nothing has changed yet. Afterwards a new target starts a run
+*change*, and nothing has changed yet. Afterward a new target starts a run
 from wherever the value is, so a target that changes mid-flight redirects
 rather than restarts. `channel` distinguishes several numbers on one widget.
 
@@ -209,7 +210,7 @@ platform/      system theme, and one accessibility bridge per platform
 runtime/       app.c: the window, the event loop, the frame
 samples/       showcase, notepad, simple
 tools/         the tests, the icon compiler, vmwalk
-third_party/   eight submodules, read as they ship
+external/   eight submodules, read as they ship
 ```
 
 `runtime/` and `core/` build into `reaktor_runtime`, a static library the three
@@ -218,7 +219,7 @@ executables link. Nothing in `core/` knows which application it is in.
 ## The style pipeline
 
 ```
-third_party/tinycss/src/*.css  ->  core/css/cssflat.c  ->  core/css/style.c
+external/tinycss/src/*.css  ->  core/css/cssflat.c  ->  core/css/style.c
                                    var(), @media,          libcss: parse,
                                    [data-theme]            match, compute
                                         |
@@ -272,49 +273,56 @@ Five, built by default, run from `build/`:
 | `keytest` | chord parsing and formatting |
 
 Beyond that, verification is the **accessibility dump**: run with
-`REAKTOR_A11Y_DUMP=<path>` and every node's role, name, value, state and
+`--a11y-dump <path>` and every node's role, name, value, state and
 rectangle is written out once the frame settles. Diff two of those and a change
 that moved something by a pixel says so. It has caught more regressions here
 than looking has.
 
-And when a fix is visual, **look at the framebuffer**. `REAKTOR_SHOT=<path.bmp>`
+And when a fix is visual, **look at the framebuffer**. `--shot <path.bmp>`
 writes the window once it settles, then quits. Reasoning from a library's source
 about where it puts a glyph produces confident, wrong answers.
 
-## Environment variables
+## Command-line flags
 
-All read once at startup. The first three exist so a screenshot lands on the
-same view every time instead of being clicked into place.
+**Reaktor reads no environment variables.** Every default is compiled in, and
+the only things worth overriding are the ones that make a run reproducible —
+so that two screenshots can be compared, or two accessibility dumps diffed.
 
-| Variable | Effect |
+The runtime takes these and removes them from `argv` before the application
+sees it, so an application's own arguments are unaffected:
+
+| Flag | Effect |
 | --- | --- |
-| `REAKTOR_TAB` | Which showcase tab opens, 0–8: Login, Buttons, Inputs, Display, Layout, Popups, Animation, Styling, Diagnostics |
-| `REAKTOR_SCROLL` | How far that page starts scrolled |
-| `REAKTOR_THEME` | 0 system, 1 light, 2 dark |
-| `REAKTOR_CSS` | The override stylesheet, read last; absent is not an error |
-| `REAKTOR_SHOT` | A `.bmp` path: write the window once it settles, then quit |
-| `REAKTOR_A11Y_DUMP` | A path to write the accessibility tree to, once it settles |
-| `REAKTOR_STATS` | Log frame timings once a second |
-| `REAKTOR_RENDERER` | `auto`, `cpu`, `gpu`, `list`, or a driver name |
-| `REAKTOR_SCALE` | Override the display scale, in the spirit of `GDK_SCALE` |
-| `REAKTOR_ROOT` | Where the assets are, if not found by walking up to `.reaktor-root` |
-| `REAKTOR_BORDERLESS` | Override whether the application draws its own titlebar |
-| `REAKTOR_VSYNC` `REAKTOR_AA` `REAKTOR_SW_NOAA` | vsync, Nuklear's anti-aliasing, stroke feathering |
-| `REAKTOR_FRAME_RATE` | A frame cap, or `0` for uncapped, instead of `waitevent` |
-| `REAKTOR_REDRAW` | `always` draws every callback — for profiling, not for use |
-| `REAKTOR_HOVER_GAP_MS` | Pin the pointer-redraw gap and skip its calibration |
+| `--shot <path.bmp>` | Write the window once it settles, then quit |
+| `--a11y-dump <path>` | Write the accessibility tree once it settles |
+| `--theme <system\|light\|dark>` | Which color scheme to open in |
 
-The showcase's Diagnostics page reports all of it, plus where each frame's
-milliseconds and each megabyte went. Prefer it to a guess: several plausible
-optimisations here turned out to be measurably worse.
+The showcase adds two of its own, through `sample_args`:
+
+| Flag | Effect |
+| --- | --- |
+| `--tab <0-8>` | Login, Buttons, Inputs, Display, Layout, Popups, Animation, Styling, Diagnostics |
+| `--scroll <px>` | How far that page starts scrolled |
+
+```bash
+./build/showcase --tab 7 --theme dark --shot styling.bmp --a11y-dump styling.txt
+```
+
+Everything else is a decision the library makes rather than one it asks about:
+the renderer is the software rasterizer on every platform, vsync and
+anti-aliasing are on, frames are drawn on events, and the assets are found by
+walking up to the `.reaktor-root` marker. The showcase's Diagnostics page
+reports what each of those settled on, plus where each frame's milliseconds
+and each megabyte went. Prefer it to a guess: several plausible optimizations
+here turned out to be measurably worse.
 
 ## The renderer
 
-`auto` is **the software rasteriser, on every platform**. The app draws nothing
+`auto` is **the software rasterizer, on every platform**. The app draws nothing
 at rest, so a GPU buys it nothing it can measure; a GPU path costs
 unconditionally, and on a machine without one it costs a great deal — SDL's
 software renderer measured 13.1 ms of CPU per frame against Direct3D-on-WARP's
-78.7. One rasteriser everywhere is also one set of pixels to reason about,
+78.7. One rasterizer everywhere is also one set of pixels to reason about,
 which matters because the feathering rules in `nk_sdl_render_ex` are written
 against this one. `gpu`, or a driver by name, still pins what it always did.
 
@@ -341,7 +349,7 @@ from 3.55 MB to 1.30 MB. `tools/shell.html` is the page; its loading overlay
 sets `pointer-events: none`, without which a full-viewport overlay swallows
 every canvas click and the app looks dead.
 
-## Nuklear behaviours that have already cost an afternoon
+## Nuklear behaviors that have already cost an afternoon
 
 Each was found the hard way. None is a bug.
 
@@ -359,7 +367,7 @@ Each was found the hard way. None is a bug.
 - **`nk_stroke_rect` is asymmetric** — a 2px border measures 1px left and top,
   2px right and bottom. Anything stroking its own frame must stroke on the
   bounds, not inset by half, or it comes out shorter than the button beside it.
-- **`nk_draw_button_text_symbol` always centres the label**; the alignment
+- **`nk_draw_button_text_symbol` always centers the label**; the alignment
   argument only chooses which side the glyph goes on.
 - **`nk_do_selectable_image` reads inverted** — `NK_TEXT_ALIGN_LEFT` pins the
   image to the *right* edge.

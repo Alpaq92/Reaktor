@@ -26,7 +26,15 @@
 #define WINDOW_HEIGHT 680
 #define FONT_SIZE     16
 
-#define FONT_STEPS 5
+/* The ladder pick_font snaps to: a fifth of a step apart, from body text to
+ * a page heading. It used to stop at 19, so a stylesheet asking for a heading
+ * got 19px however large it asked and a document's whole type scale collapsed
+ * into one size. Geometric rather than a list of sizes read off some
+ * particular sheet, so no size is privileged and nothing goes stale.
+ *
+ * Every step is baked twice, regular and bold - a sheet that can set
+ * font-size but not font-weight is only half reading the sheet. */
+#define FONT_STEPS 8
 
 #define IMG_CACHE_MAX 48
 
@@ -42,10 +50,10 @@ void reaktor_rss_mark(int step);
 #define GLYPH_STROKE  2.0f
 
 #define SHEET_MAX 4
-#define CORE_SHEET "third_party/tinycss/src/core.css"
+#define CORE_SHEET "external/tinycss/src/core.css"
 #define APP_SHEET  "assets/rest/reaktor.css"
 
-#define USER_SHEET "third_party/simplecss/simple.css"
+#define USER_SHEET "external/simplecss/simple.css"
 
 #define THEME_SYSTEM 0
 #define THEME_LIGHT  1
@@ -78,6 +86,7 @@ struct App {
     int round_count;
 
     struct nk_font *faces[FONT_STEPS];
+    struct nk_font *bolds[FONT_STEPS];
     struct nk_font *face_bold;
     char            font_status[160];
     struct nk_font_atlas *atlas;
@@ -106,6 +115,11 @@ struct App {
     struct nk_rect ctl[3];
     int            ctl_n;
     int            want_quit;
+
+    /* --shot and --a11y-dump: a run that can be compared with the last one.
+     * NULL unless the flag was given. */
+    const char    *shot_path;
+    const char    *dump_path;
 
     struct nk_rect field_rect;
     int            field_rect_valid;
@@ -197,7 +211,6 @@ void focus_resolve(App *app);
 
 extern Uint64 g_hover_gap_ms;
 
-int  env_int(const char *name, int fallback);
 int  renderer_is_software(SDL_Renderer *ren);
 void load_theme(App *app);
 void a11y_dump_once(App *app);
@@ -223,6 +236,12 @@ void hot_push_ex(App *app, struct nk_rect r, int cursor, int repaint,
                  int top, int track);
 int  css_button(App *app, struct nk_context *ctx, const char *selector,
                 const char *label);
+int  reaktor_button_label_as(App *app, struct nk_context *ctx,
+                             const char *sel, const char *label);
+int  reaktor_button_accent_as(App *app, struct nk_context *ctx,
+                              const char *sel, const char *label);
+int  reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
+                            const char *ionicon, const char *label);
 void note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds);
 void stroke_edit_edge(struct nk_context *ctx, struct nk_rect b,
                       const reaktor_style *s);

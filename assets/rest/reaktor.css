@@ -1,4 +1,4 @@
-.card-title {
+h4 {
     font-size: 19px;
     font-weight: 700;
 }
@@ -11,15 +11,36 @@
     font-size: 14px;
 }
 
-.section-title {
-    font-size: 19px;
-    font-weight: 700;
-}
-
 .section-note {
     font-size: 16px;
 }
 
 .api-line {
     font-size: 12px;
+}
+
+.small {
+    font-size: 13px;
+}
+
+.status {
+    font-size: 13px;
+}
+
+.tooltip {
+    font-size: 13px;
+}
+
+.popup-title {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+th {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+td {
+    font-size: 13px;
 }

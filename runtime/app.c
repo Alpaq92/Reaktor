@@ -5,13 +5,6 @@
 #include "anim.h"
 #include "sample.h"
 
-int
-env_int(const char *name, int fallback)
-{
-    const char *v = SDL_getenv(name);
-    return (v && *v) ? SDL_atoi(v) : fallback;
-}
-
 static int
 effective_dark(const App *app)
 {
@@ -29,21 +22,40 @@ reaktor_rss_mark(int step)
     reaktor_process_memory(&reaktor_rss[step], &reaktor_priv[step]);
 }
 
-static const char *
-frame_rate_wanted(void)
+/* The flags the runtime owns, taken out of argv so the application never
+ * sees them. What is left keeps its order, which is how the notepad still
+ * finds the filename it was given.
+ *
+ * Answers the new argc. A flag that wants a value and is given none is left
+ * in place rather than silently swallowing the next argument. */
+static int
+take_flags(App *app, int argc, char **argv)
 {
-    const char *rate = SDL_getenv("REAKTOR_FRAME_RATE");
-    const char *redraw = SDL_getenv("REAKTOR_REDRAW");
+    int i, n = 0;
 
-    if (rate && *rate) return rate;
-    return (redraw && SDL_strcmp(redraw, "always") == 0) ? "0" : "waitevent";
+    for (i = 0; i < argc; i++) {
+        const char *a = argv[i];
+        const char *v = (i + 1 < argc) ? argv[i + 1] : NULL;
+
+        if (v && SDL_strcmp(a, "--shot") == 0)       { app->shot_path = v; i++; }
+        else if (v && SDL_strcmp(a, "--a11y-dump") == 0) { app->dump_path = v; i++; }
+        else if (v && SDL_strcmp(a, "--theme") == 0) {
+            if (SDL_strcmp(v, "light") == 0)     app->theme_mode = THEME_LIGHT;
+            else if (SDL_strcmp(v, "dark") == 0) app->theme_mode = THEME_DARK;
+            else                                 app->theme_mode = THEME_SYSTEM;
+            i++;
+        } else {
+            argv[n++] = argv[i];
+        }
+    }
+    return n;
 }
 
 static const char *
 theme_sheet(int dark)
 {
-    return dark ? "third_party/tinycss/src/variables-dark.css"
-                : "third_party/tinycss/src/variables-light.css";
+    return dark ? "external/tinycss/src/variables-dark.css"
+                : "external/tinycss/src/variables-light.css";
 }
 
 void
@@ -67,23 +79,18 @@ load_theme(App *app)
     sheets[n++] = core;
     sheets[n++] = own;
 
+    /* The override slot, read only while the application asks for it. */
     if (!app->css_override_off) {
-        const char *env = SDL_getenv("REAKTOR_CSS");
-        const char *want = (env && *env) ? env : USER_SHEET;
+        const char *want = USER_SHEET;
         SDL_IOStream *f;
 
         SDL_strlcpy(user, want, sizeof(user));
         f = SDL_IOFromFile(user, "rb");
-        if (!f && !(env && *env && SDL_strchr(env, ':'))) {
-            if (reaktor_path(user, sizeof(user), want))
-                f = SDL_IOFromFile(user, "rb");
-        }
+        if (!f && reaktor_path(user, sizeof(user), want))
+            f = SDL_IOFromFile(user, "rb");
         if (f) {
             SDL_CloseIO(f);
             sheets[n++] = user;
-        } else if (env && *env) {
-            SDL_Log("REAKTOR_CSS: cannot read %s - tiny.css alone applies",
-                    want);
         }
     }
     app->sheets = n;
@@ -227,8 +234,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     sample_window(&g_win);
 
     SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
-    if (SDL_strcmp(frame_rate_wanted(), "waitevent") == 0)
-        SDL_SetHint(SDL_HINT_TIMER_RESOLUTION, "0");
+    SDL_SetHint(SDL_HINT_TIMER_RESOLUTION, "0");
 
     reaktor_rss_mark(RSS_ENTRY);
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -242,49 +248,21 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     if (!app) return SDL_APP_FAILURE;
     *appstate = app;
 
-    {
-        const char *mode = SDL_getenv("REAKTOR_RENDERER");
-        int i, n = SDL_GetNumRenderDrivers();
+    app->theme_mode = THEME_SYSTEM;
+    argc = take_flags(app, argc, argv);
 
-        if (!mode || !*mode) mode = "auto";
-        if (SDL_strcmp(mode, "auto") == 0)
-            SDL_strlcpy(app->render_mode, "auto: software",
-                        sizeof(app->render_mode));
-        else
-            SDL_strlcpy(app->render_mode, mode, sizeof(app->render_mode));
-
-        if (SDL_strcmp(mode, "list") == 0) {
-            for (i = 0; i < n; i++) SDL_Log("%s", SDL_GetRenderDriver(i));
-            return SDL_APP_SUCCESS;
-        }
-        if (SDL_strcmp(mode, "cpu") == 0 || SDL_strcmp(mode, "auto") == 0) {
-            SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-        } else if (SDL_strcmp(mode, "gpu") == 0) {
-            for (i = 0; i < n; i++) {
-                const char *d = SDL_GetRenderDriver(i);
-                if (d && SDL_strcmp(d, "software") != 0) {
-                    SDL_SetHint(SDL_HINT_RENDER_DRIVER, d);
-                    break;
-                }
-            }
-        } else if (SDL_strcmp(mode, "auto") != 0) {
-            int known = 0;
-            for (i = 0; i < n; i++)
-                if (SDL_strcmp(SDL_GetRenderDriver(i), mode) == 0) known = 1;
-            if (known) {
-                SDL_SetHint(SDL_HINT_RENDER_DRIVER, mode);
-            } else {
-                SDL_Log("REAKTOR_RENDERER=%s is not a driver this build has; "
-                        "try REAKTOR_RENDERER=list", mode);
-                SDL_strlcpy(app->render_mode, "auto", sizeof(app->render_mode));
-            }
-        }
-    }
+    /* The software rasterizer, on every platform. The app draws nothing at
+     * rest, so a GPU buys it nothing it can measure, and one rasterizer
+     * everywhere is one set of pixels to reason about - which matters because
+     * the feathering rules in nk_sdl3_renderer.h are written against this
+     * one. The detection below only labels what it got. */
+    SDL_strlcpy(app->render_mode, "auto: software", sizeof(app->render_mode));
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
 
 #ifdef __EMSCRIPTEN__
-    app->borderless = env_int("REAKTOR_BORDERLESS", 0) != 0;
+    app->borderless = 0;
 #else
-    app->borderless = env_int("REAKTOR_BORDERLESS", g_win.borderless) != 0;
+    app->borderless = g_win.borderless != 0;
 #endif
 
     {
@@ -340,7 +318,7 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
         }
         app->renderer_is_sw =
             SDL_strcmp(SDL_GetRendererName(app->ren), "software") == 0;
-        app->sw_noaa = env_int("REAKTOR_SW_NOAA", 0) != 0;
+        app->sw_noaa = 0;
     }
 
 #ifdef __EMSCRIPTEN__
@@ -349,16 +327,11 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
 #endif
     reaktor_a11y_platform_init(reader_activate, reader_focus, app);
 
-    {
-        int want = env_int("REAKTOR_VSYNC", 1);
-        app->vsync_on = SDL_SetRenderVSync(app->ren, want ? 1 : 0) ? want : 0;
-    }
-    app->aa = env_int("REAKTOR_AA", 1);
-    app->redraw_always = SDL_getenv("REAKTOR_REDRAW") &&
-                         SDL_strcmp(SDL_getenv("REAKTOR_REDRAW"),
-                                    "always") == 0;
+    app->vsync_on = SDL_SetRenderVSync(app->ren, 1) ? 1 : 0;
+    app->aa = 1;
+    app->redraw_always = 0;
 
-    SDL_strlcpy(app->frame_rate, frame_rate_wanted(), sizeof(app->frame_rate));
+    SDL_strlcpy(app->frame_rate, "waitevent", sizeof(app->frame_rate));
 
     {
         const SDL_DisplayMode *m =
@@ -385,25 +358,15 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
 
     app->wake_event = SDL_RegisterEvents(1);
 
-    if (SDL_getenv("REAKTOR_HOVER_GAP_MS")) {
-        int gap = env_int("REAKTOR_HOVER_GAP_MS", (int)HOVER_GAP_MS);
-        if (gap >= 0 && gap <= 1000) {
-            g_hover_gap_ms   = (Uint64)gap;
-            g_hover_gap_pinned = 1;
-        }
-    }
 
     app->cur_default = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
     app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
     app->cur_text    = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT);
 
+    /* The override slot starts empty; turning it on is the switch's job. */
     app->css_override_off = 1;
 
     sample_args(app, argc, argv);
-
-    app->theme_mode = env_int("REAKTOR_THEME", THEME_SYSTEM);
-    if (app->theme_mode < 0 || app->theme_mode > THEME_DARK)
-        app->theme_mode = THEME_SYSTEM;
 
     nk_textedit_init_fixed(&app->edit, app->edit_buf, sizeof(app->edit_buf));
 
@@ -661,21 +624,6 @@ SDL_AppIterate(void *appstate)
             app->fps_frames = 0;
             app->fps_t0 = now;
 
-            if (SDL_getenv("REAKTOR_STATS")) {
-                char lp[1024];
-                FILE *lf = reaktor_path(lp, sizeof(lp), "build/stats.log")
-                         ? fopen(lp, "a") : NULL;
-                if (lf) {
-                    char ln[160];
-                    SDL_snprintf(ln, sizeof(ln),
-                                 "fps=%.0f drag=%d build=%.2f render=%.2f present=%.2f",
-                                 app->fps, app->dragging,
-                                 app->build_ms_x100 / 100.0f,
-                                 app->render_ms_x100 / 100.0f,
-                                 app->present_ms_x100 / 100.0f);
-                    fputs(ln, lf); fputc(10, lf); fclose(lf);
-                }
-            }
         }
     }
 
@@ -791,19 +739,33 @@ SDL_AppIterate(void *appstate)
         }
         t_present0 = SDL_GetPerformanceCounter();
         {
-            const char *shot = SDL_getenv("REAKTOR_SHOT");
+            const char *shot = app->shot_path;
             static int shot_done;
 
-            if (shot && *shot && !shot_done && reaktor_frame_settled()) {
-                SDL_Surface *sh = SDL_RenderReadPixels(app->ren, NULL);
+            if (shot && *shot && !shot_done) {
+                if (reaktor_frame_settled()) {
+                    SDL_Surface *sh = SDL_RenderReadPixels(app->ren, NULL);
 
-                shot_done = 1;
-                if (sh) {
-                    if (!SDL_SaveBMP(sh, shot))
-                        SDL_Log("screenshot: %s", SDL_GetError());
-                    SDL_DestroySurface(sh);
+                    shot_done = 1;
+                    if (sh) {
+                        if (!SDL_SaveBMP(sh, shot))
+                            SDL_Log("screenshot: %s", SDL_GetError());
+                        SDL_DestroySurface(sh);
+                    }
+                    app->want_quit = 1;
+                } else {
+                    /* Ask for another frame. A settled frame is not otherwise
+                     * guaranteed to be a drawn one: the app stops scheduling
+                     * frames the moment nothing is changing, which is exactly
+                     * when the picture is worth taking - so without this the
+                     * wait is for an event that never comes. */
+                    SDL_Event e;
+
+                    app->dirty = 1;
+                    SDL_zero(e);
+                    e.type = SDL_EVENT_USER;
+                    SDL_PushEvent(&e);
                 }
-                app->want_quit = 1;
             }
         }
         SDL_RenderPresent(app->ren);

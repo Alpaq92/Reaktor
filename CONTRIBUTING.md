@@ -17,7 +17,7 @@ assumptions the native build lets through — worth running before you send
 anything.
 
 [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) is the map: the tree, the style
-pipeline, the frame loop, and the Nuklear behaviours that have already cost
+pipeline, the frame loop, and the Nuklear behaviors that have already cost
 somebody an afternoon. Read it before touching drawing code.
 
 ## Conventions
@@ -35,18 +35,18 @@ somebody an afternoon. Read it before touching drawing code.
 
 Binding unless you make the case for changing one.
 
-- **Submodules are read, never edited, never quoted.** No colour, path, metric
-  or other value is copied out of `third_party/` into this tree — the app opens
+- **Submodules are read, never edited, never quoted.** No color, path, metric
+  or other value is copied out of `external/` into this tree — the app opens
   the file at runtime. Where reading is genuinely impossible the file is copied
   into the tree, marked vendored, and every deviation commented;
   `core/render/nk_sdl3_renderer.h` is the only one, and it carries the cost of
   no longer tracking upstream.
-- **The stylesheet is the source of style.** A colour, radius, border width or
+- **The stylesheet is the source of style.** A color, radius, border width or
   padding appearing as a literal in the source needs a reason beside it. The
   legitimate ones are fallbacks for when a sheet fails to load.
 - **MIT-preferred for anything vendored**, permissive required. Record it in
   [docs/NOTICE.md](docs/NOTICE.md) in the same change, read from the project's
-  own licence file rather than its README.
+  own license file rather than its README.
 - **A vendored asset carries its terms in the tree.** If an upstream ships
   none, trace them to something the author published — the file's own metadata
   counts — then write down what you found and that you assembled the record.
@@ -66,15 +66,15 @@ For a change of any size, say in the pull request:
 
 - that both targets build — native and WebAssembly — and the five tests pass;
 - **the accessibility dump before and after**, if anything moved. Run with
-  `REAKTOR_A11Y_DUMP=<path>` and diff the two; it reports position to the pixel
-  and is the closest thing here to a regression suite;
-- a screenshot, if the change is visible. Pin the view with `REAKTOR_TAB`,
-  `REAKTOR_SCROLL` and `REAKTOR_THEME` rather than clicking your way there.
+  `--a11y-dump <path>` and diff the two; it reports position to the pixel and
+  is the closest thing here to a regression suite;
+- a screenshot, if the change is visible. Pin the view with `--tab`,
+  `--scroll` and `--theme` rather than clicking your way there.
 
 Two things this repository has learned the hard way. A claim about performance
 wants a number from the Diagnostics page, not an expectation — several
-plausible optimisations here measured worse. And a claim that a visual fix
-works wants the framebuffer: `REAKTOR_SHOT=<path.bmp>` writes the window and
+plausible optimizations here measured worse. And a claim that a visual fix
+works wants the framebuffer: `--shot <path.bmp>` writes the window and
 quits. Deriving where a widget *should* be from the same model that put it in
 the wrong place will agree with you every time.
 

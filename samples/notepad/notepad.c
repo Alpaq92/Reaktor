@@ -214,10 +214,11 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
                          shown_name(), dirty() ? " (modified)" : "",
                          g.len, g.status);
 
-            nk_style_push_font(ctx, reaktor_font(app, 13, 0));
+            nk_style_push_font(ctx, reaktor_style_font(app, ".status",
+                                                       13, 0));
             reaktor_label(&(reaktor_label_spec){
                 .text = line, .name = "Status", .value = line,
-                .colour = "--text-muted",
+                .color = "--text-muted",
                 .box = { .ml = 8.0f, .flags = REAKTOR_LAY_FILL_X |
                                               REAKTOR_LAY_CENTER_Y } });
             nk_style_pop_font(ctx);
@@ -279,8 +280,8 @@ sample_file_taken(App *app)
     char answer[SC_PATH_CAP];
 
     if (!reaktor_file_taken(app, answer, (int)sizeof(answer))) return;
-    if (SDL_strcmp(answer, "cancelled") == 0) {
-        SDL_strlcpy(g.status, "Cancelled", sizeof(g.status));
+    if (SDL_strcmp(answer, "canceled") == 0) {
+        SDL_strlcpy(g.status, "Canceled", sizeof(g.status));
         return;
     }
     load(answer);
