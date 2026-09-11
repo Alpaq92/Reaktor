@@ -277,8 +277,9 @@ target_include_directories(notepad PRIVATE samples)
 target_link_libraries(notepad PRIVATE reaktor_runtime)
 
 if(NOT EMSCRIPTEN)
-    # Not WIN32: the answers go to stdout, which wants a console.
-    add_executable(bench samples/bench/bench.c ${APP_RESOURCES})
+    # WIN32 like the rest, so no console flashes up. bench reattaches to the
+    # parent's console itself when it has one, which is where stdout goes.
+    add_executable(bench WIN32 samples/bench/bench.c ${APP_RESOURCES})
     target_include_directories(bench PRIVATE samples)
     target_link_libraries(bench PRIVATE reaktor_runtime)
     set_target_properties(bench PROPERTIES
