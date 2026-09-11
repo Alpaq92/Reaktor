@@ -23,7 +23,8 @@ required.
   **[LCUI](https://github.com/lc-soft/LCUI)**, parses the stylesheet, which is
   read at startup rather than compiled in.
 - **[Onlay](https://github.com/Alpaq92/Onlay)** computes the rectangles — a
-  fork of randrew/layout with weighted tracks, gaps and padding.
+  fork of [randrew/layout](https://github.com/randrew/layout) with weighted
+  tracks, gaps and padding.
 - Every dependency is a submodule, read at runtime as it ships. No values are
   copied out of one and into this tree.
 - For the complete list, check [docs/NOTICE.md](docs/NOTICE.md).
