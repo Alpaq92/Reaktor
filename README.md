@@ -38,8 +38,8 @@ required.
   DOM subtree on the web. Keyboard focus and shortcuts included.
 - **HiDPI** — layout in logical pixels, atlas baked at the display's size.
 - **Light and dark** — follows the system, or pick one.
-- **Windows, macOS, Linux, the BSDs and WebAssembly** — one set of sources, a
-  software rasterizer, no GPU.
+- **Windows, macOS, Linux, the BSDs and WebAssembly** — one set of sources,
+  the same software rasterizer on all five, no GPU required.
 - **Nothing drawn at rest** — 0% of a core while it sits there.
 
 Not yet: **localization**. The font atlas bakes Latin-1 only and there is no
