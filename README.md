@@ -19,8 +19,9 @@ required.
 
 - **[Nuklear](https://github.com/Immediate-Mode-UI/Nuklear)** draws the
   widgets. **[SDL3](https://github.com/libsdl-org/SDL)** supplies the window,
-  input and renderer. **libcss**, taken from
-  **[LCUI](https://github.com/lc-soft/LCUI)**, parses the stylesheet.
+  the input and the software renderer. **libcss**, taken from
+  **[LCUI](https://github.com/lc-soft/LCUI)**, parses the stylesheet, which is
+  read at startup rather than compiled in.
 - **[Onlay](https://github.com/Alpaq92/Onlay)** computes the rectangles — a
   fork of randrew/layout with weighted tracks, gaps and padding.
 - Every dependency is a submodule, read at runtime as it ships. No values are
