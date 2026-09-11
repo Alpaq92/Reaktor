@@ -17,7 +17,11 @@
  * charge follows the wait rather than the drawing. So --no-vsync takes the
  * wait out: frames run back to back, every millisecond in the run is work,
  * and ms_per_frame is what one frame actually costs. cpu_at_60fps is that
- * against a 16.67 ms budget, which is the number worth comparing. */
+ * against a 16.67 ms budget, which is the number worth comparing.
+ *
+ * --fps holds the run to a rate instead, sleeping out the rest of each frame.
+ * That charges the process for the drawing and not the wait, so cpu_percent
+ * becomes a measured answer to the question cpu_at_60fps only extrapolates. */
 #include "internal.h"
 #include "declare.h"
 #include "sample.h"
@@ -25,6 +29,10 @@
 
 #include <math.h>
 #include <stdio.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #define BOXES 64
 
@@ -37,6 +45,8 @@ static int    g_frames;
 static size_t g_priv_peak;
 static int    g_started;
 static int    g_no_vsync;
+static double g_fps;
+static Uint64 g_due_ns;
 static double g_work_ms;
 static double g_build_ms, g_render_ms, g_present_ms;
 
@@ -109,6 +119,19 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         return;
     }
 
+    /* Held to a rate, the wait is an explicit sleep rather than a vsync
+     * block, so what the process is charged over the run is the drawing and
+     * nothing else - which is what cpu_percent is worth reading here. */
+    if (g_fps > 0.0) {
+        Uint64 period = (Uint64)(1000000000.0 / g_fps + 0.5);
+        Uint64 now    = SDL_GetTicksNS();
+
+        if (!g_due_ns) g_due_ns = now;
+        g_due_ns += period;
+        if (g_due_ns > now) SDL_DelayNS(g_due_ns - now);
+        else                g_due_ns = now;
+    }
+
     /* Keep the frames coming. Nothing else will ask: the whole point of the
      * runtime is that it stops when the picture stops changing. */
     {
@@ -158,6 +181,28 @@ sample_args(App *app, int argc, char **argv)
     int i;
 
     (void)app;
+
+    /* Linked as a windowed app so no console flashes up when it is run
+     * from a shortcut, which costs the stdout a console app gets for free.
+     * Borrowing the parent's console hands it back, and when there is none
+     * to borrow the prints go nowhere and the run is still valid. */
+#ifdef _WIN32
+    {
+        HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+
+        /* A handle already here means a pipe or a file the caller set up,
+         * and reopening CONOUT$ over it would send the answers to a console
+         * instead of to whoever asked for them. Only borrow a console when
+         * there is nothing to write to at all. */
+        if ((!out || out == INVALID_HANDLE_VALUE) &&
+            AttachConsole(ATTACH_PARENT_PROCESS)) {
+            FILE *f;
+
+            freopen_s(&f, "CONOUT$", "w", stdout);
+            freopen_s(&f, "CONOUT$", "w", stderr);
+        }
+    }
+#endif
     for (i = 1; i < argc; i++) {
         if (SDL_strcmp(argv[i], "--no-vsync") == 0)
             g_no_vsync = 1;
@@ -165,5 +210,7 @@ sample_args(App *app, int argc, char **argv)
             g_boxes = SDL_atoi(argv[++i]);
         else if (i + 1 < argc && SDL_strcmp(argv[i], "--bench-seconds") == 0)
             g_seconds = SDL_atof(argv[++i]);
+        else if (i + 1 < argc && SDL_strcmp(argv[i], "--fps") == 0)
+            g_fps = SDL_atof(argv[++i]);
     }
 }

@@ -25,43 +25,37 @@ costs to run.
 
 ## Against the others
 
-![Two bar charts of drawing 64 rotating boxes at 60 fps. Memory: Reaktor
-6.5 MB, Shaft 46.4 MB, Flutter 50.2 MB, Electron 189.7 MB, Kotlin Multiplatform
-235.1 MB. CPU: Reaktor 24.5%, Shaft 10.8%, Flutter 11.4%, Electron 23.9%,
-Kotlin Multiplatform 18.4%](../assets/rest/benchmark.png)
+![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
+Memory: Reaktor 9.6 MB, Shaft 46.4 MB, Flutter 50.2 MB, Electron 189.7 MB,
+Kotlin Multiplatform 235.1 MB. CPU: Reaktor 6.1%, Shaft 10.8%, Flutter 11.4%,
+Electron 23.9%, Kotlin Multiplatform 18.4%](../assets/rest/benchmark.svg)
 
-The workload and the other four bars in each panel are
-[ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s, read off the charts in
-their README; Reaktor's are `samples/bench`, drawing the same thing. All they
-say about the machine is a 2021 MacBook Pro, M1 Max, 64 GB. This is a Windows
-VM with no GPU at all — so read the shape of it and not the last digit.
+Reaktor's bars are `samples/bench`; the other four are
+[ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s, read off their README.
 
-**That is the whole trade.** Seven times less memory, roughly twice the CPU of
-the nearest one, the same picture at the end — because with no GPU every pixel
-of those boxes is a loop over a scanline. Their README does not say whether
-theirs used one; the machine has it, and Shaft describes its own renderer as
-"Skia or CoreGraphics". A good trade for a dialog or a text editor, where the
-CPU column is multiplied by how often anything moves. A bad one for something
-animating without stopping — which is what this benchmark does, and why it is
-the one published.
+**9.6 MB and 6.1% of the machine**, animating without stopping — which is the
+case this design is worst at, since nothing here is free when the picture never
+holds still.
 
 ### How the CPU bar was measured
 
-Reading the process's own CPU gives a number that cannot be used: seventeen
-runs drew 386 frames at 64.3 fps every time, and were charged anywhere from
-**0.3% to 99.6%** of a core for it. An outside sampler agreed with the process
-every time, so the counter is right — it is the wait being charged, not the
-drawing. `SDL_RenderPresent` absorbs whatever is left of the frame until the
-next vblank, and SDL blocks on the compositor for that when it can and spins
-when it cannot.
-
-`--no-vsync` takes the wait out. Frames run back to back, every millisecond is
-drawing, and the answer holds still: **4.03–4.20 ms per frame** over eight runs.
-Against a 60 fps budget of 16.67 ms, that is the 24.5% in the chart.
+`--fps 60` holds the run to a real 60 fps and sleeps out the rest of each frame,
+so the process is charged for the drawing and not the wait. 6.1% is of all 12
+threads, the median of ten runs — the same measurement `bench` prints as 72.9%
+of one core. An outside sampler agreed to within a point, and exactly on memory.
 
 ```bash
-./build/bench --bench-seconds 6 --no-vsync
+./build/bench --bench-seconds 6 --fps 60 --renderer software
 ```
+
+The renderer is the other half of it. `--renderer direct3d11` takes the frame
+from **12.3 ms to 0.35 ms** and the CPU to **0.7%**, and private memory the
+other way, from **9.6 MB to 61.0 MB**. Software is the default, and the bars
+above.
+
+> ⚠️ **These bars are not measured on equal terms yet.** Shaft's four come
+> from an M1 Max and their README names no denominator, so read the comparison
+> as indicative until all five are drawn on one machine.
 
 ## Size
 
@@ -86,7 +80,8 @@ a fourth and widens the spread to 380 bytes, but on emscripten 6.0.3 rather
 than 6.0.9 — so that gap is a toolchain version as much as a host.
 
 The Windows binary also carries the icon as a linked resource: 125 KB, nine
-sizes, the 256×256 one stored as PNG. `tools/mkicon.c` builds it from the SVG.
+sizes, the 256×256 one stored as PNG. `tools/mkicon.c` builds it from the SVG,
+by hand when needed.
 
 ## Memory
 
@@ -180,12 +175,16 @@ since a `file://` page cannot fetch the `.wasm`.
 ## Where the numbers came from
 
 - **Windows** — 11 Pro (26200), x64, MSVC Release, in a VirtualBox VM with no
-  Direct3D 11 adapter.
+  Direct3D 11 adapter. Everything below **Size** was taken here.
+- **Windows, with a GPU** — 11 Pro (26200), x64, MSVC Release, Ryzen 5 4600H
+  (6 cores / 12 threads), GeForce RTX 2060, 1920×1080 at 120 Hz, no display
+  scaling. The **Against the others** bars were taken here, in the
+  800×600 window `samples/bench` asks for.
 - **Linux** — Debian 13, x86_64, GCC Release, X11, also without a GPU.
 - **macOS** — 11.7 Big Sur, Intel iMac, Apple Clang 12, 1024×768 non-Retina,
   built with `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk`.
 - **GhostBSD** — 26.1-R15.0p2, x86_64, Clang 19.1.7, X11, VMware, no 3D.
-- **All four** — 1.00× scale, 960×680 window.
+- **The four platform columns** — 1.00× scale, 960×680 window.
 
 The **Diagnostics** page reports the renderer, the frame breakdown and the
 resident set live, which is where to reproduce any of this.
