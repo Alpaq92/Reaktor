@@ -26,36 +26,137 @@ costs to run.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 9.6 MB, Shaft 46.4 MB, Flutter 50.2 MB, Electron 189.7 MB,
-Kotlin Multiplatform 235.1 MB. CPU: Reaktor 6.1%, Shaft 10.8%, Flutter 11.4%,
-Electron 23.9%, Kotlin Multiplatform 18.4%](../assets/rest/benchmark.svg)
+Memory: Reaktor 10.0 MB, the same binary on D3D11 60.6 MB and on OpenGL
+90.8 MB, Flutter 92.2 MB, Electron 155.8 MB, Kotlin Multiplatform 670.0 MB.
+CPU as a percent of one core: Reaktor 67.3%, D3D11 15.6%, OpenGL 14.3%,
+Flutter 16.8%, Electron 36.0%, Kotlin Multiplatform 50.2%](../assets/rest/benchmark.svg)
 
-Reaktor's bars are `samples/bench`; the other four are
-[ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s, read off their README.
+The workload is not original. It is
+[ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s benchmark — 64 boxes
+rotating at 60 fps in an 800×600 window — and the comparison started as a
+reading of the five figures in its README. Those are gone from the chart now.
+They were taken on an M1 Max with no denominator named for the CPU column, and
+mixing them with a run on this desk was comparing two machines and calling it a
+comparison of frameworks. **Shaft's own figures are excluded, and Shaft is not
+plotted at all, because it does not build on Windows** — see below. The
+picture it defined is what survived, and every bar above is a run of it here.
 
-**9.6 MB and 6.1% of the machine**, animating without stopping — which is the
-case this design is worst at, since nothing here is free when the picture never
-holds still, frame after frame.
+Four frameworks drawing that picture on one machine, measured by one
+procedure, with Reaktor entered three times because `--renderer` changes what
+it is: `benchmarks/` holds the other three as projects of their own — plus a
+fourth for Shaft, which is the one that did not run — and
+`benchmarks/run.ps1` runs them and samples each from outside over its whole
+process tree, because Electron is five processes and a JVM's idea of its own
+memory is not the system's.
 
-### How the CPU bar was measured
+**The memory order and the CPU order do not tell the same story.** Reaktor
+draws this in a ninth of Flutter's memory and a sixty-seventh of Compose's. On
+CPU it is the *most* expensive of the six, because it is the only one
+rasterizing on the processor.
 
-`--fps 60` holds the run to a real 60 fps and sleeps out the rest of each frame,
-so the process is charged for the drawing and not the wait. 6.1% is of all 12
-threads, the median of ten runs — the same measurement `bench` prints as 72.9%
-of one core. An outside sampler agreed to within a point, and exactly on memory.
+| Arm | Memory | CPU, one core | CPU, all 12 threads |
+| --- | --- | --- | --- |
+| **Reaktor**, software | **10.0 MB** | **67.3%** | **5.6%** |
+| **Reaktor**, `direct3d11` | 60.6 MB | 15.6% | 1.3% |
+| **Reaktor**, `opengl` | 90.8 MB | 14.3% | 1.2% |
+| Flutter | 92.2 MB | 16.8% | 1.4% |
+| Electron | 155.8 MB | 36.0% | 3.0% |
+| Kotlin Multiplatform | 670.0 MB | 50.2% | 4.2% |
+
+The first three rows are one executable. `--renderer` is the whole difference,
+and it buys about a fifth of the CPU for six to nine times the memory — which
+is the trade the default is taking, in the direction of the memory. On a GPU
+driver Reaktor costs what the GPU frameworks cost: **`opengl` lands on 90.8 MB
+against Flutter's 92.2**, and the CPU figures of the three GPU rows sit inside
+two and a half points of each other. Those two have almost nothing in common
+above the driver — Nuklear through SDL against Skia through the Flutter engine —
+which is the point: at that size the number is the GL context and its buffers,
+not the framework on top of it.
+
+Both CPU columns are given because the question has to be asked: at 12 threads
+the two readings differ by a factor of twelve, and a comparison that does not
+say which one it means is not saying anything.
+
+### How it was measured
 
 ```bash
-./build/bench --bench-seconds 6 --fps 60 --renderer software
+./benchmarks/run.ps1 -Seconds 6 -Fps 60 -Runs 10
 ```
 
-The renderer is the other half of it. `--renderer direct3d11` takes the frame
-from **12.3 ms to 0.35 ms** and the CPU to **0.7%**, and private memory the
-other way, from **9.6 MB to 61.0 MB**. Software is the default, and the bars
-above.
+`--fps 60` holds every arm to a real 60 fps and sleeps out the rest of each
+frame, so a process is charged for the drawing and not the wait. Each figure is
+the median of ten six-second runs. Three full passes moved the CPU medians by
+up to three points and the memory by less than a megabyte, so read the CPU
+column to the point and the memory column to the tenth. Startup is inside the measurement, so
+the run length matters — at three seconds instead of six, Electron reads 45.5%
+and Compose 60.7%, while Reaktor does not move.
 
-> ⚠️ **These bars are not measured on equal terms yet.** Shaft's four come
-> from an M1 Max and their README names no denominator, so read the comparison
-> as indicative until all five are drawn on one machine.
+Memory is the peak of summed private bytes across the process tree, which for
+the JVM is with no heap flags: 670 MB is what Compose costs out of the box, not
+what it can be squeezed to.
+
+What a single Reaktor frame costs is a separate question, and `--fps 60` is the
+wrong run to ask it in: with vsync on, the block lands inside the present and
+the frame reads as the whole 16.6 ms period. `--no-vsync` is the run that
+answers it, and here the frame goes from **11.42 ms on the software rasterizer
+to 0.41 on `direct3d11` and 0.27 on `opengl`** — in every case almost all of it
+the present.
+
+Those are the drivers this SDL build actually has. `direct3d12` and `vulkan`
+say *not available* and fall back to D3D11, which is worth knowing before
+reading a figure attributed to them; `opengles2` does start, at 0.26 ms and
+143.7 MB, the memory being ANGLE's. The Diagnostics page prints the backend SDL
+settled on next to the one that was asked for, which is the only way to tell a
+fallback from a measurement.
+
+The two renderers then disagree about whether that is the whole story.
+`bench` extrapolates its software frame to 68.2% of a core at 60 fps and the
+sampler charges the process 68.6%, which is as close as two different
+instruments get. For `direct3d11` `bench` says 2.5% and the sampler says 16.5%.
+Neither is wrong: the drawing really is that cheap, and the difference is
+everything the process is charged for that no frame counter can see — the
+driver's threads, the presentation, the wakeups that pace the rate. It is the
+reason the bars come from outside.
+
+### What these replaced
+
+The previous bars had five frameworks, but only Reaktor's were ours — the other
+four came from [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s README, taken
+on an M1 Max, with no denominator named for the CPU figure. Reaktor's own
+numbers barely moved when they were measured properly: **9.6 MB against 10.0**,
+and 6.1% of the machine against **5.6%**. Everything around them did.
+
+**The denominator was the whole trouble.** That panel was labeled percent of
+twelve cores, and on twelve cores Flutter measures **1.4%** here where their
+README shows 11.4%. Eightfold, in the direction that says their figure was per
+core — so the old chart was plotting one per-machine number against four
+per-core ones, in the same panel, which flattered the per-machine one by about
+twelve. On one denominator the memory ordering survives and the CPU ordering
+does not: Reaktor's software rasterizer is the most expensive of the six, which
+is what a CPU rasterizer among GPU ones should be.
+
+Compose's 235.1 MB becoming 670.0 is a second kind of difference and not the
+same kind of finding. The JVM sizes its heap from the machine's RAM, so that
+bar says as much about this machine as it does about Compose.
+
+**Shaft itself is absent, and not for want of trying.** Its Skia bundle ships
+Windows binaries and Shaft links D3D12 for Windows, but SwiftSDL3 0.1.6 never
+compiles its `joystick/virtual/`, `joystick/hidapi/` or `joystick/windows/`
+directories there, so `SDL_joystick.c` has nothing to link against. Everything
+else builds — Skia, and the benchmark's own Swift, 25 of 26 steps — and then
+the executable does not link:
+
+```
+lld-link: error: undefined symbol: SDL_SetJoystickVirtualButtonInner
+```
+
+That is the whole of it. Two earlier walls turned out to be this machine rather
+than Shaft, and both are gone: the build needs a developer shell, and it needs
+git told not to attempt symlinks. `benchmarks/README.md` has the commands. What
+remains cannot be fixed from this side — a package cannot add sources to
+another package's target, and dependencies here are read as they ship — so
+`benchmarks/shaft-bench` stays in the tree, building up to the link, waiting on
+a SwiftSDL3 that lists its Windows sources correctly.
 
 ## Size
 
@@ -174,8 +275,10 @@ since a `file://` page cannot fetch the `.wasm`.
   Direct3D 11 adapter. Everything below **Size** was taken here.
 - **Windows, with a GPU** — 11 Pro (26200), x64, MSVC Release, Ryzen 5 4600H
   (6 cores / 12 threads), GeForce RTX 2060, 1920×1080 at 120 Hz, no display
-  scaling. The **Against the others** bars were taken here, in the
-  800×600 window `samples/bench` asks for.
+  scaling. All five bars of **Against the others** were taken here, in the
+  800×600 window every arm asks for. The other three frameworks were built
+  here too: Electron 44.3.0 on Node 22, Flutter 3.38.0, and Compose
+  Multiplatform 1.12.0 on Kotlin 2.4.20 and a Temurin JDK 21.
 - **Linux** — Debian 13, x86_64, GCC Release, X11, also without a GPU.
 - **macOS** — 11.7 Big Sur, Intel iMac, Apple Clang 12, 1024×768 non-Retina,
   built with `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk`.

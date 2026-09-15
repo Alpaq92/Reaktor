@@ -1,0 +1,11 @@
+name: reaktor_bench
+description: The Reaktor rotating-box benchmark, drawn by Flutter.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter

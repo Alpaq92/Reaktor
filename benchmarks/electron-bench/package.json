@@ -1,0 +1,14 @@
+{
+  "name": "reaktor-bench-electron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Reaktor rotating-box benchmark, drawn by Electron.",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.3.0"
+  }
+}

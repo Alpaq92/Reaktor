@@ -92,7 +92,10 @@ position.
 - [docs/DEMO.md](docs/DEMO.md) — the four applications in this repository and
   what each one is for.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — what it costs, measured on four
-  platforms.
+  platforms, and against Flutter, Electron and Compose Multiplatform on one.
+- [benchmarks/README.md](benchmarks/README.md) — those three as projects of
+  their own, drawing the same picture, and the script that measures them all
+  the same way.
 - [docs/NOTICE.md](docs/NOTICE.md) — what it depends on, and under what
   license.
 
