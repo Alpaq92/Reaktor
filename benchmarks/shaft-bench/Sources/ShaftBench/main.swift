@@ -1,13 +1,3 @@
-// The rotating boxes of samples/bench/bench.c, drawn by Shaft.
-//
-// Shaft is Flutter's design in Swift, on SDL3 with Skia, so this is the same
-// shape as the Flutter arm: one CustomPaint over the window, repainted from a
-// notifier rather than by rebuilding the tree.
-//
-// What it cannot report is a per-frame split. Shaft has no equivalent of
-// Flutter's timings callback, so this arm prints frames and the rate it held,
-// and the cost of the run is the one the sampler in run.ps1 takes from
-// outside - which is the number the comparison uses for every arm anyway.
 import Foundation
 import Shaft
 import ShaftSetup
@@ -25,10 +15,6 @@ let benchSeconds = flag("--bench-seconds", 5)
 let benchFps = flag("--fps", 0)
 let benchBoxes = Int(flag("--boxes", 64))
 
-/// The size the run was actually drawn at, written by the painter. The window
-/// is the backend's to size, so this is reported rather than assumed. Declared
-/// before the call below because top-level globals run in order and runApp
-/// does not return.
 var painted = Size(0, 0)
 
 ShaftSetup.useDefault()
@@ -50,8 +36,6 @@ final class BenchState: State<BenchApp> {
     override func initState() {
         super.initState()
 
-        // The view exists by the time the first frame is over, which is the
-        // earliest the window can be given the size the other arms draw at.
         SchedulerBinding.shared.addPostFrameCallback { [self] _ in
             if let view = View.maybeOf(context) as? DesktopView {
                 view.size = Size(800, 600)
@@ -79,8 +63,6 @@ final class BenchState: State<BenchApp> {
             return
         }
 
-        // Held to a rate, the wait is an explicit timer rather than a vsync
-        // block, so the run is charged for the drawing and not the wait.
         if benchFps > 0 {
             due = max(due + 1.0 / benchFps, t)
             let delay = due - t
@@ -127,8 +109,6 @@ final class BoxPainter: CustomPainterBase {
     override func paint(canvas: Canvas, size: Size) {
         painted = size
 
-        // The integer divisions are bench.c's, kept integer here for the same
-        // reason: a truncated grid step is part of the picture.
         let w = Int(size.width)
         let h = Int(size.height)
         let stepX = w / 8, halfX = w / 16

@@ -1,10 +1,9 @@
 #include "a11y.h"
 
+#include <emscripten.h>
+
 static reaktor_a11y_action g_activate, g_focus;
 static void *g_user;
-
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
 
 EMSCRIPTEN_KEEPALIVE void
 reaktor_a11y_web_activate(unsigned id)
@@ -102,12 +101,13 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
     set('aria-valuemax', ranged ? String(hi) : null);
     set('aria-keyshortcuts', k ? k : null);
 
-    el.style.left = x + 'px'; el.style.top = y + 'px';
-    el.style.width = w + 'px'; el.style.height = h + 'px';
-
     var p = parent ? a.nodes[parent] : a.root;
     if (!p) p = a.root;
     if (el.parentNode !== p || p.lastChild !== el) p.appendChild(el);
+
+    el.ax = x; el.ay = y;
+    el.style.left = (x - (p.ax || 0)) + 'px'; el.style.top = (y - (p.ay || 0)) + 'px';
+    el.style.width = w + 'px'; el.style.height = h + 'px';
 });
 
 EM_JS(void, web_a11y_end, (unsigned focus), {
@@ -160,27 +160,3 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
     }
     web_a11y_end(focus_id);
 }
-
-#elif !defined(_WIN32) && !defined(REAKTOR_HAVE_ATSPI) &&       !defined(REAKTOR_HAVE_NSACCESSIBILITY)
-
-void
-reaktor_a11y_platform_init(reaktor_a11y_action activate,
-                           reaktor_a11y_action focus, void *user)
-{
-    g_activate = activate;
-    g_focus    = focus;
-    g_user     = user;
-}
-
-void
-reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
-{
-    (void)a; (void)focus_id;
-}
-
-void
-reaktor_a11y_platform_drain(void)
-{
-}
-
-#endif

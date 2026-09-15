@@ -1,5 +1,6 @@
 param([string]$Target = "")
 
+$extra = @($args)
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $outDir = Join-Path $root "build"
@@ -25,7 +26,8 @@ $bat = Join-Path $env:TEMP "reaktor_build.bat"
   '@echo off',
   ('call "' + $vcvars + '" >nul 2>&1'),
   ('"' + $cmake + '" -S "' + $root + '" -B "' + $outDir + '" -G Ninja ' +
-   '-DCMAKE_MAKE_PROGRAM="' + $ninja + '" -DCMAKE_BUILD_TYPE=Release'),
+   '-DCMAKE_MAKE_PROGRAM="' + $ninja + '" -DCMAKE_BUILD_TYPE=Release' +
+   (($extra | ForEach-Object { ' "' + $_ + '"' }) -join '')),
   'if errorlevel 1 exit /b 1',
   ('"' + $cmake + '" --build "' + $outDir + '" --parallel' +
    $(if ($Target) { ' --target ' + $Target } else { '' })),

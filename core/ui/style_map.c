@@ -48,11 +48,6 @@ push_button_style(App *app, struct nk_context *ctx, const char *selector)
     reaktor_style_get(selector, &s);
     if (!s.matched) return f;
 
-    /* The state rules, read rather than computed. :hover used to supply only
-     * a background and :active nothing at all - it was the base color ten
-     * per cent darker, which is a decision a stylesheet is entitled to make
-     * and this was making for it. The darkening is still the fallback, for a
-     * sheet that styles :hover and stops there. */
     snprintf(state, sizeof(state), "%s:hover", selector);
     reaktor_style_get(state, &hov);
     snprintf(state, sizeof(state), "%s:active", selector);

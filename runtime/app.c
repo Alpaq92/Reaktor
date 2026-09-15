@@ -3,6 +3,7 @@
 #include "internal.h"
 #include "declare.h"
 #include "anim.h"
+#include "locale.h"
 #include "sample.h"
 
 static int
@@ -22,12 +23,6 @@ reaktor_rss_mark(int step)
     reaktor_process_memory(&reaktor_rss[step], &reaktor_priv[step]);
 }
 
-/* The flags the runtime owns, taken out of argv so the application never
- * sees them. What is left keeps its order, which is how the notepad still
- * finds the filename it was given.
- *
- * Answers the new argc. A flag that wants a value and is given none is left
- * in place rather than silently swallowing the next argument. */
 static int
 take_flags(App *app, int argc, char **argv)
 {
@@ -40,6 +35,8 @@ take_flags(App *app, int argc, char **argv)
         if (v && SDL_strcmp(a, "--shot") == 0)       { app->shot_path = v; i++; }
         else if (v && SDL_strcmp(a, "--a11y-dump") == 0) { app->dump_path = v; i++; }
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
+        else if (v && SDL_strcmp(a, "--lang") == 0)     { app->lang_pref = v; i++; }
+        else if (v && SDL_strcmp(a, "--font-fallback") == 0) { reaktor_text_add_fallback(v); i++; }
         else if (v && SDL_strcmp(a, "--theme") == 0) {
             if (SDL_strcmp(v, "light") == 0)     app->theme_mode = THEME_LIGHT;
             else if (SDL_strcmp(v, "dark") == 0) app->theme_mode = THEME_DARK;
@@ -80,7 +77,6 @@ load_theme(App *app)
     sheets[n++] = core;
     sheets[n++] = own;
 
-    /* The override slot, read only while the application asks for it. */
     if (!app->css_override_off) {
         const char *want = USER_SHEET;
         SDL_IOStream *f;
@@ -252,16 +248,6 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     app->theme_mode = THEME_SYSTEM;
     argc = take_flags(app, argc, argv);
 
-    /* The software rasterizer, on every platform. The app draws nothing at
-     * rest, so a GPU buys it nothing it can measure, and one rasterizer
-     * everywhere is one set of pixels to reason about - which matters because
-     * the feathering rules in nk_sdl3_renderer.h are written against this
-     * one. The detection below only labels what it got.
-     *
-     * --renderer lifts that, for measuring what the choice costs rather than
-     * asserting it. Anything but "software" is handed to SDL as the driver to
-     * try, and "auto" lets it pick; the feathering is then not what these
-     * sources were written against, so the picture may differ. */
     if (app->renderer_pref && SDL_strcmp(app->renderer_pref, "software") != 0) {
         SDL_strlcpy(app->render_mode, app->renderer_pref,
                     sizeof(app->render_mode));
@@ -367,6 +353,8 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     if (!app->ctx) return SDL_APP_FAILURE;
     reaktor_rss_mark(RSS_NUKLEAR);
 
+    /* Before the atlas, which bakes what the catalogs need. */
+    reaktor_locale_start(app->lang_pref);
     rebuild_font(app);
     reaktor_rss_mark(RSS_FONT);
 
@@ -377,7 +365,6 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
     app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
     app->cur_text    = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT);
 
-    /* The override slot starts empty; turning it on is the switch's job. */
     app->css_override_off = 1;
 
     sample_args(app, argc, argv);
@@ -749,6 +736,7 @@ SDL_AppIterate(void *appstate)
                 fill = NK_ANTI_ALIASING_OFF;
                 if (app->sw_noaa) line = NK_ANTI_ALIASING_OFF;
             }
+            reaktor_text_prepare(ctx, app->ren);
             nk_sdl_render_ex(ctx, fill, line);
         }
         t_present0 = SDL_GetPerformanceCounter();
@@ -768,11 +756,6 @@ SDL_AppIterate(void *appstate)
                     }
                     app->want_quit = 1;
                 } else {
-                    /* Ask for another frame. A settled frame is not otherwise
-                     * guaranteed to be a drawn one: the app stops scheduling
-                     * frames the moment nothing is changing, which is exactly
-                     * when the picture is worth taking - so without this the
-                     * wait is for an event that never comes. */
                     SDL_Event e;
 
                     app->dirty = 1;

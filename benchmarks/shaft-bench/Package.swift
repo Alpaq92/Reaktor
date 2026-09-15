@@ -1,9 +1,4 @@
 // swift-tools-version: 5.9
-//
-// The dependency is Shaft's own package, taken from its repository the way its
-// CounterTemplate takes it. The Cxx interoperability mode and the C++17
-// standard are not optional: Shaft's default renderer is Skia, and it does not
-// build without them.
 import PackageDescription
 
 let package = Package(
@@ -28,9 +23,6 @@ let package = Package(
                 .interoperabilityMode(.Cxx)
             ],
 
-            // SwiftSDL3 compiles its DirectInput haptic code on Windows but
-            // does not link the library the GUIDs live in, so the executable
-            // does it. Nothing on the other platforms needs this.
             linkerSettings: [
                 .linkedLibrary("dxguid", .when(platforms: [.windows])),
                 .linkedLibrary("dinput8", .when(platforms: [.windows])),

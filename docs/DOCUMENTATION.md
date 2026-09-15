@@ -10,8 +10,10 @@ Using it, and working on it.
 **Inside** — [The architecture](#the-architecture) · [The tree](#the-tree) ·
 [The style pipeline](#the-style-pipeline) ·
 [The frame loop](#the-frame-loop) · [Tests](#tests) ·
+[Build options](#build-options) ·
 [Command-line flags](#command-line-flags) · [The renderer](#the-renderer) ·
 [The web build](#the-web-build) · [Localization](#localization) ·
+[Text](#text) ·
 [Nuklear behaviors](#nuklear-behaviors-that-have-already-cost-an-afternoon)
 
 ---
@@ -172,6 +174,11 @@ For the widgets the library has no spec for, report them yourself:
 reaktor_note(app, REAKTOR_A11Y_TREEITEM, label, NULL, state, bounds);
 ```
 
+`-DREAKTOR_A11Y=OFF` builds without the platform bridges, and so does an
+application that links `reaktor_a11y_none` — see
+[Build options](#build-options). The tree itself is still built, because layout
+finds a box again by its accessibility id; only serving it is dropped.
+
 ## Animation
 
 A number that takes time to change, keyed by the same accessibility id.
@@ -238,16 +245,21 @@ core/render    Nuklear impl, the SDL3 backend, drawing, SVG icons
 core/ui        the declarative API, layout, widgets, style map, keys, focus
 core/a11y      the shadow tree and its diff
 core/anim      eased values keyed by a11y id
+core/locale    the Locale module: catalogs, lookup, plurals, formatting
+core/text      the Text module: direction, shaping, fallback glyphs, line breaking
 platform/      system theme, and one accessibility bridge per platform
+assets/locale  the showcase's catalogs, one file per language
 runtime/       app.c: the window, the event loop, the frame
 samples/       showcase, notepad, simple, bench
 tools/         the tests, the icon compiler, vmwalk
 benchmarks/    bench's workload in four other frameworks, and one sampler
-external/      eight submodules, read as they ship
+external/      ten submodules, read as they ship
 ```
 
 `runtime/` and `core/` build into `reaktor_runtime`, a static library the four
-executables link. Nothing in `core/` knows which application it is in.
+executables link — all but `core/locale`, `core/text` and the bridges, which
+are the modules, compiled into the programs that take them. Nothing in `core/` knows
+which application it is in.
 
 ## The style pipeline
 
@@ -296,7 +308,7 @@ on four platforms.
 
 ## Tests
 
-Five, built by default, run from `build/`:
+Seven, built by default, run from `build/`:
 
 | | |
 | --- | --- |
@@ -305,6 +317,8 @@ Five, built by default, run from `build/`:
 | `a11ytest` | node identity, the diff, the pool |
 | `animtest` | curves, retarget, eviction |
 | `keytest` | chord parsing and formatting |
+| `localetest` | catalog parsing, lookup, plural expressions, formatting |
+| `texttest` | line breaks, paragraph direction, measuring, and the order glyphs reach the vertex buffer in — against the fonts in `assets/fonts`, with no window; built only with the Text module |
 
 Beyond that, verification is the **accessibility dump**: run with
 `--a11y-dump <path>` and every node's role, name, value, state and
@@ -315,6 +329,74 @@ than looking has.
 And when a fix is visual, **look at the framebuffer**. `--shot <path.bmp>`
 writes the window once it settles, then quits. Reasoning from a library's source
 about where it puts a glyph produces confident, wrong answers.
+
+## Build options
+
+Passed to CMake. Both scripts forward them:
+
+```bash
+./build.sh -- -DREAKTOR_A11Y=OFF        # macOS, Linux, the BSDs
+```
+
+```powershell
+.\build.ps1 -DREAKTOR_A11Y=OFF          # Windows
+.\build-wasm.ps1 -DREAKTOR_A11Y=OFF     # the web build; build-wasm.sh takes -- as build.sh does
+```
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `REAKTOR_A11Y` | `ON` | Serve the accessibility tree to screen readers: UI Automation, AT-SPI, NSAccessibility, the DOM |
+| `REAKTOR_LOCALE` | `ON` | Translations, from the catalogs in `assets/locale` — see [Localization](#localization) |
+| `REAKTOR_LOCALE_EMBED` | `OFF` | Compile the catalogs into the executable rather than read them at startup |
+| `REAKTOR_TEXT` | `ON` | Direction, shaping and fallback glyphs for the text the font atlas cannot draw, and line breaks by Unicode's rules — see [Text](#text) |
+| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Linux and the BSDs |
+
+**CMake remembers an option.** A later build without the flag keeps whatever
+was set last, so turn one back on by passing `=ON`, not by leaving it out.
+
+**A module is two libraries, and the application links one of them.**
+`reaktor_a11y` or `reaktor_a11y_none`, `reaktor_locale` or
+`reaktor_locale_none`, `reaktor_text` or `reaktor_text_none`: both halves
+define the same functions, and each is an interface library, so its sources are
+compiled into the program that links it and nowhere else. The showcase takes
+all three modules; `simple`, `notepad` and `bench` take the `_none` halves, and
+show what the runtime costs with nothing added. An option switched off turns a
+module into its `_none` half for every program that links it.
+
+```cmake
+target_link_libraries(myapp PRIVATE
+    reaktor_runtime reaktor_a11y reaktor_locale reaktor_text_none)
+```
+
+**`REAKTOR_A11Y=OFF` removes the bridges and nothing else.** The UI Automation,
+AT-SPI and NSAccessibility bridges and the web DOM subtree are not compiled, and
+the libraries only they need are not linked: `uiautomationcore`, `ole32` and
+`oleaut32` on Windows, `dbus-1` on Linux and the BSDs. (Cocoa stays on macOS;
+SDL links it for itself.) The accessibility tree is still built, because layout
+finds boxes by its ids and animations are keyed to them, so `--a11y-dump` keeps
+working. A switched-off build draws the same pixels and writes the same dump as
+a default one; a screen reader just finds nothing in it.
+
+It trims little, because the bridges are small — see
+[PERFORMANCE.md](PERFORMANCE.md#modules). The reason to turn it off is the
+libraries, and on Linux, not needing `dbus-1` at all.
+
+**`REAKTOR_LOCALE=OFF` leaves every string as its key.** `reaktor_tr` answers
+with the key it was given, the atlas bakes Latin-1 alone, and the web build
+stops packing the catalogs and the Japanese font — most of the showcase's
+`.data`.
+
+**`REAKTOR_LOCALE_EMBED=ON` writes the catalogs into the executable.** CMake
+reads every `assets/locale/*.txt` at configure time into a generated C file,
+and a catalog added or edited later reconfigures on the next build. The program
+then needs no `assets/locale` beside it; the Japanese font is still read from
+`assets/fonts`.
+
+**`REAKTOR_TEXT=OFF` leaves mojibake and kb_text_shape out of the build.**
+Nothing is reordered or shaped, no glyph comes from another font, and a line
+breaks after a space. A catalog Aileron can draw — Polish — is untouched,
+because what Aileron has is Locale's to bake; the Japanese one comes out as
+boxes.
 
 ## Command-line flags
 
@@ -330,13 +412,15 @@ sees it, so an application's own arguments are unaffected:
 | `--shot <path.bmp>` | Write the window once it settles, then quit |
 | `--a11y-dump <path>` | Write the accessibility tree once it settles |
 | `--theme <system\|light\|dark>` | Which color scheme to open in |
+| `--lang <code>` | Which catalog to open in, by its file name: `en`, `pl`, `ja` |
+| `--font-fallback <path>` | A font for the Text module to take glyphs from when the UI font has none, tried before any the application adds; give it again for more |
 | `--renderer <name>` | `software` (the default), `auto` to let SDL pick, or a driver name |
 
 The showcase adds two of its own, through `sample_args`:
 
 | Flag | Effect |
 | --- | --- |
-| `--tab <0-8>` | Login, Buttons, Inputs, Display, Layout, Popups, Animation, Styling, Diagnostics |
+| `--tab <0-9>` | Login, Buttons, Inputs, Display, Layout, Popups, Animation, Styling, Translations, Diagnostics |
 | `--scroll <px>` | How far that page starts scrolled |
 
 And `bench` adds four:
@@ -387,8 +471,9 @@ and no amount of re-deriving it will make it show.
 `core/render/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, vendored rather
 than included because one of the changes is inside `nk_sdl_font_stash_end`.
 Every deviation is marked `REAKTOR`: an 8-bit indexed atlas instead of RGBA32,
-a 1×1 white texture for untextured geometry, pixel snapping, and independent
-feathering of fills and strokes.
+a 1×1 white texture for untextured geometry, pixel snapping, independent
+feathering of fills and strokes, and the atlas's palette made public so the
+[Text](#text) module's glyph textures can share it.
 
 ## The web build
 
@@ -397,36 +482,188 @@ Same sources, same `CMakeLists.txt`. `./build-wasm.sh` needs
 `notepad.html` in `build-wasm/`, to be served over HTTP — a `file://` page
 cannot fetch the `.wasm`.
 
+Every push to `master` publishes the showcase to
+[GitHub Pages](https://alpaq92.github.io/Reaktor/), as the site's front page —
+`.github/workflows/pages.yml`, pinned to the emscripten the published sizes were
+built with.
+
 Assets are packaged with `--preload-file` and only the files the sources
 actually name — the list is grepped at configure time, which took the bundle
-from 3.55 MB to 1.30 MB. `tools/shell.html` is the page; its loading overlay
-sets `pointer-events: none`, without which a full-viewport overlay swallows
-every canvas click and the app looks dead.
+from 3.55 MB to 1.30 MB. The showcase alone also packs `assets/locale` and the
+Japanese font, which `simple` and `notepad` never open. `tools/shell.html` is
+the page; its loading overlay sets `pointer-events: none`, without which a
+full-viewport overlay swallows every canvas click and the app looks dead.
 
 ## Localization
 
-Not supported, and the missing piece is not the one people expect.
+The Locale module translates what a program says and formats what it counts:
+a catalog per language, a lookup by key, plural forms, and numbers, money and
+dates written the way the language writes them. The showcase's Translations
+page is the working example — one page and one piece of code, in English,
+Polish and Japanese.
 
-Translating the strings is the easy third. The other two are why no amount of
-string work would make a Japanese or Arabic build render:
+**A catalog** is `assets/locale/<code>.txt`, one entry a line:
 
-- **Glyph coverage.** `rebuild_font` never sets `cfg.range`, so Nuklear bakes
-  its default U+0020-U+00FF. Latin-1 and nothing else: no Cyrillic, no Greek,
-  no CJK, no Arabic, no Devanagari. Nuklear ships
-  `nk_font_cyrillic_glyph_ranges`, `nk_font_chinese_glyph_ranges` and
-  `nk_font_korean_glyph_ranges`, so the ranges exist - but the atlas is
-  already 1024x1024 for 8 sizes in two weights, and CJK is thousands of
-  glyphs per size.
-- **Shaping and direction.** Nuklear positions one glyph after another by
-  advance width. That is correct for Latin, Cyrillic and Greek and wrong for
-  Arabic (contextual forms, right-to-left), Hebrew (right-to-left) and the
-  Indic scripts (reordering, conjuncts). There is no shaping engine and no
-  bidi algorithm anywhere in the tree.
+```
+language = Polski
+plural = n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2
+file.save = Zapisz
+file.count = {n} plik | {n} pliki | {n} plików
+number.decimal = ,
+money.PLN = zł
+date.long = d MMMM y
+```
 
-What is already in place, for whatever it is worth: the accessibility tree
-carries the same strings the widgets draw, so a translated interface is a
-translated screen reader with no extra work, and the declarative specs take
-`const char *` rather than baking text into the drawing code.
+A line splits at its first ` = `, and in a value `\n` is a newline and `\\` a
+backslash. `language` is the catalog's name for itself, which is what a
+language switch shows; `plural` is a gettext plural expression, as in a `.po`
+header. There is no comment syntax, because a key is free text.
+
+```c
+char   buf[64];
+time_t now = time(NULL);
+
+reaktor_button(&(reaktor_button_spec){ .label = reaktor_tr("file.save") });
+reaktor_label(&(reaktor_label_spec){
+    .text = reaktor_trn("file.count", n, buf, sizeof buf) });   /* 3 pliki */
+
+reaktor_format_money(buf, sizeof buf, 1234.5, "PLN");           /* 1234,50 zł */
+reaktor_format_date(buf, sizeof buf, localtime(&now), REAKTOR_DATE_LONG);
+```
+
+`reaktor_tr` answers the current catalog's value, or the key itself when there
+is none, so a string nobody translated shows up as its key rather than as
+nothing. `reaktor_trn` picks one of the ` | ` forms by the catalog's rule, and
+writes `{n}` as the number, formatted.
+
+**Formatting** reads the keys a catalog carries for it, and a key a catalog
+leaves out is formatted the way English is:
+
+| Key | English | What it says |
+| --- | --- | --- |
+| `number.decimal` | `.` | The decimal separator |
+| `number.group` | `,` | The grouping separator |
+| `number.group.min` | `1` | The fewest digits allowed ahead of the first separator |
+| `money` | `{s}{n}` | Where the symbol and the amount go |
+| `money.<code>` | the code | A currency's symbol |
+| `money.<code>.digits` | `2` | A currency's decimals |
+| `date.short` | `M/d/yy` | A pattern, as are the three below |
+| `date.long` | `MMMM d, y` | |
+| `date.full` | `EEEE, MMMM d, y` | |
+| `time.short` | `h:mm a` | |
+| `date.months`, `date.months.short` | `January \| February \| …` | Twelve forms |
+| `date.days`, `date.days.short` | `Sunday \| Monday \| …` | Seven forms, Sunday first |
+| `time.ampm` | `AM \| PM` | |
+
+A pattern is made of `d dd M MM MMM MMMM y yy EEE EEEE H HH h hh m mm a`, with
+anything in `'quotes'` kept as it is. The weekday is worked out from the date,
+not read from `tm_wday`. Each call writes at most `cap` bytes, terminator
+included, and answers `buf`.
+
+No table of conventions sits behind this: a catalog says how its language
+writes a number the way it says how it writes "Save". The Polish one puts
+no-break spaces where a line must not break, between groups of digits and
+between an amount and its symbol. A symbol made of letters that would touch the
+amount is kept off it by one regardless, so `PLN 12.00` rather than
+`PLN12.00`.
+
+**The language** is `--lang` when a catalog has that code; otherwise the first
+of the system's preferred languages that one has; otherwise English; otherwise
+the first catalog. `reaktor_locale_set` switches at any time, and the next
+frame draws in it.
+
+**Leave `.name` to the translated text**, so a screen reader reads what is
+drawn. The price is that a language switch makes every translated widget a new
+one: placed a frame late, once, and dropping focus if it had it.
+
+**The atlas bakes what the catalogs use** and Aileron has: Latin-1, plus every
+such character, at every size in both weights. The characters Aileron lacks
+are the [Text](#text) module's to draw.
+
+**Formatting stops at the patterns above.** No time zones, no calendar but the
+Gregorian, and digits grouped in threes only — not the Indian lakh.
+
+The accessibility tree carries the same strings the widgets draw, so a
+translated interface is a translated screen reader with no extra work.
+
+## Text
+
+Nuklear draws a string from the font atlas, one glyph after another, left to
+right. The Text module draws every string that needs more than that, and
+breaks lines the way Unicode says to. A string whose characters are all baked
+into the atlas is left to Nuklear, so Latin text costs what it always did.
+
+- **Direction** by the Unicode bidirectional algorithm, through
+  [mojibake](https://github.com/zaerl/mojibake). Arabic and Hebrew run right to
+  left, with the numbers and Latin words inside them the right way round, and
+  a bracket faces the way its direction needs. A wrapped paragraph that starts
+  right to left keeps to the right edge, and every line keeps the paragraph's
+  direction.
+- **Shaping** by [kb_text_shape](https://github.com/JimmyLefevre/kb). Each run
+  of one direction, one script and one font goes through OpenType's rules for
+  its script: Arabic letters join, marks sit on their letters, Devanagari moves
+  its vowel signs and forms conjuncts. Kerning is off, as it is in the atlas,
+  so a word is as wide wherever it is drawn.
+- **Fallback glyphs** from the first font that has them: the face's own file,
+  then each `--font-fallback` in the order given, then each font the
+  application adds with `reaktor_text_add_fallback`. A font is chosen a
+  grapheme at a time, so a letter and its marks come from the same one.
+- **Every size and weight.** Nothing is baked ahead of time. A glyph is
+  rasterized the first time it is drawn, at the size it is drawn, into 512×512
+  textures of the module's own, and lands on the pixel grid the way the atlas's
+  glyphs do. A bold face takes its fallback glyphs from the same fonts as a
+  regular one, so the showcase's bold Japanese is M PLUS 1p Regular. The
+  Diagnostics page's font row counts the glyphs drawn from fallback fonts.
+- **Lines break by UAX #14**, through mojibake: between Japanese characters but
+  not before a full stop or a small kana, after a hyphen, never inside a
+  number. A wrapped label is measured with the breaks it is drawn with, and each
+  line is measured whole — shaped text is not the sum of its glyphs — so its
+  box is exactly as tall as its lines.
+
+**How it gets in.** `rebuild_font` hands the module every face after the bake,
+and the module takes over each face's width function, so Nuklear measures a
+string the way the module will draw it. Each frame, before `nk_sdl_render_ex`
+turns the commands into vertices, the runtime calls `reaktor_text_prepare`,
+which turns each text command the atlas cannot draw into a custom command in
+the same place in the list — so the text still draws over what is under it and
+under what is over it — and the custom command's callback adds the glyph
+quads. Shaping is cached by string and font file, and does not depend on size;
+rasterized glyphs are cached by font, glyph and size. Each cache starts over
+when it fills.
+
+**Fonts are the application's to supply.** The showcase ships M PLUS 1p for its
+Japanese catalog, added in `sample_args`, and nothing else; a program that
+shows Arabic, Hebrew or an Indic script points the module at a font that has
+it:
+
+```bash
+./build/showcase --font-fallback C:/Windows/Fonts/segoeui.ttf --font-fallback C:/Windows/Fonts/Nirmala.ttc
+```
+
+Segoe UI has Arabic and Hebrew, Nirmala UI the Indic scripts. A font collection
+is read at its first font.
+
+Without the module, `reaktor_text_none` breaks a line after a space, or in a run
+with none before the glyph that would not fit — keeping that glyph, which
+`nk_label_wrap` loses.
+
+mojibake is built with only what the module calls, its collation, IDNA,
+security and character-name tables left out. kb_text_shape is one header,
+compiled once, in `core/text/kb.c`. Between them they are most of what the
+module costs — see [PERFORMANCE.md](PERFORMANCE.md#modules).
+
+Not there yet:
+
+- **Editing shaped text.** A text field measures its caret a glyph at a time,
+  which is right for Japanese and wrong inside a joined Arabic word, and the
+  caret moves in the order the text is stored, not the order it is shown.
+- **A single-line label in a right-to-left language** is still set against the
+  left edge; only wrapped paragraphs keep to the right one.
+- **Language-specific forms.** The shaper is told a script but not a language,
+  so a font's Serbian or Urdu variants go unused.
+- **Color glyphs, emoji and vertical text.**
+- **Normalization, case mapping and collation**, which mojibake has and
+  nothing calls yet.
 
 ## Nuklear behaviors that have already cost an afternoon
 
@@ -469,3 +706,10 @@ Each was found the hard way. None is a bug.
 - **`nk_rule_horizontal` fills its whole widget rect** — the row height *is*
   the line thickness.
 - **`nk_sdl_font_stash_begin` leaks the atlas it replaces.**
+- **`nk_label_wrap` breaks at spaces only**, and a line without one keeps the
+  glyph that overflowed, where the clip hides it — a character lost from the end
+  of every line of Japanese. `reaktor_label` breaks its own lines.
+- **A merged font joins the atlas's *first* font**, not the one added last:
+  `merge_mode` extends `atlas->fonts`, whichever face the call was meant for.
+- **`cfg.range` is read on every glyph lookup**, not only while baking. The
+  ranges have to live as long as the fonts do, which is why `App` holds them.

@@ -1,10 +1,4 @@
 #!/bin/sh
-# build-wasm.sh - the same sources, linked to a web page.
-#
-#     ./build-wasm.sh            # build
-#     ./build-wasm.sh --serve    # build, then serve it on :8000
-#
-# The output must be served: a file:// page cannot fetch the .wasm.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -19,7 +13,7 @@ while [ $# -gt 0 ]; do
             shift
             [ $# -gt 0 ] || { echo "build-wasm.sh: --port needs a number" >&2; exit 2; }
             port="$1" ;;
-        --help|-h) sed -n '2,7p' "$0" | cut -c 3-; exit 0 ;;
+        --help|-h) echo "usage: build-wasm.sh [--serve] [--port N] [-- CMAKE_ARGS]"; exit 0 ;;
         --)        shift; break ;;
         *) echo "build-wasm.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
     esac

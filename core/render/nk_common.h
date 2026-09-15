@@ -10,11 +10,13 @@
 #define NK_INCLUDE_FONT_BAKING
 #define NK_INCLUDE_DEFAULT_FONT
 
-/* Nuklear's default fires a button on press, which needs a frame
- * while the mouse is held. A browser delivers press and release in
- * one task, so that frame never happens and the button never fires. */
+/* A browser delivers press and release in one task. */
 #define NK_BUTTON_TRIGGER_ON_RELEASE
 
 #include "../../external/nuklear/nuklear.h"
+
+/* The caller SDL_frees the ranges. */
+nk_rune *reaktor_font_ranges(const unsigned char *ttf, const unsigned *cp,
+                             int n);
 
 #endif

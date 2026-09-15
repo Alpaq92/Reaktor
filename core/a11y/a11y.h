@@ -68,7 +68,7 @@ typedef struct reaktor_a11y_change {
 
 #define REAKTOR_A11Y_MAX_NODES   256
 #define REAKTOR_A11Y_MAX_CHANGES 256
-#define REAKTOR_A11Y_POOL        8192
+#define REAKTOR_A11Y_POOL        16384
 #define REAKTOR_A11Y_MAX_DEPTH   32
 #define REAKTOR_A11Y_SLOTS       512
 

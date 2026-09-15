@@ -303,8 +303,6 @@ reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max
     nk_style_push_style_item(ctx, &ctx->style.progress.cursor_normal, clear);
     nk_style_push_style_item(ctx, &ctx->style.progress.cursor_hover, clear);
     nk_style_push_style_item(ctx, &ctx->style.progress.cursor_active, clear);
-    /* Both borders: Nuklear strokes the widget and the cursor separately,
-     * and the cursor's is the one that showed as a hairline across the fill. */
     nk_style_push_float(ctx, &ctx->style.progress.border, 0.0f);
     nk_style_push_float(ctx, &ctx->style.progress.cursor_border, 0.0f);
     nk_progress(ctx, cur, max, modifiable);
@@ -483,9 +481,6 @@ reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
     return css_button(app, ctx, "button", label);
 }
 
-/* The same three buttons, painted from a rule the page named. A class the
- * sheet does not define falls back to `button`, so a selector that is only
- * meaningful to one stylesheet costs nothing under another. */
 int
 reaktor_button_label_as(App *app, struct nk_context *ctx, const char *sel,
                         const char *label)
@@ -774,10 +769,6 @@ reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
     return id;
 }
 
-/* The face a rule asks for, falling back to a size named in the code.
- *
- * Every caller of this used to be a bare reaktor_font(app, 13, 0) - a number
- * the stylesheet could not reach, on a page claiming the look lives in CSS. */
 const struct nk_user_font *
 reaktor_style_font(App *app, const char *selector, int px, int bold)
 {
@@ -800,10 +791,6 @@ reaktor_popup_rounding(void)
     return dlg.rounding > 8.0f ? 8.0f : dlg.rounding;
 }
 
-/* A menu popup's chrome. The row spacing here is not cosmetic: it is the 2
- * that reaktor_menu_height counts, and a popup opened without it is a row
- * short of the height it asked for, which leaves the last item on the
- * clipped edge with nothing to click. */
 void
 reaktor_menu_style_push(struct nk_context *ctx)
 {
@@ -831,8 +818,6 @@ reaktor_menu_height(int rows)
     return rows * REAKTOR_MENU_ROW + (rows - 1) * REAKTOR_MENU_GAP + 10.0f;
 }
 
-/* One menu row: the pointer cursor, the accessibility node and the item
- * itself, plus an accelerator drawn at the right edge when there is one. */
 int
 reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,
                   const char *accel, int contextual)
@@ -887,7 +872,14 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     out->mode       = app->render_mode;
     out->frame_rate = app->frame_rate;
     out->drag_rate  = app->drag_rate;
-    out->font       = app->font_status;
+    {
+        static char line[sizeof app->font_status + 200];
+        char        drawn[200];
+
+        reaktor_text_describe(drawn, sizeof drawn);
+        if (drawn[0]) SDL_snprintf(line, sizeof line, "%s; %s", app->font_status, drawn);
+        out->font = drawn[0] ? line : app->font_status;
+    }
     out->vsync      = app->vsync_on;
     out->aa = !app->aa ? "off"
             : !app->renderer_is_sw ? "on"
@@ -914,10 +906,6 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     }
 
     {
-        /* Sampled twice a second, not per frame. On Linux this parses
-         * /proc/self/statm and /proc/self/smaps_rollup, and the second makes
-         * the kernel walk every mapping - on the one page whose job is to
-         * report honest frame timings, which it would then be inflating. */
         static size_t   rss, priv;
         static unsigned taken;
         unsigned        now = SDL_GetTicks();

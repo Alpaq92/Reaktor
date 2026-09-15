@@ -758,11 +758,6 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
             IRawElementProviderSimple_Release(&r->simple);
         }
     }
-    /* On a change, not on every push. A push happens whenever the diff is
-     * non-empty - any frame where a label's text or a widget's rect moved -
-     * and re-announcing the same focus to a listening client on each of them
-     * is both a lie and a COM object per frame. The AT-SPI and web bridges
-     * already guard it this way. */
     if (focus_id != g_last_focus) {
         g_last_focus = focus_id;
         if (focus_id) {

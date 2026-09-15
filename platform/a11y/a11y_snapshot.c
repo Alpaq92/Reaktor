@@ -109,15 +109,11 @@ reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id)
 static const char *
 copy_text(int at, char **buf, size_t *left)
 {
-    const char *src;
     size_t n;
 
     if (at < 0 || *left < 2) return NULL;
-    src = g.str + at;
-    n = strlen(src);
-    if (n > *left - 1) n = *left - 1;
-    memcpy(*buf, src, n);
-    (*buf)[n] = '\0';
+    /* libdbus aborts on invalid UTF-8. */
+    n = SDL_utf8strlcpy(*buf, g.str + at, *left);
     {
         const char *out = *buf;
         *buf  += n + 1;

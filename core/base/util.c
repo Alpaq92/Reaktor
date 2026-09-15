@@ -40,11 +40,6 @@ static int copy_out(char *out, size_t cap, const char *src)
 int reaktor_root(char *out, size_t cap)
 {
 
-    /* Resolved once. Finding it means asking for the executable's own path
-     * and then probing for .reaktor-root at every level up the tree - and the
-     * answer cannot change while the process runs. Every asset the app opens
-     * comes through here, and a theme switch empties the icon cache and would
-     * otherwise re-resolve for each icon on screen. */
     static char cached[REAKTOR_PATH_CAP];
     static int  resolved;
 

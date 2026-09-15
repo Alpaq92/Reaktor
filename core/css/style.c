@@ -25,11 +25,6 @@ static struct {
     int            cache_n;
     css_metrics_t  metrics;
     reaktor_cssvars *vars;
-    /* The sheet's own base, resolved once from `body`, and the parent every
-     * other lookup is computed against. Without it `em` and `rem` fall back
-     * to the 16px initial value: simple.css says `body { font-size: 1.15rem }`,
-     * so its 0.5em padding is 9.2px and we were computing 8.0 - a 15% error
-     * on every length in the sheet, compounding into every widget's size. */
     css_computed_style_t root;
     int            root_ready;
 } g;
@@ -42,9 +37,6 @@ static void rgba_of(css_color_value_t c, unsigned char out[4])
     out[3] = (unsigned char)((c >> 24) & 0xff);
 }
 
-/* Drop the base style. Called before every cascade into it and on the two
- * failure paths, so a half-initialized sheet cannot leave the previous
- * sheet's font size in place as the parent for the next one. */
 static void base_reset(void)
 {
     if (g.root_ready) css_computed_style_destroy(&g.root);
@@ -90,16 +82,7 @@ int reaktor_style_init(const char *const *css_paths, int count,
     css_parser_destroy(parser);
     free(flat);
 
-    /* Now that the rules are in, establish the base every other lookup is
-     * computed against.
-     *
-     * One cascade, not one per element. css_cascade_style writes the initial
-     * value for every property the declaration leaves out, so cascading
-     * `html` and then `body` into the same computed style erased the first
-     * pass rather than layering on it - and it allocates font_family without
-     * freeing what was there, which leaked on every theme change. `body` is
-     * the one that matters: it is what a document's elements inherit, and it
-     * is where a sheet puts its size. */
+    /* One cascade: a second resets the first and leaks its font_family. */
     base_reset();
     {
         static const css_computed_style_t none;
@@ -149,11 +132,6 @@ void reaktor_style_darken(unsigned char rgba[4], float amount)
         rgba[i] = (unsigned char)(rgba[i] * (1.0f - amount) + 0.5f);
 }
 
-/* A length libcss resolved to pixels, or 0.
- *
- * It cannot resolve a percentage without a parent of known width, and when it
- * gives up it leaves the number alone with the unit still set - so `100%`
- * arrives as the float 100. Anything not in px is not a length we can use. */
 static float px_of(css_numeric_value_t v, css_unit_t unit)
 {
     return unit == CSS_UNIT_PX ? v : 0.0f;
@@ -242,18 +220,6 @@ static void resolve(const char *selector, reaktor_style *out)
     out->max_height  = px_of(computed.max_height,
                              computed.unit_bits.max_height);
 
-    /* Only when this rule states it. line-height inherits in CSS, but libcss
-     * reports an explicit `line-height: normal` and an absent declaration
-     * identically - and simple.css sets `normal` on every control, which is
-     * why the browser computes 18.4px/normal for a button while body is 1.5.
-     * Inheriting body's ratio made every control taller than the browser
-     * draws it.
-     *
-     * The kind comes from libcss's own tag, not from the size of the number:
-     * `line-height: 150%` is the same thing as 1.5 and would otherwise have
-     * been taken for a 150px line box. line-height is not in the property
-     * list css_compute_absolute_values walks, so a length is only usable if
-     * it was already written in px. */
     out->line_height = 0.0f;
     switch (computed.type_bits.line_height) {
     case CSS_LINE_HEIGHT_NUMBER: {

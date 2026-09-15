@@ -1,34 +1,10 @@
 #!/bin/sh
-# run.sh - runs the arms of the comparison on macOS, Linux and the BSDs.
-# run.ps1 is the Windows one, and the two are deliberately the same shape:
-# the same flags, the same columns, the same medians.
-#
-# The frame counters come from each app's own stdout. Memory and CPU do not:
-# they are sampled from outside, over the whole process tree, because Electron
-# is five processes and a JVM's idea of its own memory is not the operating
-# system's.
-#
-# Its memory figures are not run.ps1's. That one reads private bytes; this one
-# reads resident set size, which counts a page two processes share once for
-# each of them. Electron and the JVM are where that shows. Compare a run of
-# this against a run of this.
-#
-# Nothing is built here. Each arm points at an artifact that its own toolchain
-# produces, and an arm whose artifact is missing is skipped with the command
-# that would make it.
-#
-#     ./run.sh                                   # all arms, 6 s, 60 fps, 10 runs
-#     ./run.sh --targets electron,kmp --runs 3
-#     ./run.sh --csv bars.csv
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(dirname -- "$here")
 uname_s=$(uname -s)
 
-# Reaktor appears three times on purpose: the default CPU rasterizer, and the
-# same binary on the GPU driver the other arms draw on. SDL's name for that
-# driver is the platform's.
 case "$uname_s" in
     Darwin) targets="reaktor-software reaktor-metal reaktor-opengl shaft flutter electron kmp" ;;
     *)      targets="reaktor-software reaktor-opengl shaft flutter electron kmp" ;;
@@ -42,7 +18,9 @@ csv=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --help|-h) sed -n '2,22p' "$0" | cut -c 3-; exit 0 ;;
+        --help|-h)
+            echo "usage: run.sh [--targets a,b] [--seconds N] [--fps N] [--boxes N] [--runs N] [--csv FILE]"
+            exit 0 ;;
         --targets|--seconds|--fps|--boxes|--runs|--csv) ;;
         *) echo "run.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
     esac
@@ -61,9 +39,6 @@ while [ $# -gt 0 ]; do
 done
 
 cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
-
-# ---------------------------------------------------------------------------
-# The arms. Each one sets arm_exe, arm_args, arm_dir and arm_make.
 
 arm_spec() {
     arm_args=""
@@ -109,11 +84,6 @@ arm_spec() {
     esac
 }
 
-# ---------------------------------------------------------------------------
-# The sampler.
-
-# A clock finer than a second. The CPU reading divides by it, and whole
-# seconds over a six second run is more than a percent of error on its own.
 perl=$(command -v perl 2>/dev/null || true)
 [ -n "$perl" ] || echo "run.sh: no perl - wall time falls back to whole seconds" >&2
 
@@ -125,8 +95,6 @@ now() {
     fi
 }
 
-# Every descendant of a process, so Electron's renderer and GPU children are
-# counted and a launcher's children are not left out.
 tree_of() {
     ps -eo pid=,ppid= | awk -v root="$1" '
         { kids[$2] = kids[$2] " " $1 }
@@ -145,9 +113,6 @@ tree_of() {
 clk_tck=$(getconf CLK_TCK 2>/dev/null || echo 100)
 page_kb=$(( $(getconf PAGESIZE 2>/dev/null || echo 4096) / 1024 ))
 
-# One reading of the tree, as "pid cpu_seconds rss_kb" lines. Linux answers
-# out of /proc because its ps rounds processor time to the whole second;
-# everywhere else ps carries hundredths and is the whole story.
 sample_tree() {
     if [ -r /proc/self/stat ]; then
         for id in $(echo "$1" | tr ',' ' '); do
@@ -174,7 +139,6 @@ sample_tree() {
     fi
 }
 
-# The median of a column of a file, ignoring the runs that did not report it.
 median_of() {
     awk -v c="$2" '$c != "-" { print $c }' "$1" | sort -n | awk '
         { a[NR] = $1 + 0 }
@@ -185,9 +149,6 @@ median_of() {
         }'
 }
 
-# Runs one arm once and prints
-# "mem_mb cpu_core cpu_machine exit size frames ms_per_frame",
-# with "-" for anything the arm did not report.
 run_once() {
     : > "$tmp/samples"
 
@@ -200,9 +161,6 @@ run_once() {
     tree="$pid"
     ticks=0
     while kill -0 "$pid" 2>/dev/null; do
-        # The tree is rebuilt every fifth sample. Walking every process on the
-        # machine at 10 Hz would be a measurable share of what is being
-        # measured, and a child appearing half a second late costs nothing.
         if [ $(( ticks % 5 )) -eq 0 ]; then tree=$(tree_of "$pid"); fi
         ticks=$(( ticks + 1 ))
         sample_tree "$tree" | awk -v t="$ticks" '{ print t, $0 }' >> "$tmp/samples"
@@ -212,10 +170,6 @@ run_once() {
     wait "$pid" || status=$?
     ended=$(now)
 
-    # CPU is kept per process id rather than summed live: a child that exits
-    # mid-run still spent what it spent, and its last reading is it. Memory is
-    # the peak of the readings of a single tick, which is a moment that
-    # actually happened rather than a sum of separate highs.
     set -- $(awk '
         { if ($3 > cpu[$2]) cpu[$2] = $3; rss[$1] += $4 }
         END {
@@ -237,8 +191,6 @@ $(key size) $(key frames) $(key ms_per_frame)"
 key() {
     awk -v k="$1" '$1 == k && NF == 2 { v = $2 } END { print (v == "" ? "-" : v) }' "$tmp/out"
 }
-
-# ---------------------------------------------------------------------------
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
@@ -279,8 +231,6 @@ for name in $targets; do
 
     [ -s "$per_run" ] || continue
 
-    # The median of the runs is the answer; a single reading against a single
-    # reading means nothing.
     echo "$name $size $(median_of "$per_run" 1) $(median_of "$per_run" 2) \
 $(median_of "$per_run" 3) $(median_of "$per_run" 4) $(median_of "$per_run" 5) \
 $(wc -l < "$per_run" | tr -d ' ')" >> "$rows"
@@ -294,8 +244,6 @@ while read -r arm size mem core machine frames per_frame count; do
         "$arm" "$size" "$mem" "$core" "$machine" "$frames" "$per_frame" "$count"
 done < "$rows"
 
-# A window that did not come out 800x600 is not drawing the same picture, and
-# this is the only place that would say so.
 while read -r arm size rest; do
     case "$size" in
         800x600 | \?) ;;

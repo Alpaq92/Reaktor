@@ -45,5 +45,5 @@
   <text x="1377.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="400" fill="#b9b9b9">KMP</text>
   <line x1="785" y1="452.5" x2="1440" y2="452.5" stroke="#4a4a4a" stroke-width="1"/>
   <text x="40" y="562" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#b9b9b9">Drawing 64 rotating boxes at 60 fps in an 800×600 window. Lower is better in both panels.</text>
-  <text x="40" y="586" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8e8e8e">Three Reaktor configurations against the alternatives from other tech stacks, on the same machine — details in benchmarks/README.md.</text>
+  <text x="40" y="586" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8e8e8e">Three Reaktor configurations against the alternatives from other tech stacks, on the same machine — details in benchmarks/BENCHMARKS.md.</text>
 </svg>

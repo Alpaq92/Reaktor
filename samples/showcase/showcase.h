@@ -12,6 +12,7 @@ enum {
     TAB_POPUPS,
     TAB_ANIM,
     TAB_STYLING,
+    TAB_TRANSLATIONS,
     TAB_DIAG,
     TAB_COUNT
 };
@@ -76,6 +77,9 @@ void sample_tablist_keys(char *out, int cap);
 
 int  sample_tab(void);
 void set_tab(App *app, int tab);
+
+int  sample_option(App *app, struct nk_context *ctx, const char *label,
+                   float w, int on);
 
 void reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
                            float w, float h);
