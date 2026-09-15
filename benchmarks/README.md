@@ -12,9 +12,12 @@ The chart now carries what came out of it, and it is not what it replaced. The
 memory ordering survived; the CPU ordering did not. Measuring Flutter over
 twelve threads gives **1.4%** where that README shows 11.4%, which is an
 eightfold gap in the direction that says their figure was per-core and
-Reaktor's per-machine — the two plotted in one panel. On one denominator,
-Reaktor's software rasterizer is the most expensive of the four on CPU, which
-is what a CPU rasterizer among GPU ones should be.
+Reaktor's per-machine — the two plotted in one panel. On one denominator the
+software rasterizer first came out the most expensive arm on CPU, which is what
+a CPU rasterizer among GPU ones should be, and measuring where that went found
+it was not the rasterizing: a panel background was arriving as two textured,
+blended triangles where a fill would do. `docs/PERFORMANCE.md` has the numbers.
+It reads 16.4% of a core now, under Flutter.
 
 Shaft itself is not in the chart: it does not link on Windows, for a reason
 that is nothing to do with this benchmark. See below.
