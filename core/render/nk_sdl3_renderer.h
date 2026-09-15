@@ -325,6 +325,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
     {
         SDL_Rect saved_clip;
         SDL_BlendMode saved_blend;
+        float saved_r, saved_g, saved_b, saved_a;
         bool clipping_enabled;
         int vs = sizeof(struct nk_sdl_vertex);
         size_t vp = NK_OFFSETOF(struct nk_sdl_vertex, position);
@@ -405,6 +406,10 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         /* Ensure alpha blending is enabled for geometry rendering. */
         saved_blend = SDL_BLENDMODE_INVALID;
         SDL_GetRenderDrawBlendMode(sdl->renderer, &saved_blend);
+        /* The fill fast path below writes the draw color, which belongs to
+         * whoever set it - the clear, a frame from now. */
+        SDL_GetRenderDrawColorFloat(sdl->renderer, &saved_r, &saved_g,
+                                    &saved_b, &saved_a);
         SDL_SetRenderDrawBlendMode(sdl->renderer, SDL_BLENDMODE_BLEND);
 
         nk_draw_foreach(cmd, &sdl->ctx, &sdl->ogl.cmds)
@@ -453,9 +458,127 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
             {
                 const void *vertices = nk_buffer_memory_const(&vbuf);
 
+                /* REAKTOR: shapes ask for no texture at all.
+                 *
+                 * white_tex is one opaque white texel, and sampling it
+                 * multiplies the vertex color by one - the same pixels a
+                 * null texture draws. A GPU does not care either way. A CPU
+                 * rasterizer does: the same full-window quad costs 6.95 ms
+                 * as textured geometry and 16.38 ms textured and blended,
+                 * against 0.12 ms for the fill it amounts to. Handing the
+                 * renderer NULL takes the sampler out of the inner loop for
+                 * every shape, which is every panel, row and border. Text
+                 * still arrives with font_tex and is untouched. */
+                SDL_Texture *tex = (SDL_Texture *)cmd->texture.ptr;
+
+                if (tex == sdl->ogl.white_tex) tex = NULL;
+
+                /* REAKTOR: an axis-aligned quad of one color is a fill, not
+                 * two triangles.
+                 *
+                 * nk_convert flattens every shape to triangles, and a CPU
+                 * rasterizer pays for that literally: the same full-window
+                 * coverage costs 6.95 ms walked as geometry against 0.12 ms
+                 * as a fill. An empty window is exactly this command and
+                 * nothing else - one quad, six indices - and so is most of
+                 * what a real page draws, every panel, row and separator
+                 * among them.
+                 *
+                 * Six indices, no texture and one color across all of them is
+                 * the whole test. It cannot match a rounded rect or an
+                 * antialiased edge, because Nuklear feathers those into more
+                 * geometry than this, and it cannot match a gradient, because
+                 * the colors would differ. Hardware is left alone: it draws
+                 * triangles for free and the rounding below is only applied
+                 * to the software path. */
+                if (is_sw && tex == NULL && cmd->elem_count == 6) {
+                    const nk_byte *vb = (const nk_byte *)vertices;
+                    const float *pos[6];
+                    const float *c0 = NULL;
+                    int k, ok = 1, corners = 0;
+                    float x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+
+                    for (k = 0; k < 6; k++) {
+                        const nk_byte *v = vb + (nk_size)offset[k] *
+                                                (nk_size)vs;
+                        const float *col = (const float *)(v + vc);
+
+                        pos[k] = (const float *)(v + vp);
+                        if (!c0) c0 = col;
+                        else if (col[0] != c0[0] || col[1] != c0[1] ||
+                                 col[2] != c0[2] || col[3] != c0[3]) {
+                            ok = 0;
+                            break;
+                        }
+                    }
+
+                    if (ok) {
+                        x0 = x1 = pos[0][0];
+                        y0 = y1 = pos[0][1];
+                        for (k = 1; k < 6; k++) {
+                            if (pos[k][0] < x0) x0 = pos[k][0];
+                            if (pos[k][0] > x1) x1 = pos[k][0];
+                            if (pos[k][1] < y0) y0 = pos[k][1];
+                            if (pos[k][1] > y1) y1 = pos[k][1];
+                        }
+                        if (!(x1 > x0 && y1 > y0)) ok = 0;
+                    }
+
+                    /* Every vertex on a corner, and all four corners used:
+                     * anything else is a shape that happens to have six
+                     * indices, not the rectangle they would describe. */
+                    if (ok) {
+                        for (k = 0; k < 6; k++) {
+                            int cx = pos[k][0] == x1;
+                            int cy = pos[k][1] == y1;
+
+                            if ((pos[k][0] != x0 && !cx) ||
+                                (pos[k][1] != y0 && !cy)) {
+                                ok = 0;
+                                break;
+                            }
+                            corners |= 1 << (cy * 2 + cx);
+                        }
+                        if (corners != 0xF) ok = 0;
+                    }
+
+                    if (ok) {
+                        SDL_FRect fr;
+                        /* Thin rules are left to blend. A one pixel high
+                         * fill lands differently without it - the separators
+                         * on the Buttons page move a shade - and they cost
+                         * nothing to draw either way. Area is where the
+                         * saving is, and where the two agree. */
+                        int opaque = c0[3] >= 1.0f &&
+                                     x1 - x0 >= 2.0f && y1 - y0 >= 2.0f;
+
+                        fr.x = x0;
+                        fr.y = y0;
+                        fr.w = x1 - x0;
+                        fr.h = y1 - y0;
+
+                        /* Source-over with an alpha of one is the source, so
+                         * an opaque fill has nothing to read the destination
+                         * for. Saying so is most of the saving: the blend is
+                         * a read-modify-write per pixel and the write is not.
+                         */
+                        if (opaque)
+                            SDL_SetRenderDrawBlendMode(sdl->renderer,
+                                                       SDL_BLENDMODE_NONE);
+                        SDL_SetRenderDrawColorFloat(sdl->renderer, c0[0],
+                                                    c0[1], c0[2], c0[3]);
+                        SDL_RenderFillRect(sdl->renderer, &fr);
+                        if (opaque)
+                            SDL_SetRenderDrawBlendMode(sdl->renderer,
+                                                       SDL_BLENDMODE_BLEND);
+                        offset += cmd->elem_count;
+                        continue;
+                    }
+                }
+
                 SDL_RenderGeometryRaw(
                         sdl->renderer,
-                        (SDL_Texture *)cmd->texture.ptr,
+                        tex,
                         (const float*)((const nk_byte*)vertices + vp), vs,
                         (const SDL_FColor*)((const nk_byte*)vertices + vc), vs,
                         (const float*)((const nk_byte*)vertices + vt), vs,
@@ -467,6 +590,8 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         }
 
         /* Restore the original blend mode. */
+        SDL_SetRenderDrawColorFloat(sdl->renderer, saved_r, saved_g,
+                                    saved_b, saved_a);
         if (saved_blend != SDL_BLENDMODE_INVALID) {
             SDL_SetRenderDrawBlendMode(sdl->renderer, saved_blend);
         }

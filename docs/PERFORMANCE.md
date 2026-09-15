@@ -26,10 +26,10 @@ costs to run.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 10.0 MB, the same binary on D3D11 60.6 MB and on OpenGL
-90.8 MB, Flutter 92.2 MB, Electron 155.8 MB, Kotlin Multiplatform 670.0 MB.
-CPU as a percent of one core: Reaktor 67.3%, D3D11 15.6%, OpenGL 14.3%,
-Flutter 16.8%, Electron 36.0%, Kotlin Multiplatform 50.2%](../assets/rest/benchmark.svg)
+Memory: Reaktor 10.0 MB, the same binary on D3D11 60.7 MB and on OpenGL
+90.2 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB.
+CPU as a percent of one core: Reaktor 16.4%, D3D11 14.4%, OpenGL 14.1%,
+Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%](../assets/rest/benchmark.svg)
 
 The workload is not original. It is
 [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s benchmark — 64 boxes
@@ -49,29 +49,43 @@ fourth for Shaft, which is the one that did not run — and
 process tree, because Electron is five processes and a JVM's idea of its own
 memory is not the system's.
 
-**The memory order and the CPU order do not tell the same story.** Reaktor
-draws this in a ninth of Flutter's memory and a sixty-seventh of Compose's. On
-CPU it is the *most* expensive of the six, because it is the only one
-rasterizing on the processor.
+**The two panels agree, which they did not use to.** Reaktor draws this in a
+ninth of Flutter's memory and a sixty-seventh of Compose's, and it is also the
+cheapest arm on CPU that is not one of its own GPU backends.
 
 | Arm | Memory | CPU, one core | CPU, all 12 threads |
 | --- | --- | --- | --- |
-| **Reaktor**, software | **10.0 MB** | **67.3%** | **5.6%** |
-| **Reaktor**, `direct3d11` | 60.6 MB | 15.6% | 1.3% |
-| **Reaktor**, `opengl` | 90.8 MB | 14.3% | 1.2% |
-| Flutter | 92.2 MB | 16.8% | 1.4% |
-| Electron | 155.8 MB | 36.0% | 3.0% |
-| Kotlin Multiplatform | 670.0 MB | 50.2% | 4.2% |
+| **Reaktor**, software | **10.0 MB** | **16.4%** | **1.4%** |
+| **Reaktor**, `direct3d11` | 60.7 MB | 14.4% | 1.2% |
+| **Reaktor**, `opengl` | 90.2 MB | 14.1% | 1.2% |
+| Flutter | 92.2 MB | 16.6% | 1.4% |
+| Electron | 158.3 MB | 39.0% | 3.3% |
+| Kotlin Multiplatform | 669.8 MB | 56.1% | 4.7% |
+
+**That top row used to read 67.3%, and the paragraph under it used to explain
+why a CPU rasterizer among GPU ones should be the most expensive thing in the
+table.** It was not paying for rasterizing. It was paying for being asked the
+wrong way: `nk_convert` flattens every shape to triangles, so a panel
+background arrived as two textured, alpha-blended triangles covering the
+window. Measured three ways, the same coverage costs 16.38 ms as textured
+blended geometry, 6.95 ms untextured, and 0.12 ms as a fill. The renderer now
+recognises an axis-aligned quad of one color and issues the fill, and skips the
+blend when the color is opaque, because source-over with an alpha of one is the
+source. A frame of this benchmark went from 11.48 ms to 2.12 ms and an empty
+window from 8.06 ms to 0.54 ms, drawing the same pixels to within one least
+significant bit — `--renderer direct3d11` is unchanged to the bit. The lesson
+is the one at the top of this file: the cost was in the asking, not the
+drawing, and only measuring the present found it.
 
 The first three rows are one executable. `--renderer` is the whole difference,
-and it buys about a fifth of the CPU for six to nine times the memory — which
-is the trade the default is taking, in the direction of the memory. On a GPU
-driver Reaktor costs what the GPU frameworks cost: **`opengl` lands on 90.8 MB
-against Flutter's 92.2**, and the CPU figures of the three GPU rows sit inside
-two and a half points of each other. Those two have almost nothing in common
-above the driver — Nuklear through SDL against Skia through the Flutter engine —
-which is the point: at that size the number is the GL context and its buffers,
-not the framework on top of it.
+and what it now buys is about two points of CPU for six to nine times the
+memory — which is no longer much of a trade, and is the reason the default
+stays where it is. On a GPU driver Reaktor costs what the GPU frameworks cost:
+**`opengl` lands on 90.2 MB against Flutter's 92.2**, and the CPU figures of
+all four GPU-drawing arms sit inside two and a half points of each other. Those
+two have almost nothing in common above the driver — Nuklear through SDL
+against Skia through the Flutter engine — which is the point: at that size the
+number is the GL context and its buffers, not the framework on top of it.
 
 Both CPU columns are given because the question has to be asked: at 12 threads
 the two readings differ by a factor of twelve, and a comparison that does not
@@ -131,11 +145,13 @@ twelve cores, and on twelve cores Flutter measures **1.4%** here where their
 README shows 11.4%. Eightfold, in the direction that says their figure was per
 core — so the old chart was plotting one per-machine number against four
 per-core ones, in the same panel, which flattered the per-machine one by about
-twelve. On one denominator the memory ordering survives and the CPU ordering
-does not: Reaktor's software rasterizer is the most expensive of the six, which
-is what a CPU rasterizer among GPU ones should be.
+twelve. On one denominator the memory ordering survives, and the CPU ordering
+went through two upheavals rather than one: first the software rasterizer came
+out the most expensive arm in the table, which is what a CPU rasterizer among
+GPU ones should be, and then it turned out not to be rasterizing that was
+expensive — see the fills above — and it came back to 16.4%.
 
-Compose's 235.1 MB becoming 670.0 is a second kind of difference and not the
+Compose's 235.1 MB becoming 669.8 is a second kind of difference and not the
 same kind of finding. The JVM sizes its heap from the machine's RAM, so that
 bar says as much about this machine as it does about Compose.
 
