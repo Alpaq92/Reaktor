@@ -1,9 +1,3 @@
-/* The rotating boxes of samples/bench/bench.c, drawn by Electron.
- *
- * The window is the content area, not the frame: 800x600 of canvas, the same
- * picture the other four arms draw. The renderer does the drawing and hands
- * its counters back over IPC; this process prints them and exits, so the
- * stdout block matches what bench.exe prints. */
 'use strict'
 
 const { app, BrowserWindow, ipcMain } = require('electron')
@@ -20,8 +14,6 @@ const seconds = flag('--bench-seconds', '5')
 const fps = flag('--fps', '0')
 const boxes = flag('--boxes', '64')
 
-/* Reaktor's default renderer is the CPU one. Chromium's is not, and this is
- * the only switch that brings the two arms onto the same rasterizer. */
 if (argv.indexOf('--software') >= 0) app.disableHardwareAcceleration()
 
 app.whenReady().then(() => {
@@ -34,8 +26,6 @@ app.whenReady().then(() => {
         autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            /* Off, or Chromium quietly stops painting an unfocused window and
-             * the run measures a sleeping process. */
             backgroundThrottling: false
         }
     })

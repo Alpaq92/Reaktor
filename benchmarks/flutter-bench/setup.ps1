@@ -1,9 +1,3 @@
-# Generates the platform runner for the Flutter arm and sizes its window to the
-# 800x600 the other four draw into.
-#
-# The runner is not checked in: `flutter create` writes it, and the size lives
-# in its C++ rather than in any Dart this benchmark controls. So the size is a
-# patch applied after the generation, and re-running this is harmless.
 param([string]$Platform = "windows")
 
 $ErrorActionPreference = "Stop"
@@ -14,8 +8,6 @@ if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
     throw "flutter is not on PATH"
 }
 
-# `flutter create` regenerates a project's scaffolding, and the benchmark is
-# scaffolding-shaped: one main.dart. Keep a copy rather than find out.
 $saved = Get-Content $dart -Raw
 
 & flutter create --platforms=$Platform --project-name reaktor_bench $here
@@ -42,10 +34,6 @@ if ($text -notmatch 'Win32Window::Size\s+size\([^)]*\);') {
 $sized = [regex]::Replace($text, 'Win32Window::Size\s+size\([^)]*\);',
                           'Win32Window::Size size(800, 600);')
 
-# `flutter create` titles the window after the package, so this one comes out
-# called reaktor_bench. Every other arm names the framework that is drawing -
-# Reaktor, Electron, Kotlin Multiplatform - and a shot of the five is
-# unreadable if one of them names the benchmark instead.
 if ($sized -notmatch 'window\.Create\(L"[^"]*",') {
     throw "could not find the window title in $main"
 }
@@ -55,10 +43,6 @@ Set-Content -Path $main -Value $sized -NoNewline
 
 Write-Host "window sized to 800x600 and titled Flutter in windows\runner\main.cpp"
 
-# That size is the outer window: the template hands it straight to CreateWindow,
-# which leaves a client area smaller by the frame, and the client area is what
-# gets drawn. Growing the rect by the frame is the whole fix, and it is done by
-# patching rather than by asking, because Flutter has no API for it.
 $win32 = Join-Path $here "windows\runner\win32_window.cpp"
 $adjusted = $false
 

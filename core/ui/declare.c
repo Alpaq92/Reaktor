@@ -10,9 +10,6 @@ static int                g_space;
 static int                g_unsettled;
 static int                g_settled_run;
 
-/* Give up asking for another frame after this many. A tree that has
- * not settled by now is not going to: it is a box whose name changes
- * every frame, not one still measuring itself. */
 #define REAKTOR_SETTLE_TRIES 16
 static int                g_settle_tries;
 static const char        *g_stuck;
@@ -51,10 +48,6 @@ reaktor_frame_end(void)
     if (!g_unsettled) {
         g_settle_tries = 0;
     } else if (g_settle_tries < REAKTOR_SETTLE_TRIES) {
-        /* Boxes are placed a frame late, so a tree that has just
-         * grown one needs another frame to draw into. Nothing else
-         * is going to ask for it - the app draws on events only - so
-         * a synthetic event is what wakes the loop. */
         SDL_Event e;
 
         g_settle_tries++;
@@ -113,9 +106,6 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     box = *b;
     box.dir = dir;
 
-    /* The outermost container takes the panel's width. Without this a
-     * root box has no width until something measures it, and two
-     * adjacent declared blocks could not be siblings. */
     if (g_depth == 0 && box.w <= 0.0f)
         box.w = nk_window_get_content_region_size(g_ctx).x;
 
@@ -147,8 +137,6 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
                 g_boxok[g_depth + 1]   = 1;
             }
         } else {
-            /* No rect yet: first frame for this box. Recorded rather
-             * than guessed at, and the frame is redrawn. */
             if (g_depth < REAKTOR_LAY_DEPTH) g_boxok[g_depth + 1] = 0;
             if (!g_stuck) g_stuck = box.name ? box.name : "(a container)";
             g_unsettled++;
@@ -217,8 +205,6 @@ width_of(unsigned id)
     return reaktor_layout_rect(&g_app->lay, id, &r) ? r.w : 0.0f;
 }
 
-/* Report the widget, claim its slot, and answer whether it has a rect
- * to draw into. Every widget below starts with this and returns on 0. */
 static int
 place(unsigned char role, const char *name, const char *value, unsigned state,
       const char *keys, const reaktor_box *b, unsigned *out_id)
@@ -246,8 +232,6 @@ style_font(const char *selector)
     return g_ctx->style.font;
 }
 
-/* A size for an axis the caller left alone. Zero means "no default here",
- * and a box that fills an axis keeps whatever the layout gives it. */
 static void
 box_default(reaktor_box *b, float w, float h)
 {
@@ -255,18 +239,12 @@ box_default(reaktor_box *b, float w, float h)
     if (h > 0.0f && b->h <= 0.0f && !(b->flags & REAKTOR_LAY_FILL_Y)) b->h = h;
 }
 
-/* The height four widgets settle on when they are given none. */
 static float
 row_height(float extra)
 {
     return g_ctx->style.font->height + extra;
 }
 
-/* One rule laid over another, the narrower winning wherever it says
- * anything. There is no "was declared" bit in reaktor_style - a property the
- * rule omits reads as zero - so a zero is taken as silence. That is wrong for
- * an authored `padding: 0`, and it is the best this can do until the resolver
- * carries the declared set. */
 static void
 overlay(reaktor_style *base, const reaktor_style *over)
 {
@@ -293,17 +271,6 @@ overlay(reaktor_style *base, const reaktor_style *over)
     if (over->font_px > 0)        base->font_px     = over->font_px;
 }
 
-/* The size the sheet asks for, when the page has not asked for one itself.
- *
- * `element` is the rule a widget is by default: a button is `button` whether
- * or not the page named a selector, which is what lets a stylesheet change
- * how big things are rather than only what color they are. A selector the
- * page did name is tried first and falls back to the element rule.
- *
- * pad_x/pad_y are Nuklear's own padding, used only when no rule matches. */
-/* The selector to style by: what the page named when some sheet defines it,
- * and the element rule otherwise. A class only one stylesheet knows about
- * therefore costs nothing under another. */
 static const char *
 rule_or(const char *selector, const char *element)
 {
@@ -323,10 +290,6 @@ box_from_style(reaktor_box *box, const char *text, const char *selector,
     reaktor_style              st;
     float                      extra_w, extra_h;
 
-    /* The element rule first, then the page's selector over the top - both,
-     * in that order, the way a sheet is meant to be read. Taking whichever
-     * matched first meant a narrow rule that sets one property threw away
-     * every metric the element rule supplied. */
     memset(&st, 0, sizeof(st));
     if (element) reaktor_style_get(element, &st);
     if (selector) {
@@ -362,10 +325,6 @@ box_from_style(reaktor_box *box, const char *text, const char *selector,
         box->w = w;
     }
     if (box->h <= 0.0f && !(box->flags & REAKTOR_LAY_FILL_Y)) {
-        /* The content box is the line box, not the font's own height: a
-         * sheet saying line-height 1.5 wants half a line of air around its
-         * text, and that is most of why a document's controls are roomier
-         * than a toolbar's. */
         float line = st.line_height > 0.0f ? st.line_height : f->height;
         float h    = st.height > 0.0f ? st.height : line + extra_h;
         if (h < st.min_height) h = st.min_height;
@@ -373,12 +332,6 @@ box_from_style(reaktor_box *box, const char *text, const char *selector,
         box->h = h;
     }
 
-    /* And the space around it. A sheet written for a document says how far
-     * apart its controls sit with margins - simple.css puts 0.5rem under
-     * every button, input and select, and that vertical rhythm is most of
-     * what the sheet looks like. Reading the margins and then not applying
-     * them left the widgets the right size in the wrong places. A margin the
-     * page set itself wins, the same way its sizes do. */
     if (st.matched) {
         if (box->mt <= 0.0f) box->mt = st.margin[REAKTOR_SIDE_TOP];
         if (box->mr <= 0.0f) box->mr = st.margin[REAKTOR_SIDE_RIGHT];
@@ -429,8 +382,6 @@ reaktor_button(const reaktor_button_spec *s)
 
     r = nk_widget_bounds(g_ctx);
 
-    /* The rule this button is painted from: what the page named, if any sheet
-     * defines it, and `button` otherwise. */
     sel = rule_or(s->style, "button");
     styled = push_style_font(s->style);
     if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_REPEATER);
@@ -457,13 +408,123 @@ reaktor_button(const reaktor_button_spec *s)
     return hit;
 }
 
+#define WRAP_LINES 256
+
+typedef struct wrapped {
+    float space;
+    int   lines, end[WRAP_LINES];
+} wrapped;
+
+static int
+wrap_guess(const struct nk_user_font *f, const char *s, int len, float space)
+{
+    float   w = 0.0f;
+    int     at = 0;
+    nk_rune cp;
+
+    while (at < len) {
+        int   n = nk_utf_decode(s + at, &cp, len - at);
+        float g;
+
+        if (n <= 0) return at ? at : len;
+        g = f->width(f->userdata, f->height, s + at, n);
+        if (w + g > space && at > 0) {
+            int brk;
+
+            if (cp == ' ') return at + n;
+            brk = reaktor_text_break(s, len, at);
+            return brk > 0 ? brk : at;
+        }
+        w  += g;
+        at += n;
+    }
+    return len;
+}
+
+static int
+wrap_fit(const struct nk_user_font *f, const char *s, int len, float space)
+{
+    int end = wrap_guess(f, s, len, space);
+
+    for (;;) {
+        int trim = end, brk;
+
+        while (trim > 0 && s[trim - 1] == ' ') trim--;
+        if (trim <= 0 || f->width(f->userdata, f->height, s, trim) <= space)
+            return end;
+        brk = reaktor_text_break(s, len, trim - 1);
+        if (brk <= 0 || brk >= end) return end;
+        end = brk;
+    }
+}
+
+static int
+wrap_lines(const struct nk_user_font *f, const char *s, float space, wrapped *w)
+{
+    int len = (int)strlen(s), done = 0, lines = 0;
+
+    while (done < len) {
+        done += wrap_fit(f, s + done, len - done, space);
+        if (lines < WRAP_LINES) w->end[lines] = done;
+        lines++;
+    }
+    w->space = space;
+    w->lines = lines;
+    return lines > 0 ? lines : 1;
+}
+
+static void
+wrap_draw(const struct nk_user_font *f, const char *s, struct nk_color fg,
+          const wrapped *w)
+{
+    const struct nk_style *st = &g_ctx->style;
+    struct nk_rect         b, line;
+    int                    len = (int)strlen(s), done = 0, k, rtl;
+    char                   marked[1024];
+
+    if (nk_widget(&b, g_ctx) == NK_WIDGET_INVALID) return;
+    rtl  = reaktor_text_rtl(s, len);
+    line = nk_rect(b.x + st->text.padding.x, b.y + st->text.padding.y,
+                   b.w - 2.0f * st->text.padding.x, f->height);
+    fg = nk_rgb_factor(fg, st->text.color_factor);
+    for (k = 0; done < len && line.y + line.h <= b.y + b.h; k++) {
+        int            n = w && w->space == line.w && k < w->lines && k < WRAP_LINES
+                         ? w->end[k] - done
+                         : wrap_fit(f, s + done, len - done, line.w);
+        const char    *text = s + done;
+        int            bytes = n;
+        struct nk_rect at = line;
+
+        if (rtl) {
+            float width;
+
+            if (n + 3 <= (int)sizeof marked) {
+                memcpy(marked, "\xE2\x80\x8F", 3);
+                memcpy(marked + 3, text, (size_t)n);
+                text  = marked;
+                bytes = n + 3;
+            }
+            width = f->width(f->userdata, f->height, text, bytes);
+            at.x += at.w - width;
+            at.w  = width;
+        } else {
+            while (bytes > 0 && text[bytes - 1] == ' ') bytes--;
+        }
+        nk_draw_text(nk_window_get_canvas(g_ctx), at, text, bytes, f,
+                     st->window.background, fg);
+        done   += n;
+        line.y += f->height;
+    }
+}
+
 void
 reaktor_label(const reaktor_label_spec *s)
 {
     reaktor_box                box;
     const struct nk_user_font *f;
+    wrapped                    lines;
     unsigned                   id;
-    int                        styled;
+    int                        styled, measured = 0;
 
     if (!g_app || !s || !s->text) return;
     box = s->box;
@@ -473,14 +534,17 @@ reaktor_label(const reaktor_label_spec *s)
     f   = style_font(s->style);
 
     if (s->wrap) {
+        struct nk_vec2 pad = g_ctx->style.text.padding;
         float own   = width_of(id);
-        float avail = (own > 0.0f ? own : g_width[g_widths - 1]) - 4.0f;
-        float tw    = f->width(f->userdata, f->height, s->text,
-                               (int)strlen(s->text));
-        int   lines = (avail > 1.0f && tw > avail) ? (int)(tw / avail) + 2 : 1;
+        float avail = (float)(int)(own > 0.0f ? own : g_width[g_widths - 1]);
         struct nk_rect prev;
 
-        if (box.h <= 0.0f) box.h = (f->height + 3.0f) * (float)lines;
+        if (box.h <= 0.0f) {
+            box.h = f->height * (float)wrap_lines(f, s->text, avail - 2.0f * pad.x,
+                                                  &lines)
+                  + 2.0f * pad.y;
+            measured = 1;
+        }
         if (!reaktor_layout_rect(&g_app->lay, id, &prev) || prev.h != box.h)
             g_unsettled++;
     } else {
@@ -496,18 +560,11 @@ reaktor_label(const reaktor_label_spec *s)
         nk_flags a = s->align == REAKTOR_CENTRE ? NK_TEXT_CENTERED
                    : s->align == REAKTOR_RIGHT  ? NK_TEXT_RIGHT
                                                 : NK_TEXT_LEFT;
+        struct nk_color c = reaktor_token(s->color, g_ctx->style.text.color);
 
         styled = push_style_font(s->style);
-        if (s->color) {
-            struct nk_color c = reaktor_token(s->color,
-                                              g_ctx->style.text.color);
-            if (s->wrap) nk_label_colored_wrap(g_ctx, s->text, c);
-            else         nk_label_colored(g_ctx, s->text, a, c);
-        } else if (s->wrap) {
-            nk_label_wrap(g_ctx, s->text);
-        } else {
-            nk_label(g_ctx, s->text, a);
-        }
+        if (s->wrap) wrap_draw(f, s->text, c, measured ? &lines : NULL);
+        else         nk_label_colored(g_ctx, s->text, a, c);
         if (styled) nk_style_pop_font(g_ctx);
     }
 }

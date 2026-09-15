@@ -276,13 +276,6 @@ static void trim(const char *s, size_t *start, size_t *end)
     while (*end > *start && isspace((unsigned char)s[*end - 1])) (*end)--;
 }
 
-/* [name="value"] -> .name-value, in place, for the one shape that carries
- * real styling in a document sheet. Anything else in brackets is still
- * unrepresentable and the rule still goes.
- *
- * Writes into `out` and answers its length, or 0 if the selector cannot be
- * rewritten. The result is never longer than the input: [x="y"] is six
- * characters of punctuation and .x-y is two. */
 static size_t selector_rewrite(const char *s, size_t len, char *out,
                                size_t cap)
 {
@@ -298,11 +291,7 @@ static size_t selector_rewrite(const char *s, size_t len, char *out,
             size_t j = i + 1, eq, ve, vs;
 
             while (j < len && s[j] != ']' && s[j] != '=') j++;
-            if (j >= len || s[j] != '=') return 0;   /* [attr] alone */
-            /* Only a plain equals. ^= $= *= |= ~= select on part of the
-             * value, which a class cannot express - folding the operator
-             * into the name produced a rule registered under something
-             * nothing could ever match, which is worse than dropping it. */
+            if (j >= len || s[j] != '=') return 0;
             if (j > i + 1 && strchr("^$*|~", s[j - 1])) return 0;
             eq = j;
             vs = eq + 1;
@@ -403,13 +392,8 @@ static void collect_one(void *c, const char *p, size_t plen,
         vars_set(ctx->m, p, plen, v, vlen);
 }
 
-/* px is the rem base - html's font-size, 16 unless the sheet says otherwise.
- * em is what an element inherits, which is body's if it sets one. */
 typedef struct root_ctx { float px, em; } root_ctx;
 
-/* A length in px, resolving a unit against the rem base. Used for the two
- * font-size declarations that establish the bases themselves, so it cannot
- * call convert_units without going in a circle. */
 static float base_length(const char *v, size_t vlen, float rem_px)
 {
     char   b[64];
@@ -421,18 +405,12 @@ static float base_length(const char *v, size_t vlen, float rem_px)
         b[i] = (char)tolower((unsigned char)v[i]);
     b[vlen] = 0;
 
-    /* The number, and then exactly where it ended. atof would stop at the
-     * first letter and never say so, which is how `1.15rem !important` came
-     * back as 1.15 and was believed. */
     i = 0;
     if (b[i] == '-' || b[i] == '+') i++;
     while (i < vlen && (isdigit((unsigned char)b[i]) || b[i] == '.')) i++;
     if (i == 0) return 0.0f;
     n = atof(b);
 
-    /* Only the units this can convert. A sheet may legitimately say pt or
-     * ch or vw; answering 0 leaves the caller on its default, which is a
-     * better wrong answer than treating the number as pixels. */
     if (strcmp(b + i, "%") == 0)   return (float)(n * rem_px / 100.0);
     if (strcmp(b + i, "rem") == 0) return (float)(n * rem_px);
     if (strcmp(b + i, "em") == 0)  return (float)(n * rem_px);
@@ -441,9 +419,6 @@ static float base_length(const char *v, size_t vlen, float rem_px)
     return 0.0f;
 }
 
-/* Whether a selector list names this element on its own - `body` or the
- * `html, body` a sheet is just as likely to write. An exact four-byte
- * compare matched only the first spelling and silently missed the second. */
 static int selector_names(const char *src, size_t s, size_t e,
                           const char *want)
 {
@@ -469,16 +444,12 @@ static void root_one(void *c, const char *p, size_t plen,
 
     if (plen != 9 || strncmp(p, "font-size", 9) != 0) return;
     n = base_length(v, vlen, 16.0f);
-    /* html is the rem base. It is the em base only until a body rule says
-     * otherwise - setting both here meant an html rule appearing later in
-     * the concatenated sheets discarded the body size. */
     if (n > 0.0f) {
         if (ctx->em == ctx->px) ctx->em = n;
         ctx->px = n;
     }
 }
 
-/* body's font-size, which is the one nearly every element inherits. */
 static void body_one(void *c, const char *p, size_t plen,
                      const char *v, size_t vlen)
 {

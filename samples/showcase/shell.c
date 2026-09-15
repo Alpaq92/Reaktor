@@ -9,7 +9,7 @@ sample_window(reaktor_window_spec *out)
 {
     out->w = WINDOW_WIDTH;
     out->h = WINDOW_HEIGHT;
-    out->title = "Reaktor";
+    out->title = "Showcase";
     out->borderless = 1;
 }
 
@@ -61,13 +61,15 @@ sample_tab(void)
     return g_tab;
 }
 
-/* --tab and --scroll open the window on one page, scrolled to one place, so
- * two runs can be compared without clicking either of them into position.
- * The runtime has already taken its own flags out of argv. */
 void
 sample_args(App *app, int argc, char **argv)
 {
-    int i;
+    char font[1024];
+    int  i;
+
+    /* After every --font-fallback. */
+    if (reaktor_path(font, sizeof font, "assets/fonts/MPLUS1p-Regular.ttf"))
+        reaktor_text_add_fallback(font);
 
     for (i = 1; i + 1 < argc; i++) {
         int n = SDL_atoi(argv[i + 1]);
@@ -327,18 +329,64 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
     nk_style_pop_style_item(ctx);
 }
 
+static style_frame
+push_strip_look(struct nk_context *ctx, struct nk_color fg, struct nk_color wash)
+{
+    nk_style_push_style_item(ctx, &ctx->style.button.normal,
+                             nk_style_item_color(nk_rgba(0, 0, 0, 0)));
+    nk_style_push_style_item(ctx, &ctx->style.button.hover,
+                             nk_style_item_color(wash));
+    nk_style_push_style_item(ctx, &ctx->style.button.active,
+                             nk_style_item_color(wash));
+    nk_style_push_color(ctx, &ctx->style.button.text_normal, fg);
+    nk_style_push_color(ctx, &ctx->style.button.text_hover,  fg);
+    nk_style_push_color(ctx, &ctx->style.button.text_active, fg);
+    nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
+    nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
+    return (style_frame){ 3, 3, 2, 0, 0 };
+}
+
+static struct nk_color
+strip_wash(void)
+{
+    return reaktor_token("--background-hover", nk_rgba(128, 128, 128, 40));
+}
+
+int
+sample_option(App *app, struct nk_context *ctx, const char *label, float w,
+              int on)
+{
+    struct nk_color fg = reaktor_token(on ? "--links" : "--text-muted", app->text);
+    struct nk_rect  b;
+    style_frame     look;
+    unsigned        id;
+    int             hit;
+
+    if (w <= 0.0f) {
+        const struct nk_user_font *f = ctx->style.font;
+        w = f->width(f->userdata, f->height, label, (int)strlen(label))
+          + 2.0f * (float)TAB_PAD_X;
+    }
+    nk_layout_row_push(ctx, w);
+    b = nk_widget_bounds(ctx);
+    hot_push(app, b, 1, 1);
+
+    look = push_strip_look(ctx, fg, strip_wash());
+    id   = reaktor_note(app, REAKTOR_A11Y_RADIO, label, NULL,
+                        on ? REAKTOR_A11Y_CHECKED : 0u, b);
+    hit  = nk_button_label(ctx, label);
+    if (reaktor_focus_activated(app, id)) hit = 1;
+    pop_style(ctx, look);
+    return hit && !on;
+}
+
 static void
 tab_strip(App *app, struct nk_context *ctx, int win_w)
 {
     const struct nk_user_font *font = pick_font(app, 16, 0);
-    unsigned char c[4];
-    struct nk_color accent = reaktor_style_token("--links", c)
-                           ? col_of(c) : app->text;
-    struct nk_color muted  = reaktor_style_token("--text-muted", c)
-                           ? col_of(c) : app->text;
-    struct nk_color wash   = reaktor_style_token("--background-hover", c)
-                           ? col_of(c) : nk_rgba(128, 128, 128, 40);
-    struct nk_color clear  = nk_rgba(0, 0, 0, 0);
+    struct nk_color accent = reaktor_token("--links", app->text);
+    struct nk_color muted  = reaktor_token("--text-muted", app->text);
+    struct nk_color wash   = strip_wash();
     struct nk_command_buffer *canvas;
     struct nk_rect strip;
     struct nk_rect active_r = nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
@@ -347,10 +395,9 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     const float SW_PAD_X = 8.0f;
     const float TAB_SEP = 10.0f;
     const float TAB_EDGE = 4.0f;
-    float sep = TAB_SEP, edge = TAB_EDGE;
+    float sep = TAB_SEP;
     int i;
 
-    (void)win_w;
     strip = nk_widget_bounds(ctx);
     if (!nk_group_begin(ctx, "tabs", NK_WINDOW_NO_SCROLLBAR)) return;
     canvas = nk_window_get_canvas(ctx);
@@ -376,20 +423,25 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
                                     (int)strlen(n)) + 2.0f * (float)TAB_PAD_X;
             used += themew[i];
         }
-        /* Tighter than a tab. A tab's padding is what separates it from the
-         * tab beside it; this one stands alone at the end of the strip, so
-         * the same padding just reads as a wide gray slab when it lights up. */
         sw_w = font->width(font->userdata, font->height, swl,
                            (int)strlen(swl)) + 2.0f * SW_PAD_X;
 #ifdef __EMSCRIPTEN__
         sw_w = 0.0f;
 #endif
-        rest = (float)win_w - used - sw_w - sep - edge - 2.0f * 4.0f
+        rest = (float)win_w - used - sw_w - TAB_SEP - TAB_EDGE - 2.0f * 4.0f
              - (float)(TAB_COUNT + 5) * 4.0f;
 
-        if (rest < 0.0f) { sep += rest; rest = 0.0f; }
-        if (sep < 8.0f)  { edge += sep - 8.0f; sep = 8.0f; }
-        if (edge < 4.0f) edge = 4.0f;
+        if (rest < 0.0f) {
+            float over = -rest - (TAB_SEP - 8.0f);
+            float trim = SDL_ceilf(over / (float)(TAB_COUNT + 3));
+
+            sep  = over > 0.0f ? 8.0f : TAB_SEP + rest;
+            rest = 0.0f;
+            if (trim > 2.0f * ((float)TAB_PAD_X - 6.0f))
+                trim = 2.0f * ((float)TAB_PAD_X - 6.0f);
+            for (i = 0; over > 0.0f && i < TAB_COUNT; i++) tabw[i] -= trim;
+            for (i = 0; over > 0.0f && i < 3; i++) themew[i] -= trim;
+        }
     }
 
     nk_style_push_font(ctx, font);
@@ -397,25 +449,14 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     for (i = 0; i < TAB_COUNT; i++) {
         const char *name = reaktor_tab_names[i];
         float w = tabw[i];
-        struct nk_color fg = (i == sample_tab()) ? accent : muted;
         struct nk_rect b;
+        style_frame look;
 
         nk_layout_row_push(ctx, w);
         b = nk_widget_bounds(ctx);
         hot_push(app, b, 1, 1);
 
-        nk_style_push_style_item(ctx, &ctx->style.button.normal,
-                                 nk_style_item_color(clear));
-        nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                                 nk_style_item_color(wash));
-        nk_style_push_style_item(ctx, &ctx->style.button.active,
-                                 nk_style_item_color(wash));
-        nk_style_push_color(ctx, &ctx->style.button.text_normal, fg);
-        nk_style_push_color(ctx, &ctx->style.button.text_hover,  fg);
-        nk_style_push_color(ctx, &ctx->style.button.text_active, fg);
-        nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
-        nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
-
+        look = push_strip_look(ctx, i == sample_tab() ? accent : muted, wash);
         {
             unsigned id = reaktor_note(app, REAKTOR_A11Y_TAB, name, NULL,
                                        i == sample_tab() ? REAKTOR_A11Y_SELECTED
@@ -431,15 +472,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
             if (hit) set_tab(app, i);
         }
         if (i == sample_tab()) active_r = b;
-
-        nk_style_pop_float(ctx);
-        nk_style_pop_float(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_style_item(ctx);
-        nk_style_pop_style_item(ctx);
-        nk_style_pop_style_item(ctx);
+        pop_style(ctx, look);
     }
     nk_layout_row_push(ctx, rest);
     nk_spacing(ctx, 1);
@@ -448,40 +481,11 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Color scheme", NULL, 0,
                       strip);
     for (i = 0; i < 3; i++) {
-        struct nk_color fg = (i == app->theme_mode) ? accent : muted;
-        struct nk_rect b;
-
-        nk_layout_row_push(ctx, themew[i]);
-        b = nk_widget_bounds(ctx);
-        hot_push(app, b, 1, 1);
-
-        nk_style_push_style_item(ctx, &ctx->style.button.normal,
-                                 nk_style_item_color(clear));
-        nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                                 nk_style_item_color(wash));
-        nk_style_push_style_item(ctx, &ctx->style.button.active,
-                                 nk_style_item_color(wash));
-        nk_style_push_color(ctx, &ctx->style.button.text_normal, fg);
-        nk_style_push_color(ctx, &ctx->style.button.text_hover,  fg);
-        nk_style_push_color(ctx, &ctx->style.button.text_active, fg);
-        nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
-        nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
-
-        reaktor_note(app, REAKTOR_A11Y_RADIO, g_theme_names[i], NULL,
-                     i == app->theme_mode ? REAKTOR_A11Y_CHECKED : 0u, b);
-        if (nk_button_label(ctx, g_theme_names[i]) && i != app->theme_mode) {
+        if (sample_option(app, ctx, g_theme_names[i], themew[i],
+                          i == app->theme_mode)) {
             app->theme_pending = i + 1;
             app->dirty = 1;
         }
-
-        nk_style_pop_float(ctx);
-        nk_style_pop_float(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_style_item(ctx);
-        nk_style_pop_style_item(ctx);
-        nk_style_pop_style_item(ctx);
     }
 
     nk_layout_row_push(ctx, sep);
@@ -492,25 +496,13 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
     nk_layout_row_push(ctx, sw_w);
     {
         struct nk_rect b = nk_widget_bounds(ctx);
+        style_frame    look;
 
         hot_push(app, b, 1, 1);
         reaktor_note(app, REAKTOR_A11Y_BUTTON, swl, NULL, 0, b);
-        nk_style_push_style_item(ctx, &ctx->style.button.normal,
-                                 nk_style_item_color(clear));
-        nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                                 nk_style_item_color(wash));
-        nk_style_push_style_item(ctx, &ctx->style.button.active,
-                                 nk_style_item_color(wash));
-        nk_style_push_color(ctx, &ctx->style.button.text_normal, muted);
-        nk_style_push_color(ctx, &ctx->style.button.text_hover,  muted);
-        nk_style_push_color(ctx, &ctx->style.button.text_active, muted);
-        nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
-        nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
-        /* The slot pushed above is the wash, so the label has to fit inside
-         * it with the sheet's own button padding taken off - and tiny.css
-         * asks for nearly all of SW_PAD_X. Zero here: the wash is the
-         * padding. */
+        look = push_strip_look(ctx, muted, wash);
         nk_style_push_vec2(ctx, &ctx->style.button.padding, nk_vec2(0.0f, 0.0f));
+        look.vec2s = 1;
 
         if (nk_button_label(ctx, swl)) {
 #ifdef __APPLE__
@@ -528,16 +520,7 @@ tab_strip(App *app, struct nk_context *ctx, int win_w)
             app->dirty = 1;
 #endif
         }
-
-        nk_style_pop_vec2(ctx);
-        nk_style_pop_float(ctx);
-        nk_style_pop_float(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_style_item(ctx);
-        nk_style_pop_style_item(ctx);
-        nk_style_pop_style_item(ctx);
+        pop_style(ctx, look);
     }
 
 #endif

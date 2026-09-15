@@ -8,6 +8,10 @@ C99. Widgets are declared; the look comes from CSS read at runtime.
 script finds MSVC's. `./build.ps1 <target>` builds one. Targets: `showcase`,
 `notepad`, `simple`, `bench`, plus the tests in `tools/`.
 
+CMake options pass straight through: `./build.ps1 -DREAKTOR_A11Y=OFF`,
+`./build.sh -- -DREAKTOR_A11Y=OFF`. The cache keeps an option, so a later build
+without the flag does not reset it — pass `=ON` to switch back.
+
 ## Verify against pixels, not source
 
 Reasoning from a dependency's source about what it will draw has been wrong
@@ -40,6 +44,12 @@ regression oracle for every layout or style change.
 - **Measure the present, not the draw.** On a machine with no GPU, most of a
   frame is `SDL_RenderPresent`. `build/render/present` split is on the
   Diagnostics page and in `bench --no-vsync`.
+- **Text the atlas cannot draw is not Nuklear's to draw.** A string with any
+  character the atlas lacks — Japanese, Arabic — is measured by
+  `core/text/text.c` and drawn from the custom command it swaps in for
+  Nuklear's text command, so a change to how Nuklear or the renderer places
+  glyphs does not reach it. Its bidi levels are matched to mojibake's by order:
+  mojibake 0.3.6 records `byte_offset` at a character's last byte.
 - **A hidden web page runs no frames.** The web build's main loop waits on
   `requestAnimationFrame`, which never fires in a background tab, a minimized
   window or a browser pane that is not on screen. `#a11y` is made in `main()`,
@@ -56,3 +66,8 @@ regression oracle for every layout or style change.
   the runtime strips from `argv`.
 - `docs/DOCUMENTATION.md` is the whole of it; `PERFORMANCE.md` holds measured
   numbers only, with the machine named.
+- An optional module is an interface library plus a `_none` twin defining the
+  same functions, and an application links one of the two; its
+  `REAKTOR_<NAME>` option, default `ON`, swaps in the twin. Localization and
+  text shaping are two modules, not one. A module that is off must leave pixels
+  and `--a11y-dump` byte-identical except for what the module itself produces.

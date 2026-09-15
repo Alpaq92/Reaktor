@@ -1,14 +1,3 @@
-# Runs the arms of the comparison and measures them all the same way.
-#
-# The frame counters come from each app's own stdout. Memory and CPU do not:
-# they are sampled from outside, over the whole process tree, because Electron
-# is five processes and a JVM's idea of its own memory is not the operating
-# system's. One sampler for all five is the only way the bars mean anything
-# against each other.
-#
-# Nothing is built here. Each arm points at an artifact that its own toolchain
-# produces, and an arm whose artifact is missing is skipped with the command
-# that would make it.
 param(
     [string[]] $Targets = @("reaktor-software", "reaktor-d3d11",
                             "reaktor-opengl", "shaft", "flutter", "electron",
@@ -49,7 +38,7 @@ function Get-Arm([string]$name) {
             @{ exe  = Join-Path $here "shaft-bench\.build\release\ShaftBench.exe"
                args = @()
                dir  = Join-Path $here "shaft-bench"
-               make = "swift build -c release   (in benchmarks/shaft-bench; macOS - see the README)" }
+               make = "swift build -c release   (in benchmarks/shaft-bench; macOS - see BENCHMARKS.md)" }
         }
         "flutter" {
             @{ exe  = Join-Path $here "flutter-bench\build\windows\x64\runner\Release\reaktor_bench.exe"
@@ -73,8 +62,6 @@ function Get-Arm([string]$name) {
     }
 }
 
-# Every descendant of a process, so Electron's renderer and GPU children are
-# counted and a launcher's children are not left out.
 function Get-ProcessTree([int]$rootId) {
     $byParent = @{}
     foreach ($p in Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId) {
@@ -103,8 +90,6 @@ function Invoke-Arm($spec, [string[]]$argv) {
 
     $proc = Start-Process -FilePath $spec.exe -ArgumentList ($spec.args + $argv) -WorkingDirectory $spec.dir -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
 
-    # CPU is kept per process id rather than summed live: a child that exits
-    # mid-run still spent what it spent, and the last reading it gave is it.
     $cpuMs = @{}
     $peakPrivate = 0L
     $tree = @($proc.Id)
@@ -217,8 +202,6 @@ foreach ($name in $Targets) {
 Write-Host ""
 $rows | Format-Table -AutoSize
 
-# A window that did not come out 800x600 is not drawing the same picture, and
-# this is the only place that would say so.
 foreach ($row in $rows) {
     if ($row.Size -ne "800x600" -and $row.Size -ne "?") {
         Write-Host ("warning: {0} drew at {1}, not 800x600" -f $row.Arm, $row.Size)

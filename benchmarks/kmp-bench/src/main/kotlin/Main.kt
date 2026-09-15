@@ -1,20 +1,3 @@
-// The rotating boxes of samples/bench/bench.c, drawn by Compose Multiplatform.
-//
-// Compose on the desktop is Skia through Skiko inside a Swing window. Two
-// things about that window had to be found out by running it rather than by
-// reading about it:
-//
-// A WindowState size is the frame, and asking for 800x600 that way draws into
-// 784x561. So the size is declared by the content instead - the canvas asks
-// for exactly 800x600 device pixels, converted through the current density so
-// a scaled display does not quietly change the picture, and the window packs
-// around it.
-//
-// And withFrameNanos is not a rate to sleep in. Skipping the vsyncs that are
-// not due held 42.7 fps rather than 60, because the state written inside the
-// callback is drawn a frame later and the loop re-registers after that. So the
-// wait is an explicit delay, the way bench.c sleeps out the rest of its frame,
-// and withFrameNanos is asked for one frame once the wait is over.
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -42,9 +25,6 @@ private const val W = 800
 private const val H = 600
 private val BACKGROUND = Color(0xFFF7F7F7)
 
-// Written by the draw pass, read by the report. The drawing happens on the
-// composition's thread and the report is posted from the frame loop, so the
-// counters are atomic rather than plain.
 private val drawNanos = AtomicLong()
 private val paintedWidth = AtomicLong()
 private val paintedHeight = AtomicLong()
@@ -63,8 +43,6 @@ fun main(args: Array<String>) {
     application {
         Window(
             onCloseRequest = ::exitApplication,
-            // Unspecified, so the window packs around what the content asks
-            // for rather than deducting its frame from what it was told.
             state = rememberWindowState(size = DpSize.Unspecified),
             resizable = false,
             title = "Kotlin Multiplatform",
@@ -86,9 +64,6 @@ private fun Bench(seconds: Double, fps: Double, boxes: Int) {
         var frames = 0
 
         while (true) {
-            // Held to a rate, the wait is an explicit sleep rather than a
-            // vsync block, so the run is charged for the drawing and not the
-            // wait.
             if (period > 0 && due > 0) {
                 val waitMs = (due - System.nanoTime()) / 1_000_000
                 if (waitMs > 0) delay(waitMs)
@@ -131,8 +106,6 @@ private fun Bench(seconds: Double, fps: Double, boxes: Int) {
         val began = System.nanoTime()
         val t = time
 
-        // The integer divisions are bench.c's, kept integer here for the same
-        // reason: a truncated grid step is part of the picture.
         val w = size.width.toInt()
         val h = size.height.toInt()
         val stepX = w / 8

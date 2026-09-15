@@ -1,11 +1,3 @@
-/* The picture, in canvas 2D. Every constant here is read off
- * samples/bench/bench.c, including the integer divisions - the grid step and
- * the radius are truncated there, so they are truncated here too, or the boxes
- * land a pixel off and the two arms are not drawing the same thing.
- *
- * The grid comes off the real drawing area rather than a hardcoded 800x600,
- * the way bench.c takes win_w and win_h, and the size is printed so a window
- * that came out the wrong size says so instead of quietly drawing smaller. */
 'use strict'
 
 const params = new URLSearchParams(location.search)
@@ -72,9 +64,6 @@ function draw(now) {
     schedule()
 }
 
-/* Held to a rate, the wait is a timer and the frame still lands on a vsync.
- * Free-running, requestAnimationFrame is the vsync and the rate is the
- * display's - Chromium has no way to be asked for more. */
 function schedule() {
     if (FPS <= 0) { requestAnimationFrame(draw); return }
 
@@ -84,10 +73,6 @@ function schedule() {
     else { due = performance.now(); requestAnimationFrame(draw) }
 }
 
-/* ms_per_frame is the drawing this script is charged for and nothing else:
- * Chromium rasterizes and presents on other threads in other processes, and
- * none of that is visible from here. The comparable number for this arm is
- * the one the sampler in run.ps1 takes from outside. */
 function report(elapsed_ms) {
     window.bench.report({
         size: W + 'x' + H,

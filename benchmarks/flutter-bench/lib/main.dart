@@ -1,19 +1,3 @@
-// The rotating boxes of samples/bench/bench.c, drawn by Flutter.
-//
-// No Material, no theme, no scaffolding: one CustomPaint over the window, so
-// what a frame costs is the drawing and not a widget tree neither of the other
-// arms has.
-//
-// The per-frame split comes from addTimingsCallback, which is the one place
-// Flutter reports what a frame cost after it happened - buildDuration is the
-// widget and layout pass, rasterDuration is the raster thread. Their sum is
-// what bench.c calls ms_per_frame.
-//
-// A Ticker is the obvious way to drive this and the wrong one. Letting the
-// vsyncs that are not due pass without repainting held 41.6 fps rather than
-// 60, because a repaint asked for inside a vsync callback lands on the next
-// one and the count drifts. So the wait is a timer, the way bench.c sleeps out
-// the rest of its frame: sleep, then ask for exactly one frame.
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -28,8 +12,6 @@ late final double _seconds;
 late final double _fps;
 late final int _boxes;
 
-// The size the run was actually drawn at. The window is sized by the platform
-// runner, not by anything here, so it is reported rather than assumed.
 Size _painted = Size.zero;
 
 double _flag(List<String> args, String name, double fallback) {
@@ -76,8 +58,6 @@ class _BenchState extends State<_Bench> {
     }
   }
 
-  // Moving the notifier is what asks for a frame; the callback below is what
-  // finds out it happened.
   void _tick() {
     if (_done) return;
     if (!_clock.isRunning) _clock.start();
@@ -115,8 +95,6 @@ class _BenchState extends State<_Bench> {
   void _finish(double elapsed) {
     _done = true;
 
-    // The timings for the last frames have not been reported yet; they arrive
-    // a frame or two later. Nothing is being drawn in the meantime.
     Future<void>.delayed(const Duration(milliseconds: 300), () {
       final double perFrame = (_buildMs + _rasterMs) / _frames;
 
@@ -157,8 +135,6 @@ class _BoxPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final double t = time.value;
 
-    // The integer divisions are bench.c's, kept integer here for the same
-    // reason: a truncated grid step is part of the picture.
     final int w = size.width.toInt();
     final int h = size.height.toInt();
     final int stepX = w ~/ 8;

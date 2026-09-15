@@ -16,6 +16,7 @@
 #include "style.h"
 #include "layout.h"
 #include "ui.h"
+#include "text.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -26,23 +27,12 @@
 #define WINDOW_HEIGHT 680
 #define FONT_SIZE     16
 
-/* The ladder pick_font snaps to: a fifth of a step apart, from body text to
- * a page heading. It used to stop at 19, so a stylesheet asking for a heading
- * got 19px however large it asked and a document's whole type scale collapsed
- * into one size. Geometric rather than a list of sizes read off some
- * particular sheet, so no size is privileged and nothing goes stale.
- *
- * Every step is baked twice, regular and bold - a sheet that can set
- * font-size but not font-weight is only half reading the sheet. */
 #define FONT_STEPS 8
 
 #define IMG_CACHE_MAX 48
 
 #define TITLE_PX      16
 
-/* One definition, in runtime/app.c. As statics in this header they were a
- * private copy per translation unit: app.c filled its own and the Diagnostics
- * page read widgets.c's, which was zero and always would be. */
 extern size_t reaktor_rss[RSS_STEPS];
 extern size_t reaktor_priv[RSS_STEPS];
 void reaktor_rss_mark(int step);
@@ -91,6 +81,8 @@ struct App {
     char            font_status[160];
     struct nk_font_atlas *atlas;
     int             atlas_w, atlas_h, atlas_bpp;
+    /* Nuklear reads these until the next bake. */
+    unsigned       *glyphs;
 
     struct nk_text_edit edit;
     char                edit_buf[128];
@@ -116,11 +108,10 @@ struct App {
     int            ctl_n;
     int            want_quit;
 
-    /* --shot and --a11y-dump: a run that can be compared with the last one.
-     * NULL unless the flag was given. */
     const char    *shot_path;
     const char    *dump_path;
     const char    *renderer_pref;
+    const char    *lang_pref;
 
     struct nk_rect field_rect;
     int            field_rect_valid;

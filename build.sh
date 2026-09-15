@@ -1,10 +1,4 @@
 #!/bin/sh
-# build.sh - CMake wrapper for macOS, Linux and the BSDs. build.ps1 on Windows.
-#
-#     ./build.sh                 # everything
-#     ./build.sh --target NAME   # one target
-#     ./build.sh --debug         # -DCMAKE_BUILD_TYPE=Debug
-#     --                         # pass the rest to cmake
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -20,7 +14,7 @@ while [ $# -gt 0 ]; do
             target="$1" ;;
         --debug)   buildtype="Debug" ;;
         --release) buildtype="Release" ;;
-        --help|-h) sed -n '2,7p' "$0" | cut -c 3-; exit 0 ;;
+        --help|-h) echo "usage: build.sh [--target NAME] [--debug] [-- CMAKE_ARGS]"; exit 0 ;;
         --)        shift; break ;;
         *) echo "build.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
     esac

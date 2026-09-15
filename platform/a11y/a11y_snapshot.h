@@ -12,7 +12,7 @@ typedef struct reaktor_snap_node {
     float         num, lo, hi, step;
 } reaktor_snap_node;
 
-#define REAKTOR_SNAP_TEXT 512
+#define REAKTOR_SNAP_TEXT 4096
 
 int  reaktor_snap_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                        void *user);

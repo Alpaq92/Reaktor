@@ -1,14 +1,6 @@
 /* nuklear - public domain */
 
-/* VENDORED COPY - see docs/NOTICE.md.
- *
- * Nuklear's SDL3 backend, taken from external/nuklear/demo/sdl3_renderer/
- * and changed to bake and upload the font atlas 8-bit indexed rather than
- * RGBA32. It could not stay an include: the format is chosen inside
- * nk_sdl_font_stash_end, and this project does not edit submodules.
- *
- * Grep REAKTOR for the changed hunks. Re-vendoring means re-applying them.
- */
+/* VENDORED COPY - see docs/NOTICE.md. Changes are marked REAKTOR. */
 
 /*
  * ==============================================================
@@ -48,7 +40,7 @@ NK_API void                 nk_sdl_font_stash_end(struct nk_context* ctx);
 #endif
 NK_API int                  nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt);
 NK_API void                 nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing);
-/* REAKTOR: fills and strokes feathered independently - see nk_sdl_render_ex. */
+/* REAKTOR: fill and stroke feathering apart. */
 NK_API void                 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA);
 NK_API void                 nk_sdl_update_TextInput(struct nk_context* ctx);
 NK_API void                 nk_sdl_shutdown(struct nk_context* ctx);
@@ -56,6 +48,8 @@ NK_API nk_handle            nk_sdl_get_userdata(struct nk_context* ctx);
 NK_API void                 nk_sdl_set_userdata(struct nk_context* ctx, nk_handle userdata);
 NK_API void                 nk_sdl_style_set_debug_font(struct nk_context* ctx);
 NK_API struct nk_allocator  nk_sdl_allocator(void);
+/* REAKTOR: exported for the Text module. */
+NK_API bool                 nk_sdl_set_coverage_palette(SDL_Texture *tex);
 
 #ifdef __cplusplus
 }
@@ -78,13 +72,7 @@ struct nk_sdl_device {
     struct nk_buffer cmds;
     struct nk_draw_null_texture tex_null;
     SDL_Texture *font_tex;
-    /* REAKTOR: the white texel Nuklear multiplies untextured geometry by.
-     *
-     * nk_font_atlas_end points tex_null at the atlas, so every draw command -
-     * shapes as much as text - arrives carrying font_tex and the two cannot be
-     * told apart by handle. Giving it a 1x1 texture of its own makes the
-     * handle mean what it says, which is what the glyph snapping in
-     * nk_sdl_render tests on. */
+    /* REAKTOR: white texel for untextured geometry. */
     SDL_Texture *white_tex;
 };
 
@@ -161,10 +149,8 @@ nk_sdl_allocator()
     return allocator;
 }
 
-/* REAKTOR: the palette that makes an INDEX8 atlas equal the RGBA32 one -
- * entry i is white at alpha i. SDL keeps its own reference, so this frees
- * ours. */
-static bool
+/* REAKTOR: entry i is white at alpha i. */
+NK_API bool
 nk_sdl_set_coverage_palette(SDL_Texture *tex)
 {
     SDL_Palette *pal = SDL_CreatePalette(256);
@@ -201,18 +187,7 @@ nk_sdl_device_upload_atlas(struct nk_context* ctx, const void *image, int width,
         sdl->ogl.font_tex = NULL;
     }
 
-    /* REAKTOR: 8-bit indexed, not ARGB8888.
-     *
-     * A baked glyph is coverage: nk_font_bake_convert writes
-     * ((alpha << 24) | 0x00FFFFFF) per pixel, so three of four bytes are a
-     * constant and the color comes from the vertex. SDL3 has no A8 format,
-     * so the alpha8 bake goes up as INDEX8 with a palette whose entry i is
-     * white at alpha i - the same texture, a quarter the size. Every SDL3
-     * backend registers INDEX8.
-     *
-     * Falling back matters: an indexed texture with no palette samples an
-     * undefined one, which would put every glyph wrong with nothing to say
-     * why. The conversion buffer is only allocated once indexed has lost. */
+    /* REAKTOR: 8-bit indexed. */
     sdl->ogl.font_tex = SDL_CreateTexture(sdl->renderer, SDL_PIXELFORMAT_INDEX8, SDL_TEXTUREACCESS_STATIC, width, height);
     if (sdl->ogl.font_tex && !nk_sdl_set_coverage_palette(sdl->ogl.font_tex)) {
         SDL_DestroyTexture(sdl->ogl.font_tex);
@@ -298,13 +273,7 @@ nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing AA)
     nk_sdl_render_ex(ctx, AA, AA);
 }
 
-/* REAKTOR: Nuklear feathers fills (shape_AA) and strokes (line_AA) separately,
- * and on a rasterizer with no partial coverage they fail differently. A fill's
- * feather is a ring half a pixel outside a fill shrunk by half a pixel; landed
- * whole it is a half-tone column between a panel's border and its fill, and a
- * rule between menu items. A stroke's feather is what grades a border's curve,
- * and it is also what covers the fill's staircase underneath. So the software
- * renderer wants strokes feathered and fills not, which one flag cannot say. */
+/* REAKTOR: fill and stroke feathering apart. */
 NK_API void
 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                  enum nk_anti_aliasing line_AA)
@@ -350,12 +319,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         config.vertex_size = sizeof(struct nk_sdl_vertex);
         config.vertex_alignment = NK_ALIGNOF(struct nk_sdl_vertex);
         config.tex_null = sdl->ogl.tex_null;
-        /* REAKTOR: 22 was upstream's, and at that count a small circle is a
-         * visible polygon on the software renderer, which cannot feather a
-         * fill. The circles a page draws are Ionicons now (see showcase.c),
-         * so this only reaches what Nuklear still draws itself and the
-         * fallbacks for a glyph that failed to load - a few dozen more
-         * vertices a frame, and none of them is a polygon. */
+        /* REAKTOR: 22 upstream. */
         config.circle_segment_count = 48;
         config.curve_segment_count = 22;
         config.arc_segment_count = 22;
@@ -368,24 +332,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         nk_buffer_init(&ebuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
         nk_convert(&sdl->ctx, &sdl->ogl.cmds, &vbuf, &ebuf, &config);
 
-        /* REAKTOR: on the software renderer, every vertex goes on the grid.
-         *
-         * SDL's software backend turns each vertex into a whole pixel by
-         * truncation - SDL_render_sw.c does (int)(x * scale), and the
-         * rasterizer below it works on integer SDL_Points. There is no partial
-         * coverage anywhere in that path, which costs twice over: a rect whose
-         * edge lands on .5 covers one row more or less than a GPU would (the
-         * tab underline arriving as two lines with a gap, the top row of the
-         * window a shade dark), and Nuklear's antialiasing - geometry a
-         * fraction of a pixel wide, meant to be blended - lands whole, as a
-         * hairline around every rounded rect.
-         *
-         * Storing round(x) + 0.5 answers both. SDL's truncation then lands on
-         * round(x), which is what a hardware backend does, and the feather
-         * collapses onto the pixel it was fading toward instead of onto its
-         * neighbour. Both are the reason this is not done on hardware, where
-         * the same rounding would flatten a feather that would otherwise have
-         * blended - see the glyph snapping below. */
+        /* REAKTOR: software vertices on the pixel grid. */
         is_sw = SDL_strcmp(SDL_GetRendererName(sdl->renderer), "software") == 0;
         if (is_sw) {
             nk_byte *v = (nk_byte *)nk_buffer_memory(&vbuf);
@@ -406,8 +353,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         /* Ensure alpha blending is enabled for geometry rendering. */
         saved_blend = SDL_BLENDMODE_INVALID;
         SDL_GetRenderDrawBlendMode(sdl->renderer, &saved_blend);
-        /* The fill fast path below writes the draw color, which belongs to
-         * whoever set it - the clear, a frame from now. */
+        /* REAKTOR: saved for the fill fast path. */
         SDL_GetRenderDrawColorFloat(sdl->renderer, &saved_r, &saved_g,
                                     &saved_b, &saved_a);
         SDL_SetRenderDrawBlendMode(sdl->renderer, SDL_BLENDMODE_BLEND);
@@ -416,25 +362,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         {
             if (!cmd->elem_count) continue;
 
-            /* REAKTOR: glyph quads land on whole pixels here too.
-             *
-             * A glyph is a quad sampling the atlas. Nuklear advances the pen
-             * by fractional widths, so a quad can start mid-pixel; hardware
-             * then samples the atlas between texels and softens the glyph,
-             * where the pass above has already put the software renderer on
-             * the grid. Left alone that is most of what separates the two
-             * backends - about twenty thousand pixels a page, all of it
-             * against text.
-             *
-             * Rounding the quad here puts both on the same texel grid. It is
-             * also what type rendering normally does: a bitmap baked for this
-             * size, drawn 1:1 on the pixel grid, is what the baker intended.
-             *
-             * Shapes have to be left out of it, which is what white_tex is
-             * for: nk_font_atlas_end points tex_null at the atlas, so without
-             * a handle of its own this test matches every draw command and
-             * rounds the feather flat - a hard stripe down the inside of
-             * every panel. */
+            /* REAKTOR: glyph quads on the pixel grid. */
             if (!is_sw && cmd->texture.ptr == (void *)sdl->ogl.font_tex) {
                 nk_byte *v = (nk_byte *)nk_buffer_memory(&vbuf);
                 nk_uint k;
@@ -458,39 +386,12 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
             {
                 const void *vertices = nk_buffer_memory_const(&vbuf);
 
-                /* REAKTOR: shapes ask for no texture at all.
-                 *
-                 * white_tex is one opaque white texel, and sampling it
-                 * multiplies the vertex color by one - the same pixels a
-                 * null texture draws. A GPU does not care either way. A CPU
-                 * rasterizer does: the same full-window quad costs 6.95 ms
-                 * as textured geometry and 16.38 ms textured and blended,
-                 * against 0.12 ms for the fill it amounts to. Handing the
-                 * renderer NULL takes the sampler out of the inner loop for
-                 * every shape, which is every panel, row and border. Text
-                 * still arrives with font_tex and is untouched. */
+                /* REAKTOR: shapes untextured. */
                 SDL_Texture *tex = (SDL_Texture *)cmd->texture.ptr;
 
                 if (tex == sdl->ogl.white_tex) tex = NULL;
 
-                /* REAKTOR: an axis-aligned quad of one color is a fill, not
-                 * two triangles.
-                 *
-                 * nk_convert flattens every shape to triangles, and a CPU
-                 * rasterizer pays for that literally: the same full-window
-                 * coverage costs 6.95 ms walked as geometry against 0.12 ms
-                 * as a fill. An empty window is exactly this command and
-                 * nothing else - one quad, six indices - and so is most of
-                 * what a real page draws, every panel, row and separator
-                 * among them.
-                 *
-                 * Six indices, no texture and one color across all of them is
-                 * the whole test. It cannot match a rounded rect or an
-                 * antialiased edge, because Nuklear feathers those into more
-                 * geometry than this, and it cannot match a gradient, because
-                 * the colors would differ. Hardware is left alone: it draws
-                 * triangles for free and the rounding below is only applied
-                 * to the software path. */
+                /* REAKTOR: one-color quads as fills. */
                 if (is_sw && tex == NULL && cmd->elem_count == 6) {
                     const nk_byte *vb = (const nk_byte *)vertices;
                     const float *pos[6];
@@ -524,9 +425,6 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                         if (!(x1 > x0 && y1 > y0)) ok = 0;
                     }
 
-                    /* Every vertex on a corner, and all four corners used:
-                     * anything else is a shape that happens to have six
-                     * indices, not the rectangle they would describe. */
                     if (ok) {
                         for (k = 0; k < 6; k++) {
                             int cx = pos[k][0] == x1;
@@ -544,11 +442,6 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
                     if (ok) {
                         SDL_FRect fr;
-                        /* Thin rules are left to blend. A one pixel high
-                         * fill lands differently without it - the separators
-                         * on the Buttons page move a shade - and they cost
-                         * nothing to draw either way. Area is where the
-                         * saving is, and where the two agree. */
                         int opaque = c0[3] >= 1.0f &&
                                      x1 - x0 >= 2.0f && y1 - y0 >= 2.0f;
 
@@ -557,11 +450,6 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                         fr.w = x1 - x0;
                         fr.h = y1 - y0;
 
-                        /* Source-over with an alpha of one is the source, so
-                         * an opaque fill has nothing to read the destination
-                         * for. Saying so is most of the saving: the blend is
-                         * a read-modify-write per pixel and the write is not.
-                         */
                         if (opaque)
                             SDL_SetRenderDrawBlendMode(sdl->renderer,
                                                        SDL_BLENDMODE_NONE);
@@ -715,15 +603,12 @@ nk_sdl_font_stash_end(struct nk_context* ctx)
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
-    /* REAKTOR: alpha8, to match the upload. Also keeps the 4x RGBA buffer out
-     * of the startup peak - the bake holds it live alongside the alpha8 one. */
+    /* REAKTOR: alpha8. */
     image = nk_font_atlas_bake(&sdl->atlas, &w, &h, NK_FONT_ATLAS_ALPHA8);
     NK_ASSERT(image);
     nk_sdl_device_upload_atlas(&sdl->ctx, image, w, h);
     nk_font_atlas_end(&sdl->atlas, nk_handle_ptr(sdl->ogl.font_tex), &sdl->ogl.tex_null);
-    /* REAKTOR: see white_tex in struct nk_sdl_device. If it cannot be made,
-     * tex_null keeps pointing at the atlas and everything still draws - only
-     * the glyph test in nk_sdl_render loses its precision. */
+    /* REAKTOR: see white_tex. */
     if (!sdl->ogl.white_tex) {
         Uint32 px = 0xFFFFFFFFu;
         sdl->ogl.white_tex = SDL_CreateTexture(sdl->renderer,

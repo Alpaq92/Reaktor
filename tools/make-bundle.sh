@@ -1,9 +1,4 @@
 #!/bin/sh
-# make-bundle.sh - assemble build/reaktor.app around the plain binary.
-#
-#   make-bundle.sh BUNDLE BINARY INFOPLIST SOURCE_ROOT
-#
-# A CMake POST_BUILD step on macOS. The CLI binary and the Finder bundle both
 set -eu
 
 bundle=$1
@@ -56,7 +51,7 @@ do
     fi
 done
 
-# The same set CMake scans for the WASM preload; keep the two in step.
+# Same set as the WASM scan in CMakeLists.txt.
 srcs=$(ls "$root/src/"*.h "$root/core/"*/*.c "$root/core/"*/*.h \
           "$root/platform/"*.c "$root/platform/"*/*.c \
           "$root/runtime/"*.c "$root/samples/"*.h \

@@ -1,5 +1,6 @@
 param([switch]$Serve)
 
+$extra = @($args)
 $ErrorActionPreference = "Stop"
 $root   = $PSScriptRoot
 $outDir = Join-Path $root "build-wasm"
@@ -30,7 +31,7 @@ $ErrorActionPreference = 'Continue'
 & $cmake -S $root -B $outDir -G Ninja `
     "-DCMAKE_MAKE_PROGRAM=$ninja" `
     "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
-    "-DCMAKE_BUILD_TYPE=Release" 2>&1 | ForEach-Object { "$_" }
+    "-DCMAKE_BUILD_TYPE=Release" @extra 2>&1 | ForEach-Object { "$_" }
 $rc = $LASTEXITCODE
 if ($rc -eq 0) {
     & $cmake --build $outDir --parallel 2>&1 | ForEach-Object { "$_" }

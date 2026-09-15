@@ -22,3 +22,9 @@
 [submodule "external/onlay"]
 	path = external/onlay
 	url = https://github.com/Alpaq92/Onlay.git
+[submodule "external/mojibake"]
+	path = external/mojibake
+	url = https://github.com/zaerl/mojibake.git
+[submodule "external/kb"]
+	path = external/kb
+	url = https://github.com/JimmyLefevre/kb.git

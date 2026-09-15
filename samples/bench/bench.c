@@ -1,27 +1,3 @@
-/* The workload the published comparison is measured on: rotating boxes,
- * drawn as fast as the display will take them.
- *
- * It is deliberately the case this library is worst at. Reaktor draws nothing
- * when nothing has changed, so every figure in PERFORMANCE.md is a count of
- * frames rather than a rate - and an animation that never stops removes that
- * advantage entirely. A benchmark that let it idle would be measuring the
- * design instead of the drawing.
- *
- * Answers on stdout after --bench-seconds and quits, so the numbers come from
- * the same counters the Diagnostics page reads.
- *
- * Two of them need a word. private_mb is what the process asked the system to
- * back, and it is stable to a tenth. cpu_percent is not: the same 386 frames
- * get charged anywhere from 0.3% to 99.6% of a core, because SDL's vsync wait
- * blocks on the compositor when it can and spins when it cannot, and the
- * charge follows the wait rather than the drawing. So --no-vsync takes the
- * wait out: frames run back to back, every millisecond in the run is work,
- * and ms_per_frame is what one frame actually costs. cpu_at_60fps is that
- * against a 16.67 ms budget, which is the number worth comparing.
- *
- * --fps holds the run to a rate instead, sleeping out the rest of each frame.
- * That charges the process for the drawing and not the wait, so cpu_percent
- * becomes a measured answer to the question cpu_at_60fps only extrapolates. */
 #include "internal.h"
 #include "declare.h"
 #include "sample.h"
@@ -65,8 +41,6 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         g_cpu0 = reaktor_process_cpu_ms();
     }
 
-    /* Last frame's, not this one's - the runtime writes these after it
-     * presents. One frame of 386 is not worth threading a callback for. */
     g_build_ms   += app->build_ms_x100 / 100.0;
     g_render_ms  += app->render_ms_x100 / 100.0;
     g_present_ms += app->present_ms_x100 / 100.0;
@@ -120,9 +94,6 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         return;
     }
 
-    /* Held to a rate, the wait is an explicit sleep rather than a vsync
-     * block, so what the process is charged over the run is the drawing and
-     * nothing else - which is what cpu_percent is worth reading here. */
     if (g_fps > 0.0) {
         Uint64 period = (Uint64)(1000000000.0 / g_fps + 0.5);
         Uint64 now    = SDL_GetTicksNS();
@@ -133,8 +104,6 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         else                g_due_ns = now;
     }
 
-    /* Keep the frames coming. Nothing else will ask: the whole point of the
-     * runtime is that it stops when the picture stops changing. */
     {
         SDL_Event e;
 
@@ -160,7 +129,7 @@ sample_window(reaktor_window_spec *out)
 {
     out->w = 800;
     out->h = 600;
-    out->title = "Reaktor";
+    out->title = "Bench";
 }
 
 SDL_HitTestResult SDLCALL
@@ -183,18 +152,10 @@ sample_args(App *app, int argc, char **argv)
 
     (void)app;
 
-    /* Linked as a windowed app so no console flashes up when it is run
-     * from a shortcut, which costs the stdout a console app gets for free.
-     * Borrowing the parent's console hands it back, and when there is none
-     * to borrow the prints go nowhere and the run is still valid. */
 #ifdef _WIN32
     {
         HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
 
-        /* A handle already here means a pipe or a file the caller set up,
-         * and reopening CONOUT$ over it would send the answers to a console
-         * instead of to whoever asked for them. Only borrow a console when
-         * there is nothing to write to at all. */
         if ((!out || out == INVALID_HANDLE_VALUE) &&
             AttachConsole(ATTACH_PARENT_PROCESS)) {
             FILE *f;

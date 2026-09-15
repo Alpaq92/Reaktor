@@ -33,9 +33,6 @@ hash_of(const char *p, int n)
     return h;
 }
 
-/* The length first, because it settles it without touching the text: an
- * insertion or a deletion changes it, and only an edit that happens to keep
- * the length the same has to be hashed. This runs on every drawn frame. */
 static int
 dirty(void)
 {
@@ -229,8 +226,6 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 int
 sample_key(App *app, const SDL_Event *e)
 {
-    /* reaktor_chord rather than a raw modifier test: it folds Cmd and Ctrl
-     * together, so the same table works on macOS without a second spelling. */
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_N)) { new_file(); return 1; }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_O)) {
         if (!reaktor_file_open(app))

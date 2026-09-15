@@ -9,7 +9,8 @@ at a control and saying it looked off.
 ```bash
 git submodule update --init --recursive
 ./build.sh          # build.ps1 on Windows
-./build/laytest && ./build/a11ytest && ./build/animtest && ./build/keytest
+for t in laytest onlaytest a11ytest animtest keytest localetest texttest
+do ./build/$t || break; done
 ```
 
 `./build-wasm.sh` builds the web target from the same sources and catches
@@ -51,6 +52,12 @@ Binding unless you make the case for changing one.
   none, trace them to something the author published — the file's own metadata
   counts — then write down what you found and that you assembled the record.
   `assets/fonts/Aileron-Notice.txt` is the shape to copy.
+- **An optional feature is a module, and a module can be left out.** It is an
+  interface library with a `_none` twin that defines the same functions, and a
+  `REAKTOR_<NAME>` option, `ON` by default, that swaps the twin in. A build with
+  the module off draws the same pixels and writes the same `--a11y-dump`, except
+  for what the module itself produces. Localization and text shaping are two
+  modules, not one.
 - **Nothing is drawn when nothing has changed.** Do not add a timer, a polling
   loop or an unconditional repaint to make something update; make the thing
   that changed mark the frame dirty.
@@ -64,7 +71,7 @@ Binding unless you make the case for changing one.
 
 For a change of any size, say in the pull request:
 
-- that both targets build — native and WebAssembly — and the five tests pass;
+- that both targets build — native and WebAssembly — and the seven tests pass;
 - **the accessibility dump before and after**, if anything moved. Run with
   `--a11y-dump <path>` and diff the two; it reports position to the pixel and
   is the closest thing here to a regression suite;

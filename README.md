@@ -2,18 +2,27 @@
 
 A Nuklear-powered (GUI) engine for C.
 
-![The Reaktor showcase, split along the diagonal: the same window in the light
-scheme above the line and the dark scheme below it, showing a centered login
-card, a tab strip across the top and a scheme switch beside the window
-controls](assets/rest/screenshot.png)
+<p align="center">
+  <img src="assets/screenshots/screenshot.png" alt="The Reaktor showcase, split along the diagonal: the same window in the light scheme above the line and the dark scheme below it, showing a centered login card, a tab strip across the top and a scheme switch beside the window controls">
+</p>
+
+**[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
+same program, built to WebAssembly.
 
 Tired of C having no cross-platform GUI — nothing like Avalonia, Shaft or
 Freya — and of leaning on toolkits that want hundreds of megabytes just to put
 a dialog on screen? No? I was. So I wrote Reaktor: a GUI library that is
-complete without being big. A 2.5 MB binary, about 10 MB of RAM, and no GPU
+complete without being big. A 2.3 MB binary, about 10 MB of RAM, and no GPU
 required.
 
 > ⚠️ **Reaktor is in active development**, and breaking changes might occur.
+
+<p align="center">
+  <a href="docs/PERFORMANCE.md"><img src="assets/rest/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 10.0 MB, the same binary on D3D11 60.7 MB and on OpenGL 90.2 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB. CPU as a percent of one core: Reaktor 16.4%, D3D11 14.4%, OpenGL 14.1%, Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%"></a>
+</p>
+
+How these were measured, and on what, is in
+[PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## What it is made of
 
@@ -39,17 +48,24 @@ required.
   DOM subtree on the web. Keyboard focus and shortcuts included.
 - **HiDPI** — layout in logical pixels, atlas baked at the display's size.
 - **Light and dark** — follows the system, or pick one.
+- **Localization** — a catalog per language, plural rules, and numbers, money
+  and dates as each language writes them: English, Polish and Japanese in the
+  showcase.
+- **Text past Latin-1** — right-to-left direction, shaping for Arabic, Hebrew
+  and the Indic scripts, glyphs from fallback fonts at any size, and line breaks
+  by Unicode's rules, so Japanese wraps properly.
+- **Modular** — the accessibility bridges, localization and text shaping are
+  modules, each on by default. `-DREAKTOR_A11Y=OFF`, `-DREAKTOR_LOCALE=OFF` or
+  `-DREAKTOR_TEXT=OFF` swaps one for a stub with the same calls, and the rest
+  of the app draws the same pixels.
 - **Windows, macOS, Linux, the BSDs and WebAssembly** — one set of sources,
   the same software rasterizer on all five, no GPU required.
 - **Nothing drawn at rest** — 0% of a core while it sits there.
 
-Not yet: **localization**. The font atlas bakes Latin-1 only and there is no
-text shaping or bidi, so anything past Western European scripts does not
-render — see [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md#localization).
-
 ## Build
 
-Needs a C99 compiler, CMake and the submodules.
+Needs CMake, the submodules and a C11 compiler: Reaktor is C99, but mojibake,
+which the Text module uses, is C11.
 
 ```bash
 git clone --recursive https://github.com/Alpaq92/Reaktor
@@ -88,28 +104,16 @@ position.
 
 - [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) — the whole of it: the
   declarative API, layout, styling, accessibility and animation, then the tree,
-  the tests and the command-line flags.
+  the tests, the command-line flags, localization and text.
 - [docs/DEMO.md](docs/DEMO.md) — the four applications in this repository and
   what each one is for.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — what it costs, measured on four
   platforms, and against Flutter, Electron and Compose Multiplatform on one.
-- [benchmarks/README.md](benchmarks/README.md) — those three as projects of
-  their own, drawing the same picture, and the script that measures them all
-  the same way.
+- [benchmarks/BENCHMARKS.md](benchmarks/BENCHMARKS.md) — those three as
+  projects of their own, drawing the same picture, and the script that
+  measures them all the same way.
 - [docs/NOTICE.md](docs/NOTICE.md) — what it depends on, and under what
   license.
-
-## Wanted, not yet built
-
-- **Localization.** Translating what a program says, and letting an
-  application ship more than one language.
-- **Support for non-Latin scripts.** Everything past Western European text —
-  Cyrillic, Greek, CJK, Arabic, Hebrew, the Indic scripts, and the shaping
-  they need.
-- **Further optimization, and a pass over the code.** Faster frames, and
-  fewer places doing the same job twice.
-- **Modularity.** A build today is all or nothing. The accessibility bridges,
-  and the libraries they drag in, should be things you can turn off.
 
 ## License
 

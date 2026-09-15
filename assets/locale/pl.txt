@@ -1,0 +1,27 @@
+language = Polski
+plural = n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2
+locale.title = Brzydkie kaczątko
+locale.author = Hans Christian Andersen
+locale.source = Przekład Cecylii Niewiadomskiej. Baśnie, Gebethner i Wolff, 1899. Domena publiczna; tekst z Wikiźródeł.
+locale.formats = Formaty
+locale.date = Data
+locale.time = Godzina
+locale.number = Liczba
+locale.money = Kwota
+locale.plural = Liczba mnoga
+locale.count = {n} kaczątko | {n} kaczątka | {n} kacząt
+number.decimal = ,
+number.group =  
+number.group.min = 2
+money = {n} {s}
+money.PLN = zł
+money.JPY.digits = 0
+date.short = d.MM.y
+date.long = d MMMM y
+date.full = EEEE, d MMMM y
+time.short = HH:mm
+date.months = stycznia | lutego | marca | kwietnia | maja | czerwca | lipca | sierpnia | września | października | listopada | grudnia
+date.months.short = sty | lut | mar | kwi | maj | cze | lip | sie | wrz | paź | lis | gru
+date.days = niedziela | poniedziałek | wtorek | środa | czwartek | piątek | sobota
+date.days.short = niedz. | pon. | wt. | śr. | czw. | pt. | sob.
+locale.story = Prześlicznie było na wsi. Lato gorące, pogodne, żółte zboża na polach, owies jeszcze zielony, na łąkach wielkie stogi pachnącego siana, a bociany przechadzają się powoli na wysokich czerwonych nogach i klekocą po egipsku, bo takim językiem nauczyły się mówić od matek. Dokoła wielkie lasy, cieniste, szumiące, a w nich głębokie i ciche jeziora. Prześlicznie i cudownie było na wsi.\nNa pochyłości wzgórza jasne słońce oświetlało stary zamek z wieżycami i gankami, otoczony murem i szeroką wstęgą wolno płynącej wody. Z muru zwieszały się pnące rośliny, a wielkie liście łopianu schylały się aż do wody. I było pod nimi cicho i ciemno, jak w cienistym lesie. Pod jednym z takich liści młoda kaczka usłała sobie gniazdo i siedziała na jajach. Nudziło jej się bardzo, bo żadna z sąsiadek nie miała chęci w tak piękną pogodę rozmawiać z nią o tem, co słychać na świecie. Każda wolała pływać po przejrzystej wodzie, pluskać się i osuszać na ciepłem słoneczku, a ona tylko jedna, jak przykuta siedzi w cieniu na gnieździe.
