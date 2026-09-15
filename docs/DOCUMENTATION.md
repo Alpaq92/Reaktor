@@ -236,6 +236,7 @@ platform/      system theme, and one accessibility bridge per platform
 runtime/       app.c: the window, the event loop, the frame
 samples/       showcase, notepad, simple, bench
 tools/         the tests, the icon compiler, vmwalk
+benchmarks/    bench's workload in four other frameworks, and one sampler
 external/      eight submodules, read as they ship
 ```
 
@@ -332,12 +333,19 @@ The showcase adds two of its own, through `sample_args`:
 | `--tab <0-8>` | Login, Buttons, Inputs, Display, Layout, Popups, Animation, Styling, Diagnostics |
 | `--scroll <px>` | How far that page starts scrolled |
 
-And `bench` adds two:
+And `bench` adds four:
 
 | Flag | Effect |
 | --- | --- |
 | `--bench-seconds <n>` | How long to draw before printing and quitting |
 | `--no-vsync` | Free-run, so the figures measure drawing and not waiting |
+| `--fps <n>` | Hold the run to a rate, sleeping out the rest of each frame |
+| `--boxes <n>` | How many boxes to rotate (64 by default) |
+
+The last two exist because the same workload is drawn by four other frameworks
+in `benchmarks/`, which take the same flags and print the same keys. Pair them
+with `--renderer` and the same executable supplies three of the bars in
+PERFORMANCE.md's chart.
 
 ```bash
 ./build/showcase --tab 7 --theme dark --shot styling.bmp --a11y-dump styling.txt

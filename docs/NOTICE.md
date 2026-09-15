@@ -86,6 +86,12 @@ one ink, as SVG, PNG and `.ico`. Its colors are USWDS system tokens, which are
 public domain as a U.S. Government work; the shapes are not taken from
 anywhere.
 
+Nothing in `benchmarks/` is on this list. Those four projects are the same
+workload written in Flutter, Electron, Compose Multiplatform and Shaft, and
+none of their frameworks is vendored here, linked into anything or shipped: the
+directory holds source and build files, and each toolchain fetches its own when
+asked to build one. Nothing in that directory is part of a Reaktor build.
+
 ## What is redistributed
 
 A native build links SDL, libcss, yutil, plutosvg and plutovg statically and

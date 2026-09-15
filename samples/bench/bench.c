@@ -104,6 +104,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     if (now_ms >= g_seconds * 1000.0) {
         double cpu_ms = reaktor_process_cpu_ms() - g_cpu0;
 
+        printf("size          %dx%d\n", win_w, win_h);
         printf("frames        %d\n", g_frames);
         printf("fps           %.1f\n", g_frames / (now_ms / 1000.0));
         printf("ms_build      %.2f\n", g_build_ms / g_frames);

@@ -7,7 +7,7 @@ for byte — the whole of the difference between them is in `samples/`.
 | --- | --- | --- |
 | `showcase` | ~2,800 lines | Every widget, both schemes, and how far the CSS seam reaches |
 | `notepad` | ~290 lines | A text editor that opens, edits and saves a file |
-| `bench` | ~160 lines | The workload the published figures are measured on |
+| `bench` | ~160 lines | The workload the published figures are measured on, here and in the other four frameworks |
 | `simple` | ~60 lines | One button that closes the window |
 
 ```bash
@@ -56,16 +56,26 @@ menu's last item lands when the popup is a pixel too short.
 ## bench
 
 Sixty-four boxes rotating as fast as the display will take them, for however
-many seconds `--bench-seconds` asks for, and then six numbers on stdout:
+many seconds `--bench-seconds` asks for, and then what the run cost on stdout:
 
 ```
-frames        1472
-fps           245.3
-ms_per_frame  4.04
-cpu_at_60fps  24.3
-cpu_percent   95.3
-private_mb    6.8
+size          800x600
+frames        525
+fps           87.4
+ms_build      0.02
+ms_render     0.09
+ms_present    11.30
+ms_per_frame  11.42
+cpu_at_60fps  68.5
+cpu_percent   99.3
+private_mb    9.6
 ```
+
+`--boxes <n>` changes the workload and `--fps <n>` holds it to a rate, sleeping
+out the rest of each frame instead of drawing flat out. `size` is the drawing
+area, which is there because the same picture is drawn by four other frameworks
+in `benchmarks/` and a window that came out the wrong size would otherwise say
+nothing about it.
 
 Pass `--no-vsync` for those, and read `cpu_at_60fps` rather than `cpu_percent`.
 Left on vsync, `SDL_RenderPresent` spends the rest of the frame waiting for the
@@ -77,8 +87,11 @@ drawing and the number holds to a tenth.
 It is deliberately the thing this library is worst at. Every other figure in
 [PERFORMANCE.md](PERFORMANCE.md) is a count of frames, because nothing is drawn
 while nothing changes — an animation that never stops throws that advantage
-away and measures the drawing instead of the design. Both bars of the chart
-there come from this program.
+away and measures the drawing instead of the design. Reaktor's two bars in the
+chart there come from this program; the other three come from `benchmarks/`,
+which is the same picture written in Flutter, Electron and Compose
+Multiplatform, so that the comparison is one workload and one sampler rather
+than five readings from five machines.
 
 ## simple
 

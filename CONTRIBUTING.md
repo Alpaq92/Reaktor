@@ -73,7 +73,11 @@ For a change of any size, say in the pull request:
 
 Two things this repository has learned the hard way. A claim about performance
 wants a number from the Diagnostics page, not an expectation — several
-plausible optimizations here measured worse. And a claim that a visual fix
+plausible optimizations here measured worse, and a claim against another
+framework wants `benchmarks/run.ps1`, which draws the same picture in each and
+samples them all from outside. Numbers read off somebody's README are how the
+chart in PERFORMANCE.md came to compare a CPU rasterizer against four GPU ones
+in the same panel. And a claim that a visual fix
 works wants the framebuffer: `--shot <path.bmp>` writes the window and
 quits. Deriving where a widget *should* be from the same model that put it in
 the wrong place will agree with you every time.
