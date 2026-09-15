@@ -40,6 +40,12 @@ regression oracle for every layout or style change.
 - **Measure the present, not the draw.** On a machine with no GPU, most of a
   frame is `SDL_RenderPresent`. `build/render/present` split is on the
   Diagnostics page and in `bench --no-vsync`.
+- **A hidden web page runs no frames.** The web build's main loop waits on
+  `requestAnimationFrame`, which never fires in a background tab, a minimized
+  window or a browser pane that is not on screen. `#a11y` is made in `main()`,
+  so the root is there, but the canvas stays blank and the tree empty until
+  the page renders — and a scripted click or screenshot makes it render, so
+  it looks as if the tree waits for input. Check `document.visibilityState`.
 
 ## House rules
 
