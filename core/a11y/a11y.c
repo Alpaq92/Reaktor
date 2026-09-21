@@ -139,51 +139,55 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
     return id;
 }
 
+static reaktor_a11y_node *
+node_of(reaktor_a11y *a, unsigned id)
+{
+    int f = a->front, i;
+
+    if (!a->building || !id) return NULL;
+    for (i = a->count[f] - 1; i >= 0; i--)
+        if (a->node[f][i].id == id) return &a->node[f][i];
+    return NULL;
+}
+
+static const char *
+intern_str(reaktor_a11y *a, const char *s)
+{
+    return (s && *s) ? intern(a, s, hash_str(2166136261u, s)) : NULL;
+}
+
 void
 reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
                        float hi, float step)
 {
-    int f = a->front, i;
+    reaktor_a11y_node *n = node_of(a, id);
 
-    if (!a->building || !id) return;
-    for (i = a->count[f] - 1; i >= 0; i--) {
-        reaktor_a11y_node *n = &a->node[f][i];
-
-        if (n->id != id) continue;
-        n->num = num; n->lo = lo; n->hi = hi; n->step = step;
-        return;
-    }
+    if (!n) return;
+    n->num = num; n->lo = lo; n->hi = hi; n->step = step;
 }
 
 void
 reaktor_a11y_set_keys(reaktor_a11y *a, unsigned id, const char *keys)
 {
-    int f = a->front, i;
+    reaktor_a11y_node *n = node_of(a, id);
 
-    if (!a->building || !id) return;
-    for (i = a->count[f] - 1; i >= 0; i--) {
-        reaktor_a11y_node *n = &a->node[f][i];
+    if (n) n->keys = intern_str(a, keys);
+}
 
-        if (n->id != id) continue;
-        n->keys = (keys && *keys)
-                ? intern(a, keys, hash_str(2166136261u, keys)) : NULL;
-        return;
-    }
+void
+reaktor_a11y_set_value(reaktor_a11y *a, unsigned id, const char *value)
+{
+    reaktor_a11y_node *n = node_of(a, id);
+
+    if (n) n->value = intern_str(a, value);
 }
 
 void
 reaktor_a11y_set_bounds(reaktor_a11y *a, unsigned id, struct nk_rect r)
 {
-    int f = a->front, i;
+    reaktor_a11y_node *n = node_of(a, id);
 
-    if (!a->building || !id) return;
-    for (i = a->count[f] - 1; i >= 0; i--) {
-        reaktor_a11y_node *n = &a->node[f][i];
-
-        if (n->id != id) continue;
-        n->bounds = r;
-        return;
-    }
+    if (n) n->bounds = r;
 }
 
 void

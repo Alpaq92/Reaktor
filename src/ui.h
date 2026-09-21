@@ -80,6 +80,7 @@ void reaktor_note_pop(App *app);
 int reaktor_focus_activated(App *app, unsigned id);
 
 void reaktor_note_keys(App *app, unsigned id, const char *keys);
+void reaktor_note_value(App *app, unsigned id, const char *value);
 void reaktor_note_bounds(App *app, unsigned id, struct nk_rect r);
 unsigned reaktor_note_here(App *app, struct nk_context *ctx,
                            unsigned char role, const char *name,

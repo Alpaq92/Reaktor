@@ -388,6 +388,14 @@ note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds)
 }
 
 void
+note_edit_active(App *app, struct nk_context *ctx, nk_flags state)
+{
+    if (!(state & NK_EDIT_ACTIVE)) return;
+    if (app->stop_editing) nk_edit_unfocus(ctx);
+    else app->editing = 1;
+}
+
+void
 note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
                nk_flags state, const struct nk_text_edit *edit)
 {
@@ -396,13 +404,15 @@ note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
 
     if (!(state & NK_EDIT_ACTIVE)) return;
 
-    if (font && font->width) {
+    /* An empty edit has no text, whatever it says its length is. */
+    if (font && font->width && nk_str_get_const(&edit->string)) {
         const char *txt = nk_str_get_const(&edit->string);
         nk_rune unicode;
         int glyph_len;
         char *at = nk_str_at_rune((struct nk_str *)&edit->string,
                                   edit->cursor, &unicode, &glyph_len);
         int bytes = at ? (int)(at - txt) : nk_str_len_char(&edit->string);
+
         if (bytes > 0)
             caret = font->width(font->userdata, font->height, txt, bytes);
     }

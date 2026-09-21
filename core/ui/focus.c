@@ -125,17 +125,28 @@ focus_is_range(App *app)
 int
 focus_key(App *app, const SDL_Event *event)
 {
-    struct nk_window *pw = nk_window_find(app->ctx, "page");
-    int editing = pw && pw->edit.active;
+    int editing = app->editing;
 
     if (event->key.key == SDLK_TAB) {
-        if (editing) pw->edit.active = nk_false;
+        if (editing) app->stop_editing = 1;
         focus_move(app, (event->key.mod & SDL_KMOD_SHIFT) ? FOCUS_PREV
                                                          : FOCUS_NEXT);
         app->dirty = 1;
         return 1;
     }
-    if (editing) return 0;
+    if (editing) {
+        /* The caret's, and the panel would scroll the field out of sight. */
+        switch (event->key.key) {
+        case SDLK_HOME:
+            nk_input_key(app->ctx, NK_KEY_TEXT_START, nk_true);
+            return 1;
+        case SDLK_END:
+            nk_input_key(app->ctx, NK_KEY_TEXT_END, nk_true);
+            return 1;
+        default:
+            return 0;
+        }
+    }
 
     switch (event->key.key) {
     case SDLK_RIGHT: case SDLK_KP_6: case SDLK_UP: case SDLK_KP_8:

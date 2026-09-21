@@ -5,6 +5,9 @@
 #include "anim.h"
 #include "locale.h"
 #include "sample.h"
+#ifdef __EMSCRIPTEN__
+#include "keyboard_web.h"
+#endif
 
 static int
 effective_dark(const App *app)
@@ -137,6 +140,16 @@ web_page_size(int *w, int *h)
     int ch = EM_ASM_INT({ return window.innerHeight | 0; });
     if (cw > 64 && ch > 64) { *w = cw; *h = ch; }
 }
+static void
+web_keys_woke(void)
+{
+    SDL_Event e;
+
+    SDL_zero(e);
+    e.type = SDL_EVENT_USER;
+    SDL_PushEvent(&e);
+}
+
 static EM_BOOL
 web_on_resize(int type, const EmscriptenUiEvent *ev, void *user)
 {
@@ -376,6 +389,9 @@ SDL_AppInit(void **appstate, int argc, char *argv[])
 
     app->dirty = 1;
 
+#ifdef __EMSCRIPTEN__
+    reaktor_web_keys_init(web_keys_woke);
+#endif
     nk_input_begin(app->ctx);
     return SDL_APP_CONTINUE;
 }
@@ -526,6 +542,11 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
             if (event->motion.y > hi_y) event->motion.y = hi_y;
         }
 
+#ifdef __EMSCRIPTEN__
+        /* The element's to deliver, or keypress types every character twice. */
+        if (event->type == SDL_EVENT_TEXT_INPUT && reaktor_web_keys_holds())
+            return SDL_APP_CONTINUE;
+#endif
         nk_sdl_handle_event(app->ctx, event);
     }
     return SDL_APP_CONTINUE;
@@ -611,6 +632,7 @@ SDL_AppIterate(void *appstate)
     app->laid_w = win_w;
     app->laid_h = win_h;
     app->hot_n = 0;
+    app->editing = 0;
 
     {
         Uint64 now = SDL_GetTicks();
@@ -654,6 +676,14 @@ SDL_AppIterate(void *appstate)
         }
         app->dirty = 1;
     }
+#ifdef __EMSCRIPTEN__
+    {
+        int rune;
+
+        while ((rune = reaktor_web_keys_take()) > 0)
+            nk_input_unicode(ctx, (nk_rune)rune);
+    }
+#endif
     nk_input_end(ctx);
     ctx->style.text.color = app->text;
 
@@ -674,6 +704,7 @@ SDL_AppIterate(void *appstate)
         nk_style_push_vec2(ctx, &ctx->style.window.padding, nk_vec2(0, 0));
     }
     nk_end(ctx);
+    app->stop_editing = 0;
 
     if (app->activate_id && app->focus_seen) {
         SDL_Event e;
@@ -712,6 +743,10 @@ SDL_AppIterate(void *appstate)
     }
 
     nk_sdl_update_TextInput(ctx);
+#ifdef __EMSCRIPTEN__
+    /* After the frame, when a field has said whether it is being edited. */
+    reaktor_web_keys_wants(app->editing);
+#endif
     if (app->ime_valid) {
         SDL_SetTextInputArea(app->win, &app->ime_rect, app->ime_cursor);
         app->ime_valid = 0;
