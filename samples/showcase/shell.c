@@ -53,6 +53,8 @@ window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
 
 static int g_tab = -1;
 static int g_scroll0 = -1;
+static char g_login[128];
+static int  g_login_len;
 
 int
 sample_tab(void)
@@ -272,15 +274,12 @@ login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
                                         REAKTOR_LAY_FILL_Y } });
             }
 
-            {
-                int used = (int)app->edit.string.len;
-                reaktor_field(&(reaktor_field_spec){
-                    .buf = app->edit_buf, .len = &used,
-                    .cap = (int)sizeof(app->edit_buf),
-                    .hint = "you@example.com",
-                    .box = { .h = ROW_FIELD, .flags = REAKTOR_LAY_FILL_X,
-                             .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
-            }
+            reaktor_field(&(reaktor_field_spec){
+                .buf = g_login, .len = &g_login_len,
+                .cap = (int)sizeof(g_login),
+                .hint = "you@example.com",
+                .box = { .h = ROW_FIELD, .flags = REAKTOR_LAY_FILL_X,
+                         .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
             reaktor_button(&(reaktor_button_spec){
                 .label = "Continue with email", .accent = 1,

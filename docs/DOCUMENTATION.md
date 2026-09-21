@@ -55,6 +55,10 @@ Answers non-zero on the frame it was pressed. There is no widget object, no
 handle and no id to keep: the widget *is* the code that made it, reading your
 variable and answering in your scope.
 
+A field writes back — bytes into your buffer, length into your `int` — and
+reads both again next frame. A length from anywhere else reseeds the buffer;
+one that is always zero empties the field as soon as you stop typing.
+
 The fifteen specs are in [`core/ui/declare.h`](../core/ui/declare.h): button,
 label, icon, field, link, swatch, check, radio, select, slider, progress,
 knob, property, combo, color.
@@ -493,6 +497,28 @@ from 3.55 MB to 1.30 MB. The showcase alone also packs `assets/locale` and the
 Japanese font, which `simple` and `notepad` never open. `tools/shell.html` is
 the page; its loading overlay sets `pointer-events: none`, without which a
 full-viewport overlay swallows every canvas click and the app looks dead.
+
+**Typing on a phone** is `platform/web/keyboard_web.c`. SDL's web backend has
+no text input of its own: it turns a `keypress` into text, which a phone's
+keyboard never sends, and there is no element for a phone to open a keyboard
+over. So a field being edited on a touch device holds a hidden `input`, which
+is what raises the keyboard, and what it receives is fed in as typed runes —
+by way of the callback that also asks for a frame, since nothing else here
+would. A keyboard of its own, physical, is left to SDL: while it is listening,
+a `keypress` it takes is one the browser will not insert anywhere else.
+
+The tap itself does the focusing, and asks the accessibility tree whether it
+landed on a text box, because Safari opens the keyboard only for a focus
+inside the gesture — a frame later is too late. Android is happy either way,
+so the frame after is where the keyboard is let go of again, and where a field
+the app moved to on its own is caught. What is left on a phone is that the
+keyboard covers the page rather than resizing it, so a field near the bottom
+can end up behind it.
+
+**The accessibility tree is positioned `fixed`.** A node lies where its widget
+does, and a widget can be off the canvas — a tab strip too wide for the window
+has some. Absolutely positioned, those nodes widen the page, and a phone lays
+out to that width instead of the screen's.
 
 ## Localization
 

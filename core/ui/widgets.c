@@ -593,9 +593,12 @@ reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
     f = push_edit_style(ctx, &s, 0);
     if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
     if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;
-    state = nk_edit_string(ctx, flags, buf, len, cap, filter);
+    /* One byte short, so the value is always there to be read as a string. */
+    state = nk_edit_string(ctx, flags, buf, len, cap > 0 ? cap - 1 : 0, filter);
+    if (cap > 0) buf[*len] = '\0';
     pop_style(ctx, f);
     stroke_edit_edge(ctx, bounds, &s);
+    note_edit_active(app, ctx, state);
     note_ime_caret(app, ctx, bounds, state, &ctx->text_edit);
     reaktor_note(app, REAKTOR_A11Y_TEXTBOX,
                  hint ? hint : ((flags & NK_EDIT_BOX) ? "Notes" : "Text"), buf,
@@ -739,6 +742,12 @@ void
 reaktor_note_keys(App *app, unsigned id, const char *keys)
 {
     reaktor_a11y_set_keys(&app->a11y, id, keys);
+}
+
+void
+reaktor_note_value(App *app, unsigned id, const char *value)
+{
+    reaktor_a11y_set_value(&app->a11y, id, value);
 }
 
 void

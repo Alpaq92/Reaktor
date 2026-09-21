@@ -342,6 +342,10 @@ add_library(reaktor_runtime STATIC
     platform/theme.c
     runtime/app.c)
 
+if(EMSCRIPTEN)
+    target_sources(reaktor_runtime PRIVATE platform/web/keyboard_web.c)
+endif()
+
 target_include_directories(reaktor_runtime PUBLIC
     core/a11y
     core/anim
@@ -353,6 +357,7 @@ target_include_directories(reaktor_runtime PUBLIC
     core/ui
     platform
     platform/a11y
+    platform/web
     samples
     src
     "${TP}/nuklear"

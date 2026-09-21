@@ -50,6 +50,18 @@ regression oracle for every layout or style change.
   Nuklear's text command, so a change to how Nuklear or the renderer places
   glyphs does not reach it. Its bidi levels are matched to mojibake's by order:
   mojibake 0.3.6 records `byte_offset` at a character's last byte.
+- **A field's keys are its own, wherever it was declared.** Nuklear keeps
+  edit-active state on the window a widget sits in, so the page's window misses
+  every field inside a group; `app->editing` is what navigation asks before it
+  gives up the arrows, Home, End, Enter and Space. Home and End also scroll the
+  panel out from under the edit, so the runtime keeps those two.
+- **A field's value is not its buffer, and its length is the caller's.**
+  `nk_edit_string` leaves the bytes past the length alone, so the buffer read as
+  a string is the last, longer value; a length from anywhere but the field's own
+  last frame reseeds it empty every frame.
+- **An empty edit has no text pointer.** `nk_str_get_const` answers NULL while
+  `nk_str_len_char` still answers bytes, so that pair measures a null pointer
+  with a positive length.
 - **A hidden web page runs no frames.** The web build's main loop waits on
   `requestAnimationFrame`, which never fires in a background tab, a minimized
   window or a browser pane that is not on screen. `#a11y` is made in `main()`,

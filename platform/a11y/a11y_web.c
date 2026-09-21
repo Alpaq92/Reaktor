@@ -21,7 +21,8 @@ EM_JS(void, web_a11y_init, (void), {
     var canvas = Module['canvas'];
     var root = document.createElement('div');
     root.id = 'a11y';
-    root.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;' +
+    /* Fixed, or a node beyond the canvas widens the page a phone lays out to. */
+    root.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;' +
         'overflow:visible;pointer-events:none;opacity:0;';
     document.body.appendChild(root);
     canvas.setAttribute('role', 'application');
@@ -33,8 +34,8 @@ EM_JS(void, web_a11y_init, (void), {
 EM_JS(void, web_a11y_begin, (void), {
     var a = Module['a11y']; if (!a) return;
     var r = Module['canvas'].getBoundingClientRect();
-    a.root.style.left = (r.left + window.scrollX) + 'px';
-    a.root.style.top  = (r.top + window.scrollY) + 'px';
+    a.root.style.left = r.left + 'px';
+    a.root.style.top  = r.top + 'px';
     a.gen++;
 });
 

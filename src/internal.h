@@ -116,6 +116,8 @@ struct App {
     struct nk_rect field_rect;
     int            field_rect_valid;
     int            drag_in_field;
+    int            editing;
+    int            stop_editing;
 
     SDL_Rect ime_rect;
     int      ime_cursor;
@@ -237,6 +239,7 @@ int  reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
 void note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds);
 void stroke_edit_edge(struct nk_context *ctx, struct nk_rect b,
                       const reaktor_style *s);
+void note_edit_active(App *app, struct nk_context *ctx, nk_flags state);
 void note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
                     nk_flags state, const struct nk_text_edit *edit);
 void draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,

@@ -128,6 +128,8 @@ void reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,
 
 void reaktor_a11y_set_keys(reaktor_a11y *a, unsigned id, const char *keys);
 
+void reaktor_a11y_set_value(reaktor_a11y *a, unsigned id, const char *value);
+
 void reaktor_a11y_set_bounds(reaktor_a11y *a, unsigned id, struct nk_rect r);
 
 const reaktor_a11y_node *reaktor_a11y_tree(const reaktor_a11y *a, int *count);

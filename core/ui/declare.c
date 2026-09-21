@@ -595,13 +595,14 @@ void
 reaktor_field(const reaktor_field_spec *s)
 {
     reaktor_box box;
+    unsigned    id = 0;
 
     if (!g_app || !s || !s->buf || !s->len) return;
     box = s->box;
     box_from_style(&box, NULL, s->style, "input", 0.0f, 10.0f);
 
     if (!place(REAKTOR_A11Y_TEXTBOX, s->name ? s->name : s->hint,
-               s->buf[0] ? s->buf : NULL, 0u, NULL, &box, NULL))
+               NULL, 0u, NULL, &box, &id))
         return;
     reaktor_note_mute(g_app, 1);
     (void)reaktor_field_text(g_app, g_ctx,
@@ -609,6 +610,7 @@ reaktor_field(const reaktor_field_spec *s)
                              s->buf, s->len, s->cap, s->hint, s->filter,
                              s->pad_x, s->pad_y);
     reaktor_note_mute(g_app, 0);
+    reaktor_note_value(g_app, id, s->buf[0] ? s->buf : NULL);
 }
 
 int
