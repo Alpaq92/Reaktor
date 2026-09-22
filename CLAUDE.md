@@ -41,6 +41,10 @@ regression oracle for every layout or style change.
   attribute selectors.
 - **The renderer snaps every vertex to whole pixels.** Sub-pixel corrections
   are discarded, and rects that abut can round apart into a visible seam.
+- **A one-pixel stroke is two pixels here.** `nk_stroke_rect` casts its rect to
+  `short`, so a half-pixel inset never reaches the draw list, and with line
+  anti-aliasing on a stroke of thickness one is always two half-alpha rows.
+  An edge that has to be one pixel is two fills, as `reaktor_menu_edge` draws.
 - **Measure the present, not the draw.** On a machine with no GPU, most of a
   frame is `SDL_RenderPresent`. `build/render/present` split is on the
   Diagnostics page and in `bench --no-vsync`.

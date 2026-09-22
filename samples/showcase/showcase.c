@@ -1247,6 +1247,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT,
                             nk_vec2(150.0f, reaktor_menu_height(3)))) {
         reaktor_menu_style_push(ctx);
+        reaktor_menu_edge(app, ctx);
         nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         if (item_with_icon(app, ctx, "New", "add-outline", 0))
             SDL_strlcpy(s->menu_pick, "File > New", sizeof(s->menu_pick));
@@ -1258,14 +1259,15 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         }
         if (item_with_icon(app, ctx, "Close", "close-outline", 0))
             SDL_strlcpy(s->menu_pick, "File > Close", sizeof(s->menu_pick));
-        reaktor_menu_style_pop(ctx);
         nk_menu_end(ctx);
+        reaktor_menu_style_pop(ctx);
     }
     nk_layout_row_push(ctx, 60.0f);
     hot(app, ctx, REAKTOR_A11Y_MENU, "Edit", 0);
     if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT,
                             nk_vec2(190.0f, reaktor_menu_height(4)))) {
         reaktor_menu_style_push(ctx);
+        reaktor_menu_edge(app, ctx);
         nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         if (reaktor_menu_item(app, ctx, "Cut", NULL, 0))
             SDL_strlcpy(s->menu_pick, "Edit > Cut", sizeof(s->menu_pick));
@@ -1282,20 +1284,21 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         nk_spacer(ctx);
         nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
-        reaktor_menu_style_pop(ctx);
         nk_menu_end(ctx);
+        reaktor_menu_style_pop(ctx);
     }
     nk_layout_row_push(ctx, 60.0f);
     hot(app, ctx, REAKTOR_A11Y_MENU, "View", 0);
     if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT,
                             nk_vec2(170.0f, reaktor_menu_height(2)))) {
         reaktor_menu_style_push(ctx);
+        reaktor_menu_edge(app, ctx);
         nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         reaktor_progress_bar(app, ctx, &s->progress, 100, NK_MODIFIABLE);
         if (reaktor_menu_item(app, ctx, "Reset", NULL, 0))
             s->progress = 50;
-        reaktor_menu_style_pop(ctx);
         nk_menu_end(ctx);
+        reaktor_menu_style_pop(ctx);
     }
     nk_layout_row_end(ctx);
     nk_menubar_end(ctx);
@@ -1365,6 +1368,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         if (nk_contextual_begin(ctx, NK_WINDOW_BORDER, nk_vec2(150.0f, reaktor_menu_height(3)),
                                 trigger)) {
             reaktor_menu_style_push(ctx);
+            reaktor_menu_edge(app, ctx);
             nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
             if (item_with_icon(app, ctx, "First", "star-outline", 1))
                 SDL_strlcpy(s->menu_pick, "context: First",
@@ -1376,8 +1380,8 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                                1))
                 SDL_strlcpy(s->menu_pick, "context: Third",
                             sizeof(s->menu_pick));
-            reaktor_menu_style_pop(ctx);
             nk_contextual_end(ctx);
+            reaktor_menu_style_pop(ctx);
         }
     }
     popup_style_pop(ctx);

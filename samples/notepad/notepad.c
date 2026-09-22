@@ -158,6 +158,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     nk_layout_row_push(ctx, 60.0f);
     if (nk_menu_begin_label(ctx, "File", NK_TEXT_CENTERED,
                             nk_vec2(200.0f, reaktor_menu_height(4)))) {
+        reaktor_menu_edge(app, ctx);
         menu_cursor(app, ctx);
         nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         if (reaktor_menu_item(app, ctx, "New", "Ctrl+N", 0))
@@ -177,6 +178,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     nk_layout_row_push(ctx, 60.0f);
     if (nk_menu_begin_label(ctx, "Help", NK_TEXT_CENTERED,
                             nk_vec2(200.0f, reaktor_menu_height(2)))) {
+        reaktor_menu_edge(app, ctx);
         menu_cursor(app, ctx);
         nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         if (reaktor_menu_item(app, ctx, "Shortcuts", "Ctrl+K", 0))
