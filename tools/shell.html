@@ -61,13 +61,15 @@
       }
     };
 
-    Module.canvas.addEventListener('mousedown', function () {
-      Module.canvas.focus();
-    });
-
     Module.canvas.addEventListener('keydown', function (e) {
       if (e.key === 'Tab') e.preventDefault();
     });
+
+    if (new URLSearchParams(location.search).has('keylog')) {
+      var keylog = document.createElement('script');
+      keylog.src = 'keylog.js';
+      document.head.appendChild(keylog);
+    }
 
     Module.onRuntimeInitialized = function () { Module.setStatus(''); };
   </script>

@@ -530,7 +530,10 @@ if(EMSCRIPTEN)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/reaktor-icon.png"
             "${CMAKE_BINARY_DIR}/reaktor-icon.png"
-        COMMENT "Copying favicon assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/keylog.js"
+            "${CMAKE_BINARY_DIR}/keylog.js"
+        COMMENT "Copying page assets"
         VERBATIM)
 endif()
 
