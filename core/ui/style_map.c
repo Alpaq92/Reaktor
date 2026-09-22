@@ -760,7 +760,7 @@ apply_widget_style(App *app)
     st->window.rounding = 0.0f;
     st->window.combo_border_color      = edge;
     st->window.contextual_border_color = edge;
-    st->window.contextual_border       = 2.0f;
+    st->window.contextual_border       = 1.0f;
     st->window.menu_border_color       = edge;
     st->window.group_border_color      = edge;
     st->window.tooltip_border_color    = nk_rgba(muted.r, muted.g, muted.b, 90);

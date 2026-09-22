@@ -66,6 +66,7 @@ float reaktor_popup_rounding(void);
 void  reaktor_menu_style_push(struct nk_context *ctx);
 void  reaktor_menu_style_pop(struct nk_context *ctx);
 float reaktor_menu_height(int rows);
+void  reaktor_menu_edge(App *app, struct nk_context *ctx);
 int   reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,
                         const char *accel, int contextual);
 

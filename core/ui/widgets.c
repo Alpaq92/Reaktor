@@ -803,6 +803,8 @@ reaktor_popup_rounding(void)
 void
 reaktor_menu_style_push(struct nk_context *ctx)
 {
+    struct nk_color none = nk_rgba(0, 0, 0, 0);
+
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(
                                  reaktor_token("--background",
@@ -811,11 +813,20 @@ reaktor_menu_style_push(struct nk_context *ctx)
                         reaktor_popup_rounding());
     nk_style_push_vec2(ctx, &ctx->style.window.spacing,
                        nk_vec2(4.0f, REAKTOR_MENU_GAP));
+    /* Alpha 0 drops the row fills, side strips and stroke a dynamic popup
+     * paints after its body; reaktor_menu_edge paints them instead. */
+    nk_style_push_color(ctx, &ctx->style.window.background, none);
+    nk_style_push_color(ctx, &ctx->style.window.menu_border_color, none);
+    nk_style_push_color(ctx, &ctx->style.window.contextual_border_color,
+                        none);
 }
 
 void
 reaktor_menu_style_pop(struct nk_context *ctx)
 {
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
+    nk_style_pop_color(ctx);
     nk_style_pop_vec2(ctx);
     nk_style_pop_float(ctx);
     nk_style_pop_style_item(ctx);
@@ -825,6 +836,26 @@ float
 reaktor_menu_height(int rows)
 {
     return rows * REAKTOR_MENU_ROW + (rows - 1) * REAKTOR_MENU_GAP + 10.0f;
+}
+
+/* A stroke of one pixel lands on two here; two fills land where they say. */
+void
+reaktor_menu_edge(App *app, struct nk_context *ctx)
+{
+    struct nk_command_buffer *out = nk_window_get_canvas(ctx);
+    struct nk_rect body = nk_window_get_bounds(ctx);
+    struct nk_rect keep = nk_window_get_content_region(ctx);
+    struct nk_color fill = reaktor_token("--background", nk_rgb(53, 53, 53));
+    struct nk_color edge = reaktor_token("--background-hover", fill);
+    float r = reaktor_popup_rounding();
+
+    nk_push_scissor(out, body);
+    reaktor_fill_round(app, out, body, r, edge);
+    reaktor_fill_round(app, out,
+                       nk_rect(body.x + 1.0f, body.y + 1.0f,
+                               body.w - 2.0f, body.h - 2.0f),
+                       r - 1.0f, fill);
+    nk_push_scissor(out, keep);
 }
 
 int
