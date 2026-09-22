@@ -34,6 +34,11 @@ EM_JS(void, web_keys_make, (void), {
     Module["reaktorKeys"] = { el: el, runes: [],
                               coarse: window.matchMedia("(pointer: coarse)") };
 
+    /* A tap's compatibility mousedown lands after the field took the keyboard. */
+    Module["canvas"].addEventListener("mousedown", function () {
+        if (document.activeElement !== el) Module["canvas"].focus();
+    });
+
     /* Safari opens the keyboard only for a focus inside the gesture itself. */
     Module["canvas"].addEventListener("pointerup", function (e) {
         if (e.pointerType === "mouse") return;

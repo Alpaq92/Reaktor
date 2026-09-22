@@ -9,11 +9,13 @@ A Nuklear-powered (GUI) engine for C.
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
 same program, built to WebAssembly.
 
-Tired of C having no cross-platform GUI — nothing like Avalonia, Shaft or
-Freya — and of leaning on toolkits that want hundreds of megabytes just to put
-a dialog on screen? No? I was. So I wrote Reaktor: a GUI library that is
-complete without being big. A 2.3 MB binary, about 10 MB of RAM, and no GPU
-required.
+Tired of C having no cross-platform GUI — nothing like
+[Avalonia](https://github.com/avaloniaui/avalonia),
+[Shaft](https://github.com/ShaftUI/Shaft) or
+[Freya](https://github.com/marc2332/freya) — and of leaning on toolkits that
+want hundreds of megabytes just to put a dialog on screen? No? I was. So I
+wrote Reaktor: a GUI library that is complete without being big. A 2.3 MB
+binary, about 10 MB of RAM, and no GPU required.
 
 > ⚠️ **Reaktor is in active development**, and breaking changes might occur.
 
@@ -41,25 +43,22 @@ How these were measured, and on what, is in
 ## Features
 
 - **Widgets** — 15 declarative specs, with all of Nuklear underneath.
-- **Styling from CSS** — colors, type, borders, radii, padding, margins,
-  `:hover` / `:active`. Read at runtime; swap the sheet, the app changes.
+- **Styling from CSS** — color, type, borders, radii, spacing, `:hover` /
+  `:active`, read at runtime. Swap the sheet, the app changes.
 - **Animation** — 31 easing curves, keyed per widget.
-- **Accessibility** — automatic. UI Automation, NSAccessibility, AT-SPI, and a
-  DOM subtree on the web. Keyboard focus and shortcuts included.
+- **Accessibility** — automatic: UI Automation, NSAccessibility, AT-SPI and a
+  DOM subtree on the web, with keyboard focus and shortcuts.
 - **HiDPI** — layout in logical pixels, atlas baked at the display's size.
 - **Light and dark** — follows the system, or pick one.
-- **Localization** — a catalog per language, plural rules, and numbers, money
-  and dates as each language writes them: English, Polish and Japanese in the
-  showcase.
-- **Text past Latin-1** — right-to-left direction, shaping for Arabic, Hebrew
-  and the Indic scripts, glyphs from fallback fonts at any size, and line breaks
-  by Unicode's rules, so Japanese wraps properly.
-- **Modular** — the accessibility bridges, localization and text shaping are
-  modules, each on by default. `-DREAKTOR_A11Y=OFF`, `-DREAKTOR_LOCALE=OFF` or
-  `-DREAKTOR_TEXT=OFF` swaps one for a stub with the same calls, and the rest
-  of the app draws the same pixels.
-- **Windows, macOS, Linux, the BSDs and WebAssembly** — one set of sources,
-  the same software rasterizer on all five, no GPU required.
+- **Localization** — a catalog per language; plural rules, numbers, money and
+  dates as each language writes them.
+- **Text past Latin-1** — direction, shaping, fallback fonts at any size and
+  Unicode line breaking, so Japanese wraps properly.
+- **Modular** — accessibility, localization and text shaping are modules, on
+  by default; `-DREAKTOR_TEXT=OFF` and friends swap in a stub, and only what
+  that module drew stops being drawn.
+- **Five platforms** — Windows, macOS, Linux, the BSDs and WebAssembly, one
+  set of sources on the same software rasterizer, no GPU.
 - **Nothing drawn at rest** — 0% of a core while it sits there.
 
 ## Build
@@ -74,8 +73,9 @@ cd Reaktor
 ./build/showcase
 ```
 
-For the browser, `./build-wasm.sh` (needs [emsdk](https://emscripten.org))
-builds all three to WebAssembly, then serve `build-wasm/` over HTTP.
+For the browser, `./build-wasm.sh` (`build-wasm.ps1` on Windows, needs
+[emsdk](https://emscripten.org)) builds all three to WebAssembly, then serve
+`build-wasm/` over HTTP.
 
 ## Usage
 
