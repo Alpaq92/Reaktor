@@ -62,6 +62,22 @@ struct round_slot {
     SDL_Texture *tex;
 };
 
+#define FIELD_UNDO_STEPS 100
+
+struct field_step {
+    int   at, cut, put;
+    char *bytes;
+};
+
+struct field_undo {
+    const struct nk_window *win;
+    const char             *buf;
+    char                   *text;
+    int                     len, room;
+    struct field_step       step[FIELD_UNDO_STEPS];
+    int                     n, top;
+};
+
 struct App {
     SDL_Window        *win;
     SDL_Renderer      *ren;
@@ -115,6 +131,7 @@ struct App {
 
     struct nk_rect field_rect;
     int            field_rect_valid;
+    struct field_undo field_undo;
     int            drag_in_field;
     int            editing;
     int            stop_editing;
@@ -289,6 +306,7 @@ int reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
 nk_flags reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
                        char *buf, int *len, int cap, const char *hint,
                        nk_plugin_filter filter, float pad_x, float pad_y);
+void field_undo_clear(App *app);
 
 int reaktor_focus_step(App *app, unsigned id);
 

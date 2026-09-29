@@ -59,6 +59,10 @@ A field writes back — bytes into your buffer, length into your `int` — and
 reads both again next frame. A length from anywhere else reseeds the buffer;
 one that is always zero empties the field as soon as you stop typing.
 
+Ctrl+Z and Ctrl+R undo and redo in the focused field, from a history the field
+keeps itself, since `nk_edit_string` clears Nuklear's every frame. Editing
+another field, or changing the value in code, starts it over.
+
 The fifteen specs are in [`core/ui/declare.h`](../core/ui/declare.h): button,
 label, icon, field, link, swatch, check, radio, select, slider, progress,
 knob, property, combo, color.
