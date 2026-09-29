@@ -217,6 +217,7 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
     struct nk_rect in, bar, fl, kn;
     float t;
 
+    hot_push(app, b, 0, 1);
     nk_style_push_color(ctx, &ctx->style.slider.bar_normal, clear.data.color);
     nk_style_push_color(ctx, &ctx->style.slider.bar_hover, clear.data.color);
     nk_style_push_color(ctx, &ctx->style.slider.bar_active, clear.data.color);
@@ -297,6 +298,7 @@ reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max
     if (r > fill.w * 0.5f) r = fill.w * 0.5f;
     if (r < 0.0f) r = 0.0f;
 
+    hot_push(app, b, 0, 1);
     nk_style_push_style_item(ctx, &ctx->style.progress.normal, clear);
     nk_style_push_style_item(ctx, &ctx->style.progress.hover, clear);
     nk_style_push_style_item(ctx, &ctx->style.progress.active, clear);
@@ -414,6 +416,8 @@ reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
     l.y = b.y + st->border + b.h * 0.5f - h * 0.5f;
     r.x = b.x + b.w - (h + st->padding.x);
     r.y = l.y;
+    hot_push(app, l, 0, 1);
+    hot_push(app, r, 0, 1);
     stepper_wash(app, ctx, l);
     stepper_wash(app, ctx, r);
     reaktor_chevron_at(app, ctx, l, "chevron-back-outline",    st->dec_button.text_normal);
