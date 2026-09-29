@@ -837,6 +837,7 @@ SDL_AppQuit(void *appstate, SDL_AppResult result)
     if (!app) return;
 
     if (app->ctx) nk_input_end(app->ctx);
+    field_undo_clear(app);
     reaktor_style_shutdown();
     {
         int i;
