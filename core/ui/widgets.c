@@ -581,6 +581,137 @@ reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
     return css_button_icon(app, ctx, "button", src, label);
 }
 
+static void
+undo_drop(struct field_undo *u, int from)
+{
+    while (u->n > from) SDL_free(u->step[--u->n].bytes);
+    u->top = u->n;
+}
+
+static int
+undo_keep(struct field_undo *u, const char *buf, int len)
+{
+    if (len > u->room) {
+        char *t = (char *)SDL_realloc(u->text, (size_t)len);
+
+        if (!t) {
+            undo_drop(u, 0);
+            u->win = NULL;
+            return 0;
+        }
+        u->text = t;
+        u->room = len;
+    }
+    if (len > 0) SDL_memcpy(u->text, buf, (size_t)len);
+    u->len = len;
+    return 1;
+}
+
+static int
+undo_differs(const struct field_undo *u, const char *buf, int len)
+{
+    return len != u->len || (len > 0 && SDL_memcmp(buf, u->text, (size_t)len));
+}
+
+static void
+undo_note(struct field_undo *u, const char *buf, int len)
+{
+    int pre = 0, suf = 0, cut, put;
+    struct field_step *s;
+
+    while (pre < u->len && pre < len && u->text[pre] == buf[pre]) pre++;
+    while (pre > 0 && pre < len && (buf[pre] & 0xC0) == 0x80) pre--;
+    while (suf < u->len - pre && suf < len - pre &&
+           u->text[u->len - 1 - suf] == buf[len - 1 - suf]) suf++;
+    while (suf > 0 && (buf[len - suf] & 0xC0) == 0x80) suf--;
+    cut = u->len - pre - suf;
+    put = len - pre - suf;
+
+    undo_drop(u, u->top);
+    if (u->n == FIELD_UNDO_STEPS) {
+        SDL_free(u->step[0].bytes);
+        u->n--;
+        SDL_memmove(u->step, u->step + 1, (size_t)u->n * sizeof(u->step[0]));
+    }
+    s = &u->step[u->n];
+    s->bytes = (char *)SDL_malloc((size_t)(cut + put) + 1);
+    if (!s->bytes) { undo_drop(u, 0); return; }
+    SDL_memcpy(s->bytes, u->text + pre, (size_t)cut);
+    SDL_memcpy(s->bytes + cut, buf + pre, (size_t)put);
+    s->at = pre;
+    s->cut = cut;
+    s->put = put;
+    u->top = ++u->n;
+}
+
+static void
+undo_swap(struct nk_window *win, char *buf, int *len, int at,
+          const char *in, int in_n, int out_n)
+{
+    SDL_memmove(buf + at + in_n, buf + at + out_n,
+                (size_t)(*len - at - out_n));
+    SDL_memcpy(buf + at, in, (size_t)in_n);
+    *len += in_n - out_n;
+    win->edit.cursor = win->edit.sel_start = win->edit.sel_end =
+        nk_utf_len(buf, at + in_n);
+}
+
+void
+field_undo_clear(App *app)
+{
+    struct field_undo *u = &app->field_undo;
+
+    undo_drop(u, 0);
+    SDL_free(u->text);
+    SDL_zerop(u);
+}
+
+/* nk_edit_string clears Nuklear's undo, which misses mid-text typing too. */
+static nk_flags
+field_edit(App *app, struct nk_context *ctx, nk_flags flags, char *buf,
+           int *len, int max, nk_plugin_filter filter)
+{
+    struct nk_window *win = ctx->current;
+    struct field_undo *u = &app->field_undo;
+    int held = u->win == win && u->buf == buf;
+    nk_flags state;
+
+    if (held && undo_differs(u, buf, *len)) {
+        undo_drop(u, 0);
+        held = undo_keep(u, buf, *len);
+    }
+    if (held && win->edit.active && win->edit.seq == win->edit.name &&
+        !(win->layout->flags & NK_WINDOW_ROM)) {
+        struct field_step *s = NULL;
+
+        if (nk_input_is_key_pressed(&ctx->input, NK_KEY_TEXT_UNDO) &&
+            u->top > 0) {
+            s = &u->step[--u->top];
+            undo_swap(win, buf, len, s->at, s->bytes, s->cut, s->put);
+        } else if (nk_input_is_key_pressed(&ctx->input, NK_KEY_TEXT_REDO) &&
+                   u->top < u->n) {
+            s = &u->step[u->top++];
+            undo_swap(win, buf, len, s->at, s->bytes + s->cut, s->put, s->cut);
+        }
+        if (s) held = undo_keep(u, buf, *len);
+    }
+
+    state = nk_edit_string(ctx, flags, buf, len, max, filter);
+    if (!(state & NK_EDIT_ACTIVE) || (win->layout->flags & NK_WINDOW_ROM))
+        return state;
+
+    if (!held) {
+        undo_drop(u, 0);
+        u->win = win;
+        u->buf = buf;
+        undo_keep(u, buf, *len);
+    } else if (undo_differs(u, buf, *len)) {
+        undo_note(u, buf, *len);
+        undo_keep(u, buf, *len);
+    }
+    return state;
+}
+
 nk_flags
 reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
               char *buf, int *len, int cap, const char *hint,
@@ -598,7 +729,8 @@ reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
     if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
     if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;
     /* One byte short, so the value is always there to be read as a string. */
-    state = nk_edit_string(ctx, flags, buf, len, cap > 0 ? cap - 1 : 0, filter);
+    state = field_edit(app, ctx, flags, buf, len, cap > 0 ? cap - 1 : 0,
+                       filter);
     if (cap > 0) buf[*len] = '\0';
     pop_style(ctx, f);
     stroke_edit_edge(ctx, bounds, &s);
