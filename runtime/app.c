@@ -132,6 +132,16 @@ load_theme(App *app)
     app->dirty   = 1;
 }
 
+static void
+wake_loop(void)
+{
+    SDL_Event e;
+
+    SDL_zero(e);
+    e.type = SDL_EVENT_USER;
+    SDL_PushEvent(&e);
+}
+
 #ifdef __EMSCRIPTEN__
 static void
 web_page_size(int *w, int *h)
@@ -500,6 +510,11 @@ SDL_AppEvent(void *appstate, SDL_Event *event)
             app->restore_rate = 2;
             break;
 
+        /* Nuklear scrolls a panel at its end, after drawing what it holds. */
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (!app->dragging) app->restore_rate = 2;
+            break;
+
         case SDL_EVENT_WINDOW_MOUSE_LEAVE:
             app->hot_last = -1;
             app->hot_last_repaint = 0;
@@ -815,8 +830,12 @@ SDL_AppIterate(void *appstate)
     app->dirty = 0;
     app->drag_moved = 0;
     if (app->restore_rate > 0) {
-        if (--app->restore_rate > 0) app->dirty = 1;
-        else SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
+        if (--app->restore_rate > 0) {
+            app->dirty = 1;
+            wake_loop();
+        } else {
+            SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
+        }
     }
     if (app->want_quit) return SDL_APP_SUCCESS;
 

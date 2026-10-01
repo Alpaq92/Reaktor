@@ -700,10 +700,14 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                               .box = { .w = 440.0f,
                                        .flags = REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
+                    /* Its step buttons light up inside its own rect. */
+                    reaktor_hot_follow(app, nk_widget_bounds(ctx), 0);
                     nk_property_float(ctx, "R:", 0.0f, &s->tint.r, 1.0f,
                                       0.01f, 0.005f);
+                    reaktor_hot_follow(app, nk_widget_bounds(ctx), 0);
                     nk_property_float(ctx, "G:", 0.0f, &s->tint.g, 1.0f,
                                       0.01f, 0.005f);
+                    reaktor_hot_follow(app, nk_widget_bounds(ctx), 0);
                     nk_property_float(ctx, "B:", 0.0f, &s->tint.b, 1.0f,
                                       0.01f, 0.005f);
                 }
@@ -715,6 +719,7 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                     nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
                     reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f,
                                        0.01f);
+                    reaktor_hot_top(app, nk_widget_bounds(ctx), 0, 1);
                     nk_checkbox_label(ctx, "with a layout in it",
                                       &s->check_spell);
                 }
@@ -1279,6 +1284,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         nk_layout_row_template_push_static(ctx, 6.0f);
         nk_layout_row_template_end(ctx);
         nk_spacer(ctx);
+        reaktor_hot_top(app, nk_widget_bounds(ctx), 0, 1);
         nk_checkbox_label_align(ctx, "Overwrite", &s->check_spell,
                                 NK_WIDGET_RIGHT, NK_TEXT_LEFT);
         nk_spacer(ctx);

@@ -21,7 +21,8 @@ if (-not (Test-Path (Join-Path $root "external\SDL\CMakeLists.txt"))) {
     throw "submodules missing - run: git submodule update --init --recursive"
 }
 
-$bat = Join-Path $env:TEMP "reaktor_build.bat"
+# One per run: cmd reads a batch file as it goes, and other checkouts build too.
+$bat = Join-Path $env:TEMP "reaktor_build_$PID.bat"
 @(
   '@echo off',
   ('call "' + $vcvars + '" >nul 2>&1'),
@@ -36,9 +37,13 @@ $bat = Join-Path $env:TEMP "reaktor_build.bat"
 
 $prev = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
-& cmd.exe /c $bat
-$rc = $LASTEXITCODE
-$ErrorActionPreference = $prev
+try {
+    & cmd.exe /c $bat
+    $rc = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prev
+    Remove-Item -LiteralPath $bat -ErrorAction SilentlyContinue
+}
 
 if ($rc -ne 0) { throw "build failed ($rc)" }
 Write-Host ""

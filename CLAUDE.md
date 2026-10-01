@@ -36,6 +36,10 @@ regression oracle for every layout or style change.
 - **A box is placed one frame late**, and found again by its **name**. A widget
   whose label changes every frame needs a stable `.name` or it never gets a
   rectangle.
+- **Hover is drawn only across a hot rectangle.** Pointer motion runs a frame
+  only when it crosses a rectangle `hot_push` registered the frame before, so a
+  widget that looks different under the pointer and registers none keeps its
+  old look until some other input.
 - **libcss has no `em`/`rem`** — its units are px, %, dip, sp, pt. `cssflat.c`
   converts before the engine sees the text, along with `var()`, `@media` and
   attribute selectors.

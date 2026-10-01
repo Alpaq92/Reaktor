@@ -302,12 +302,16 @@ There is no loop. SDL is told `SDL_HINT_MAIN_CALLBACK_RATE = "waitevent"`, so
 `SDL_AppIterate` runs when an event arrives and returns immediately unless
 `app->dirty` is set. What sets it: a widget being clicked, typed into or
 dragged; the pointer crossing a **hot rectangle** registered last frame (that
-is how hover repaints without polling); the window moving, resizing or changing
-scheme; an animation still running.
+is how hover repaints without polling, so a widget that looks different under
+the pointer registers one); the window moving, resizing or changing scheme; an
+animation still running.
 
 While a mouse button is held the rate switches to the display's refresh, with a
 two-frame settle after release, so the frame that completes a click is not also
-the frame that stops scheduling frames.
+the frame that stops scheduling frames. A turn of the wheel takes the same two
+frames, because Nuklear scrolls a panel at its end, after drawing what it holds
+at the old offset; the second is asked for with an event, since a loop waiting
+on events would not otherwise run it.
 
 The app therefore measures 0% of a core at rest, and **adding a timer or an
 unconditional repaint to make something update is the wrong fix** — mark the

@@ -388,10 +388,11 @@ reaktor_button(const reaktor_button_spec *s)
     if (s->disabled) nk_widget_disable_begin(g_ctx);
     fitted = reaktor_fit_label(g_app, g_ctx, r);
     reaktor_note_mute(g_app, 1);
-    if (s->icon && !s->label)
+    if (s->icon && !s->label) {
+        reaktor_hot(g_app, r, 0, 1);
         hit = nk_button_image(g_ctx, reaktor_ionicon(g_app, s->icon,
                                                      (int)(r.h * 0.6f)));
-    else if (s->icon)
+    } else if (s->icon)
         hit = reaktor_button_icon_as(g_app, g_ctx, sel, s->icon, s->label);
     else if (s->accent)
         hit = reaktor_button_accent_as(g_app, g_ctx, sel, s->label);
@@ -695,6 +696,7 @@ reaktor_check(const reaktor_check_spec *s)
 
     styled = push_style_font(s->style ? s->style : "input");
 
+    reaktor_hot(g_app, nk_widget_bounds(g_ctx), 0, 1);
     reaktor_note_mute(g_app, 1);
     if (s->box_right)
         nk_checkbox_label_align(g_ctx, s->label, &on,
@@ -767,6 +769,7 @@ reaktor_select(const reaktor_select_spec *s)
         nk_flags align = s->centered ? NK_TEXT_CENTERED : NK_TEXT_LEFT;
         struct nk_rect b = nk_widget_bounds(g_ctx);
 
+        reaktor_hot(g_app, b, 0, 1);
         reaktor_note_mute(g_app, 1);
         if (s->icon) {
             struct nk_color accent = reaktor_token("--links",
@@ -943,6 +946,7 @@ reaktor_combo_open(const reaktor_combo_spec *s)
     h  = nk_widget_bounds(g_ctx);
     cw = nk_widget_width(g_ctx);
 
+    reaktor_hot(g_app, h, 0, 1);
     reaktor_note_mute(g_app, 1);
     if (s->disc)
         open = nk_combo_begin_symbol_label(g_ctx, s->label, NK_SYMBOL_NONE,
