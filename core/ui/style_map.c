@@ -10,10 +10,12 @@ void
 hot_push_ex(App *app, struct nk_rect r, int cursor, int repaint, int top,
             int track)
 {
+    const struct nk_window *w = app->ctx ? app->ctx->current : NULL;
     int n = app->hot_n;
 
-    if (app->ctx && app->ctx->current && app->ctx->current->layout) {
-        struct nk_rect c = app->ctx->current->layout->clip;
+    if (app->layer_held) return;
+    if (w && w->layout) {
+        struct nk_rect c = w->layout->clip;
         float x0 = r.x > c.x ? r.x : c.x;
         float y0 = r.y > c.y ? r.y : c.y;
         float x1 = (r.x + r.w) < (c.x + c.w) ? (r.x + r.w) : (c.x + c.w);
@@ -35,6 +37,74 @@ void
 hot_push(App *app, struct nk_rect r, int cursor, int repaint)
 {
     hot_push_ex(app, r, cursor, repaint, 0, 0);
+}
+
+/* An armed button paints its own fill and border; Nuklear draws the label. */
+static struct {
+    int                    armed, hid;
+    struct nk_rect         b;
+    struct nk_style_item   normal, hover, active;
+    float                  border;
+} g_chrome;
+
+void
+reaktor_button_arm(struct nk_context *ctx)
+{
+    struct nk_rect b = nk_widget_bounds(ctx);
+
+    g_chrome.b = reaktor_rect_trunc(b);
+    g_chrome.armed = 1;
+}
+
+void
+reaktor_button_disarm(void)
+{
+    g_chrome.armed = 0;
+}
+
+static void
+button_chrome_begin(struct nk_command_buffer *out, nk_handle user)
+{
+    App *app = (App *)user.ptr;
+    struct nk_style_button *st = &app->ctx->style.button;
+    nk_flags state = app->ctx->last_widget_state;
+    const struct nk_style_item *bg;
+    struct nk_style_item none = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+
+    if (!g_chrome.armed) return;
+    g_chrome.armed = 0;
+    bg = (state & NK_WIDGET_STATE_HOVER)   ? &st->hover
+       : (state & NK_WIDGET_STATE_ACTIVED) ? &st->active : &st->normal;
+    if (bg->type != NK_STYLE_ITEM_COLOR) return;
+
+    reaktor_fill_round(app, out, g_chrome.b, st->rounding,
+                       nk_rgb_factor(bg->data.color,
+                                     st->color_factor_background));
+    reaktor_edge_round(app, out, g_chrome.b, st->rounding, st->border,
+                       nk_rgb_factor(st->border_color,
+                                     st->color_factor_background));
+    g_chrome.normal = st->normal;
+    g_chrome.hover  = st->hover;
+    g_chrome.active = st->active;
+    g_chrome.border = st->border;
+    st->normal = st->hover = st->active = none;
+    st->border = 0.0f;
+    g_chrome.hid = 1;
+}
+
+static void
+button_chrome_end(struct nk_command_buffer *out, nk_handle user)
+{
+    App *app = (App *)user.ptr;
+    struct nk_style_button *st = &app->ctx->style.button;
+
+    (void)out;
+    if (!g_chrome.hid) return;
+    st->normal = g_chrome.normal;
+    st->hover  = g_chrome.hover;
+    st->active = g_chrome.active;
+    st->border = g_chrome.border;
+    g_chrome.hid = 0;
 }
 
 static style_frame
@@ -122,7 +192,9 @@ css_button(App *app, struct nk_context *ctx, const char *selector,
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
     id = reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
+    reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, label);
+    reaktor_button_disarm();
     pop_style(ctx, f);
     if (reaktor_focus_activated(app, id)) clicked = 1;
     return clicked;
@@ -218,7 +290,9 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
         a.colors = 4;
     }
 
+    reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, label);
+    reaktor_button_disarm();
     pop_style(ctx, a);
     pop_style(ctx, f);
     return clicked;
@@ -235,8 +309,33 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
+    reaktor_button_arm(ctx);
     clicked = nk_button_image_label(ctx, im, label, NK_TEXT_CENTERED);
+    reaktor_button_disarm();
     pop_style(ctx, f);
+    return clicked;
+}
+
+/* Nuklear shrinks an image button by its rounding too, so it is drawn here. */
+int
+css_button_image(App *app, struct nk_context *ctx, const char *selector,
+                 struct nk_image im, float px, const char *name)
+{
+    struct nk_rect b = nk_widget_bounds(ctx);
+    style_frame f;
+    int clicked;
+
+    hot_push(app, b, 1, 1);
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, name, 0);
+    f = push_button_style(app, ctx, selector);
+    reaktor_button_arm(ctx);
+    clicked = nk_button_text(ctx, "", 0);
+    reaktor_button_disarm();
+    pop_style(ctx, f);
+    nk_draw_image(nk_window_get_canvas(ctx),
+                  nk_rect((float)(int)(b.x + (b.w - px) * 0.5f),
+                          (float)(int)(b.y + (b.h - px) * 0.5f), px, px),
+                  &im, nk_rgb(255, 255, 255));
     return clicked;
 }
 
@@ -288,13 +387,14 @@ push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset)
     *out = s;
     if (!s.matched) return f;
 
-    nk_style_push_style_item(ctx, &ctx->style.edit.normal,
-                             nk_style_item_color(col_of(s.bg)));
-    nk_style_push_style_item(ctx, &ctx->style.edit.hover,
-                             nk_style_item_color(col_of(s.bg)));
-    nk_style_push_style_item(ctx, &ctx->style.edit.active,
-                             nk_style_item_color(col_of(s.bg)));
-    f.items = 3;
+    {
+        struct nk_style_item none = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+
+        nk_style_push_style_item(ctx, &ctx->style.edit.normal, none);
+        nk_style_push_style_item(ctx, &ctx->style.edit.hover, none);
+        nk_style_push_style_item(ctx, &ctx->style.edit.active, none);
+        f.items = 3;
+    }
 
     {
         const struct nk_window *win = ctx->current;
@@ -349,15 +449,16 @@ push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset)
 }
 
 void
-stroke_edit_edge(struct nk_context *ctx, struct nk_rect b, const reaktor_style *s)
+edit_edge(App *app, struct nk_context *ctx, struct nk_rect b,
+          const reaktor_style *s)
 {
-    float t = s->border, r;
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
 
-    if (!s->matched || t <= 0.0f) return;
-    r = s->rounding - t * 0.5f;
-    nk_stroke_rect(nk_window_get_canvas(ctx),
-                   nk_rect(b.x + t * 0.5f, b.y + t * 0.5f, b.w - t, b.h - t),
-                   r > 0.0f ? r : 0.0f, t, col_of(s->border_col));
+    if (!s->matched) return;
+    b = reaktor_rect_trunc(b);
+    reaktor_fill_round(app, cv, b, s->rounding, col_of(s->bg));
+    reaktor_edge_round(app, cv, b, s->rounding, s->border,
+                       col_of(s->border_col));
 }
 
 void
@@ -390,7 +491,8 @@ note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds)
 void
 note_edit_active(App *app, struct nk_context *ctx, nk_flags state)
 {
-    if (!(state & NK_EDIT_ACTIVE)) return;
+    /* A held field keeps its caret for later, but the keys are not its now. */
+    if (!(state & NK_EDIT_ACTIVE) || app->layer_held) return;
     if (app->stop_editing) nk_edit_unfocus(ctx);
     else app->editing = 1;
 }
@@ -402,7 +504,7 @@ note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
     const struct nk_user_font *font = ctx->style.font;
     float caret = 0.0f;
 
-    if (!(state & NK_EDIT_ACTIVE)) return;
+    if (!(state & NK_EDIT_ACTIVE) || app->layer_held) return;
 
     /* An empty edit has no text, whatever it says its length is. */
     if (font && font->width && nk_str_get_const(&edit->string)) {
@@ -439,6 +541,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
     hot_push(app, bounds, 2, 0);
 
     f = push_edit_style(ctx, &s, 1);
+    edit_edge(app, ctx, bounds, &s);
     {
         nk_flags st = nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit,
                                      nk_filter_default);
@@ -448,7 +551,6 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
                      st & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
     }
     pop_style(ctx, f);
-    stroke_edit_edge(ctx, bounds, &s);
 
     nk_style_push_float(ctx, &ctx->style.window.rounding,
                         reaktor_popup_rounding());
@@ -565,6 +667,9 @@ apply_widget_style(App *app)
         st->button.rounding     = btn.rounding;
         st->button.padding      = nk_vec2(btn.pad_x, btn.pad_y);
     }
+    st->button.userdata   = nk_handle_ptr(app);
+    st->button.draw_begin = button_chrome_begin;
+    st->button.draw_end   = button_chrome_end;
 
     reaktor_style_get("input", &inp);
     if (inp.matched) {

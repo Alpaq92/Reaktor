@@ -33,17 +33,23 @@
 
 #define TITLE_PX      16
 
+/* Asked, pressed once its target is laid out, released; AGAIN re-presses. */
+enum {
+    KEY_CLICK_NONE, KEY_CLICK_ASKED, KEY_CLICK_PRESS, KEY_CLICK_RELEASE,
+    KEY_CLICK_AGAIN
+};
+
 extern size_t reaktor_rss[RSS_STEPS];
 extern size_t reaktor_priv[RSS_STEPS];
 void reaktor_rss_mark(int step);
 
 #define GLYPH_STROKE  2.0f
 
-#define SHEET_MAX 4
+#define SHEET_MAX 12
 #define CORE_SHEET "external/tinycss/src/core.css"
 #define APP_SHEET  "assets/rest/reaktor.css"
-
-#define USER_SHEET "external/simplecss/simple.css"
+#define FONT_FILE      "assets/fonts/Aileron-Regular.otf"
+#define FONT_BOLD_FILE "assets/fonts/Aileron-Bold.otf"
 
 #define THEME_SYSTEM 0
 #define THEME_LIGHT  1
@@ -54,12 +60,14 @@ struct img_slot {
     int          px;
     SDL_Texture *tex;
     int          w, h;
+    unsigned     seen;
 };
 
-#define ROUND_CACHE_MAX 8
+#define ROUND_CACHE_MAX 32
 struct round_slot {
-    int          r;
+    int          r, t;
     SDL_Texture *tex;
+    unsigned     seen;
 };
 
 #define FIELD_UNDO_STEPS 100
@@ -113,6 +121,7 @@ struct App {
     char drag_rate[16];
     int  first_frame_done;
     int  dragging;
+    int  drag_mouse;
 
     int            restore_rate;
     int            borderless;
@@ -184,11 +193,15 @@ struct App {
     unsigned       activate_id;
     int            focus_seen;
     int            key_click;
-    float          key_click_x, key_click_y;
     struct nk_rect body_rect;
     unsigned       page_node;
     int            focus_scroll;
     struct nk_rect focus_scroll_rect;
+    int            focus_layer;
+    const void    *focus_win;
+    int            layer, layer_trap, layer_held, input_held, focus_held;
+    int            popup_lo, popup_hi, trap_lo, trap_hi;
+    struct nk_input held_input;
 
     int   laid_w, laid_h;
     float fps;
@@ -198,7 +211,13 @@ struct App {
     float  frame_gap_ms;
     int   style_ms_x100;
     int   sheets;
-    int   css_override_off;
+    const char *font_face, *font_face_bold;
+    const char *icon_dirs[8];
+    int         icon_dir_count;
+    int         file_ok;
+    int         shot_failed, dump_failed;
+    int         secondary;
+    int         settled_run, settle_tries;
     int   build_ms_x100, render_ms_x100, present_ms_x100;
 };
 
@@ -209,16 +228,25 @@ void image_centred(struct nk_context *ctx, struct nk_image im, int px);
 const struct nk_user_font *pick_font(App *app, int px, int bold);
 void rebuild_font(App *app);
 void apply_render_scale(App *app);
-void set_window_icon(SDL_Window *win);
+SDL_Surface *icon_surface(const char *name, int px);
+void set_window_icon(SDL_Window *win, const char *name);
 
 struct nk_color col_of(const unsigned char c[4]);
 
 void reader_focus(void *user, unsigned id);
 void reader_activate(void *user, unsigned id);
 
+enum { FOCUS_PAGE, FOCUS_POPUP, FOCUS_TOAST, FOCUS_FLOATER };
+
+/* No input for a layer under a modal, or for one new this frame. */
+enum { HOLD_NONE, HOLD_ALL, HOLD_FRESH };
+
 int  focus_key(App *app, const SDL_Event *event);
-void focus_ring(App *app, struct nk_context *ctx);
+void focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv);
+void focus_ring_overlay(App *app, struct nk_context *ctx);
 void focus_resolve(App *app);
+void key_click_ask(App *app);
+int  focus_covered(App *app);
 
 extern Uint64 g_hover_gap_ms;
 
@@ -234,6 +262,47 @@ void css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
                const char *hint);
 int  css_button_accent(App *app, struct nk_context *ctx, const char *selector,
                        const char *label, const char *token);
+int  css_button_image(App *app, struct nk_context *ctx, const char *selector,
+                      struct nk_image im, float px, const char *name);
+void reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w,
+                         int win_h, int blocked);
+void reaktor_toast_clear(void);
+void reaktor_floaters_draw(App *app, struct nk_context *ctx, int win_w, int win_h);
+int  reaktor_floaters_modal(void);
+void reaktor_floater_frame(App *app, struct nk_context *ctx, struct nk_rect window,
+                         int modal);
+void reaktor_floaters_clear(App *app);
+void reaktor_hold_input(App *app, struct nk_context *ctx, const char *name,
+                        int hold, int *held);
+void reaktor_hold_end(App *app, struct nk_context *ctx);
+void reaktor_layer_focus(struct nk_context *ctx, struct nk_window *to);
+int  reaktor_layer_begin(App *app, struct nk_context *ctx, const char *name,
+                         struct nk_rect r, nk_flags flags, int layer, int trap,
+                         int hold, int *held);
+void reaktor_layer_end(App *app, struct nk_context *ctx, int shown);
+
+typedef struct reaktor_surface {
+    struct nk_color fill, edge;
+    float           border, radius;
+} reaktor_surface;
+
+reaktor_surface reaktor_rule_surface(const reaktor_style *s, float radius);
+void reaktor_paint_surface(App *app, struct nk_command_buffer *cv, struct nk_rect r,
+                           const reaktor_surface *s);
+struct nk_rect reaktor_rect_trunc(struct nk_rect b);
+
+App *reaktor_main_app(void);
+int  reaktor_hot_motion(App *app, float mx, float my);
+void reaktor_show_cursor(App *app);
+void reaktor_place_ime(App *app);
+void reaktor_render_aa(const App *app, enum nk_anti_aliasing *fill,
+                       enum nk_anti_aliasing *line);
+int  reaktor_windows_event(SDL_Event *event);
+void reaktor_windows_draw(void);
+void reaktor_windows_restyle(void);
+void reaktor_windows_rescale(void);
+void reaktor_windows_close_all(void);
+const char *reaktor_launch_icon(void);
 int  css_button_icon(App *app, struct nk_context *ctx, const char *selector,
                      const char *icon_src, const char *label);
 
@@ -254,8 +323,10 @@ int  reaktor_button_accent_as(App *app, struct nk_context *ctx,
 int  reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
                             const char *ionicon, const char *label);
 void note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds);
-void stroke_edit_edge(struct nk_context *ctx, struct nk_rect b,
-                      const reaktor_style *s);
+void edit_edge(App *app, struct nk_context *ctx, struct nk_rect b,
+               const reaktor_style *s);
+void reaktor_button_arm(struct nk_context *ctx);
+void reaktor_button_disarm(void);
 void note_edit_active(App *app, struct nk_context *ctx, nk_flags state);
 void note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
                     nk_flags state, const struct nk_text_edit *edit);

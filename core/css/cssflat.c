@@ -135,6 +135,109 @@ int reaktor_cssvars_color(const reaktor_cssvars *m, const char *name,
     return 0;
 }
 
+static int parse_color(const char *s, size_t n, float c[4])
+{
+    char tmp[64];
+    float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    const char *p;
+    char *end;
+    int h[8], i, k;
+
+    while (n && isspace((unsigned char)*s)) { s++; n--; }
+    while (n && isspace((unsigned char)s[n - 1])) n--;
+    if (n == 0 || n >= sizeof(tmp)) return 0;
+    memcpy(tmp, s, n);
+    tmp[n] = 0;
+    if (strcmp(tmp, "transparent") == 0) {
+        c[0] = c[1] = c[2] = c[3] = 0.0f;
+        return 1;
+    }
+    if (tmp[0] == '#') {
+        for (k = 0; k < 8 && tmp[k + 1]; k++)
+            if ((h[k] = hex1((unsigned char)tmp[k + 1])) < 0) return 0;
+        if (tmp[k + 1] || (k != 3 && k != 4 && k != 6 && k != 8)) return 0;
+        for (i = 0; i < k / (k < 6 ? 1 : 2); i++)
+            v[i] = k < 6 ? (float)(h[i] * 17) : (float)(h[2 * i] * 16 + h[2 * i + 1]);
+        if (k == 4 || k == 8) v[3] /= 255.0f;
+    } else if (strncmp(tmp, "rgb", 3) == 0 && (p = strchr(tmp, '('))) {
+        for (i = 0, p++; i < 4; i++) {
+            while (*p == ' ' || *p == ',' || *p == '/') p++;
+            if (*p == ')') break;
+            v[i] = (float)strtod(p, &end);
+            if (end == p) return 0;
+            if (*end == '%') { v[i] *= i < 3 ? 2.55f : 0.01f; end++; }
+            p = end;
+        }
+        if (i < 3) return 0;
+    } else {
+        return 0;
+    }
+    for (i = 0; i < 4; i++) c[i] = v[i];
+    return 1;
+}
+
+/* One color-mix() argument: a color and an optional percentage. */
+static int mix_arg(const char *s, size_t n, float c[4], float *pct)
+{
+    size_t e = n;
+
+    *pct = -1.0f;
+    while (e && isspace((unsigned char)s[e - 1])) e--;
+    if (e && s[e - 1] == '%') {
+        size_t b = e - 1;
+        while (b && s[b - 1] != ' ' && s[b - 1] != ')') b--;
+        *pct = (float)atof(s + b) / 100.0f;
+        e = b;
+    }
+    return parse_color(s, e, c);
+}
+
+/* color-mix(in srgb, A p%, B), which libcss lacks, as rgba(). */
+static void mix_colors(buf *b)
+{
+    static const char fn[] = "color-mix(";
+    size_t from = 0;
+    char *at;
+
+    while (b->p && (at = strstr(b->p + from, fn))) {
+        size_t s = (size_t)(at - b->p), i = s + sizeof(fn) - 1, cut[2], n = 0;
+        int depth = 1;
+        float a[4], c[4], pa, pc, wa, wc, sum, alpha, mixed[3];
+        char out[64];
+        buf r;
+
+        for (; i < b->len && depth; i++) {
+            if (b->p[i] == '(') depth++;
+            else if (b->p[i] == ')') depth--;
+            else if (b->p[i] == ',' && depth == 1 && n < 2) cut[n++] = i;
+        }
+        if (depth || n < 2 ||
+            !mix_arg(b->p + cut[0] + 1, cut[1] - cut[0] - 1, a, &pa) ||
+            !mix_arg(b->p + cut[1] + 1, i - 1 - cut[1] - 1, c, &pc)) {
+            from = s + 1;
+            continue;
+        }
+        if (pa < 0.0f) pa = pc < 0.0f ? 0.5f : 1.0f - pc;
+        if (pc < 0.0f) pc = 1.0f - pa;
+        sum = pa + pc;
+        if (sum <= 0.0f) { from = s + 1; continue; }
+        wa = pa * a[3];
+        wc = pc * c[3];
+        alpha = wa + wc;
+        for (n = 0; n < 3; n++)
+            mixed[n] = alpha > 0.0f ? (a[n] * wa + c[n] * wc) / alpha : 0.0f;
+        snprintf(out, sizeof(out), "rgba(%d, %d, %d, %.3f)",
+                 (int)(mixed[0] + 0.5f), (int)(mixed[1] + 0.5f),
+                 (int)(mixed[2] + 0.5f), (double)(sum > 1.0f ? alpha / sum : alpha));
+        memset(&r, 0, sizeof(r));
+        buf_add(&r, b->p, s);
+        buf_str(&r, out);
+        buf_add(&r, b->p + i, b->len - i);
+        free(b->p);
+        *b = r;
+    }
+}
+
 void reaktor_cssvars_free(reaktor_cssvars *m)
 {
     size_t i;
@@ -478,6 +581,7 @@ static void emit_one(void *c, const char *p, size_t plen,
 
     memset(&tmp, 0, sizeof(tmp));
     if (!subst_vars(ctx->m, v, vlen, &tmp)) { free(tmp.p); return; }
+    mix_colors(&tmp);
 
     memset(&conv, 0, sizeof(conv));
     if (plen == 9 && strncmp(p, "font-size", 9) == 0 &&
@@ -715,8 +819,11 @@ char *reaktor_css_flatten(const char *const *paths, int count,
 
     memset(&all, 0, sizeof(all));
     for (i = 0; i < count; i++) {
-        char *t = reaktor_read_file(paths[i], NULL);
-        if (!t) { free(all.p); return NULL; }
+        char *t = reaktor_asset_load(paths[i], NULL);
+        if (!t) {
+            fprintf(stderr, "css: cannot read %s; skipped\n", paths[i]);
+            continue;
+        }
         if (!buf_str(&all, t) || !buf_str(&all, "\n")) {
             free(t); free(all.p);
             return NULL;

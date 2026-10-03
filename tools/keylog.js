@@ -18,25 +18,41 @@
     log.textContent = text;
     log.scrollTop = log.scrollHeight;
   };
-  /* Stamped as it happens, drawn once a frame, or the log times itself. */
-  var say = function (s) {
-    text += ((Date.now() - t0) / 1000).toFixed(2) + ' ' + s + '\n';
+  /* Stamped as it happens and written in one route, so lines stay in order. */
+  var add = function (line) {
+    text += line + '\n';
     if (!pending) { pending = 1; requestAnimationFrame(flush); }
   };
+  var say = function (s) {
+    var at = ((Date.now() - t0) / 1000).toFixed(2);
+
+    setTimeout(function () { add(at + ' ' + s); }, 0);
+  };
   var saw = function (e) {
-    say(e.type + ' ' + who(e.target) +
+    var at = ((Date.now() - t0) / 1000).toFixed(2);
+    var line = e.type + ' ' + who(e.target) +
         ' active=' + who(document.activeElement) +
-        (e.key === undefined ? '' : ' key=' + e.key + ' keyCode=' + e.keyCode) +
+        (e.pointerType ? ' ' + e.pointerType : '') +
+        (e.key === undefined ? '' : ' key=' + e.key + ' code=' +
+            JSON.stringify(e.code) + ' keyCode=' + e.keyCode) +
         (e.inputType === undefined ? '' : ' ' + (e.inputType || '-')) +
         (e.data === undefined ? '' : ' data=' + JSON.stringify(e.data)) +
-        (e.isComposing ? ' composing' : ''));
+        (e.isComposing ? ' composing' : '');
+
+    /* Read once every listener has run, SDL's among them. */
+    setTimeout(function () {
+      add(at + ' ' + line + (e.defaultPrevented ? ' PREVENTED' : ''));
+    }, 0);
   };
 
-  ('focusin focusout pointerdown pointerup touchstart touchend mousedown ' +
-   'mouseup click keydown keyup beforeinput input compositionstart ' +
-   'compositionupdate compositionend').split(' ').forEach(function (t) {
-    addEventListener(t, saw, true);
-  });
+  ('focusin focusout pointerdown pointerup pointercancel touchstart touchend ' +
+   'mousedown mouseup click keydown keypress keyup beforeinput input ' +
+   'compositionstart compositionupdate compositionend').split(' ')
+    .forEach(function (t) { addEventListener(t, saw, true); });
+  addEventListener('blur', function () { say('window blur'); });
+  addEventListener('focus', function () { say('window focus'); });
+
+  window.reaktorKeylog = say;
 
   if (window.visualViewport) {
     visualViewport.addEventListener('resize', function () {

@@ -7,7 +7,6 @@
 
 #define ICON_SVG "assets/icons/reaktor-icon.svg"
 #define ICON_ICO "assets/icons/reaktor-icon.ico"
-#define ICON_TMP "assets/icons/reaktor-icon.png.tmp"
 
 static const int g_sizes[] = { 16, 20, 24, 32, 40, 48, 64, 128, 256 };
 #define SIZE_N ((int)(sizeof(g_sizes) / sizeof(g_sizes[0])))
@@ -58,18 +57,40 @@ bmp32(plutovg_surface_t *surf, int n, long *out_len)
     return out;
 }
 
+struct grown {
+    unsigned char *p;
+    long           n, cap;
+};
+
+static void
+append(void *closure, void *data, int size)
+{
+    struct grown *g = (struct grown *)closure;
+
+    if (g->n + size > g->cap) {
+        long cap = g->cap ? g->cap : 4096;
+        unsigned char *more;
+
+        while (cap < g->n + size) cap *= 2;
+        if (!(more = (unsigned char *)realloc(g->p, (size_t)cap))) return;
+        g->p   = more;
+        g->cap = cap;
+    }
+    memcpy(g->p + g->n, data, (size_t)size);
+    g->n += size;
+}
+
 int
 main(void)
 {
     struct entry e[SIZE_N];
-    char tmp[1024], out_path[1024];
+    char out_path[1024];
     FILE *f;
     long offset;
     int i, ok = 1;
 
     memset(e, 0, sizeof(e));
-    if (!reaktor_path(tmp, sizeof(tmp), ICON_TMP) ||
-        !reaktor_path(out_path, sizeof(out_path), ICON_ICO)) {
+    if (!reaktor_path(out_path, sizeof(out_path), ICON_ICO)) {
         fprintf(stderr, "mkicon: cannot resolve the repo root\n");
         return 1;
     }
@@ -89,14 +110,14 @@ main(void)
         e[i].size = n;
         if (n >= 256) {
             e[i].png = 1;
-            if (plutovg_surface_write_to_png(surf, tmp))
-                {
-                    size_t got = 0;
-                    e[i].data = (unsigned char *)
-                        reaktor_read_file(tmp, &got);
-                    e[i].len = (long)got;
-                }
-            remove(tmp);
+            struct grown g = { NULL, 0, 0 };
+
+            if (plutovg_surface_write_to_png_stream(surf, append, &g) && g.n) {
+                e[i].data = g.p;
+                e[i].len  = g.n;
+            } else {
+                free(g.p);
+            }
         } else {
             e[i].data = bmp32(surf, n, &e[i].len);
         }
@@ -108,7 +129,7 @@ main(void)
     }
 
     if (ok) {
-        f = fopen(out_path, "wb");
+        f = reaktor_fopen(out_path, "wb");
         if (!f) {
             fprintf(stderr, "mkicon: cannot write %s\n", out_path);
             ok = 0;

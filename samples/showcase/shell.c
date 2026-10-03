@@ -1,19 +1,9 @@
 #include "internal.h"
 #include "showcase.h"
-
-static const char *const g_theme_names[3] = { "system", "light", "dark" };
 #include "declare.h"
+#include "reaktor/main.h"
 
-void
-sample_window(reaktor_window_spec *out)
-{
-    out->w = WINDOW_WIDTH;
-    out->h = WINDOW_HEIGHT;
-    out->title = "Showcase";
-    out->borderless = 1;
-}
-
-SDL_HitTestResult SDLCALL
+static SDL_HitTestResult SDLCALL
 window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
 {
     App *app = (App *)data;
@@ -63,28 +53,31 @@ sample_tab(void)
     return g_tab;
 }
 
-void
-sample_args(App *app, int argc, char **argv)
+void showcase_tray_show(App *app, int on);
+
+static int
+sample_start(App *app, int argc, char **argv)
 {
-    char font[1024];
-    int  i;
+    int i;
 
-    /* After every --font-fallback. */
-    if (reaktor_path(font, sizeof font, "assets/fonts/MPLUS1p-Regular.ttf"))
-        reaktor_text_add_fallback(font);
+    showcase_tray_show(app, 1);
+    for (i = 1; i < argc; i++) {
+        int n = i + 1 < argc ? SDL_atoi(argv[i + 1]) : -1;
 
-    for (i = 1; i + 1 < argc; i++) {
-        int n = SDL_atoi(argv[i + 1]);
-
-        if (SDL_strcmp(argv[i], "--tab") == 0) {
+        if (SDL_strcmp(argv[i], "--floater") == 0) showcase_open_floater(app, 0);
+        else if (SDL_strcmp(argv[i], "--modal-floater") == 0) showcase_open_floater(app, 1);
+        else if (SDL_strcmp(argv[i], "--toasts") == 0) showcase_toasts(app);
+        else if (SDL_strcmp(argv[i], "--window") == 0) showcase_open_window(app, 0);
+        else if (SDL_strcmp(argv[i], "--modal-window") == 0) showcase_open_window(app, 1);
+        else if (i + 1 < argc && SDL_strcmp(argv[i], "--tab") == 0) {
             if (n >= 0 && n < TAB_COUNT) g_tab = n;
             i++;
-        } else if (SDL_strcmp(argv[i], "--scroll") == 0) {
+        } else if (i + 1 < argc && SDL_strcmp(argv[i], "--scroll") == 0) {
             if (n >= 0) g_scroll0 = n;
             i++;
         }
     }
-    (void)app;
+    return 0;
 }
 
 void
@@ -205,7 +198,7 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx, "close-outline", "Close", GLYPH_CLOSE))
-        app->want_quit = 1;
+        reaktor_request_quit(app);
 
     nk_layout_row_end(ctx);
     reaktor_note_pop(app);
@@ -236,15 +229,15 @@ card_height(int with_diag)
 }
 
 static void
-login_card(App *app, struct nk_context *ctx, float win_w, float body_y,
-           float body_h)
+login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
+           float body_y, float body_h)
 {
     struct nk_rect at;
     float card_h = card_height(app->show_contact);
-    float side = (win_w - (float)CARD_W) * 0.5f;
+    float side = body_x + (body_w - (float)CARD_W) * 0.5f;
     float top  = body_y + (body_h - card_height(0)) * 0.5f;
 
-    if (side < 8.0f) side = 8.0f;
+    if (side < body_x + 8.0f) side = body_x + 8.0f;
 
     if (top + card_h > body_y + body_h - 8.0f)
         top = body_y + body_h - card_h - 8.0f;
@@ -379,168 +372,179 @@ sample_option(App *app, struct nk_context *ctx, const char *label, float w,
     return hit && !on;
 }
 
-static void
-tab_strip(App *app, struct nk_context *ctx, int win_w)
-{
-    const struct nk_user_font *font = pick_font(app, 16, 0);
-    struct nk_color accent = reaktor_token("--links", app->text);
-    struct nk_color muted  = reaktor_token("--text-muted", app->text);
-    struct nk_color wash   = strip_wash();
-    struct nk_command_buffer *canvas;
-    struct nk_rect strip;
-    struct nk_rect active_r = nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
-    const char *swl = app->borderless ? "native titlebar" : "custom titlebar";
-    float tabw[TAB_COUNT], themew[3], sw_w = 0.0f, rest = 0.0f;
-    const float SW_PAD_X = 8.0f;
-    const float TAB_SEP = 10.0f;
-    const float TAB_EDGE = 4.0f;
-    float sep = TAB_SEP;
-    int i;
-
-    strip = nk_widget_bounds(ctx);
-    if (!nk_group_begin(ctx, "tabs", NK_WINDOW_NO_SCROLLBAR)) return;
-    canvas = nk_window_get_canvas(ctx);
-    {
-        unsigned id = reaktor_note_push(app, REAKTOR_A11Y_TABLIST, "Pages",
-                                        NULL, 0, strip);
-        char keys[160];
-        sample_tablist_keys(keys, (int)sizeof(keys));
-        reaktor_note_keys(app, id, keys);
-    }
-
-    {
-        float used = 0.0f;
-        for (i = 0; i < TAB_COUNT; i++) {
-            const char *n = reaktor_tab_names[i];
-            tabw[i] = font->width(font->userdata, font->height, n,
-                                  (int)strlen(n)) + 2.0f * (float)TAB_PAD_X;
-            used += tabw[i];
-        }
-        for (i = 0; i < 3; i++) {
-            const char *n = g_theme_names[i];
-            themew[i] = font->width(font->userdata, font->height, n,
-                                    (int)strlen(n)) + 2.0f * (float)TAB_PAD_X;
-            used += themew[i];
-        }
-        sw_w = font->width(font->userdata, font->height, swl,
-                           (int)strlen(swl)) + 2.0f * SW_PAD_X;
-#ifdef __EMSCRIPTEN__
-        sw_w = 0.0f;
-#endif
-        rest = (float)win_w - used - sw_w - TAB_SEP - TAB_EDGE - 2.0f * 4.0f
-             - (float)(TAB_COUNT + 5) * 4.0f;
-
-        if (rest < 0.0f) {
-            float over = -rest - (TAB_SEP - 8.0f);
-            float trim = SDL_ceilf(over / (float)(TAB_COUNT + 3));
-
-            sep  = over > 0.0f ? 8.0f : TAB_SEP + rest;
-            rest = 0.0f;
-            if (trim > 2.0f * ((float)TAB_PAD_X - 6.0f))
-                trim = 2.0f * ((float)TAB_PAD_X - 6.0f);
-            for (i = 0; over > 0.0f && i < TAB_COUNT; i++) tabw[i] -= trim;
-            for (i = 0; over > 0.0f && i < 3; i++) themew[i] -= trim;
-        }
-    }
-
-    nk_style_push_font(ctx, font);
-    nk_layout_row_begin(ctx, NK_STATIC, (float)(TAB_H - 6), TAB_COUNT + 6);
-    for (i = 0; i < TAB_COUNT; i++) {
-        const char *name = reaktor_tab_names[i];
-        float w = tabw[i];
-        struct nk_rect b;
-        style_frame look;
-
-        nk_layout_row_push(ctx, w);
-        b = nk_widget_bounds(ctx);
-        hot_push(app, b, 1, 1);
-
-        look = push_strip_look(ctx, i == sample_tab() ? accent : muted, wash);
-        {
-            unsigned id = reaktor_note(app, REAKTOR_A11Y_TAB, name, NULL,
-                                       i == sample_tab() ? REAKTOR_A11Y_SELECTED
-                                                     : 0u,
-                                       b);
-            char keys[96];
-            int hit = nk_button_label(ctx, name);
-
-            sample_tab_keys(i, keys, (int)sizeof(keys));
-            reaktor_note_keys(app, id, keys);
-
-            if (reaktor_focus_activated(app, id)) hit = 1;
-            if (hit) set_tab(app, i);
-        }
-        if (i == sample_tab()) active_r = b;
-        pop_style(ctx, look);
-    }
-    nk_layout_row_push(ctx, rest);
-    nk_spacing(ctx, 1);
-    reaktor_note_pop(app);
-
-    reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Color scheme", NULL, 0,
-                      strip);
-    for (i = 0; i < 3; i++) {
-        if (sample_option(app, ctx, g_theme_names[i], themew[i],
-                          i == app->theme_mode)) {
-            app->theme_pending = i + 1;
-            app->dirty = 1;
-        }
-    }
-
-    nk_layout_row_push(ctx, sep);
-    nk_spacing(ctx, 1);
-    reaktor_note_pop(app);
-
 #ifndef __EMSCRIPTEN__
-    nk_layout_row_push(ctx, sw_w);
-    {
-        struct nk_rect b = nk_widget_bounds(ctx);
-        style_frame    look;
-
-        hot_push(app, b, 1, 1);
-        reaktor_note(app, REAKTOR_A11Y_BUTTON, swl, NULL, 0, b);
-        look = push_strip_look(ctx, muted, wash);
-        nk_style_push_vec2(ctx, &ctx->style.button.padding, nk_vec2(0.0f, 0.0f));
-        look.vec2s = 1;
-
-        if (nk_button_label(ctx, swl)) {
+static void
+toggle_titlebar(App *app)
+{
 #ifdef __APPLE__
-            if (app->borderless_lock_frames == 0) {
-                app->borderless_pending = 1;
-                app->dirty = 1;
-            }
-#else
-            app->borderless = !app->borderless;
-            SDL_SetWindowBordered(app->win, app->borderless ? false : true);
-            SDL_SetWindowHitTest(app->win,
-                                 app->borderless ? window_hit_test : NULL,
-                                 app->borderless ? app : NULL);
-            app->ctl_n = 0;
-            app->dirty = 1;
-#endif
-        }
-        pop_style(ctx, look);
+    if (app->borderless_lock_frames == 0) {
+        app->borderless_pending = 1;
+        app->dirty = 1;
     }
-
+#else
+    app->borderless = !app->borderless;
+    SDL_SetWindowBordered(app->win, app->borderless ? false : true);
+    SDL_SetWindowHitTest(app->win, app->borderless ? window_hit_test : NULL,
+                         app->borderless ? app : NULL);
+    app->ctl_n = 0;
+    app->dirty = 1;
+#endif
+}
 #endif
 
-    nk_layout_row_end(ctx);
-    nk_style_pop_font(ctx);
+static void
+nav(App *app, float w, float h)
+{
+    static const char *const icons[TAB_COUNT] = {
+        "log-in-outline", "radio-button-on-outline", "create-outline",
+        "eye-outline", "grid-outline", "layers-outline", "play-circle-outline",
+        "color-palette-outline", "language-outline", "pulse-outline"
+    };
+    static const char *const schemes[3] = { "System", "Light", "Dark" };
+    static const char *const scheme_icons[3] = {
+        "contrast-outline", "sunny-outline", "moon-outline"
+    };
+    static char keys[TAB_COUNT][96];
+    const char *key_of[TAB_COUNT];
+    char all[160];
+    unsigned char narrow = w < (float)NAV_W;
+    int tab = sample_tab(), scheme = app->theme_mode, i;
 
-    if (active_r.w > 0.0f)
-        nk_fill_rect(canvas, nk_rect(active_r.x, active_r.y + active_r.h,
-                                     active_r.w, 2.0f), 0.0f, accent);
-    nk_group_end(ctx);
+    for (i = 0; i < TAB_COUNT; i++) {
+        sample_tab_keys(i, keys[i], (int)sizeof(keys[i]));
+        key_of[i] = keys[i];
+    }
+    sample_tablist_keys(all, (int)sizeof(all));
+
+    REAKTOR_FREE(.w = w, .h = h)
+    REAKTOR_COLUMN(.w = w - 16.0f, .h = h - 16.0f, .ml = 8.0f, .mt = 8.0f,
+                   .gap = 2.0f) {
+        if (reaktor_sidebar(&(reaktor_sidebar_spec){
+                .items = reaktor_tab_names, .icons = icons, .keys = key_of,
+                .count = TAB_COUNT, .chosen = &tab, .name = "Pages",
+                .list_keys = all, .narrow = narrow,
+                .box = { .flags = REAKTOR_LAY_FILL_X } }))
+            set_tab(app, tab);
+        REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {}
+        if (reaktor_sidebar(&(reaktor_sidebar_spec){
+                .items = schemes, .icons = scheme_icons, .count = 3,
+                .chosen = &scheme, .name = "Color scheme",
+                .kind = REAKTOR_NAV_CHOICE, .narrow = narrow,
+                .box = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_set_theme(app, (reaktor_theme)scheme);
+#ifndef __EMSCRIPTEN__
+        {
+            static const char *const bar_icon[1] = { "browsers-outline" };
+            const char *bar[1];
+            int pick = -1;
+
+            bar[0] = app->borderless ? "Native titlebar" : "Custom titlebar";
+            if (reaktor_sidebar(&(reaktor_sidebar_spec){
+                    .items = bar, .icons = bar_icon, .count = 1, .chosen = &pick,
+                    .name = "Window", .kind = REAKTOR_NAV_ACTIONS,
+                    .narrow = narrow, .box = { .flags = REAKTOR_LAY_FILL_X } }))
+                toggle_titlebar(app);
+        }
+#endif
+    }
+}
+
+enum { TRAY_SHOW, TRAY_TOAST, TRAY_GAP, TRAY_SYSTEM, TRAY_LIGHT, TRAY_DARK };
+
+static int g_tray_on;
+
+static reaktor_theme g_tray_theme[3] = {
+    REAKTOR_THEME_SYSTEM, REAKTOR_THEME_LIGHT, REAKTOR_THEME_DARK
+};
+
+static void
+tray_show(App *app, int checked, void *user)
+{
+    (void)checked; (void)user;
+    SDL_RestoreWindow(app->win);
+    SDL_RaiseWindow(app->win);
+}
+
+static void
+tray_toast(App *app, int checked, void *user)
+{
+    (void)checked; (void)user;
+    reaktor_toast(app, &(reaktor_toast_spec){ .text = "Sent from the tray",
+                                              .timeout_ms = 5000 });
+}
+
+static void
+tray_theme(App *app, int checked, void *user)
+{
+    (void)checked;
+    reaktor_set_theme(app, *(reaktor_theme *)user);
+}
+
+static void
+tray_quit(App *app, int checked, void *user)
+{
+    (void)checked; (void)user;
+    reaktor_request_quit(app);
+}
+
+static const reaktor_tray_item g_tray_items[] = {
+    { .label = "Show Showcase", .chosen = tray_show },
+    { .label = "Send a toast", .chosen = tray_toast },
+    { NULL },
+    { .label = "System Theme", .checkbox = 1, .chosen = tray_theme,
+      .user = &g_tray_theme[0] },
+    { .label = "Light Theme", .checkbox = 1, .chosen = tray_theme,
+      .user = &g_tray_theme[1] },
+    { .label = "Dark Theme", .checkbox = 1, .chosen = tray_theme,
+      .user = &g_tray_theme[2] },
+    { NULL },
+    { .label = "Quit", .chosen = tray_quit }
+};
+
+int
+showcase_tray_on(void)
+{
+    return g_tray_on;
 }
 
 void
+showcase_tray_show(App *app, int on)
+{
+    if (on && !g_tray_on) {
+        g_tray_on = reaktor_tray_open(app, &(reaktor_tray){
+            .tooltip = "Showcase", .items = g_tray_items,
+            .count = (int)(sizeof(g_tray_items) / sizeof(g_tray_items[0])) });
+    } else if (!on && g_tray_on) {
+        reaktor_tray_close(app);
+        g_tray_on = 0;
+    }
+}
+
+static void
 page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 {
-    float chrome = app->borderless ? (float)TITLEBAR_H : 0.0f;
-    float top    = chrome + (float)TAB_H;
+    float top    = app->borderless ? (float)TITLEBAR_H : 0.0f;
+    float nav_w  = win_w < NAV_WIDE_MIN ? (float)NAV_W_NARROW : (float)NAV_W;
     float body_h = (float)win_h - top;
+    struct nk_rect panel = nk_rect(nav_w, top + (app->borderless ? 0.0f : PANEL_GAP),
+                                   (float)win_w - nav_w - PANEL_GAP, 0.0f);
+    struct nk_rect body;
 
+    panel.h = (float)win_h - panel.y - PANEL_GAP;
+    if (panel.w < 1.0f) panel.w = 1.0f;
+    if (panel.h < 1.0f) panel.h = 1.0f;
     if (body_h < 1.0f) body_h = 1.0f;
+    body = nk_rect(panel.x, panel.y + PANEL_R * 0.5f, panel.w, panel.h - PANEL_R);
+    reaktor_tray_check(app, TRAY_SYSTEM, app->theme_mode == THEME_SYSTEM);
+    reaktor_tray_check(app, TRAY_LIGHT, app->theme_mode == THEME_LIGHT);
+    reaktor_tray_check(app, TRAY_DARK, app->theme_mode == THEME_DARK);
+    {
+        struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+
+        nk_fill_rect(cv, nk_rect(0.0f, 0.0f, (float)win_w, (float)win_h), 0.0f,
+                     app->card_bg);
+        reaktor_fill_round(app, cv, panel, PANEL_R, app->page);
+    }
 
     nk_layout_space_begin(ctx, NK_STATIC, (float)win_h, 3);
 
@@ -555,23 +559,37 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(app->card_bg));
-    nk_layout_space_push(ctx, nk_rect(0, chrome, (float)win_w, (float)TAB_H));
-    tab_strip(app, ctx, win_w);
+    nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
+    nk_layout_space_push(ctx, nk_rect(0, top, nav_w, body_h));
+    if (nk_group_begin(ctx, "nav", NK_WINDOW_NO_SCROLLBAR)) {
+        nav(app, nav_w, body_h);
+        nk_group_end(ctx);
+    }
+    nk_style_pop_vec2(ctx);
     nk_style_pop_style_item(ctx);
 
     if (sample_tab() == TAB_LOGIN) {
-        login_card(app, ctx, (float)win_w, top, body_h);
+        login_card(app, ctx, panel.x, panel.w, panel.y, panel.h);
         nk_layout_space_end(ctx);
         return;
     }
 
-    nk_layout_space_push(ctx, nk_rect(0, top, (float)win_w, body_h));
+    nk_layout_space_push(ctx, body);
     if (g_scroll0 < 0) g_scroll0 = 0;
     if (g_scroll0 > 0) {
-        nk_group_set_scroll(ctx, "body", 0, (nk_uint)g_scroll0);
-        g_scroll0 = 0;
+        static int tries;
+        nk_uint sx, sy;
+
+        /* Nuklear clamps to the content, which is placed a frame late. */
+        nk_group_get_scroll(ctx, "body", &sx, &sy);
+        if (sy == (nk_uint)g_scroll0 || ++tries > 8) {
+            g_scroll0 = 0;
+        } else {
+            nk_group_set_scroll(ctx, "body", 0, (nk_uint)g_scroll0);
+            reaktor_wake(app);
+        }
     }
-    app->body_rect = nk_rect(0, top, (float)win_w, body_h);
+    app->body_rect = body;
     if (app->focus_scroll) {
         const float air = 12.0f;
         struct nk_rect r = app->focus_scroll_rect;
@@ -579,10 +597,10 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         float dy = 0.0f;
 
         nk_group_get_scroll(ctx, "body", &sx, &sy);
-        if (r.y < top + air)
-            dy = r.y - (top + air);
-        else if (r.y + r.h > top + body_h - air)
-            dy = r.y + r.h - (top + body_h - air);
+        if (r.y < body.y + air)
+            dy = r.y - (body.y + air);
+        else if (r.y + r.h > body.y + body.h - air)
+            dy = r.y + r.h - (body.y + body.h - air);
         if ((float)sy + dy < 0.0f) dy = -(float)sy;
         nk_group_set_scroll(ctx, "body", sx, (nk_uint)((float)sy + dy));
         app->focus_scroll = 0;
@@ -609,12 +627,12 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         nk_style_pop_vec2(ctx);
         nk_style_pop_style_item(ctx);
 
-        hot_push(app, nk_rect(0, top, (float)win_w, body_h), 0, 0);
+        hot_push(app, app->body_rect, 0, 0);
 
         app->page_node =
             reaktor_note_push(app, REAKTOR_A11Y_GROUP,
                               reaktor_tab_names[sample_tab()], NULL, 0,
-                              nk_rect(0, top, (float)win_w, body_h));
+                              app->body_rect);
         reaktor_showcase_page(app, ctx, sample_tab(), sz.x, sz.y);
         reaktor_note_pop(app);
         nk_group_end(ctx);
@@ -625,4 +643,18 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     }
 
     nk_layout_space_end(ctx);
+}
+
+int
+main(int argc, char **argv)
+{
+    return launchApp(argc, argv, &(reaktor_launch){
+        .name           = "Showcase",
+        .window         = { .w = WINDOW_WIDTH, .h = WINDOW_HEIGHT,
+                            .borderless = 1, .hit_test = window_hit_test },
+        .font_fallbacks = { { .path = "assets/fonts/MPLUS1p-Regular.ttf" } },
+        .page           = page_shell,
+        .key            = sample_key,
+        .start          = sample_start,
+        .file_opened    = sample_file_opened });
 }

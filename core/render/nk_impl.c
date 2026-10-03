@@ -6,6 +6,13 @@
 #define NK_SDL3_RENDERER_IMPLEMENTATION
 #include "nk_sdl3_renderer.h"
 
+int
+reaktor_font_valid(const void *ttf, size_t size)
+{
+    return ttf && size >= 12 &&
+           stbtt_GetFontOffsetForIndex((const unsigned char *)ttf, 0) >= 0;
+}
+
 nk_rune *
 reaktor_font_ranges(const unsigned char *ttf, const unsigned *cp, int n)
 {

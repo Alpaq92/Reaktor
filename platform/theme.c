@@ -15,9 +15,13 @@ int reaktor_prefers_dark(void)
     }
 }
 
-int reaktor_window_set_dark(void *native_window, int dark)
+int reaktor_window_set_dark(SDL_Window *win, int dark)
 {
 #ifdef _WIN32
+    void *native_window =
+        win ? SDL_GetPointerProperty(SDL_GetWindowProperties(win),
+                                     SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL)
+            : NULL;
     typedef long(__stdcall * set_attr_fn)(void *, unsigned long, void *,
                                           unsigned long);
     static set_attr_fn set_attr;
@@ -38,7 +42,7 @@ int reaktor_window_set_dark(void *native_window, int dark)
         set_attr(native_window, 19, &value, sizeof(value));
     return 1;
 #else
-    (void)native_window;
+    (void)win;
     (void)dark;
     return 1;
 #endif

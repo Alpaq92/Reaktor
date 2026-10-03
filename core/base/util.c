@@ -29,6 +29,34 @@
 
 #define REAKTOR_PATH_CAP 1024
 
+FILE *reaktor_fopen(const char *path, const char *mode)
+{
+#if defined(_WIN32)
+    wchar_t w[REAKTOR_PATH_CAP], m[8];
+
+    if (!MultiByteToWideChar(CP_UTF8, 0, path, -1, w, REAKTOR_PATH_CAP) ||
+        !MultiByteToWideChar(CP_UTF8, 0, mode, -1, m, 8))
+        return NULL;
+    return _wfopen(w, m);
+#else
+    return fopen(path, mode);
+#endif
+}
+
+static FILE *open_rb(const char *path)
+{
+    return reaktor_fopen(path, "rb");
+}
+
+static int file_exists(const char *path)
+{
+    FILE *f = open_rb(path);
+
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
 static int copy_out(char *out, size_t cap, const char *src)
 {
     size_t len = strlen(src);
@@ -55,8 +83,12 @@ int reaktor_root(char *out, size_t cap)
         int i;
 
 #  if defined(_WIN32)
-        DWORD n = GetModuleFileNameA(NULL, exe, (DWORD)sizeof(exe));
-        if (n == 0 || n >= sizeof(exe)) return 0;
+        wchar_t wexe[REAKTOR_PATH_CAP];
+        DWORD n = GetModuleFileNameW(NULL, wexe, REAKTOR_PATH_CAP);
+        if (n == 0 || n >= REAKTOR_PATH_CAP) return 0;
+        if (!WideCharToMultiByte(CP_UTF8, 0, wexe, -1, exe, (int)sizeof(exe),
+                                 NULL, NULL))
+            return 0;
         for (i = 0; exe[i]; i++) if (exe[i] == '\\') exe[i] = '/';
 #  elif defined(__APPLE__)
         {
@@ -167,14 +199,10 @@ int reaktor_root(char *out, size_t cap)
             if (snprintf(probe, sizeof(probe), "%s/.reaktor-root", exe) < 0)
                 return 0;
             probe[sizeof(probe) - 1] = '\0';
-            {
-                FILE *f = fopen(probe, "rb");
-                if (f) {
-                    fclose(f);
-                    if (!copy_out(cached, sizeof(cached), exe)) return 0;
-                    resolved = 1;
-                    return copy_out(out, cap, cached);
-                }
+            if (file_exists(probe)) {
+                if (!copy_out(cached, sizeof(cached), exe)) return 0;
+                resolved = 1;
+                return copy_out(out, cap, cached);
             }
 
             slash = strrchr(exe, '/');
@@ -203,7 +231,7 @@ char *reaktor_read_file(const char *path, size_t *len)
     size_t got;
 
     if (len) *len = 0;
-    f = fopen(path, "rb");
+    f = open_rb(path);
     if (!f) return NULL;
 
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
@@ -219,6 +247,87 @@ char *reaktor_read_file(const char *path, size_t *len)
     buf[got] = '\0';
     if (len) *len = got;
     return buf;
+}
+
+int reaktor_path_absolute(const char *path)
+{
+    if (!path || !path[0]) return 0;
+    if (path[0] == '/' || path[0] == '\\') return 1;
+#if defined(_WIN32)
+    if (((path[0] >= 'A' && path[0] <= 'Z') ||
+         (path[0] >= 'a' && path[0] <= 'z')) &&
+        path[1] == ':' && (path[2] == '/' || path[2] == '\\'))
+        return 1;
+#endif
+    return 0;
+}
+
+#define REGISTERED_MAX 64
+
+static reaktor_builtin g_registered[REGISTERED_MAX];
+static int             g_registered_n;
+
+int reaktor_asset_register(const char *name, const void *data, size_t size)
+{
+    int i;
+
+    if (!name || !data) return 0;
+    for (i = 0; i < g_registered_n; i++)
+        if (strcmp(g_registered[i].name, name) == 0) break;
+    if (i == REGISTERED_MAX) return 0;
+    g_registered[i].name = name;
+    g_registered[i].data = (const unsigned char *)data;
+    g_registered[i].size = size;
+    if (i == g_registered_n) g_registered_n++;
+    return 1;
+}
+
+void reaktor_asset_forget(void)
+{
+    g_registered_n = 0;
+}
+
+static const reaktor_builtin *in_memory(const char *name)
+{
+    int i;
+
+    for (i = 0; i < g_registered_n; i++)
+        if (strcmp(g_registered[i].name, name) == 0) return &g_registered[i];
+    for (i = 0; i < reaktor_builtin_count; i++)
+        if (strcmp(reaktor_builtins[i].name, name) == 0) return &reaktor_builtins[i];
+    return NULL;
+}
+
+int reaktor_asset_exists(const char *name)
+{
+    char full[REAKTOR_PATH_CAP];
+
+    if (!name) return 0;
+    if (reaktor_path_absolute(name)) return file_exists(name);
+    if (reaktor_path(full, sizeof(full), name) && file_exists(full)) return 1;
+    return in_memory(name) != NULL;
+}
+
+char *reaktor_asset_load(const char *name, size_t *len)
+{
+    char full[REAKTOR_PATH_CAP];
+    const reaktor_builtin *b;
+    char *p = NULL;
+
+    if (len) *len = 0;
+    if (!name) return NULL;
+    if (reaktor_path_absolute(name)) return reaktor_read_file(name, len);
+    if (reaktor_path(full, sizeof(full), name)) p = reaktor_read_file(full, len);
+    if (p) return p;
+
+    b = in_memory(name);
+    if (!b) return NULL;
+    p = (char *)malloc(b->size + 1);
+    if (!p) return NULL;
+    memcpy(p, b->data, b->size);
+    p[b->size] = '\0';
+    if (len) *len = b->size;
+    return p;
 }
 
 void reaktor_free(void *p) { free(p); }

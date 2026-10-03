@@ -47,6 +47,7 @@ jobs:
         run: |
           mkdir -p site
           cp build-wasm/showcase.js build-wasm/showcase.wasm build-wasm/showcase.data site/
+          cp build-wasm/keylog.js build-wasm/reaktor-icon.svg build-wasm/reaktor-icon.png site/
           cp build-wasm/showcase.html site/index.html
 
       - uses: actions/upload-pages-artifact@v3

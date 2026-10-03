@@ -11,7 +11,7 @@ typedef struct App App;
 void reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area);
 void reaktor_frame_end(void);
 
-int reaktor_frame_settled(void);
+int reaktor_frame_settled(const App *app);
 
 void reaktor_box_open(unsigned char dir, const reaktor_box *b);
 void reaktor_box_close(void);
@@ -204,7 +204,11 @@ typedef struct reaktor_combo_spec {
 int  reaktor_combo_open(const reaktor_combo_spec *s);
 void reaktor_combo_close(void);
 
-#define REAKTOR_COMBO(...)                                                       for (int reaktor_combo_scope_ =                                                       reaktor_combo_open(&(reaktor_combo_spec){ __VA_ARGS__ });                reaktor_combo_scope_;                                                        reaktor_combo_scope_ = (reaktor_combo_close(), 0))
+#define REAKTOR_COMBO(...)                                                   \
+    for (int reaktor_combo_scope_ =                                          \
+             reaktor_combo_open(&(reaktor_combo_spec){ __VA_ARGS__ });       \
+         reaktor_combo_scope_;                                               \
+         reaktor_combo_scope_ = (reaktor_combo_close(), 0))
 
 int reaktor_combo_item(const char *label, int chosen);
 
@@ -227,5 +231,28 @@ typedef struct reaktor_link_spec {
 } reaktor_link_spec;
 
 int reaktor_link(const reaktor_link_spec *s);
+
+enum { REAKTOR_NAV_PAGES, REAKTOR_NAV_CHOICE, REAKTOR_NAV_ACTIONS };
+
+typedef struct reaktor_nav_spec {
+    const char *const *items;
+    const char *const *icons;
+    const char *const *keys;
+    int                count;
+    int               *chosen;
+    const char        *name;
+    const char        *list_keys;
+    const char        *style;
+    reaktor_box        box;
+    unsigned char      kind;
+    unsigned char      narrow;
+} reaktor_nav_spec;
+
+typedef reaktor_nav_spec reaktor_sidebar_spec;
+typedef reaktor_nav_spec reaktor_tabs_spec;
+
+/* Answer 1 when an entry is chosen; *chosen is its index. */
+int reaktor_sidebar(const reaktor_sidebar_spec *s);
+int reaktor_tabs(const reaktor_tabs_spec *s);
 
 #endif

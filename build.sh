@@ -32,15 +32,16 @@ fi
 if command -v ninja >/dev/null 2>&1; then
     set -- -G Ninja "$@"
 fi
+ncpu=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
 
 cmake -S "$root" -B "$out" -DCMAKE_BUILD_TYPE="$buildtype" "$@"
 
 if [ -n "$target" ]; then
-    cmake --build "$out" --parallel --target "$target"
+    cmake --build "$out" --parallel "$ncpu" --target "$target"
     echo
     echo "built target: $target"
 else
-    cmake --build "$out" --parallel
+    cmake --build "$out" --parallel "$ncpu"
     echo
     echo "built: $out/showcase (plus simple and notepad)"
 fi

@@ -148,7 +148,15 @@ drawing(void)
     cfg.pixel_snap   = 1;
     nk_font_atlas_init_default(&atlas);
     nk_font_atlas_begin(&atlas);
-    font = nk_font_atlas_add_from_file(&atlas, path, 16.0f, &cfg);
+    {
+        size_t len = 0;
+        char  *ttf = reaktor_read_file(path, &len);
+
+        /* The atlas copies bytes it does not own. */
+        font = ttf ? nk_font_atlas_add_from_memory(&atlas, ttf, len, 16.0f, &cfg)
+                   : NULL;
+        reaktor_free(ttf);
+    }
     if (!font || !nk_font_atlas_bake(&atlas, &w, &h, NK_FONT_ATLAS_ALPHA8)) {
         printf("FAIL could not bake %s\n", path);
         failures++;

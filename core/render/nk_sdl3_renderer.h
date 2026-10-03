@@ -224,9 +224,15 @@ nk_sdl_update_TextInput(struct nk_context* ctx)
 {
     struct nk_sdl* sdl;
     bool active;
+    SDL_Window *keys;
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
+
+    /* REAKTOR: while another window has the keys, text input is that window's;
+       SDL starts this one's again when the keys come back. */
+    keys = SDL_GetKeyboardFocus();
+    if (keys && keys != sdl->win) return;
 
     /* Determine if Nuklear is using any top-level "edit" widget.
      * Popups take higher priority because they block any incomming input.
@@ -267,6 +273,112 @@ nk_sdl_update_TextInput(struct nk_context* ctx)
      */
 }
 
+/* REAKTOR: count of the draw list's indices from ix, over its n vertices. */
+NK_INTERN void
+nk_sdl_geometry(SDL_Renderer *ren, SDL_Texture *tex, const void *vertices,
+                int n, const nk_draw_index *ix, int count)
+{
+    const struct nk_sdl_vertex *v = (const struct nk_sdl_vertex *)vertices;
+    int vs = (int)sizeof(*v);
+
+    SDL_RenderGeometryRaw(ren, tex, v->position, vs, (const SDL_FColor *)v->col,
+                          vs, v->uv, vs, n, ix, count, (int)sizeof(*ix));
+}
+
+/* REAKTOR: a rectangle among the triangles, on whole device pixels. */
+struct nk_sdl_rect {
+    SDL_FRect    d, src;
+    const float *col;
+    int          opaque;
+};
+
+/* REAKTOR: whether the six indices at ix are one rectangle. */
+NK_INTERN int
+nk_sdl_quad(const void *vertices, const nk_draw_index *ix, SDL_Texture *tex,
+            float sx, float sy, struct nk_sdl_rect *q)
+{
+    const struct nk_sdl_vertex *v[6];
+    float x0, x1, y0, y1, u[2] = {0, 0}, w[2] = {0, 0};
+    int k, seen = 0, tri[2] = {0, 0};
+    SDL_FRect d;
+
+    for (k = 0; k < 6; k++) {
+        v[k] = (const struct nk_sdl_vertex *)vertices + ix[k];
+        if (SDL_memcmp(v[k]->col, v[0]->col, sizeof(v[0]->col)) != 0)
+            return 0;
+    }
+    x0 = x1 = v[0]->position[0];
+    y0 = y1 = v[0]->position[1];
+    for (k = 1; k < 6; k++) {
+        if (v[k]->position[0] < x0) x0 = v[k]->position[0];
+        if (v[k]->position[0] > x1) x1 = v[k]->position[0];
+        if (v[k]->position[1] < y0) y0 = v[k]->position[1];
+        if (v[k]->position[1] > y1) y1 = v[k]->position[1];
+    }
+    if (!(x1 > x0 && y1 > y0)) return 0;
+    for (k = 0; k < 6; k++) {
+        int cx = v[k]->position[0] == x1;
+        int cy = v[k]->position[1] == y1;
+
+        if ((v[k]->position[0] != x0 && !cx) ||
+            (v[k]->position[1] != y0 && !cy))
+            return 0;
+        if (tex) {
+            if (seen & (1 << cx) ? u[cx] != v[k]->uv[0] : 0) return 0;
+            if (seen & (4 << cy) ? w[cy] != v[k]->uv[1] : 0) return 0;
+            u[cx] = v[k]->uv[0];
+            w[cy] = v[k]->uv[1];
+            seen |= (1 << cx) | (4 << cy);
+        }
+        tri[k / 3] |= 1 << (cy * 2 + cx);
+    }
+    if ((tri[0] | tri[1]) != 0xF ||
+        ((tri[0] & tri[1]) != 0x9 && (tri[0] & tri[1]) != 0x6))
+        return 0;
+    if (tex && !(u[1] > u[0] && w[1] > w[0])) return 0;
+
+    /* SDL truncates toward zero, so a start left of zero is nudged left. */
+    d.x = SDL_floorf(x0 * sx);
+    d.y = SDL_floorf(y0 * sy);
+    d.w = (SDL_floorf(x1 * sx) - d.x + 0.25f) / sx;
+    d.h = (SDL_floorf(y1 * sy) - d.y + 0.25f) / sy;
+    d.x = (d.x + (d.x < 0.0f ? -0.25f : 0.25f)) / sx;
+    d.y = (d.y + (d.y < 0.0f ? -0.25f : 0.25f)) / sy;
+
+    if (tex) {
+        float tw, th;
+
+        if (!SDL_GetTextureSize(tex, &tw, &th)) return 0;
+        q->src.x = u[0] * tw;
+        q->src.y = w[0] * th;
+        q->src.w = (u[1] - u[0]) * tw;
+        q->src.h = (w[1] - w[0]) * th;
+    }
+    q->d      = d;
+    q->col    = v[0]->col;
+    q->opaque = !tex && v[0]->col[3] >= 1.0f && x1 - x0 >= 2.0f &&
+                y1 - y0 >= 2.0f;
+    return 1;
+}
+
+/* REAKTOR: SDL truncates a scaled rectangle's position and size apart. */
+NK_INTERN void
+nk_sdl_quad_draw(SDL_Renderer *ren, SDL_Texture *tex, const struct nk_sdl_rect *q)
+{
+    if (tex) {
+        SDL_SetTextureColorModFloat(tex, q->col[0], q->col[1], q->col[2]);
+        SDL_SetTextureAlphaModFloat(tex, q->col[3]);
+        SDL_RenderTexture(ren, tex, &q->src, &q->d);
+        SDL_SetTextureColorModFloat(tex, 1.0f, 1.0f, 1.0f);
+        SDL_SetTextureAlphaModFloat(tex, 1.0f);
+        return;
+    }
+    if (q->opaque) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColorFloat(ren, q->col[0], q->col[1], q->col[2], q->col[3]);
+    SDL_RenderFillRect(ren, &q->d);
+    if (q->opaque) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+}
+
 NK_API void
 nk_sdl_render(struct nk_context* ctx, enum nk_anti_aliasing AA)
 {
@@ -281,6 +393,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
     /* setup global state */
     struct nk_sdl* sdl;
     int is_sw;
+    float sx = 1.0f, sy = 1.0f;
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
@@ -298,8 +411,6 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         bool clipping_enabled;
         int vs = sizeof(struct nk_sdl_vertex);
         size_t vp = NK_OFFSETOF(struct nk_sdl_vertex, position);
-        size_t vt = NK_OFFSETOF(struct nk_sdl_vertex, uv);
-        size_t vc = NK_OFFSETOF(struct nk_sdl_vertex, col);
 
         /* convert from command queue into draw list and draw to screen */
         const struct nk_draw_command *cmd;
@@ -332,15 +443,18 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         nk_buffer_init(&ebuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
         nk_convert(&sdl->ctx, &sdl->ogl.cmds, &vbuf, &ebuf, &config);
 
-        /* REAKTOR: software vertices on the pixel grid. */
+        /* REAKTOR: software vertices on the device pixel grid. */
         is_sw = SDL_strcmp(SDL_GetRendererName(sdl->renderer), "software") == 0;
+        if (!SDL_GetRenderScale(sdl->renderer, &sx, &sy) || sx <= 0.0f ||
+            sy <= 0.0f)
+            sx = sy = 1.0f;
         if (is_sw) {
             nk_byte *v = (nk_byte *)nk_buffer_memory(&vbuf);
             nk_size i, n = vbuf.needed / (nk_size)vs;
             for (i = 0; i < n; i++) {
                 float *pos = (float *)(v + i * (nk_size)vs + vp);
-                pos[0] = SDL_floorf(pos[0] + 0.5f) + 0.5f;
-                pos[1] = SDL_floorf(pos[1] + 0.5f) + 0.5f;
+                pos[0] = (SDL_floorf(pos[0] * sx + 0.5f) + 0.5f) / sx;
+                pos[1] = (SDL_floorf(pos[1] * sy + 0.5f) + 0.5f) / sy;
             }
         }
 
@@ -385,93 +499,40 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
             {
                 const void *vertices = nk_buffer_memory_const(&vbuf);
+                int n = (int)(vbuf.needed / (nk_size)vs);
 
                 /* REAKTOR: shapes untextured. */
                 SDL_Texture *tex = (SDL_Texture *)cmd->texture.ptr;
 
                 if (tex == sdl->ogl.white_tex) tex = NULL;
 
-                /* REAKTOR: one-color quads as fills. */
-                if (is_sw && tex == NULL && cmd->elem_count == 6) {
-                    const nk_byte *vb = (const nk_byte *)vertices;
-                    const float *pos[6];
-                    const float *c0 = NULL;
-                    int k, ok = 1, corners = 0;
-                    float x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+                if (is_sw) {
+                    nk_uint k = 0, from = 0;
 
-                    for (k = 0; k < 6; k++) {
-                        const nk_byte *v = vb + (nk_size)offset[k] *
-                                                (nk_size)vs;
-                        const float *col = (const float *)(v + vc);
+                    while (k + 6 <= cmd->elem_count) {
+                        struct nk_sdl_rect q;
 
-                        pos[k] = (const float *)(v + vp);
-                        if (!c0) c0 = col;
-                        else if (col[0] != c0[0] || col[1] != c0[1] ||
-                                 col[2] != c0[2] || col[3] != c0[3]) {
-                            ok = 0;
-                            break;
+                        if (!nk_sdl_quad(vertices, offset + k, tex, sx, sy, &q)) {
+                            k += 3;
+                            continue;
                         }
+                        /* What came before it in the list is drawn before it. */
+                        if (k > from)
+                            nk_sdl_geometry(sdl->renderer, tex, vertices, n,
+                                            offset + from, (int)(k - from));
+                        nk_sdl_quad_draw(sdl->renderer, tex, &q);
+                        k += 6;
+                        from = k;
                     }
-
-                    if (ok) {
-                        x0 = x1 = pos[0][0];
-                        y0 = y1 = pos[0][1];
-                        for (k = 1; k < 6; k++) {
-                            if (pos[k][0] < x0) x0 = pos[k][0];
-                            if (pos[k][0] > x1) x1 = pos[k][0];
-                            if (pos[k][1] < y0) y0 = pos[k][1];
-                            if (pos[k][1] > y1) y1 = pos[k][1];
-                        }
-                        if (!(x1 > x0 && y1 > y0)) ok = 0;
-                    }
-
-                    if (ok) {
-                        for (k = 0; k < 6; k++) {
-                            int cx = pos[k][0] == x1;
-                            int cy = pos[k][1] == y1;
-
-                            if ((pos[k][0] != x0 && !cx) ||
-                                (pos[k][1] != y0 && !cy)) {
-                                ok = 0;
-                                break;
-                            }
-                            corners |= 1 << (cy * 2 + cx);
-                        }
-                        if (corners != 0xF) ok = 0;
-                    }
-
-                    if (ok) {
-                        SDL_FRect fr;
-                        int opaque = c0[3] >= 1.0f &&
-                                     x1 - x0 >= 2.0f && y1 - y0 >= 2.0f;
-
-                        fr.x = x0;
-                        fr.y = y0;
-                        fr.w = x1 - x0;
-                        fr.h = y1 - y0;
-
-                        if (opaque)
-                            SDL_SetRenderDrawBlendMode(sdl->renderer,
-                                                       SDL_BLENDMODE_NONE);
-                        SDL_SetRenderDrawColorFloat(sdl->renderer, c0[0],
-                                                    c0[1], c0[2], c0[3]);
-                        SDL_RenderFillRect(sdl->renderer, &fr);
-                        if (opaque)
-                            SDL_SetRenderDrawBlendMode(sdl->renderer,
-                                                       SDL_BLENDMODE_BLEND);
-                        offset += cmd->elem_count;
-                        continue;
-                    }
+                    if (cmd->elem_count > from)
+                        nk_sdl_geometry(sdl->renderer, tex, vertices, n,
+                                        offset + from, (int)(cmd->elem_count - from));
+                    offset += cmd->elem_count;
+                    continue;
                 }
 
-                SDL_RenderGeometryRaw(
-                        sdl->renderer,
-                        tex,
-                        (const float*)((const nk_byte*)vertices + vp), vs,
-                        (const SDL_FColor*)((const nk_byte*)vertices + vc), vs,
-                        (const float*)((const nk_byte*)vertices + vt), vs,
-                        (vbuf.needed / vs),
-                        (void *) offset, cmd->elem_count, 2);
+                nk_sdl_geometry(sdl->renderer, tex, vertices, n, offset,
+                                (int)cmd->elem_count);
 
                 offset += cmd->elem_count;
             }
@@ -616,15 +677,25 @@ nk_sdl_font_stash_end(struct nk_context* ctx)
         if (sdl->ogl.white_tex) {
             SDL_UpdateTexture(sdl->ogl.white_tex, NULL, &px, 4);
             SDL_SetTextureBlendMode(sdl->ogl.white_tex, SDL_BLENDMODE_BLEND);
-            sdl->ogl.tex_null.texture = nk_handle_ptr(sdl->ogl.white_tex);
-            sdl->ogl.tex_null.uv = nk_vec2(0.5f, 0.5f);
         }
+    }
+    /* REAKTOR: every bake points tex_null at white_tex again. */
+    if (sdl->ogl.white_tex) {
+        sdl->ogl.tex_null.texture = nk_handle_ptr(sdl->ogl.white_tex);
+        sdl->ogl.tex_null.uv = nk_vec2(0.5f, 0.5f);
     }
     if (sdl->atlas.default_font) {
         nk_style_set_font(&sdl->ctx, &sdl->atlas.default_font->handle);
     }
 }
 #endif
+
+/* REAKTOR: Nuklear counts an up for a key that is not down as a press. */
+NK_INTERN void
+nk_sdl_key_change(struct nk_context *ctx, enum nk_keys key, int down)
+{
+    if (down || ctx->input.keyboard.keys[key].down) nk_input_key(ctx, key, down);
+}
 
 NK_API int
 nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt)
@@ -661,10 +732,10 @@ nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt)
                     case SDLK_RETURN:    nk_input_key(ctx, NK_KEY_ENTER, down); break;
                     case SDLK_TAB:       nk_input_key(ctx, NK_KEY_TAB, down); break;
                     case SDLK_BACKSPACE: nk_input_key(ctx, NK_KEY_BACKSPACE, down); break;
-                    case SDLK_HOME:      nk_input_key(ctx, NK_KEY_TEXT_START, down);
-                                         nk_input_key(ctx, NK_KEY_SCROLL_START, down); break;
-                    case SDLK_END:       nk_input_key(ctx, NK_KEY_TEXT_END, down);
-                                         nk_input_key(ctx, NK_KEY_SCROLL_END, down); break;
+                    case SDLK_HOME:      nk_sdl_key_change(ctx, NK_KEY_TEXT_START, down);
+                                         nk_sdl_key_change(ctx, NK_KEY_SCROLL_START, down); break;
+                    case SDLK_END:       nk_sdl_key_change(ctx, NK_KEY_TEXT_END, down);
+                                         nk_sdl_key_change(ctx, NK_KEY_SCROLL_END, down); break;
                     case SDLK_PAGEDOWN:  nk_input_key(ctx, NK_KEY_SCROLL_DOWN, down); break;
                     case SDLK_PAGEUP:    nk_input_key(ctx, NK_KEY_SCROLL_UP, down); break;
                     case SDLK_F1:        nk_input_key(ctx, NK_KEY_F1, down); break;
@@ -679,14 +750,14 @@ nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt)
                     case SDLK_F10:       nk_input_key(ctx, NK_KEY_F10, down); break;
                     case SDLK_F11:       nk_input_key(ctx, NK_KEY_F11, down); break;
                     case SDLK_F12:       nk_input_key(ctx, NK_KEY_F12, down); break;
-                    case SDLK_A:         nk_input_key(ctx, NK_KEY_TEXT_SELECT_ALL, down && ctrl_down); break;
-                    case SDLK_Z:         nk_input_key(ctx, NK_KEY_TEXT_UNDO, down && ctrl_down); break;
-                    case SDLK_R:         nk_input_key(ctx, NK_KEY_TEXT_REDO, down && ctrl_down); break;
-                    case SDLK_C:         nk_input_key(ctx, NK_KEY_COPY, down && ctrl_down); break;
-                    case SDLK_V:         nk_input_key(ctx, NK_KEY_PASTE, down && ctrl_down); break;
-                    case SDLK_X:         nk_input_key(ctx, NK_KEY_CUT, down && ctrl_down); break;
-                    case SDLK_B:         nk_input_key(ctx, NK_KEY_TEXT_LINE_START, down && ctrl_down); break;
-                    case SDLK_E:         nk_input_key(ctx, NK_KEY_TEXT_LINE_END, down && ctrl_down); break;
+                    case SDLK_A:         nk_sdl_key_change(ctx, NK_KEY_TEXT_SELECT_ALL, down && ctrl_down); break;
+                    case SDLK_Z:         nk_sdl_key_change(ctx, NK_KEY_TEXT_UNDO, down && ctrl_down); break;
+                    case SDLK_R:         nk_sdl_key_change(ctx, NK_KEY_TEXT_REDO, down && ctrl_down); break;
+                    case SDLK_C:         nk_sdl_key_change(ctx, NK_KEY_COPY, down && ctrl_down); break;
+                    case SDLK_V:         nk_sdl_key_change(ctx, NK_KEY_PASTE, down && ctrl_down); break;
+                    case SDLK_X:         nk_sdl_key_change(ctx, NK_KEY_CUT, down && ctrl_down); break;
+                    case SDLK_B:         nk_sdl_key_change(ctx, NK_KEY_TEXT_LINE_START, down && ctrl_down); break;
+                    case SDLK_E:         nk_sdl_key_change(ctx, NK_KEY_TEXT_LINE_END, down && ctrl_down); break;
                     case SDLK_UP:        nk_input_key(ctx, NK_KEY_UP, down); break;
                     case SDLK_DOWN:      nk_input_key(ctx, NK_KEY_DOWN, down); break;
                     case SDLK_ESCAPE:    nk_input_key(ctx, NK_KEY_TEXT_RESET_MODE, down); break;
@@ -745,15 +816,18 @@ nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt)
             ctx->input.mouse.delta.y = ctx->input.mouse.pos.y - ctx->input.mouse.prev.y;
             return 1;
 
+        /* REAKTOR: text of any length, rune by rune; upstream asserts one glyph. */
         case SDL_EVENT_TEXT_INPUT:
             {
-                nk_glyph glyph;
-                nk_size len;
-                NK_ASSERT(evt->text.text);
-                len = SDL_strlen(evt->text.text);
-                NK_ASSERT(len <= NK_UTF_SIZE);
-                NK_MEMCPY(glyph, evt->text.text, len);
-                nk_input_glyph(ctx, glyph);
+                const char *text = evt->text.text;
+                int len = (int)SDL_strlen(text), n;
+                nk_rune rune;
+
+                while (len > 0 && (n = nk_utf_decode(text, &rune, len)) > 0) {
+                    nk_input_unicode(ctx, rune);
+                    text += n;
+                    len -= n;
+                }
             }
             return 1;
 

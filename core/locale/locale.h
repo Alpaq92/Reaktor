@@ -14,7 +14,7 @@ const char *reaktor_tr(const char *key);
 const char *reaktor_trn(const char *key, unsigned long n, char *buf, size_t cap);
 
 /* The caller SDL_frees them. */
-unsigned *reaktor_locale_glyphs(const char *font_path);
+unsigned *reaktor_locale_glyphs(const unsigned char *ttf);
 
 const char *reaktor_format_number(char *buf, size_t cap, double value,
                                   int decimals);

@@ -5,6 +5,7 @@
 #include "nk_common.h"
 #include "nk_sdl3_renderer.h"
 #include "text.h"
+#include "reaktor.h"
 
 #include "../../external/nuklear/src/stb_truetype.h"
 #include "kb_text_shape.h"
@@ -191,7 +192,7 @@ font_open(int i)
 
     if (f->state) return f->state > 0;
     f->state = -1;
-    f->data  = SDL_LoadFile(f->path, &size);
+    f->data  = (unsigned char *)reaktor_asset_load(f->path, &size);
     if (f->data && size <= (size_t)SDL_MAX_SINT32) {
         at = stbtt_GetFontOffsetForIndex(f->data, 0);
         if (at >= 0 && stbtt_InitFont(&f->info, f->data, at)) {
@@ -209,7 +210,7 @@ font_open(int i)
         }
     }
     SDL_Log("text: could not open the font %s", f->path);
-    SDL_free(f->data);
+    reaktor_free(f->data);
     f->data = NULL;
     return 0;
 }

@@ -1,14 +1,11 @@
 #include "internal.h"
 #include "declare.h"
-#include "sample.h"
+#include "reaktor/launch.h"
+#include "reaktor/main.h"
 #include "keys.h"
 
 #include <math.h>
 #include <stdio.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #define BOXES 64
 
@@ -26,7 +23,7 @@ static Uint64 g_due_ns;
 static double g_work_ms;
 static double g_build_ms, g_render_ms, g_present_ms;
 
-void
+static void
 page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 {
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
@@ -90,7 +87,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         printf("cpu_percent   %.1f\n", 100.0 * cpu_ms / now_ms);
         printf("private_mb    %.1f\n", g_priv_peak / (1024.0 * 1024.0));
         fflush(stdout);
-        app->want_quit = 1;
+        reaktor_quit(app, 0);
         return;
     }
 
@@ -114,57 +111,22 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     }
 }
 
-int
+static int
 sample_key(App *app, const SDL_Event *e)
 {
     if (reaktor_chord(e, 0, SDLK_ESCAPE)) {
-        app->want_quit = 1;
+        reaktor_request_quit(app);
         return 1;
     }
     return 0;
 }
 
-void
-sample_window(reaktor_window_spec *out)
-{
-    out->w = 800;
-    out->h = 600;
-    out->title = "Bench";
-}
-
-SDL_HitTestResult SDLCALL
-window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
-{
-    (void)win; (void)pt; (void)data;
-    return SDL_HITTEST_NORMAL;
-}
-
-void
-sample_file_taken(App *app)
-{
-    (void)app;
-}
-
-void
-sample_args(App *app, int argc, char **argv)
+static int
+sample_start(App *app, int argc, char **argv)
 {
     int i;
 
     (void)app;
-
-#ifdef _WIN32
-    {
-        HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-
-        if ((!out || out == INVALID_HANDLE_VALUE) &&
-            AttachConsole(ATTACH_PARENT_PROCESS)) {
-            FILE *f;
-
-            freopen_s(&f, "CONOUT$", "w", stdout);
-            freopen_s(&f, "CONOUT$", "w", stderr);
-        }
-    }
-#endif
     for (i = 1; i < argc; i++) {
         if (SDL_strcmp(argv[i], "--no-vsync") == 0)
             g_no_vsync = 1;
@@ -175,4 +137,17 @@ sample_args(App *app, int argc, char **argv)
         else if (i + 1 < argc && SDL_strcmp(argv[i], "--fps") == 0)
             g_fps = SDL_atof(argv[++i]);
     }
+    return 0;
+}
+
+int
+main(int argc, char **argv)
+{
+    return launchApp(argc, argv, &(reaktor_launch){
+        .name    = "Bench",
+        .window  = { .w = 800, .h = 600 },
+        .console = REAKTOR_CONSOLE_PARENT,
+        .page    = page_shell,
+        .key     = sample_key,
+        .start   = sample_start });
 }

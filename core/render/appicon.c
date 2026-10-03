@@ -90,7 +90,6 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
                                             const char *inside_colour,
                                             float stroke_scale)
 {
-    char path[REAKTOR_PATH_MAX];
     char outline_hex[16] = "#000000", inside_hex[16] = "none";
     char fill_decl[32], stroke_decl[32], stroke_attr[32], svg_open[48];
     char *svg;
@@ -100,13 +99,8 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
     plutosvg_document_t *doc = NULL;
     plutovg_surface_t *surf = NULL;
 
-    if (!reaktor_path(path, sizeof(path), rel_path)) {
-        fprintf(stderr, "svg: reaktor_path failed for %s\n", rel_path);
-        return NULL;
-    }
-
-    svg = reaktor_read_file(path, NULL);
-    if (!svg) { fprintf(stderr, "svg: cannot read %s\n", path); return NULL; }
+    svg = reaktor_asset_load(rel_path, NULL);
+    if (!svg) { fprintf(stderr, "svg: cannot read %s\n", rel_path); return NULL; }
 
     if (outline_colour) {
         snprintf(outline_hex, sizeof(outline_hex), "%s", outline_colour);
