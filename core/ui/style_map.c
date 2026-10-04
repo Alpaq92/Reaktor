@@ -39,27 +39,53 @@ hot_push(App *app, struct nk_rect r, int cursor, int repaint)
     hot_push_ex(app, r, cursor, repaint, 0, 0);
 }
 
-/* An armed button paints its own fill and border; Nuklear draws the label. */
+/* An armed widget paints its own chrome; the item Nuklear would draw is blanked. */
 static struct {
-    int                    armed, hid;
-    struct nk_rect         b;
-    struct nk_style_item   normal, hover, active;
-    float                  border;
+    int                   armed;
+    struct nk_rect        b;
+    float                 rounding;
+    const nk_bool        *on;
+    struct nk_style_item *slot, saved;
+    float                *border, border_was;
 } g_chrome;
+
+static void
+chrome_arm(struct nk_rect b, const nk_bool *on, float rounding)
+{
+    g_chrome.b        = reaktor_rect_trunc(b);
+    g_chrome.on       = on;
+    g_chrome.rounding = rounding;
+    g_chrome.armed    = 1;
+}
 
 void
 reaktor_button_arm(struct nk_context *ctx)
 {
-    struct nk_rect b = nk_widget_bounds(ctx);
-
-    g_chrome.b = reaktor_rect_trunc(b);
-    g_chrome.armed = 1;
+    chrome_arm(nk_widget_bounds(ctx), NULL, 0.0f);
 }
 
 void
-reaktor_button_disarm(void)
+reaktor_select_arm(struct nk_rect b, const nk_bool *on, float rounding)
+{
+    chrome_arm(b, on, rounding);
+}
+
+void
+reaktor_chrome_disarm(void)
 {
     g_chrome.armed = 0;
+}
+
+static int
+chrome_take(struct nk_style_item *bg, struct nk_color *col)
+{
+    g_chrome.armed = 0;
+    if (bg->type != NK_STYLE_ITEM_COLOR) return 0;
+    *col           = bg->data.color;
+    g_chrome.slot  = bg;
+    g_chrome.saved = *bg;
+    *bg = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    return 1;
 }
 
 static void
@@ -68,64 +94,64 @@ button_chrome_begin(struct nk_command_buffer *out, nk_handle user)
     App *app = (App *)user.ptr;
     struct nk_style_button *st = &app->ctx->style.button;
     nk_flags state = app->ctx->last_widget_state;
-    const struct nk_style_item *bg;
-    struct nk_style_item none = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    struct nk_color col;
 
-    if (!g_chrome.armed) return;
-    g_chrome.armed = 0;
-    bg = (state & NK_WIDGET_STATE_HOVER)   ? &st->hover
-       : (state & NK_WIDGET_STATE_ACTIVED) ? &st->active : &st->normal;
-    if (bg->type != NK_STYLE_ITEM_COLOR) return;
-
-    reaktor_fill_round(app, out, g_chrome.b, st->rounding,
-                       nk_rgb_factor(bg->data.color,
-                                     st->color_factor_background));
-    reaktor_edge_round(app, out, g_chrome.b, st->rounding, st->border,
-                       nk_rgb_factor(st->border_color,
-                                     st->color_factor_background));
-    g_chrome.normal = st->normal;
-    g_chrome.hover  = st->hover;
-    g_chrome.active = st->active;
-    g_chrome.border = st->border;
-    st->normal = st->hover = st->active = none;
+    if (!g_chrome.armed ||
+        !chrome_take((state & NK_WIDGET_STATE_HOVER)   ? &st->hover
+                   : (state & NK_WIDGET_STATE_ACTIVED) ? &st->active
+                                                       : &st->normal, &col))
+        return;
+    reaktor_paint_surface(app, out, g_chrome.b, &(reaktor_surface){
+        nk_rgb_factor(col, st->color_factor_background),
+        nk_rgb_factor(st->border_color, st->color_factor_background),
+        st->border, st->rounding });
+    g_chrome.border     = &st->border;
+    g_chrome.border_was = st->border;
     st->border = 0.0f;
-    g_chrome.hid = 1;
 }
 
 static void
-button_chrome_end(struct nk_command_buffer *out, nk_handle user)
+select_chrome_begin(struct nk_command_buffer *out, nk_handle user)
 {
     App *app = (App *)user.ptr;
-    struct nk_style_button *st = &app->ctx->style.button;
+    struct nk_style_selectable *st = &app->ctx->style.selectable;
+    nk_flags state = app->ctx->last_widget_state;
+    struct nk_color col;
+    int on;
 
-    (void)out;
-    if (!g_chrome.hid) return;
-    st->normal = g_chrome.normal;
-    st->hover  = g_chrome.hover;
-    st->active = g_chrome.active;
-    st->border = g_chrome.border;
-    g_chrome.hid = 0;
+    if (!g_chrome.armed) return;
+    on = g_chrome.on && *g_chrome.on;
+    if (chrome_take((state & NK_WIDGET_STATE_ACTIVED)
+                    ? (on ? &st->pressed_active : &st->pressed)
+                  : (state & NK_WIDGET_STATE_HOVER)
+                    ? (on ? &st->hover_active : &st->hover)
+                  : (on ? &st->normal_active : &st->normal), &col))
+        reaktor_fill_round(app, out, g_chrome.b, g_chrome.rounding, col);
+}
+
+static void
+chrome_end(struct nk_command_buffer *out, nk_handle user)
+{
+    (void)out; (void)user;
+    if (g_chrome.slot) *g_chrome.slot = g_chrome.saved;
+    if (g_chrome.border) *g_chrome.border = g_chrome.border_was;
+    g_chrome.slot   = NULL;
+    g_chrome.border = NULL;
 }
 
 static style_frame
-push_button_style(App *app, struct nk_context *ctx, const char *selector)
+push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
 {
-    reaktor_style s, hov, act;
+    reaktor_style s = k->s;
+    const reaktor_style *hov = &k->hov, *act = &k->act;
     unsigned char hover[4], active[4];
     style_frame f = { 0, 0, 0, 0, 0 };
-    char state[80];
 
-    reaktor_style_get(selector, &s);
     if (!s.matched) return f;
 
-    snprintf(state, sizeof(state), "%s:hover", selector);
-    reaktor_style_get(state, &hov);
-    snprintf(state, sizeof(state), "%s:active", selector);
-    reaktor_style_get(state, &act);
-
-    memcpy(hover, hov.matched && hov.bg[3] ? hov.bg : s.bg, 4);
-    if (act.matched && act.bg[3]) {
-        memcpy(active, act.bg, 4);
+    memcpy(hover, hov->matched && hov->bg[3] ? hov->bg : s.bg, 4);
+    if (act->matched && act->bg[3]) {
+        memcpy(active, act->bg, 4);
     } else {
         memcpy(active, hover, 4);
         reaktor_style_darken(active, 0.10f);
@@ -141,9 +167,9 @@ push_button_style(App *app, struct nk_context *ctx, const char *selector)
 
     nk_style_push_color(ctx, &ctx->style.button.text_normal, col_of(s.fg));
     nk_style_push_color(ctx, &ctx->style.button.text_hover,
-                        col_of(hov.matched && hov.fg[3] ? hov.fg : s.fg));
+                        col_of(hov->matched && hov->fg[3] ? hov->fg : s.fg));
     nk_style_push_color(ctx, &ctx->style.button.text_active,
-                        col_of(act.matched && act.fg[3] ? act.fg : s.fg));
+                        col_of(act->matched && act->fg[3] ? act->fg : s.fg));
     nk_style_push_color(ctx, &ctx->style.button.border_color,
                         col_of(s.border_col));
     f.colors = 4;
@@ -171,6 +197,31 @@ push_button_style(App *app, struct nk_context *ctx, const char *selector)
 }
 
 void
+reaktor_button_look_of(const char *selector, reaktor_button_look *k)
+{
+    char state[80];
+
+    reaktor_style_get(selector, &k->s);
+    if (!k->s.matched) {
+        k->hov.matched = k->act.matched = 0;
+        return;
+    }
+    snprintf(state, sizeof(state), "%s:hover", selector);
+    reaktor_style_get(state, &k->hov);
+    snprintf(state, sizeof(state), "%s:active", selector);
+    reaktor_style_get(state, &k->act);
+}
+
+static style_frame
+push_button_style(App *app, struct nk_context *ctx, const char *selector)
+{
+    reaktor_button_look k;
+
+    reaktor_button_look_of(selector, &k);
+    return push_button_look(app, ctx, &k);
+}
+
+void
 pop_style(struct nk_context *ctx, style_frame f)
 {
     int i;
@@ -185,16 +236,26 @@ int
 css_button(App *app, struct nk_context *ctx, const char *selector,
            const char *label)
 {
+    reaktor_button_look k;
+
+    reaktor_button_look_of(selector, &k);
+    return reaktor_css_button_look(app, ctx, &k, label);
+}
+
+int
+reaktor_css_button_look(App *app, struct nk_context *ctx,
+                        const reaktor_button_look *k, const char *label)
+{
     style_frame f;
     unsigned id;
     int clicked;
 
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
     id = reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
-    f = push_button_style(app, ctx, selector);
+    f = push_button_look(app, ctx, k);
     reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, label);
-    reaktor_button_disarm();
+    reaktor_chrome_disarm();
     pop_style(ctx, f);
     if (reaktor_focus_activated(app, id)) clicked = 1;
     return clicked;
@@ -292,7 +353,7 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
 
     reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, label);
-    reaktor_button_disarm();
+    reaktor_chrome_disarm();
     pop_style(ctx, a);
     pop_style(ctx, f);
     return clicked;
@@ -311,14 +372,14 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     f = push_button_style(app, ctx, selector);
     reaktor_button_arm(ctx);
     clicked = nk_button_image_label(ctx, im, label, NK_TEXT_CENTERED);
-    reaktor_button_disarm();
+    reaktor_chrome_disarm();
     pop_style(ctx, f);
     return clicked;
 }
 
 /* Nuklear shrinks an image button by its rounding too, so it is drawn here. */
 int
-css_button_image(App *app, struct nk_context *ctx, const char *selector,
+reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
                  struct nk_image im, float px, const char *name)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
@@ -330,7 +391,7 @@ css_button_image(App *app, struct nk_context *ctx, const char *selector,
     f = push_button_style(app, ctx, selector);
     reaktor_button_arm(ctx);
     clicked = nk_button_text(ctx, "", 0);
-    reaktor_button_disarm();
+    reaktor_chrome_disarm();
     pop_style(ctx, f);
     nk_draw_image(nk_window_get_canvas(ctx),
                   nk_rect((float)(int)(b.x + (b.w - px) * 0.5f),
@@ -449,16 +510,13 @@ push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset)
 }
 
 void
-edit_edge(App *app, struct nk_context *ctx, struct nk_rect b,
+reaktor_edit_edge(App *app, struct nk_context *ctx, struct nk_rect b,
           const reaktor_style *s)
 {
-    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
-
     if (!s->matched) return;
-    b = reaktor_rect_trunc(b);
-    reaktor_fill_round(app, cv, b, s->rounding, col_of(s->bg));
-    reaktor_edge_round(app, cv, b, s->rounding, s->border,
-                       col_of(s->border_col));
+    reaktor_paint_surface(app, nk_window_get_canvas(ctx), reaktor_rect_trunc(b),
+                          &(reaktor_surface){ col_of(s->bg), col_of(s->border_col),
+                                              s->border, s->rounding });
 }
 
 void
@@ -491,7 +549,7 @@ note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds)
 void
 note_edit_active(App *app, struct nk_context *ctx, nk_flags state)
 {
-    /* A held field keeps its caret for later, but the keys are not its now. */
+    /* A held field keeps its caret, not the keys. */
     if (!(state & NK_EDIT_ACTIVE) || app->layer_held) return;
     if (app->stop_editing) nk_edit_unfocus(ctx);
     else app->editing = 1;
@@ -541,7 +599,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
     hot_push(app, bounds, 2, 0);
 
     f = push_edit_style(ctx, &s, 1);
-    edit_edge(app, ctx, bounds, &s);
+    reaktor_edit_edge(app, ctx, bounds, &s);
     {
         nk_flags st = nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit,
                                      nk_filter_default);
@@ -669,7 +727,7 @@ apply_widget_style(App *app)
     }
     st->button.userdata   = nk_handle_ptr(app);
     st->button.draw_begin = button_chrome_begin;
-    st->button.draw_end   = button_chrome_end;
+    st->button.draw_end   = chrome_end;
 
     reaktor_style_get("input", &inp);
     if (inp.matched) {
@@ -710,6 +768,9 @@ apply_widget_style(App *app)
         st->selectable.text_pressed_active = on_accent;
     st->selectable.text_background = body;
     st->selectable.rounding = 3.0f;
+    st->selectable.userdata   = nk_handle_ptr(app);
+    st->selectable.draw_begin = select_chrome_begin;
+    st->selectable.draw_end   = chrome_end;
     st->selectable.image_padding = nk_vec2(7.0f, 7.0f);
 
     reaktor_style_get("input", &rng);

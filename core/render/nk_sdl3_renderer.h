@@ -229,8 +229,7 @@ nk_sdl_update_TextInput(struct nk_context* ctx)
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
 
-    /* REAKTOR: while another window has the keys, text input is that window's;
-       SDL starts this one's again when the keys come back. */
+    /* REAKTOR: text input is left to whichever window has the keys. */
     keys = SDL_GetKeyboardFocus();
     if (keys && keys != sdl->win) return;
 
@@ -506,6 +505,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
                 if (tex == sdl->ogl.white_tex) tex = NULL;
 
+                /* REAKTOR: software rectangles from device pixels. */
                 if (is_sw) {
                     nk_uint k = 0, from = 0;
 
@@ -531,6 +531,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                     continue;
                 }
 
+                /* REAKTOR: nk_sdl_geometry, not SDL_RenderGeometryRaw. */
                 nk_sdl_geometry(sdl->renderer, tex, vertices, n, offset,
                                 (int)cmd->elem_count);
 
@@ -629,6 +630,9 @@ nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer, struct nk_allocator allocat
     sdl->allocator.free = allocator.free;
     sdl->win = win;
     sdl->renderer = renderer;
+    /* REAKTOR: UVs stay in [0, 1], so SDL need not scan them for wrapping. */
+    SDL_SetRenderTextureAddressMode(renderer, SDL_TEXTURE_ADDRESS_CLAMP,
+                                    SDL_TEXTURE_ADDRESS_CLAMP);
     nk_init(&sdl->ctx, &sdl->allocator, 0);
     sdl->ctx.userdata = nk_handle_ptr((void*)sdl);
     sdl->ctx.clip.copy = nk_sdl_clipboard_copy;

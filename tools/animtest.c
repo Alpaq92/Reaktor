@@ -125,7 +125,9 @@ test_table(void)
     v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
     ok("half way through a linear run is half way there",
        near(v, 0.375f));
-    ok("the rest of it finishes", advance(100.0f) == 0);
+    ok("the step that lands asks for the frame that shows it",
+       advance(100.0f) == 1);
+    ok("then nothing is moving", advance(16.0f) == 0);
     v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
     ok("and it arrives exactly", near(v, 0.0f));
 

@@ -2,6 +2,7 @@
 
 #include "internal.h"
 #include "declare.h"
+#include "reaktor/launch.h"
 
 static App               *g_app;
 static struct nk_context *g_ctx;
@@ -46,13 +47,9 @@ reaktor_frame_end(void)
     if (!g_unsettled) {
         g_app->settle_tries = 0;
     } else if (g_app->settle_tries < REAKTOR_SETTLE_TRIES) {
-        SDL_Event e;
-
         g_app->settle_tries++;
         g_app->dirty = 1;
-        SDL_zero(e);
-        e.type = SDL_EVENT_USER;
-        SDL_PushEvent(&e);
+        reaktor_wake(g_app);
     } else if (g_app->settle_tries == REAKTOR_SETTLE_TRIES) {
         g_app->settle_tries++;
         fprintf(stderr,
@@ -387,11 +384,11 @@ reaktor_button(const reaktor_button_spec *s)
     fitted = reaktor_fit_label(g_app, g_ctx, r);
     reaktor_note_mute(g_app, 1);
     if (s->icon && !s->label) {
-        reaktor_hot(g_app, r, 0, 1);
-        reaktor_button_arm(g_ctx);
-        hit = nk_button_image(g_ctx, reaktor_ionicon(g_app, s->icon,
-                                                     (int)(r.h * 0.6f)));
-        reaktor_button_disarm();
+        float px = (float)(int)(r.h * 0.6f);
+
+        hit = reaktor_css_button_image(g_app, g_ctx, sel,
+                                       reaktor_ionicon(g_app, s->icon, (int)px),
+                                       px, s->name);
     } else if (s->icon)
         hit = reaktor_button_icon_as(g_app, g_ctx, sel, s->icon, s->label);
     else if (s->accent)
@@ -768,9 +765,13 @@ reaktor_select(const reaktor_select_spec *s)
     {
         nk_flags align = s->centered ? NK_TEXT_CENTERED : NK_TEXT_LEFT;
         struct nk_rect b = nk_widget_bounds(g_ctx);
+        reaktor_style rs;
 
         reaktor_hot(g_app, b, 0, 1);
         reaktor_note_mute(g_app, 1);
+        reaktor_style_get(rule_or(s->style, "select"), &rs);
+        reaktor_select_arm(b, s->on, rs.matched ? rs.rounding
+                                                : g_ctx->style.selectable.rounding);
         if (s->icon) {
             struct nk_color accent = reaktor_token("--links",
                                                    g_ctx->style.text.color);
@@ -798,6 +799,7 @@ reaktor_select(const reaktor_select_spec *s)
         } else {
             hit = nk_selectable_label(g_ctx, s->label, align, s->on);
         }
+        reaktor_chrome_disarm();
         reaktor_note_mute(g_app, 0);
     }
     if (styled) nk_style_pop_font(g_ctx);
@@ -938,7 +940,6 @@ reaktor_combo_open(const reaktor_combo_spec *s)
     if (!g_app || !s) return 0;
     box = s->box;
     box_from_style(&box, NULL, s->style, "select", 0.0f, 9.0f);
-    /* A field one picks from, so never shorter than a field. */
     if (s->box.h <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_Y)) {
         reaktor_box field;
 
@@ -965,7 +966,6 @@ reaktor_combo_open(const reaktor_combo_spec *s)
                                     nk_vec2(cw, s->body_h));
     reaktor_note_mute(g_app, 0);
 
-    /* Open, the canvas is the list's, clipped below the header. */
     if (open) nk_push_scissor(nk_window_get_canvas(g_ctx), clip);
     if (s->disc) {
         struct nk_rect im = reaktor_combo_content(g_ctx, h);
@@ -976,7 +976,7 @@ reaktor_combo_open(const reaktor_combo_spec *s)
         reaktor_glyph_at(g_app, g_ctx, im, REAKTOR_DISC_ROUND,
                          g_ctx->style.combo.symbol_normal, (int)im.w, 0.0f);
     } else if (s->swatch) {
-        struct nk_rect sw = reaktor_combo_content(g_ctx, h);
+        struct nk_rect sw = reaktor_combo_content(g_ctx, reaktor_rect_trunc(h));
         float r = g_ctx->style.combo.rounding;
 
         reaktor_fill_round(g_app, nk_window_get_canvas(g_ctx), sw,
@@ -1035,38 +1035,43 @@ reaktor_colour_pick(const reaktor_colour_spec *s)
     reaktor_note_mute(g_app, 0);
 }
 
+typedef struct nav_look {
+    const struct nk_user_font *font;
+    reaktor_button_look        btn;
+} nav_look;
+
 static void
-nav_face(struct nk_rect b, const char *sel, const char *icon, const char *label,
-         const char *edge, int across)
+nav_look_of(nav_look *k, const char *sel)
+{
+    k->font = style_font(sel);
+    reaktor_button_look_of(sel, &k->btn);
+}
+
+static void
+nav_face(struct nk_rect b, const nav_look *k, const char *icon, const char *label,
+         const reaktor_style *edge, int across)
 {
     struct nk_command_buffer *cv = nk_window_get_canvas(g_ctx);
-    const struct nk_user_font *f = style_font(sel);
+    const struct nk_user_font *f = k->font;
     float px = (float)(int)(f->height + 0.5f), x;
-    reaktor_style st, hov;
     struct nk_color fg;
-    char state[80];
 
-    reaktor_style_get(sel, &st);
-    SDL_snprintf(state, sizeof(state), "%s:hover", sel);
-    reaktor_style_get(state, &hov);
-    if ((g_ctx->last_widget_state & NK_WIDGET_STATE_HOVER) && hov.matched && hov.fg[3])
-        fg = col_of(hov.fg);
+    if ((g_ctx->last_widget_state & NK_WIDGET_STATE_HOVER) && k->btn.hov.matched &&
+        k->btn.hov.fg[3])
+        fg = col_of(k->btn.hov.fg);
     else
-        fg = st.matched && st.fg[3] ? col_of(st.fg) : g_app->text;
-    if (edge) {
-        reaktor_style e;
+        fg = k->btn.s.matched && k->btn.s.fg[3] ? col_of(k->btn.s.fg) : g_app->text;
+    if (edge && edge->matched && edge->bg[3]) {
+        struct nk_rect e = reaktor_rect_trunc(b);
+        float t = across ? (edge->height > 0.0f ? edge->height : 2.0f)
+                         : (edge->width > 0.0f ? edge->width : 3.0f);
+        struct nk_rect r = across ? nk_rect(e.x, e.y + e.h - t, e.w, t)
+                                  : nk_rect(e.x, e.y + e.h * 0.25f, t, e.h * 0.5f);
 
-        reaktor_style_get(edge, &e);
-        if (e.matched && e.bg[3]) {
-            float t = across ? (e.height > 0.0f ? e.height : 2.0f)
-                             : (e.width > 0.0f ? e.width : 3.0f);
-            struct nk_rect r = across ? nk_rect(b.x, b.y + b.h - t, b.w, t)
-                                      : nk_rect(b.x, b.y + b.h * 0.25f, t, b.h * 0.5f);
-
-            reaktor_fill_round(g_app, cv, r, t * 0.5f, col_of(e.bg));
-        }
+        reaktor_fill_round(g_app, cv, r, t * 0.5f, col_of(edge->bg));
     }
-    x = label ? b.x + (st.pad[REAKTOR_SIDE_LEFT] > 0.0f ? st.pad[REAKTOR_SIDE_LEFT] : 12.0f)
+    x = label ? b.x + (k->btn.s.pad[REAKTOR_SIDE_LEFT] > 0.0f
+                       ? k->btn.s.pad[REAKTOR_SIDE_LEFT] : 12.0f)
               : b.x + (float)(int)((b.w - px) * 0.5f);
     if (icon) {
         struct nk_image im = reaktor_ionicon_col(g_app, icon, (int)px, fg);
@@ -1091,8 +1096,10 @@ nav_list(const reaktor_nav_spec *s, int across)
         REAKTOR_A11Y_TAB, REAKTOR_A11Y_RADIO, REAKTOR_A11Y_BUTTON
     };
     static const unsigned mark[3] = { REAKTOR_A11Y_SELECTED, REAKTOR_A11Y_CHECKED, 0u };
-    const char *item, *current = across ? ".tab-current" : ".sidebar-current";
-    reaktor_box list, row;
+    const char *item;
+    nav_look look[2];
+    reaktor_style edge;
+    reaktor_box list, row, down;
     struct nk_rect r;
     unsigned id;
     int i, kind, picked = -1;
@@ -1100,6 +1107,12 @@ nav_list(const reaktor_nav_spec *s, int across)
     if (!g_app || !s || !s->chosen) return 0;
     kind = s->kind <= REAKTOR_NAV_ACTIONS ? s->kind : REAKTOR_NAV_PAGES;
     item = rule_or(s->style, across ? ".tab" : ".sidebar-item");
+    nav_look_of(&look[0], item);
+    nav_look_of(&look[1], across ? ".tab-current" : ".sidebar-current");
+    reaktor_style_get(across ? ".tab-edge" : ".sidebar-edge", &edge);
+    memset(&down, 0, sizeof(down));
+    down.flags = REAKTOR_LAY_FILL_X;
+    if (!across) box_from_style(&down, NULL, NULL, item, 12.0f, 8.0f);
     list = s->box;
     reaktor_box_open(across ? REAKTOR_LAY_ROW : REAKTOR_LAY_COLUMN, &list);
     id = reaktor_note_push(g_app, list_role[kind], s->name, NULL, 0u,
@@ -1109,25 +1122,21 @@ nav_list(const reaktor_nav_spec *s, int across)
         int on = kind != REAKTOR_NAV_ACTIONS && i == *s->chosen;
         const char *icon = s->icons ? s->icons[i] : NULL;
         const char *label = s->narrow && icon ? NULL : s->items[i];
-        const char *sel = on ? current : item;
 
-        memset(&row, 0, sizeof(row));
+        row = down;
         if (across) {
+            memset(&row, 0, sizeof(row));
             box_from_style(&row, label ? label : "", NULL, item, 14.0f, 8.0f);
-            if (icon && label) row.w += style_font(item)->height + 10.0f;
-        } else {
-            row.flags = REAKTOR_LAY_FILL_X;
-            box_from_style(&row, NULL, NULL, item, 12.0f, 8.0f);
+            if (icon && label) row.w += look[0].font->height + 10.0f;
         }
         if (!place(item_role[kind], s->items[i], NULL, on ? mark[kind] : 0u,
                    s->keys ? s->keys[i] : NULL, &row, &id))
             continue;
         r = nk_widget_bounds(g_ctx);
         reaktor_note_mute(g_app, 1);
-        if (css_button(g_app, g_ctx, sel, "")) picked = i;
+        if (reaktor_css_button_look(g_app, g_ctx, &look[on].btn, "")) picked = i;
         reaktor_note_mute(g_app, 0);
-        nav_face(r, sel, icon, label,
-                 on ? (across ? ".tab-edge" : ".sidebar-edge") : NULL, across);
+        nav_face(r, &look[on], icon, label, on ? &edge : NULL, across);
         if (reaktor_focus_activated(g_app, id)) picked = i;
     }
     reaktor_note_pop(g_app);

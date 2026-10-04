@@ -100,25 +100,25 @@ on Windows emsdk 6.0.9.
 
 | `showcase` | Default | Module off | Saved |
 | --- | --- | --- | --- |
-| `.exe`, accessibility bridges | 3,473,408 | 3,460,608 | 12,800 (0.37%) |
-| `.exe`, Locale | 3,473,408 | 3,458,560 | 14,848 (0.43%) |
-| `.exe`, Text | 3,473,408 | 2,685,440 | 787,968 (22.7%) |
-| `.wasm` + `.js`, accessibility bridges | 1,965,894 | 1,963,080 | 2,814 (0.14%) |
-| `.wasm` + `.js`, Locale | 1,965,894 | 1,950,764 | 15,130 (0.77%) |
-| `.wasm` + `.js`, Text | 1,965,894 | 1,461,406 | 504,488 (25.7%) |
-| `.data`, Locale | 1,811,122 | 45,501 | 1,765,621 (97.5%) |
-| `.data`, Text | 1,811,122 | 52,434 | 1,758,688 (97.1%) |
+| `.exe`, accessibility bridges | 3,480,576 | 3,465,216 | 15,360 (0.44%) |
+| `.exe`, Locale | 3,480,576 | 3,466,240 | 14,336 (0.41%) |
+| `.exe`, Text | 3,480,576 | 2,692,608 | 787,968 (22.6%) |
+| `.wasm` + `.js`, accessibility bridges | 1,968,979 | 1,966,141 | 2,838 (0.14%) |
+| `.wasm` + `.js`, Locale | 1,968,979 | 1,953,842 | 15,137 (0.77%) |
+| `.wasm` + `.js`, Text | 1,968,979 | 1,464,437 | 504,542 (25.6%) |
+| `.data`, Locale | 1,810,099 | 44,478 | 1,765,621 (97.5%) |
+| `.data`, Text | 1,810,099 | 51,411 | 1,758,688 (97.2%) |
 
 **The bridges are small**; turned off, they drop libraries more than bytes.
 Pixels and `--a11y-dump` stay byte-identical, and only a screen reader
-notices: UI Automation finds 92 elements on the Buttons page, none without
+notices: UI Automation finds 99 elements on the Buttons page, none without
 them.
 
 **Text is mostly tables and a font.** kb_text_shape is 113 KB of code and
 443 KB of tables, and mojibake adds its line-breaking and bidirectional data;
-the `.data` it saves is M PLUS 1p, 1,758,688 bytes. Locale is 15 KB of code
+the `.data` it saves is M PLUS 1p, 1,758,688 bytes. Locale is 14 KB of code
 and 6,933 bytes of catalogs; compiled in (`-DREAKTOR_LOCALE_EMBED=ON`),
-`showcase.exe` is 3,480,064 bytes.
+`showcase.exe` is 3,487,232 bytes.
 
 **Text costs memory once it draws.** Medians of private bytes over ten
 launches: Diagnostics is 8.0 MB with every module, 7.6 MB without Text and

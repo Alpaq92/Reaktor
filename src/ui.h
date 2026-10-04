@@ -82,8 +82,7 @@ typedef struct reaktor_toast_spec {
     int         no_close;
 } reaktor_toast_spec;
 
-/* Main thread. Drawn in the main window, whose App the callbacks get. Stays
-   until closed, or for timeout_ms; eight are kept. */
+/* Main thread; hooks get the main window's App. */
 void  reaktor_toast(App *app, const reaktor_toast_spec *spec);
 
 int   reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,

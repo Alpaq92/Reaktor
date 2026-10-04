@@ -124,8 +124,9 @@ jobs:
             name=$1
             driver=$2
             shift 2
-            if DISPLAY=:99 SDL_VIDEO_DRIVER=$driver dbus-run-session -- \
-                timeout 600 "$@" --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
+            if DISPLAY=:99 dbus-run-session -- \
+                timeout 600 "$@" --video "$driver" \
+                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
                 </dev/null >"smoke/$name.log" 2>&1; then
               if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
                 echo "$name: ok"

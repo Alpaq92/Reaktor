@@ -36,7 +36,8 @@ what the library draws, and where its claims are tested rather than asserted:
   and Japanese from the catalogs, beside a date, a number, one amount in three
   currencies and a count of ducklings, each written the way that language
   writes it. The Japanese is drawn by the Text module.
-- **Popups** opens floaters, toasts, windows of their own, menus and the tray.
+- **Popups** opens floaters, toasts, windows of their own, menus and the tray,
+  and can have the showcase ask before it closes.
 - **Diagnostics** shows the renderer, and where each frame's milliseconds and
   each megabyte went, live.
 - **Animation** draws all 31 easing curves through the function the widgets

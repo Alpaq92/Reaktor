@@ -4,7 +4,6 @@
 void reaktor_web_keys_init(unsigned event_type);
 void reaktor_web_keys_wants(int wants);
 
-/* A code point, or one of these soft keys. */
 enum {
     REAKTOR_WEB_KEY_BACKSPACE = -1, REAKTOR_WEB_KEY_ENTER = -2,
     REAKTOR_WEB_KEY_LEFT = -3, REAKTOR_WEB_KEY_RIGHT = -4,

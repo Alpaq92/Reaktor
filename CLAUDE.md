@@ -55,8 +55,11 @@ regression oracle for every layout or style change.
   anti-aliasing on a stroke of thickness one is always two half-alpha rows.
   A border is `reaktor_edge_round`: fills for its runs, a ring mask for its
   corners, inside the box.
-- **A rounded fill is jagged on the software renderer.** Fill anti-aliasing is
-  off there, so a fill with corners goes through `reaktor_fill_round`.
+- **A rounded fill is jagged unless it is a mask.** Fill anti-aliasing is off
+  on every renderer, so a fill with corners goes through `reaktor_fill_round`,
+  and `reaktor_render` swaps each one Nuklear drew itself for masks, relinking
+  the built command list — whose end is wherever a `next` reaches
+  `ctx->memory.allocated`.
 - **Measure the present, not the draw.** On a machine with no GPU, most of a
   frame is `SDL_RenderPresent`. `build/render/present` split is on the
   Diagnostics page and in `bench --no-vsync`.
@@ -69,8 +72,8 @@ regression oracle for every layout or style change.
 - **Only Nuklear's active window gets input.** Every other window carries a
   sticky `NK_WINDOW_ROM` until a click or hover activates it inside
   `nk_begin`. A layer that must not take input is begun
-  `NK_WINDOW_NOT_INTERACTIVE` with `ctx->input` blanked — `reaktor_hold_input`
-  — and focus is handed back with `reaktor_layer_focus`.
+  `NK_WINDOW_NOT_INTERACTIVE` with `ctx->input` blanked — `reaktor_layer_begin`
+  with `HOLD_ALL` — and focus is handed back with `reaktor_layer_focus`.
 - **A field's keys are its own, wherever it was declared.** Nuklear keeps
   edit-active state on the window a widget sits in, so the page's window misses
   every field inside a group; `app->editing` is what navigation asks before it

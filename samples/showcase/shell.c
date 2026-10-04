@@ -53,8 +53,6 @@ sample_tab(void)
     return g_tab;
 }
 
-void showcase_tray_show(App *app, int on);
-
 static int
 sample_start(App *app, int argc, char **argv)
 {
@@ -396,9 +394,10 @@ static void
 nav(App *app, float w, float h)
 {
     static const char *const icons[TAB_COUNT] = {
-        "log-in-outline", "radio-button-on-outline", "create-outline",
-        "eye-outline", "grid-outline", "layers-outline", "play-circle-outline",
-        "color-palette-outline", "language-outline", "pulse-outline"
+        "person-outline", "tablet-landscape-outline", "create-outline",
+        "eye-outline", "copy-outline", "chatbubble-outline",
+        "play-circle-outline", "color-fill-outline", "language-outline",
+        "pulse-outline"
     };
     static const char *const schemes[3] = { "System", "Light", "Dark" };
     static const char *const scheme_icons[3] = {
@@ -535,9 +534,9 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     if (panel.h < 1.0f) panel.h = 1.0f;
     if (body_h < 1.0f) body_h = 1.0f;
     body = nk_rect(panel.x, panel.y + PANEL_R * 0.5f, panel.w, panel.h - PANEL_R);
-    reaktor_tray_check(app, TRAY_SYSTEM, app->theme_mode == THEME_SYSTEM);
-    reaktor_tray_check(app, TRAY_LIGHT, app->theme_mode == THEME_LIGHT);
-    reaktor_tray_check(app, TRAY_DARK, app->theme_mode == THEME_DARK);
+    reaktor_tray_check(app, TRAY_SYSTEM, app->theme_mode == REAKTOR_THEME_SYSTEM);
+    reaktor_tray_check(app, TRAY_LIGHT, app->theme_mode == REAKTOR_THEME_LIGHT);
+    reaktor_tray_check(app, TRAY_DARK, app->theme_mode == REAKTOR_THEME_DARK);
     {
         struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
 

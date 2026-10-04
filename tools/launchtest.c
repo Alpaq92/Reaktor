@@ -1,5 +1,6 @@
 #include "internal.h"
 #include "declare.h"
+#include "anim.h"
 #include "reaktor/launch.h"
 #include "reaktor/main.h"
 
@@ -13,7 +14,7 @@ note(const char *what)
     FILE *f;
 
     if (!g_log) return;
-    f = fopen(g_log, "a");
+    f = reaktor_fopen(g_log, "a");
     if (!f) return;
     fprintf(f, "%s\n", what);
     fclose(f);
@@ -25,7 +26,7 @@ is(const char *mode)
     return SDL_strcmp(g_mode, mode) == 0;
 }
 
-static int            g_first, g_second;
+static int            g_second;
 static struct nk_rect g_field, g_button, g_link, g_combo;
 
 static void push_key(App *app, SDL_EventType type, SDL_Keycode key);
@@ -296,7 +297,7 @@ hold_page(App *app, struct nk_context *ctx, int w, int h)
             push_click(app, g_combo.x + 20.0f, g_combo.y + g_combo.h * 0.5f);
         if (g_frames == 10) push_tap(app, SDLK_RETURN);
     }
-    if (is("hold-modal-tab")) {
+    if (is("hold-modal-tab") || is("hold-fresh-tab")) {
         if (g_frames == 3) push_tap(app, SDLK_TAB);
         if (g_frames == 6) {
             push_tap(app, SDLK_RETURN);
@@ -307,14 +308,6 @@ hold_page(App *app, struct nk_context *ctx, int w, int h)
     if (is("hold-stack") && g_frames == 3) reaktor_floater_close(app, g_second);
     if (is("hold-stack") && g_frames == 6)
         push_click(app, (w - 140.0f) * 0.5f + 70.0f, (h - 60.0f) * 0.5f + 26.0f);
-    if (is("hold-fresh-tab")) {
-        if (g_frames == 3) push_tap(app, SDLK_TAB);
-        if (g_frames == 6) {
-            push_tap(app, SDLK_RETURN);
-            push_tap(app, SDLK_TAB);
-        }
-        if (g_frames == 12) push_tap(app, SDLK_RETURN);
-    }
     if ((is("hold-tab-field") || is("hold-tab-free")) && g_frames == 3)
         push_tap(app, SDLK_TAB);
     if (is("hold-combo-keys")) {
@@ -388,21 +381,225 @@ window_page(App *app, struct nk_context *ctx, int w, int h, void *user)
     if (frames == 1) nk_edit_focus(ctx, 0);
     nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, g_win_buf,
                                    sizeof g_win_buf, nk_filter_default);
-    if (frames == 3) {
-        SDL_Event e;
-
-        SDL_zero(e);
-        e.type = SDL_EVENT_TEXT_INPUT;
-        e.text.windowID = SDL_GetWindowID(app->win);
-        e.text.text = "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\xe3\x81\xae"
-                      "\xe3\x83\x86\xe3\x82\xad";
-        SDL_PushEvent(&e);
-    }
+    if (frames == 3)
+        push_text(app, "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\xe3\x81\xae"
+                       "\xe3\x83\x86\xe3\x82\xad");
     if (frames == 10) {
         SDL_snprintf(line, sizeof line, "window text %d bytes, text input %d",
                      (int)SDL_strlen(g_win_buf), (int)SDL_TextInputActive(app->win));
         note(line);
         reaktor_quit(app, 0);
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static int   g_win_frames, g_main_at, g_key_seen, g_win_open;
+static float g_anim;
+static char  g_one_buf[16];
+
+static void
+win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
+{
+    char line[128];
+    int f = ++g_win_frames, more = f < 30;
+
+    (void)user;
+    if (is("win-keys")) {
+        REAKTOR_COLUMN(.w = (float)w, .h = (float)h, .gap = 4.0f) {
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = "A",
+                    .box = { .h = 28.0f, .flags = REAKTOR_LAY_FILL_X } }))
+                note("pressed A");
+            if (reaktor_button(&(reaktor_button_spec){
+                    .label = "B",
+                    .box = { .h = 28.0f, .flags = REAKTOR_LAY_FILL_X } }))
+                note("pressed B");
+        }
+        if (f == 3 || f == 6) push_tap(app, SDLK_TAB);
+        if (f == 9) push_tap(app, SDLK_RETURN);
+        if (f == 30) reaktor_quit(app, 0);
+    } else if (is("win-drop")) {
+        if (f == 3) {
+            SDL_Event e;
+
+            SDL_zero(e);
+            e.type = SDL_EVENT_DROP_FILE;
+            e.drop.windowID = SDL_GetWindowID(app->win);
+            e.drop.data = "dropped.txt";
+            SDL_PushEvent(&e);
+        }
+        if (f == 12) reaktor_quit(app, 0);
+    } else if (is("win-anim")) {
+        REAKTOR_COLUMN(.name = "Track", .w = (float)w, .h = (float)h) {
+            g_anim = reaktor_animate(reaktor_box_id(), 0, f >= 3 ? 100.0f : 0.0f,
+                                     300.0f, REAKTOR_EASE_LINEAR);
+        }
+        more = f < 3;
+    } else if (is("win-title")) {
+        if (f == 2) reaktor_set_title(app, "Retitled");
+        if (f == 8) {
+            SDL_snprintf(line, sizeof line, "window title '%s', main '%s'",
+                         SDL_GetWindowTitle(app->win),
+                         SDL_GetWindowTitle(reaktor_main_app()->win));
+            note(line);
+            reaktor_quit(app, 0);
+        }
+    } else if (is("win-theme")) {
+        static int want;
+
+        if (f == 2) {
+            want = !reaktor_main_app()->dark;
+            reaktor_set_theme(app, want ? REAKTOR_THEME_DARK : REAKTOR_THEME_LIGHT);
+        }
+        if (f == 10) {
+            SDL_snprintf(line, sizeof line, "theme followed: main %s, window %s",
+                         reaktor_main_app()->dark == want ? "yes" : "no",
+                         app->dark == want ? "yes" : "no");
+            note(line);
+            reaktor_quit(app, 0);
+        }
+    } else if (is("win-wake")) {
+        if (f == 5) g_main_at = g_frames;
+        if (f == 30) {
+            SDL_snprintf(line, sizeof line, "main frames +%d", g_frames - g_main_at);
+            note(line);
+            reaktor_quit(app, 0);
+        }
+    } else if (is("win-one-change")) {
+        nk_layout_row_dynamic(ctx, 28.0f, 1);
+        if (f == 1) nk_edit_focus(ctx, 0);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, g_one_buf,
+                                       sizeof g_one_buf, nk_filter_default);
+        if (f == 3) {
+            push_text(app, "ab");
+            push_tap(app, SDLK_BACKSPACE);
+        }
+        if (f == 15) {
+            SDL_snprintf(line, sizeof line, "field '%s'", g_one_buf);
+            note(line);
+            reaktor_quit(app, 0);
+        }
+    } else if (is("win-drag")) {
+        more = 0;
+    } else if (is("win-picker") || is("win-picker-close")) {
+        if (f == 2) note(reaktor_file_open(app) ? "picker open" : "picker refused");
+        if (is("win-picker-close") && f == 4) {
+            reaktor_window_close(app, g_win_open);
+            note("window closing");
+        }
+        more = f < 4;
+    }
+    if (more) {
+        app->dirty = 1;
+        reaktor_wake(app);
+    }
+}
+
+static int
+open_probe_window(App *app)
+{
+    return reaktor_window_open(app, &(reaktor_window){
+        .window = { .title = "probe", .w = 240, .h = 120 },
+        .page = win_page });
+}
+
+static int SDLCALL
+report_anim(void *app)
+{
+    char line[32];
+
+    SDL_Delay(1500);
+    SDL_snprintf(line, sizeof line, "anim %.0f", (double)g_anim);
+    note(line);
+    reaktor_quit((App *)app, 0);
+    return 0;
+}
+
+static int SDLCALL
+count_drag(void *app)
+{
+    char line[64];
+    int at;
+
+    SDL_Delay(1200);
+    at = g_win_frames;
+    SDL_Delay(3300);
+    SDL_snprintf(line, sizeof line, "window frames +%d while dragged",
+                 g_win_frames - at);
+    note(line);
+    reaktor_quit((App *)app, 0);
+    return 0;
+}
+
+static int SDLCALL
+quit_after(void *app)
+{
+    SDL_Delay(6000);
+    reaktor_quit((App *)app, 0);
+    return 0;
+}
+
+/* The last frame's tree: this frame's is still being built. */
+static int
+press_named(App *app, const char *name)
+{
+    const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
+    int n = app->a11y.count[1 - app->a11y.front], i;
+
+    for (i = 0; i < n; i++)
+        if (t[i].role == REAKTOR_A11Y_BUTTON && t[i].name &&
+            SDL_strcmp(t[i].name, name) == 0) {
+            push_click(app, t[i].bounds.x + t[i].bounds.w * 0.5f,
+                       t[i].bounds.y + t[i].bounds.h * 0.5f);
+            return 1;
+        }
+    return 0;
+}
+
+static void
+confirm_page(App *app)
+{
+    SDL_Event e;
+
+    if (g_frames == 3) {
+        SDL_zero(e);
+        e.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+        e.window.windowID = SDL_GetWindowID(app->win);
+        SDL_PushEvent(&e);
+    }
+    if (g_frames == 10)
+        note(press_named(app, is("confirm") ? "Quit" : "Cancel") ? "asked"
+                                                                 : "not asked");
+    if (g_frames == 25) {
+        note("still running");
+        reaktor_quit(app, 0);
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static void
+leak_page(App *app)
+{
+    static int cycle, id;
+    static size_t rss0, priv0;
+    size_t rss, priv;
+    char line[80];
+
+    if (id) {
+        reaktor_window_close(app, id);
+        id = 0;
+    } else if (cycle < 210) {
+        id = open_probe_window(app);
+        if (++cycle == 10) reaktor_process_memory(&rss0, &priv0);
+    } else {
+        reaktor_process_memory(&rss, &priv);
+        SDL_snprintf(line, sizeof line, "grew %d KB private over 200 windows",
+                     (int)(((long long)priv - (long long)priv0) / 1024));
+        note(line);
+        reaktor_quit(app, 0);
+        return;
     }
     app->dirty = 1;
     reaktor_wake(app);
@@ -414,6 +611,11 @@ page(App *app, struct nk_context *ctx, int w, int h)
     char line[80];
 
     g_frames++;
+    if (is("win-leak")) {
+        leak_page(app);
+        return;
+    }
+    if (is("confirm") || is("confirm-cancel")) confirm_page(app);
     if (SDL_strncmp(g_mode, "hold-", 5) == 0) {
         hold_page(app, ctx, w, h);
         return;
@@ -509,17 +711,17 @@ start(App *app, int argc, char **argv)
     }
     if (is("hold-press")) g_second = floater(app, "Modal", 100.0f, 50.0f, 1);
     if (is("hold-raise")) {
-        g_first  = floater(app, "Under", 280.0f, 160.0f, 0);
+        floater(app, "Under", 280.0f, 160.0f, 0);
         g_second = floater(app, "Modal", 100.0f, 50.0f, 1);
     }
     if (is("hold-keys") || is("hold-stack")) {
-        g_first  = floater(app, "Under", 140.0f, 60.0f, 1);
+        floater(app, "Under", 140.0f, 60.0f, 1);
         g_second = floater(app, "Top", 140.0f, 60.0f, 1);
     }
     if (is("hold-tab-field")) g_second = floater(app, "Cover", 400.0f, 400.0f, 0);
-    if (is("hold-modal-tab")) g_first = floater(app, "Opener", 160.0f, 110.0f, 1);
+    if (is("hold-modal-tab")) floater(app, "Opener", 160.0f, 110.0f, 1);
     if (is("hold-reach")) {
-        g_first  = floater(app, "Modal", 140.0f, 60.0f, 1);
+        floater(app, "Modal", 140.0f, 60.0f, 1);
         g_second = floater(app, "Above", 140.0f, 60.0f, 0);
     }
     if (is("hold-toast")) g_second = floater(app, "Field", 160.0f, 70.0f, 1);
@@ -529,14 +731,35 @@ start(App *app, int argc, char **argv)
         reaktor_window_open(app, &(reaktor_window){
             .window = { .title = "text", .w = 240, .h = 80 },
             .page = window_page });
+    if (SDL_strncmp(g_mode, "win-", 4) == 0 && !is("win-leak"))
+        g_win_open = open_probe_window(app);
+    if (is("win-anim")) SDL_DetachThread(SDL_CreateThread(report_anim, "anim", app));
+    if (is("win-drag")) SDL_DetachThread(SDL_CreateThread(count_drag, "drag", app));
+    if (is("confirm") || is("confirm-cancel"))
+        reaktor_set_confirm_close(app, "Close the test?");
+    if (is("win-picker") || is("win-picker-close"))
+        SDL_DetachThread(SDL_CreateThread(quit_after, "quit", app));
     return 0;
 }
 
 static int
 key(App *app, const SDL_Event *e)
 {
-    (void)app;
+    if (is("win-keys") && app->secondary && !g_key_seen) {
+        g_key_seen = 1;
+        note("key hook in window");
+    }
     return is("keyeat") && e->key.key == SDLK_X;
+}
+
+static void
+file_opened(App *app, const char *path)
+{
+    char line[96];
+
+    SDL_snprintf(line, sizeof line, "file in %s: %s",
+                 app->secondary ? "window" : "main", path ? path : "(none)");
+    note(line);
 }
 
 static int
@@ -571,7 +794,8 @@ main(int argc, char **argv)
         .start   = start,
         .key     = key,
         .closing = closing,
-        .stop    = stop };
+        .stop    = stop,
+        .file_opened = file_opened };
     int rc = launchApp(argc, argv, &l);
 
     if (is("twice")) {

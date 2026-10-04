@@ -6,11 +6,34 @@
 #define NK_SDL3_RENDERER_IMPLEMENTATION
 #include "nk_sdl3_renderer.h"
 
+static size_t
+be32(const unsigned char *p)
+{
+    return (size_t)p[0] << 24 | (size_t)p[1] << 16 | (size_t)p[2] << 8 | p[3];
+}
+
+/* stb_truetype trusts every offset, so each table must lie inside the file. */
 int
 reaktor_font_valid(const void *ttf, size_t size)
 {
-    return ttf && size >= 12 &&
-           stbtt_GetFontOffsetForIndex((const unsigned char *)ttf, 0) >= 0;
+    const unsigned char *p = (const unsigned char *)ttf;
+    stbtt_fontinfo info;
+    size_t at, n, i;
+    int off;
+
+    if (!p || size < 16 || size > (size_t)SDL_MAX_SINT32) return 0;
+    off = stbtt_GetFontOffsetForIndex(p, 0);
+    if (off < 0 || (size_t)off > size - 12) return 0;
+    at = (size_t)off;
+    n  = (size_t)p[at + 4] << 8 | p[at + 5];
+    if (!n || n > (size - at - 12) / 16) return 0;
+    for (i = 0; i < n; i++) {
+        const unsigned char *r = p + at + 12 + 16 * i;
+        size_t start = be32(r + 8), len = be32(r + 12);
+
+        if (start > size || len > size - start) return 0;
+    }
+    return stbtt_InitFont(&info, p, off);
 }
 
 nk_rune *

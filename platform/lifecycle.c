@@ -19,21 +19,25 @@ usable(HANDLE h)
     return h && h != INVALID_HANDLE_VALUE;
 }
 
-/* A redirected stream stays where it was sent. */
+static void
+keep_or_open(DWORD which, HANDLE h, const char *dev, const char *mode, FILE *s)
+{
+    FILE *f;
+
+    if (usable(h)) SetStdHandle(which, h);
+    else freopen_s(&f, dev, mode, s);
+}
+
 static int
 attach_parent(void)
 {
     HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
     HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
-    int    keep_out = usable(out), keep_err = usable(err);
-    FILE  *f;
 
-    if (keep_out && keep_err) return 1;
+    if (usable(out) && usable(err)) return 1;
     if (!AttachConsole(ATTACH_PARENT_PROCESS)) return 0;
-    if (keep_out) SetStdHandle(STD_OUTPUT_HANDLE, out);
-    else freopen_s(&f, "CONOUT$", "w", stdout);
-    if (keep_err) SetStdHandle(STD_ERROR_HANDLE, err);
-    else freopen_s(&f, "CONOUT$", "w", stderr);
+    keep_or_open(STD_OUTPUT_HANDLE, out, "CONOUT$", "w", stdout);
+    keep_or_open(STD_ERROR_HANDLE, err, "CONOUT$", "w", stderr);
     return 1;
 }
 
@@ -43,16 +47,12 @@ open_own(const char *title)
     HANDLE in  = GetStdHandle(STD_INPUT_HANDLE);
     HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
     HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
-    FILE  *f;
 
     if (!AllocConsole()) return;
     g_allocated = 1;
-    if (usable(out)) SetStdHandle(STD_OUTPUT_HANDLE, out);
-    else freopen_s(&f, "CONOUT$", "w", stdout);
-    if (usable(err)) SetStdHandle(STD_ERROR_HANDLE, err);
-    else freopen_s(&f, "CONOUT$", "w", stderr);
-    if (usable(in)) SetStdHandle(STD_INPUT_HANDLE, in);
-    else freopen_s(&f, "CONIN$", "r", stdin);
+    keep_or_open(STD_OUTPUT_HANDLE, out, "CONOUT$", "w", stdout);
+    keep_or_open(STD_ERROR_HANDLE, err, "CONOUT$", "w", stderr);
+    keep_or_open(STD_INPUT_HANDLE, in, "CONIN$", "r", stdin);
     g_cp = GetConsoleOutputCP();
     SetConsoleOutputCP(CP_UTF8);
     if (title) {

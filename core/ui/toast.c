@@ -10,15 +10,11 @@
 #define TOAST_MAX_W 560.0f
 
 typedef struct toast {
-    int          id;
-    char        *text, *icon, *action;
-    void       (*on_action)(App *app, void *user);
-    void       (*content)(App *app, struct nk_context *ctx, void *user);
-    float        content_w;
-    void        *user;
-    int          no_close;
-    Uint64       until;
-    SDL_TimerID  timer;
+    int                id;
+    reaktor_toast_spec spec;
+    char              *text, *icon, *action;
+    Uint64             until;
+    SDL_TimerID        timer;
 } toast;
 
 static toast g_toast[TOAST_MAX];
@@ -61,15 +57,11 @@ reaktor_toast(App *app, const reaktor_toast_spec *spec)
     if (g_toast_n == TOAST_MAX) drop(0);
     t = &g_toast[g_toast_n++];
     SDL_zero(*t);
-    t->id        = g_toast_next++;
-    t->text      = copy(spec->text);
-    t->icon      = copy(spec->icon);
-    t->action    = copy(spec->action);
-    t->on_action = spec->on_action;
-    t->content   = spec->content;
-    t->content_w = spec->content_w;
-    t->user      = spec->user;
-    t->no_close  = spec->no_close;
+    t->id     = g_toast_next++;
+    t->spec   = *spec;
+    t->text   = copy(spec->text);
+    t->icon   = copy(spec->icon);
+    t->action = copy(spec->action);
     ms = spec->timeout_ms;
     /* Nothing would ever close it. */
     if (ms <= 0 && spec->no_close && !spec->action) ms = 5000;
@@ -139,9 +131,9 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
         float tw = pad_l + pad_r + text_w(font, t->text);
 
         if (t->icon) tw += 20.0f + 8.0f;
-        if (t->content) tw += t->content_w + 8.0f;
+        if (t->spec.content) tw += t->spec.content_w + 8.0f;
         if (t->action) tw += action_w(ctx, font, t->action) + 8.0f;
-        if (!t->no_close) tw += TOAST_ROW + 8.0f;
+        if (!t->spec.no_close) tw += TOAST_ROW + 8.0f;
         if (tw < TOAST_MIN_W) tw = TOAST_MIN_W;
         if (tw > TOAST_MAX_W) tw = TOAST_MAX_W;
         if (tw > win_w - 2.0f * TOAST_EDGE) tw = win_w - 2.0f * TOAST_EDGE;
@@ -163,9 +155,8 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
                              nk_style_item_color(none));
     nk_style_push_font(ctx, font);
 
-    /* A new toasts window takes Nuklear's focus; the window that had it keeps it. */
+    /* Creating the toasts window takes Nuklear's focus. */
     keep = nk_window_find(ctx, "reaktor-toasts") ? NULL : ctx->active;
-    /* Not the release that made it, which is still under the pointer. */
     hold = blocked ? HOLD_ALL : g_toast_fresh ? HOLD_FRESH : HOLD_NONE;
     g_toast_fresh = 0;
     if ((shown = reaktor_layer_begin(app, ctx, "reaktor-toasts", area,
@@ -191,37 +182,33 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
                 nk_layout_row_template_begin(ctx, TOAST_ROW);
                 if (t->icon) nk_layout_row_template_push_static(ctx, 20.0f);
                 nk_layout_row_template_push_dynamic(ctx);
-                if (t->content) nk_layout_row_template_push_static(ctx, t->content_w);
+                if (t->spec.content)
+                    nk_layout_row_template_push_static(ctx, t->spec.content_w);
                 if (t->action)
                     nk_layout_row_template_push_static(ctx, action_w(ctx, font, t->action));
-                if (!t->no_close) nk_layout_row_template_push_static(ctx, TOAST_ROW);
+                if (!t->spec.no_close)
+                    nk_layout_row_template_push_static(ctx, TOAST_ROW);
                 nk_layout_row_template_end(ctx);
 
-                if (t->icon) {
-                    struct nk_rect c = nk_widget_bounds(ctx);
-                    struct nk_image im = reaktor_ionicon_col(app, t->icon, 20, fg);
-
-                    nk_spacer(ctx);
-                    nk_draw_image(nk_window_get_canvas(ctx),
-                                  nk_rect(c.x, (float)(int)(c.y + (c.h - 20.0f) * 0.5f),
-                                          20.0f, 20.0f),
-                                  &im, nk_rgb(255, 255, 255));
-                }
+                if (t->icon)
+                    image_centred(ctx, reaktor_ionicon_col(app, t->icon, 20, fg),
+                                  20);
                 nk_label_colored(ctx, t->text ? t->text : "", NK_TEXT_LEFT, fg);
-                if (t->content) {
+                if (t->spec.content) {
                     if (nk_group_begin_titled(ctx, "content", NULL,
                                               NK_WINDOW_NO_SCROLLBAR)) {
-                        t->content(app, ctx, t->user);
+                        t->spec.content(app, ctx, t->spec.user);
                         nk_group_end(ctx);
                     }
                 }
                 if (t->action &&
                     reaktor_button_label_as(app, ctx, ".toast-button", t->action))
                     act = first + i;
-                if (!t->no_close &&
-                    css_button_image(app, ctx, ".toast-close",
-                                     reaktor_ionicon_col(app, "close-outline", 18, fg),
-                                     18.0f, "Close"))
+                if (!t->spec.no_close &&
+                    reaktor_css_button_image(
+                        app, ctx, ".toast-close",
+                        reaktor_ionicon_col(app, "close-outline", 18, fg), 18.0f,
+                        "Close"))
                     shut = first + i;
                 nk_group_end(ctx);
             }
@@ -246,7 +233,7 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
         drop(act);
         if (shut > act) shut--;
         else if (shut == act) shut = -1;
-        if (t.on_action) t.on_action(app, t.user);
+        if (t.spec.on_action) t.spec.on_action(app, t.spec.user);
         reaktor_wake(app);
     }
     if (shut >= 0 && shut < g_toast_n) {

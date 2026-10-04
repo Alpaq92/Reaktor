@@ -34,7 +34,7 @@ typedef enum reaktor_quit_reason {
     REAKTOR_QUIT_SESSION
 } reaktor_quit_reason;
 
-/* A path (absolute, or under the root), or named bytes that outlive the run. */
+/* A path, absolute or under the root, or named bytes that outlive the run. */
 typedef struct reaktor_asset {
     const char *path;
     const char *name;
@@ -59,6 +59,7 @@ typedef struct reaktor_launch {
     reaktor_window_spec  window;
     reaktor_console      console;
     reaktor_theme        theme;
+    const char          *confirm_close;
 
     reaktor_asset        css[REAKTOR_LAYER_MAX];
     int                  no_reaktor_css;
@@ -77,7 +78,7 @@ typedef struct reaktor_launch {
     void  *user;
 } reaktor_launch;
 
-/* A window beside the main one. page gets its App, closed the main one's. */
+/* page gets the window's App, closed the main one's. */
 typedef struct reaktor_window {
     reaktor_window_spec window;
     int                 modal;
@@ -86,8 +87,7 @@ typedef struct reaktor_window {
     void  *user;
 } reaktor_window;
 
-/* A dialog inside the main window; a modal one holds what is under it.
-   body and closed get the main window's App. */
+/* In the main window; hooks get its App. */
 typedef struct reaktor_floater {
     const char *title;
     float       w, h;
@@ -97,7 +97,6 @@ typedef struct reaktor_floater {
     void  *user;
 } reaktor_floater;
 
-/* A button, a checkbox with .checkbox, or a separator without a label. */
 typedef struct reaktor_tray_item {
     const char *label;
     int         checkbox, checked, disabled;
@@ -105,7 +104,6 @@ typedef struct reaktor_tray_item {
     void       *user;
 } reaktor_tray_item;
 
-/* The window's icon in the system's tray, with a menu. */
 typedef struct reaktor_tray {
     const char              *tooltip;
     const reaktor_tray_item *items;
@@ -120,9 +118,10 @@ void  reaktor_wake(App *app);
 void  reaktor_set_theme(App *app, reaktor_theme theme);
 void  reaktor_set_css(App *app, const reaktor_asset *css, int count);
 void  reaktor_set_title(App *app, const char *title);
+void  reaktor_set_confirm_close(App *app, const char *question);
 void *reaktor_user(App *app);
 
-/* Main thread. Answers the window's id, or 0 where a page has no windows: the web. */
+/* Main thread. Answers 0 on the web. */
 int   reaktor_window_open(App *app, const reaktor_window *window);
 void  reaktor_window_close(App *app, int id);
 int   reaktor_window_is_open(App *app, int id);
@@ -132,8 +131,7 @@ int   reaktor_floater_open(App *app, const reaktor_floater *floater);
 void  reaktor_floater_close(App *app, int id);
 int   reaktor_floater_is_open(App *app, int id);
 
-/* Main thread. Answers 0 where there is no tray: the web, a desktop without
-   one. */
+/* Main thread. Answers 0 where there is no tray. */
 int   reaktor_tray_open(App *app, const reaktor_tray *tray);
 void  reaktor_tray_check(App *app, int item, int checked);
 void  reaktor_tray_close(App *app);

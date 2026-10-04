@@ -251,7 +251,6 @@ typedef struct reaktor_nav_spec {
 typedef reaktor_nav_spec reaktor_sidebar_spec;
 typedef reaktor_nav_spec reaktor_tabs_spec;
 
-/* Answer 1 when an entry is chosen; *chosen is its index. */
 int reaktor_sidebar(const reaktor_sidebar_spec *s);
 int reaktor_tabs(const reaktor_tabs_spec *s);
 

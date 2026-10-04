@@ -43,24 +43,33 @@ keys mean. Only `.page` is required. `launchApp` is an inline alias of
 | --- | --- |
 | `page(app, ctx, w, h)` | Every frame, inside a panel covering the window |
 | `start(app, argc, argv)` | Once, after the window and fonts exist, with the runtime's flags removed; non-zero ends the launch with that code |
-| `key(app, event)` | A key press, before focus navigation; non-zero keeps the key and its text from everything else |
+| `key(app, event)` | A key press in any window, with that window's App, before focus navigation; non-zero keeps the key and its text from everything else |
 | `closing(app, reason)` | Before quitting; non-zero refuses a close button (`REAKTOR_QUIT_WINDOW`), `reaktor_request_quit` or macOS's Quit (`_APP`) and a first Ctrl+C (`_CONSOLE`). SIGTERM (`_SIGNAL`) and logoff (`_SESSION`) ask but cannot be refused |
 | `stop(app)` | Once before teardown when `start` succeeded, at logoff and page unload too — the only place for cleanup |
-| `file_opened(app, path)` | A picked or dropped file, or `NULL` when the picker was canceled or failed |
+| `file_opened(app, path)` | A picked or dropped file, with the App of the window it came to, or `NULL` when the picker was canceled or failed |
 
 | Call | Effect |
 | --- | --- |
 | `reaktor_quit(app, code)` | Quit without asking. Any thread; ignored on the web |
 | `reaktor_request_quit(app)` | Quit if `closing` allows. Any thread; ignored on the web |
-| `reaktor_wake(app)` | Draw a frame. Any thread |
-| `reaktor_set_theme(app, theme)` | `REAKTOR_THEME_SYSTEM`, `_LIGHT` or `_DARK` |
+| `reaktor_wake(app)` | Draw a frame of that App's window. Any thread |
+| `reaktor_set_theme(app, theme)` | `REAKTOR_THEME_SYSTEM`, `_LIGHT` or `_DARK`, for every window |
 | `reaktor_set_css(app, sheets, n)` | Replace the application's sheets; `--css` stays on top |
-| `reaktor_set_title(app, title)` | Retitle the window |
+| `reaktor_set_title(app, title)` | Retitle that App's window |
+| `reaktor_set_confirm_close(app, question)` | Ask `question` before quitting, or with `NULL` stop asking |
 | `reaktor_file_open(app)` | Show the platform's file picker; the answer goes to `file_opened` |
 | `reaktor_user(app)` | The launch's `.user` |
 
 The `set` calls are for the main thread, take effect at the next frame, and do
 nothing when nothing changes.
+
+**Asking before closing.** `.confirm_close` is a question, such as "Close
+without saving?", that the runtime asks in a modal floater with Cancel and
+Quit whenever `closing` lets a quit it could refuse go ahead, bringing a
+minimized or hidden window back to ask it. Quit quits with code 0 and asks
+nothing more; a second Ctrl+C still quits at once.
+`reaktor_set_confirm_close` copies a new question, and `NULL` stops asking and
+closes the floater if it is open.
 
 **Console.** `.console` is `REAKTOR_CONSOLE_NONE` (the window alone),
 `_PARENT` (on Windows, the terminal it was started from) or `_DEBUG` (that
@@ -69,12 +78,14 @@ stays redirected. Ctrl+C reaches the app only from a console it owns.
 
 **Assets.** `.css` adds up to four sheets after tiny.css and reaktor.css
 (`.no_reaktor_css` drops reaktor.css), `.font` and `.font_bold` replace
-Aileron, `.font_fallbacks` feed the Text module, `.icon_dirs` are searched for
+Aileron (which stands in for one that cannot be read, or that is cut short or
+not a font at all), `.font_fallbacks` feed the Text module, `.icon_dirs` are searched for
 `<name>.svg` before Ionicons, and `.window.icon` replaces the mark. Each is a
 path, absolute or under the `.reaktor-root` marker, or named bytes (`.name`,
 `.data`, `.size`) that outlive the run; `.assets` registers more, and one named
-`icons/<name>.svg` stands in for that Ionicon. `--css`, `--font`,
-`--font-bold` and `--icons` beat the struct.
+`icons/<name>.svg` stands in for that Ionicon. A `.window.icon` that cannot be
+read leaves the mark. `--css`, `--font`, `--font-bold` and `--icons` beat the
+struct.
 
 ## Widgets
 
@@ -215,9 +226,10 @@ in [`src/ui.h`](../src/ui.h); all of them are main-thread calls.
 
 ### Floaters
 
-A dialog inside the main window. `reaktor_floater_open` centers one `.w` by
-`.h`, answers its id, and calls `.body` every frame inside tiny.css's `dialog`
-look; `.title` is its accessible name. A `.modal` one dims the window by
+A dialog inside the main window. `reaktor_floater_open` centers one whose body
+is `.w` by `.h`, as CSS sizes a box, with the `dialog` rule's padding around it;
+it answers its id, and calls `.body` every frame inside tiny.css's `dialog`
+look, with the body's size; `.title` is its accessible name. A `.modal` one dims the window by
 `--dialog-backdrop` and holds everything under it — the page, the toasts,
 earlier floaters — until it closes, and Tab stays with it and the floaters
 opened after it. `reaktor_floater_close` closes one, from its own body too,
@@ -233,7 +245,7 @@ confirm(App *app, struct nk_context *ctx, int w, int h, void *user)
 }
 
 id = reaktor_floater_open(app, &(reaktor_floater){
-    .title = "Close without saving?", .w = 360, .h = 150, .modal = 1,
+    .title = "Close without saving?", .w = 328, .h = 126, .modal = 1,
     .body  = confirm, .user = &id });
 ```
 
@@ -265,12 +277,17 @@ popup, toasts are drawn but take no input.
 `reaktor_window_open` opens a real window with its own renderer, atlas and
 Nuklear context, and answers its id, or 0 on the web. `.page` draws it with
 that window's App, so the same widgets and sheets work, and it follows the
-main window's theme and scale. A `.modal` one is the system's modal window:
-on Windows and macOS the main window, close button included, takes no input
+main window's theme and scale. It takes its input the way the main window
+does: focus navigation, the `key` hook and dropped files with its App, one
+change a frame, its own animations and file picker; a wake for its App draws
+it alone, and `reaktor_set_title` with its App retitles it. `.window.icon`
+replaces the mark for it. A `.modal` one is the system's modal window: on
+Windows and macOS the main window, close button included, takes no input
 until it closes; on Linux the window manager decides. Its own close button or
-`reaktor_window_close` runs `.closed`, with the main window's App.
-Closing the main window quits, and every window goes with it. Focus
-navigation and the Text module stay in the main window.
+`reaktor_window_close` runs `.closed`, with the main window's App. Closing the
+main window quits, and every window goes with it. The Text module stays in the
+main window, and only UI Automation serves a window's tree to screen readers:
+NSAccessibility and AT-SPI serve the main window's.
 
 ```c
 reaktor_window_open(app, &(reaktor_window){
@@ -283,7 +300,7 @@ reaktor_window_open(app, &(reaktor_window){
 `reaktor_tray_open` puts the app's icon in the system tray, with a menu, and
 answers 0 where there is no tray: the web, or a desktop without one. An entry
 is a button, a checkbox (`.checkbox`, `.checked`) or, without a `.label`, a
-separator; `.disabled` greys it out. Choosing one runs `.chosen(app, checked,
+separator; `.disabled` grays it out. Choosing one runs `.chosen(app, checked,
 user)` on the main thread, then draws a frame. A click toggles a checkbox
 before `.chosen` runs, so set checkboxes from your state with
 `reaktor_tray_check(app, index, on)` each frame. `reaktor_tray_close` removes
@@ -302,7 +319,8 @@ reaktor_tray_open(app, &(reaktor_tray){
 
 On Linux and the BSDs, SDL loads AppIndicator (Ayatana's or the original)
 and GTK 3 when the tray opens; nothing links them, and without them there is
-no tray.
+no tray. GTK sets the user's locale as it starts, and the runtime puts the C
+library's back.
 
 ## Styling
 
@@ -339,10 +357,13 @@ rather than a token is what lets a sheet that never declares `--links` work.
 - **A size set in code beats the sheet.** A `.box = { .h = N }` locks CSS out of
   that axis, the usual reason a rule "only changes the color".
 - **libcss is not a browser.** `cssflat.c` resolves `var()`, works out
-  `color-mix(in srgb, …)`, turns `em` and `rem` into pixels, keeps the
+  `color-mix(in srgb, …)`, writes every `rgb()` as `rgba()` with four
+  arguments, clamped, turns `em` and `rem` into pixels, keeps the
   `@media (prefers-color-scheme)` branch for the active scheme and drops width
   and print queries, and rewrites `[type=range]` as `.type-range`. An operator
-  form like `[href^="http"]` cannot be expressed, and its rule is dropped.
+  form like `[href^="http"]` cannot be expressed, and its rule is dropped, as
+  is a declaration with a color it cannot read. Sheets are read in the C
+  locale's numbers whatever the program's locale.
   reaktor.css uses the scheme branch to strengthen light hovers and tint the
   current sidebar entry from `--links`.
 
@@ -372,8 +393,8 @@ shortcuts (`reaktor_shortcut_match`) and writes the same table as text for
 
 There is nothing to do. A declared widget reports its role, name, value,
 state and bounds; the tree is diffed each frame and served as UI Automation on
-Windows, NSAccessibility on macOS, AT-SPI on Linux and the BSDs, and a DOM
-subtree beside the canvas on the web. A widget with no spec reports itself:
+Windows (every window), NSAccessibility on macOS and AT-SPI on Linux and
+the BSDs (the main window), and a DOM subtree beside the canvas on the web. A widget with no spec reports itself:
 
 ```c
 reaktor_note(app, REAKTOR_A11Y_TREEITEM, label, NULL, state, bounds);
@@ -398,7 +419,7 @@ REAKTOR_COLUMN(.name = "Track", .h = 56.0f) {
 The first call starts at its target: nothing has changed yet. A new target
 starts a run from wherever the value is, so a change mid-flight redirects
 rather than restarts. `channel`, the second argument, tells several numbers on
-one box apart. There are 31 curves, and `reaktor_ease_at(curve, t)` draws
+one box apart, and each window keeps its own. There are 31 curves, and `reaktor_ease_at(curve, t)` draws
 them. An entry dies with its node, and a page with nothing moving asks for no
 frames.
 
@@ -478,8 +499,8 @@ at configure time. `reaktor_asset_load` still tries the file under the
 `.reaktor-root` marker first, so an edited sheet shows without a rebuild.
 Nothing is read from the working directory, and a path a user hands over is
 made absolute where it is taken. The rest of Ionicons, simple.css and the
-catalogs are read from files; an icon that is not there draws as a white
-square.
+catalogs are read from files; an icon that is not there is drawn as nothing,
+and the log names it.
 
 **`style_map.c` is the only writer of `nk_style`.** A widget style set
 anywhere else lasts until a theme change reloads the sheets. libcss never
@@ -491,7 +512,8 @@ There is no loop. SDL runs the iterate callback when an event arrives, and it
 returns at once unless something marked the frame dirty: a widget clicked,
 typed into or dragged; the pointer crossing a **hot rectangle** registered
 the frame before, which is how hover repaints without polling; the window
-moving, resizing or changing scheme; an animation still running.
+resizing or changing scheme; an animation still running. Each window has its
+own frames: a wake carries the window it is for.
 
 While a mouse button is held, frames follow the display's refresh, with two
 more after the release. A turn of the wheel takes two frames, because Nuklear
@@ -571,6 +593,7 @@ removes them from `argv` before the application sees it:
 | `--lang <code>` | Open in that catalog: `en`, `pl`, `ja` |
 | `--font-fallback <path>` | A font for the Text module, before the application's; repeatable |
 | `--renderer <name>` | `software` (default), `auto`, or a driver name |
+| `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
 | `--console <none\|parent\|debug>` | Override `.console` |
 | `--css <path>` | A sheet after the application's; up to four |
 | `--font <path>`, `--font-bold <path>` | Replace the UI face and its bold |
@@ -616,7 +639,7 @@ Built by default and run from `build/`:
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`), what a floater, toast or popup holds and where keys go (the `hold-` modes), and `window-text` |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.
@@ -635,8 +658,10 @@ about. `--renderer auto` lets SDL choose; a driver name pins one.
   software renderer turns two triangles into a fill and truncates position and
   size apart at fractional scales.
 - **A one-pixel stroke is two half-alpha rows**, so borders are fills:
-  `reaktor_edge_round`. Fill anti-aliasing is off, so rounded fills are masks:
-  `reaktor_fill_round`.
+  `reaktor_edge_round`. Fill anti-aliasing is off on every renderer, so rounded
+  fills are masks: `reaktor_fill_round`, and each rounded fill Nuklear draws
+  itself — a scrollbar, a tree's header, a combo, a menu item — is swapped for
+  masks before the frame is drawn.
 
 `core/render/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, vendored because
 one change sits inside `nk_sdl_font_stash_end`. Every deviation is marked
@@ -644,7 +669,8 @@ one change sits inside `nk_sdl_font_stash_end`. Every deviation is marked
 geometry, pixel snapping, fills and strokes feathered apart, the atlas palette
 shared with the Text module, rectangles from device pixels, `tex_null`
 repointed after every bake, a key-up dropped for a key Nuklear does not hold,
-and text input of any length fed one rune at a time.
+text input of any length fed one rune at a time, and textures clamped rather
+than tested for wrapping.
 
 ## The web build
 

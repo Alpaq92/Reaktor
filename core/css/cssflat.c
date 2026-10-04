@@ -107,40 +107,46 @@ static int hex1(int c)
     return -1;
 }
 
-int reaktor_cssvars_color(const reaktor_cssvars *m, const char *name,
-                          unsigned char rgba[4])
+/* Not strtod, which reads the locale's decimal mark. */
+static float css_number(const char *p, const char **end)
 {
-    const char *v = reaktor_cssvars_get(m, name);
-    int h[8], i, n;
+    double v = 0.0, scale = 1.0;
+    const char *q = p;
+    int neg = 0, digits = 0, ex = 0, eneg = 0;
 
-    if (!v) return 0;
-    while (*v && isspace((unsigned char)*v)) v++;
-    if (*v != '#') return 0;
-    v++;
-    for (n = 0; n < 8 && v[n]; n++) {
-        h[n] = hex1((unsigned char)v[n]);
-        if (h[n] < 0) break;
+    if (*q == '+' || *q == '-') neg = *q++ == '-';
+    for (; *q >= '0' && *q <= '9'; q++, digits++) v = v * 10.0 + (*q - '0');
+    if (*q == '.')
+        for (q++; *q >= '0' && *q <= '9'; q++, digits++)
+            v += (*q - '0') * (scale *= 0.1);
+    if (!digits) { *end = p; return 0.0f; }
+    if ((*q == 'e' || *q == 'E') &&
+        (isdigit((unsigned char)q[1]) ||
+         ((q[1] == '+' || q[1] == '-') && isdigit((unsigned char)q[2])))) {
+        q++;
+        if (*q == '+' || *q == '-') eneg = *q++ == '-';
+        for (; *q >= '0' && *q <= '9'; q++)
+            if (ex < 400) ex = ex * 10 + (*q - '0');
+        while (ex-- > 0) v = eneg ? v / 10.0 : v * 10.0;
     }
-    if (n == 3 || n == 4) {
-        for (i = 0; i < 3; i++) rgba[i] = (unsigned char)(h[i] * 17);
-        rgba[3] = (unsigned char)(n == 4 ? h[3] * 17 : 255);
-        return 1;
-    }
-    if (n == 6 || n == 8) {
-        for (i = 0; i < 3; i++)
-            rgba[i] = (unsigned char)(h[i * 2] * 16 + h[i * 2 + 1]);
-        rgba[3] = (unsigned char)(n == 8 ? h[6] * 16 + h[7] : 255);
-        return 1;
-    }
-    return 0;
+    *end = q;
+    return (float)(neg ? -v : v);
+}
+
+/* Not %f, which writes the locale's decimal mark. */
+static void color_text(char *out, size_t cap, const float c[4])
+{
+    int a = (int)(c[3] * 1000.0f + 0.5f);
+
+    snprintf(out, cap, "rgba(%d, %d, %d, %d.%03d)", (int)(c[0] + 0.5f),
+             (int)(c[1] + 0.5f), (int)(c[2] + 0.5f), a / 1000, a % 1000);
 }
 
 static int parse_color(const char *s, size_t n, float c[4])
 {
     char tmp[64];
     float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    const char *p;
-    char *end;
+    const char *p, *end;
     int h[8], i, k;
 
     while (n && isspace((unsigned char)*s)) { s++; n--; }
@@ -163,20 +169,24 @@ static int parse_color(const char *s, size_t n, float c[4])
         for (i = 0, p++; i < 4; i++) {
             while (*p == ' ' || *p == ',' || *p == '/') p++;
             if (*p == ')') break;
-            v[i] = (float)strtod(p, &end);
+            v[i] = css_number(p, &end);
             if (end == p) return 0;
             if (*end == '%') { v[i] *= i < 3 ? 2.55f : 0.01f; end++; }
             p = end;
         }
-        if (i < 3) return 0;
+        while (*p == ' ') p++;
+        if (i < 3 || *p != ')' || p[1]) return 0;
     } else {
         return 0;
     }
-    for (i = 0; i < 4; i++) c[i] = v[i];
+    for (i = 0; i < 4; i++) {
+        float hi = i < 3 ? 255.0f : 1.0f;
+
+        c[i] = v[i] > 0.0f ? (v[i] < hi ? v[i] : hi) : 0.0f;
+    }
     return 1;
 }
 
-/* One color-mix() argument: a color and an optional percentage. */
 static int mix_arg(const char *s, size_t n, float c[4], float *pct)
 {
     size_t e = n;
@@ -185,14 +195,16 @@ static int mix_arg(const char *s, size_t n, float c[4], float *pct)
     while (e && isspace((unsigned char)s[e - 1])) e--;
     if (e && s[e - 1] == '%') {
         size_t b = e - 1;
+        const char *end;
+
         while (b && s[b - 1] != ' ' && s[b - 1] != ')') b--;
-        *pct = (float)atof(s + b) / 100.0f;
+        *pct = css_number(s + b, &end) / 100.0f;
+        if (end != s + e - 1 || !(*pct >= 0.0f && *pct <= 1.0f)) return 0;
         e = b;
     }
     return parse_color(s, e, c);
 }
 
-/* color-mix(in srgb, A p%, B), which libcss lacks, as rgba(). */
 static void mix_colors(buf *b)
 {
     static const char fn[] = "color-mix(";
@@ -202,7 +214,7 @@ static void mix_colors(buf *b)
     while (b->p && (at = strstr(b->p + from, fn))) {
         size_t s = (size_t)(at - b->p), i = s + sizeof(fn) - 1, cut[2], n = 0;
         int depth = 1;
-        float a[4], c[4], pa, pc, wa, wc, sum, alpha, mixed[3];
+        float a[4], c[4], pa, pc, wa, wc, sum, alpha, mixed[4];
         char out[64];
         buf r;
 
@@ -226,9 +238,8 @@ static void mix_colors(buf *b)
         alpha = wa + wc;
         for (n = 0; n < 3; n++)
             mixed[n] = alpha > 0.0f ? (a[n] * wa + c[n] * wc) / alpha : 0.0f;
-        snprintf(out, sizeof(out), "rgba(%d, %d, %d, %.3f)",
-                 (int)(mixed[0] + 0.5f), (int)(mixed[1] + 0.5f),
-                 (int)(mixed[2] + 0.5f), (double)(sum > 1.0f ? alpha / sum : alpha));
+        mixed[3] = sum > 1.0f ? alpha / sum : alpha;
+        color_text(out, sizeof(out), mixed);
         memset(&r, 0, sizeof(r));
         buf_add(&r, b->p, s);
         buf_str(&r, out);
@@ -236,6 +247,62 @@ static void mix_colors(buf *b)
         free(b->p);
         *b = r;
     }
+}
+
+/* Every rgb() as rgba() with four arguments: libcss writes a fifth past. */
+static int canon_colors(buf *b)
+{
+    size_t from = 0;
+    char *at;
+
+    while (b->p && (at = strstr(b->p + from, "rgb"))) {
+        size_t s = (size_t)(at - b->p), i = s + 3;
+        float c[4];
+        char out[64];
+        buf r;
+
+        if (b->p[i] == 'a') i++;
+        if (b->p[i] != '(' || (s && (isalnum((unsigned char)b->p[s - 1]) ||
+                                     b->p[s - 1] == '-' || b->p[s - 1] == '_'))) {
+            from = s + 3;
+            continue;
+        }
+        while (i < b->len && b->p[i] != ')') i++;
+        if (i == b->len || !parse_color(b->p + s, i + 1 - s, c)) return 0;
+        color_text(out, sizeof(out), c);
+        memset(&r, 0, sizeof(r));
+        buf_add(&r, b->p, s);
+        buf_str(&r, out);
+        buf_add(&r, b->p + i + 1, b->len - i - 1);
+        free(b->p);
+        *b = r;
+        from = s + strlen(out);
+    }
+    return 1;
+}
+
+int reaktor_cssvars_color(const reaktor_cssvars *m, const char *name,
+                          unsigned char rgba[4])
+{
+    const char *v = reaktor_cssvars_get(m, name);
+    float c[4];
+    buf t;
+    int i, ok;
+
+    if (!v) return 0;
+    if (strstr(v, "color-mix(")) {
+        memset(&t, 0, sizeof(t));
+        buf_str(&t, v);
+        mix_colors(&t);
+        ok = t.p && parse_color(t.p, t.len, c);
+        free(t.p);
+    } else {
+        ok = parse_color(v, strlen(v), c);
+    }
+    if (!ok) return 0;
+    for (i = 0; i < 4; i++)
+        rgba[i] = (unsigned char)((i < 3 ? c[i] : c[i] * 255.0f) + 0.5f);
+    return 1;
 }
 
 void reaktor_cssvars_free(reaktor_cssvars *m)
@@ -447,12 +514,14 @@ static int is_theme_selector(const char *s, size_t len, const char *theme)
     return 0;
 }
 
-static int is_root_selector(const char *s, size_t len)
+/* tiny.css declares its dialog's properties on ::backdrop. */
+static int is_vars_selector(const char *s, size_t len)
 {
     size_t i;
 
     for (i = 0; i + 5 <= len; i++)
-        if (strncmp(s + i, ":root", 5) == 0) return 1;
+        if (strncmp(s + i, ":root", 5) == 0 ||
+            (i + 10 <= len && strncmp(s + i, "::backdrop", 10) == 0)) return 1;
     return 0;
 }
 
@@ -582,6 +651,7 @@ static void emit_one(void *c, const char *p, size_t plen,
     memset(&tmp, 0, sizeof(tmp));
     if (!subst_vars(ctx->m, v, vlen, &tmp)) { free(tmp.p); return; }
     mix_colors(&tmp);
+    if (!canon_colors(&tmp)) { free(tmp.p); return; }
 
     memset(&conv, 0, sizeof(conv));
     if (plen == 9 && strncmp(p, "font-size", 9) == 0 &&
@@ -692,7 +762,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
         if (i < len) i++;
 
         trim(src, &sel_s, &sel_e);
-        if (is_root_selector(src + sel_s, sel_e - sel_s) ||
+        if (is_vars_selector(src + sel_s, sel_e - sel_s) ||
             is_theme_selector(src + sel_s, sel_e - sel_s, theme)) {
             collect_ctx ctx;
             ctx.m = m;
@@ -751,7 +821,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
         if (sel_e <= sel_s) continue;
 
         if (src[sel_s] == '@') continue;
-        if (is_root_selector(src + sel_s, sel_e - sel_s)) continue;
+        if (is_vars_selector(src + sel_s, sel_e - sel_s)) continue;
 
         {
             buf sel;

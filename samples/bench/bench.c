@@ -101,14 +101,8 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         else                g_due_ns = now;
     }
 
-    {
-        SDL_Event e;
-
-        app->dirty = 1;
-        SDL_zero(e);
-        e.type = SDL_EVENT_USER;
-        SDL_PushEvent(&e);
-    }
+    app->dirty = 1;
+    reaktor_wake(app);
 }
 
 static int

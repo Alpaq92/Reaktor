@@ -1334,9 +1334,8 @@ showcase_open_floater(App *app, int modal)
     if (*id) return;
     *id = reaktor_floater_open(app, &(reaktor_floater){
         .title = modal ? "Close without saving?" : "A floater",
-        .w     = 360.0f,
-        .h     = 22.0f + 8.0f + 44.0f + 12.0f + 36.0f + 4.0f * REAKTOR_MENU_GAP +
-                 24.0f,
+        .w     = 328.0f,
+        .h     = 22.0f + 8.0f + 44.0f + 12.0f + 36.0f + 4.0f * REAKTOR_MENU_GAP,
         .modal = modal, .body = modal ? modal_floater : plain_floater,
         .closed = forget_id, .user = id });
 }
@@ -1463,6 +1462,23 @@ tray_demo(App *app, struct nk_context *ctx)
 }
 
 static void
+closing_demo(App *app, struct nk_context *ctx)
+{
+    static nk_bool ask;
+
+    section(app, ctx, "Closing",
+            "A close can ask first. The close button, the tray's Quit and a "
+            "first Ctrl+C show the question in a modal floater, and only its "
+            "Quit closes; the closing hook is asked before it.");
+    api(app, ctx, "reaktor_set_confirm_close  /  .confirm_close");
+    REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X) {
+        if (reaktor_check(&(reaktor_check_spec){ .label = "Ask before closing",
+                                                 .on = &ask }))
+            reaktor_set_confirm_close(app, ask ? "Close the Showcase?" : NULL);
+    }
+}
+
+static void
 undo_delete(App *app, void *user)
 {
     (void)user;
@@ -1547,9 +1563,10 @@ static float
 menu_w(struct nk_context *ctx, const char *label)
 {
     const struct nk_user_font *f = ctx->style.font;
+    const struct nk_style_button *b = &ctx->style.menu_button;
 
-    return (float)(int)(f->width(f->userdata, f->height, label, (int)strlen(label))
-                        + 20.0f + 0.5f);
+    return (float)(int)(f->width(f->userdata, f->height, label, (int)strlen(label)) +
+                        2.0f * (b->padding.x + b->border + b->rounding) + 2.5f);
 }
 
 static void
@@ -1760,6 +1777,7 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 
     floater_demos(app, ctx);
     window_demos(app, ctx);
+    closing_demo(app, ctx);
     tray_demo(app, ctx);
     toast_demos(app, ctx);
 

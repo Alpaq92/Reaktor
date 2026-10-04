@@ -1,3 +1,4 @@
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -260,6 +261,31 @@ int reaktor_path_absolute(const char *path)
         return 1;
 #endif
     return 0;
+}
+
+const char *reaktor_path_leaf(const char *path)
+{
+    const char *p, *leaf = path;
+
+    for (p = path; p && *p; p++)
+        if (*p == '/' || *p == '\\') leaf = p + 1;
+    return leaf;
+}
+
+char *reaktor_c_locale_keep(int numeric)
+{
+    const char *now = setlocale(numeric ? LC_NUMERIC : LC_ALL, NULL);
+    size_t n = now ? strlen(now) + 1 : 0;
+    char *kept = n ? (char *)malloc(n) : NULL;
+
+    if (kept) memcpy(kept, now, n);
+    return kept;
+}
+
+void reaktor_c_locale_put(int numeric, char *kept)
+{
+    setlocale(numeric ? LC_NUMERIC : LC_ALL, kept ? kept : "C");
+    free(kept);
 }
 
 #define REGISTERED_MAX 64

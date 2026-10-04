@@ -36,6 +36,10 @@ if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT REAKTOR_SDL_GL)
 endif()
 
 set(SDL_X11_XSCRNSAVER OFF CACHE BOOL "" FORCE)
+# Linux packaging notes; OpenBSD refuses a program whose note segment passes 1 KB.
+if(CMAKE_SYSTEM_NAME MATCHES "BSD")
+    set(SDL_DLOPEN_NOTES OFF CACHE BOOL "" FORCE)
+endif()
 # NetBSD's loader searches only /usr/lib, so X11 and Wayland are linked.
 if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
     set(SDL_DEPS_SHARED OFF CACHE BOOL "" FORCE)
@@ -77,6 +81,13 @@ foreach(_in "${LC}/yutil/include/yutil/config.h.in"
 endforeach()
 file(WRITE "${LCUI_CFG}/config.h" "${LCUI_MERGED}")
 
+if(UNIX AND NOT EMSCRIPTEN)
+    find_library(REAKTOR_LIBM m)
+    if(REAKTOR_LIBM)
+        link_libraries(m)
+    endif()
+endif()
+
 file(GLOB_RECURSE LCUI_SRC
     "${LC}/yutil/src/*.c"
     "${LC}/css/src/*.c")
@@ -100,12 +111,6 @@ add_library(plutosvg STATIC "${TP}/plutosvg/source/plutosvg.c")
 target_include_directories(plutosvg PUBLIC "${TP}/plutosvg/source")
 target_compile_definitions(plutosvg PUBLIC PLUTOSVG_BUILD_STATIC)
 target_link_libraries(plutosvg PUBLIC plutovg)
-if(UNIX AND NOT EMSCRIPTEN)
-    find_library(REAKTOR_LIBM m)
-    if(REAKTOR_LIBM)
-        target_link_libraries(plutovg PRIVATE m)
-    endif()
-endif()
 
 add_library(onlay STATIC ${TP}/onlay/onlay.c)
 target_include_directories(onlay PUBLIC ${TP}/onlay)
@@ -531,15 +536,13 @@ if(EMSCRIPTEN)
     endif()
 
     set(WASM_ASSETS "")
-    file(GLOB _reaktor_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
-                      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+    file(GLOB _reaktor_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
                       "${CMAKE_CURRENT_SOURCE_DIR}/core/*/*.c"
                       "${CMAKE_CURRENT_SOURCE_DIR}/core/*/*.h"
                       "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.c"
                       "${CMAKE_CURRENT_SOURCE_DIR}/platform/*.h"
                       "${CMAKE_CURRENT_SOURCE_DIR}/platform/*/*.c"
                       "${CMAKE_CURRENT_SOURCE_DIR}/runtime/*.c"
-                      "${CMAKE_CURRENT_SOURCE_DIR}/samples/*.h"
                       "${CMAKE_CURRENT_SOURCE_DIR}/samples/*/*.c"
                       "${CMAKE_CURRENT_SOURCE_DIR}/samples/*/*.h")
     foreach(_s IN LISTS _reaktor_srcs)
@@ -631,9 +634,6 @@ if(MSVC)
     target_compile_definitions(showcase PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_definitions(reaktor_core PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
-
-set_target_properties(showcase PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(APPLE AND NOT EMSCRIPTEN)
     configure_file(

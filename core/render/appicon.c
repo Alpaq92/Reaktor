@@ -6,8 +6,6 @@
 #include "appicon.h"
 #include "plutosvg.h"
 
-#define REAKTOR_PATH_MAX 1024
-
 static int str_append(char *dst, size_t cap, size_t *len, const char *src,
                       size_t n)
 {

@@ -12,17 +12,77 @@ parse_colour(const char *spec, char *out, size_t cap)
     return 1;
 }
 
+static struct tex_slot *
+slot_at(void *slots, size_t size, int i)
+{
+    return (struct tex_slot *)((char *)slots + (size_t)i * size);
+}
+
+/* Never evicts a slot this frame's commands use. */
+static struct tex_slot *
+slot_take(App *app, void *slots, size_t size, int *count, int max)
+{
+    unsigned now = app->ctx->seq;
+    struct tex_slot *k = NULL, *s;
+    int i;
+
+    if (*count < max) return slot_at(slots, size, (*count)++);
+    for (i = 0; i < max; i++) {
+        s = slot_at(slots, size, i);
+        if (s->seen != now && (!k || now - s->seen > now - k->seen)) k = s;
+    }
+    if (k && k->tex) SDL_DestroyTexture(k->tex);
+    return k;
+}
+
 void
 img_cache_clear(App *app)
 {
     int i;
 
     for (i = 0; i < app->img_count; i++)
-        if (app->img[i].tex) SDL_DestroyTexture(app->img[i].tex);
+        if (app->img[i].s.tex) SDL_DestroyTexture(app->img[i].s.tex);
     app->img_count = 0;
-    for (i = 0; i < app->round_count; i++)
-        if (app->round[i].tex) SDL_DestroyTexture(app->round[i].tex);
-    app->round_count = 0;
+}
+
+void
+img_cache_free(App *app)
+{
+    img_cache_clear(app);
+    SDL_free(app->img);
+    app->img     = NULL;
+    app->img_cap = 0;
+    if (app->blank) SDL_DestroyTexture(app->blank);
+    app->blank = NULL;
+}
+
+static struct img_slot *
+img_grow(App *app)
+{
+    int cap = app->img_cap ? app->img_cap * 2 : IMG_CACHE_MAX;
+    struct img_slot *more =
+        (struct img_slot *)SDL_realloc(app->img, (size_t)cap * sizeof *more);
+
+    if (!more) return NULL;
+    app->img     = more;
+    app->img_cap = cap;
+    return &app->img[app->img_count++];
+}
+
+/* A missing icon is blank, not Nuklear's white quad. */
+static struct nk_image
+blank_image(App *app)
+{
+    static const Uint32 clear = 0;
+
+    if (!app->blank) {
+        app->blank = SDL_CreateTexture(app->ren, SDL_PIXELFORMAT_ARGB8888,
+                                       SDL_TEXTUREACCESS_STATIC, 1, 1);
+        if (!app->blank) return nk_image_id(0);
+        SDL_UpdateTexture(app->blank, NULL, &clear, (int)sizeof clear);
+        SDL_SetTextureBlendMode(app->blank, SDL_BLENDMODE_BLEND);
+    }
+    return nk_image_ptr(app->blank);
 }
 
 static const char *
@@ -42,38 +102,6 @@ icon_source(App *app, const char *rel, char *out, size_t cap)
     return reaktor_asset_exists(out) ? out : rel;
 }
 
-/* A full cache gives up the slot drawn longest ago, never one this frame
-   has drawn: its texture is still in the frame's commands. */
-static int
-img_take(App *app)
-{
-    unsigned now = app->ctx->seq;
-    int i, k = -1;
-
-    if (app->img_count < IMG_CACHE_MAX) return app->img_count++;
-    for (i = 0; i < IMG_CACHE_MAX; i++)
-        if (app->img[i].seen != now &&
-            (k < 0 || now - app->img[i].seen > now - app->img[k].seen))
-            k = i;
-    if (k >= 0 && app->img[k].tex) SDL_DestroyTexture(app->img[k].tex);
-    return k;
-}
-
-static int
-round_take(App *app)
-{
-    unsigned now = app->ctx->seq;
-    int i, k = -1;
-
-    if (app->round_count < ROUND_CACHE_MAX) return app->round_count++;
-    for (i = 0; i < ROUND_CACHE_MAX; i++)
-        if (app->round[i].seen != now &&
-            (k < 0 || now - app->round[i].seen > now - app->round[k].seen))
-            k = i;
-    if (k >= 0 && app->round[k].tex) SDL_DestroyTexture(app->round[k].tex);
-    return k;
-}
-
 static struct img_slot *
 img_lookup(App *app, const char *src, int px)
 {
@@ -91,12 +119,14 @@ img_lookup(App *app, const char *src, int px)
 
     for (i = 0; i < app->img_count; i++)
         if (app->img[i].px == px && strcmp(app->img[i].src, src) == 0) {
-            app->img[i].seen = app->ctx->seq;
-            return app->img[i].tex ? &app->img[i] : NULL;
+            app->img[i].s.seen = app->ctx->seq;
+            return app->img[i].s.tex ? &app->img[i] : NULL;
         }
 
-    if ((i = img_take(app)) < 0) return NULL;
-    slot = &app->img[i];
+    slot = (struct img_slot *)slot_take(app, app->img, sizeof app->img[0],
+                                        &app->img_count, app->img_cap);
+    if (!slot) slot = img_grow(app);
+    if (!slot) return NULL;
 
     SDL_strlcpy(rel, src, sizeof(rel));
     q = strchr(rel, '?');
@@ -121,10 +151,10 @@ img_lookup(App *app, const char *src, int px)
                                     icol[0] ? icol : NULL, swk);
 
     SDL_strlcpy(slot->src, src, sizeof(slot->src));
-    slot->px   = px;
-    slot->tex  = NULL;
-    slot->w    = slot->h = 0;
-    slot->seen = app->ctx->seq;
+    slot->px     = px;
+    slot->s.tex  = NULL;
+    slot->w      = slot->h = 0;
+    slot->s.seen = app->ctx->seq;
 
     if (!surf) return NULL;
 
@@ -143,9 +173,9 @@ img_lookup(App *app, const char *src, int px)
     SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
 
-    slot->tex = tex;
-    slot->w   = w;
-    slot->h   = h;
+    slot->s.tex = tex;
+    slot->w     = w;
+    slot->h     = h;
     return slot;
 }
 
@@ -155,8 +185,8 @@ icon_over(App *app, const char *src, int px, float over)
     int raster = (int)(px * reaktor_scale() * over + 0.5f);
     struct img_slot *slot = img_lookup(app, src, raster);
 
-    if (!slot) return nk_image_id(0);
-    return nk_subimage_ptr(slot->tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
+    if (!slot) return blank_image(app);
+    return nk_subimage_ptr(slot->s.tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
                            nk_rect(0.0f, 0.0f, (float)slot->w, (float)slot->h));
 }
 
@@ -178,27 +208,29 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
     nk_spacing(ctx, 1);
 }
 
-/* A disc of radius r texels, or with t > 0 the ring t wide inside it. */
 static struct nk_image
 round_mask(App *app, int r, int t)
 {
     const int ss = 4;
     int d = 2 * r, x, y, i;
     float in = (float)(r - t);
+    struct round_slot *slot;
     SDL_Surface *surf;
     SDL_Texture *tex;
     unsigned char *px;
 
     for (i = 0; i < app->round_count; i++)
         if (app->round[i].r == r && app->round[i].t == t) {
-            app->round[i].seen = app->ctx->seq;
-            return app->round[i].tex
-                 ? nk_subimage_ptr(app->round[i].tex, (nk_ushort)d,
+            app->round[i].s.seen = app->ctx->seq;
+            return app->round[i].s.tex
+                 ? nk_subimage_ptr(app->round[i].s.tex, (nk_ushort)d,
                                    (nk_ushort)d,
                                    nk_rect(0.0f, 0.0f, (float)d, (float)d))
                  : nk_image_id(0);
         }
-    if ((i = round_take(app)) < 0) return nk_image_id(0);
+    slot = (struct round_slot *)slot_take(app, app->round, sizeof app->round[0],
+                                          &app->round_count, ROUND_CACHE_MAX);
+    if (!slot) return nk_image_id(0);
 
     surf = SDL_CreateSurface(d, d, SDL_PIXELFORMAT_ARGB8888);
     tex  = NULL;
@@ -233,16 +265,15 @@ round_mask(App *app, int r, int t)
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
     }
-    app->round[i].r    = r;
-    app->round[i].t    = t;
-    app->round[i].tex  = tex;
-    app->round[i].seen = app->ctx->seq;
+    slot->r      = r;
+    slot->t      = t;
+    slot->s.tex  = tex;
+    slot->s.seen = app->ctx->seq;
     if (!tex) return nk_image_id(0);
     return nk_subimage_ptr(tex, (nk_ushort)d, (nk_ushort)d,
                            nk_rect(0.0f, 0.0f, (float)d, (float)d));
 }
 
-/* Masks are drawn at device resolution. */
 static int
 mask_px(float logical)
 {
@@ -251,14 +282,79 @@ mask_px(float logical)
     return n < 1 ? 1 : n;
 }
 
+static nk_size
+splice_fill(App *app, nk_size at, struct nk_rect clip)
+{
+    struct nk_context *ctx = app->ctx;
+    struct nk_command_rect_filled f =
+        *(struct nk_command_rect_filled *)((nk_byte *)ctx->memory.memory.ptr + at);
+    struct nk_command_buffer run;
+    nk_byte *base;
+    nk_size first;
+
+    SDL_zero(run);
+    run.base         = &ctx->memory;
+    run.use_clipping = NK_CLIPPING_OFF;
+    run.clip         = clip;
+    run.begin = run.end = run.last = ctx->memory.allocated;
+    nk_push_scissor(&run, clip);
+    first = run.last;
+    reaktor_fill_round(app, &run, nk_rect(f.x, f.y, f.w, f.h), f.rounding, f.color);
+    base = (nk_byte *)ctx->memory.memory.ptr;
+    ((struct nk_command *)(base + run.last))->next = f.header.next;
+    ((struct nk_command *)(base + at))->type = NK_COMMAND_NOP;
+    ((struct nk_command *)(base + at))->next = first;
+    return run.last;
+}
+
+static void
+mask_rounded_fills(App *app)
+{
+    struct nk_context *ctx = app->ctx;
+    const struct nk_command *c = nk__begin(ctx);
+    struct nk_rect clip = REAKTOR_NO_CLIP;
+    nk_size end = ctx->memory.allocated, at, next, tail = 0;
+    int spliced = 0;
+
+    if (!c) return;
+    at = (nk_size)((const nk_byte *)c - (const nk_byte *)ctx->memory.memory.ptr);
+    for (;;) {
+        struct nk_command *cmd =
+            (struct nk_command *)((nk_byte *)ctx->memory.memory.ptr + at);
+
+        next = cmd->next;
+        tail = at;
+        if (cmd->type == NK_COMMAND_SCISSOR) {
+            const struct nk_command_scissor *s =
+                (const struct nk_command_scissor *)cmd;
+
+            clip = nk_rect(s->x, s->y, s->w, s->h);
+        } else if (cmd->type == NK_COMMAND_RECT_FILLED &&
+                   ((struct nk_command_rect_filled *)cmd)->rounding &&
+                   ((struct nk_command_rect_filled *)cmd)->color.a) {
+            tail = splice_fill(app, at, clip);
+            spliced = 1;
+        }
+        if (next >= end) break;
+        at = next;
+    }
+    /* What ended the list at the old end must end it at the new one. */
+    if (spliced)
+        ((struct nk_command *)((nk_byte *)ctx->memory.memory.ptr + tail))->next =
+            ctx->memory.allocated;
+}
+
 /* Rounded shapes are masks; a feathered rect seams against them. */
 void
-reaktor_render_aa(const App *app, enum nk_anti_aliasing *fill,
-                  enum nk_anti_aliasing *line)
+reaktor_render(App *app)
 {
-    *fill = NK_ANTI_ALIASING_OFF;
-    *line = app->aa && !(app->renderer_is_sw && app->sw_noaa)
-          ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF;
+    SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
+                           app->clear.a);
+    SDL_RenderClear(app->ren);
+    mask_rounded_fills(app);
+    nk_sdl_render_ex(app->ctx, NK_ANTI_ALIASING_OFF,
+                     app->aa && !(app->renderer_is_sw && app->sw_noaa)
+                     ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
 }
 
 struct nk_rect
@@ -283,7 +379,6 @@ corner_px(struct nk_rect b, float rounding)
 {
     int r = (int)(rounding + 0.5f);
 
-    /* b is whole: two corners never share a row. */
     if (2 * r > (int)b.w) r = (int)b.w / 2;
     if (2 * r > (int)b.h) r = (int)b.h / 2;
     return r;
@@ -315,7 +410,7 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     float R, D;
     int r, m;
 
-    if (b.w <= 0.0f || b.h <= 0.0f) return;
+    if (b.w <= 0.0f || b.h <= 0.0f || !col.a) return;
     b = whole_px(b);
     if (b.w <= 0.0f || b.h <= 0.0f) return;
     r = corner_px(b, rounding);
@@ -399,23 +494,32 @@ pick_font(App *app, int px, int bold)
 static const char *
 face_label(const char *name)
 {
-    const char *base = SDL_strrchr(name, '/');
+    const char *base = reaktor_path_leaf(name);
 
-    if (SDL_strrchr(name, 92) > base) base = SDL_strrchr(name, 92);
-    base = base ? base + 1 : name;
     return SDL_strncmp(base, "Aileron-", 8) == 0 ? "Aileron" : base;
+}
+
+static char *
+take_face(const char *name, size_t *size)
+{
+    char *b = reaktor_asset_load(name, size);
+
+    if (b && !reaktor_font_valid(b, *size)) {
+        reaktor_free(b);
+        b = NULL;
+    }
+    return b;
 }
 
 static char *
 load_face(const char **name, const char *stand_in, size_t *size)
 {
-    char *b = reaktor_asset_load(*name, size);
+    char *b = take_face(*name, size);
 
-    if (!b || reaktor_font_valid(b, *size)) return b;
-    SDL_Log("%s is not a font; %s stands in", *name, stand_in);
-    reaktor_free(b);
+    if (b || SDL_strcmp(*name, stand_in) == 0) return b;
+    SDL_Log("%s is not a font that can be read; %s stands in", *name, stand_in);
     *name = stand_in;
-    return reaktor_asset_load(*name, size);
+    return take_face(*name, size);
 }
 
 void
@@ -523,14 +627,15 @@ apply_render_scale(App *app)
 }
 
 SDL_Surface *
-icon_surface(const char *name, int px)
+reaktor_icon_surface(const char *name, int px)
 {
     plutovg_surface_t *svg;
     SDL_Surface *view, *copy = NULL;
     int w, h, stride;
 
-    svg = reaktor_svg_surface_path(name ? name : REAKTOR_MARK, px, NULL, NULL,
-                                   0.0f);
+    svg = reaktor_svg_surface_path(name, px, NULL, NULL, 0.0f);
+    if (!svg && SDL_strcmp(name, REAKTOR_MARK) != 0)
+        svg = reaktor_svg_surface_path(REAKTOR_MARK, px, NULL, NULL, 0.0f);
     if (!svg) return NULL;
 
     w      = plutovg_surface_get_width(svg);
@@ -549,22 +654,21 @@ icon_surface(const char *name, int px)
 }
 
 void
-set_window_icon(SDL_Window *win, const char *name)
+reaktor_set_window_icon(SDL_Window *win, const char *name)
 {
-    SDL_Surface *ico = icon_surface(name, 64);
+    SDL_Surface *ico = reaktor_icon_surface(name, 64);
 
     if (!ico) return;
     SDL_SetWindowIcon(win, ico);
     SDL_DestroySurface(ico);
 }
 
-/* A border drawn inside b. */
 void
 reaktor_edge_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
                    float rounding, float width, struct nk_color col)
 {
     struct nk_image ring = nk_image_id(0);
-    float R, T, side, inset;
+    float R, T;
     int r, t, m;
 
     if (b.w <= 0.0f || b.h <= 0.0f || width <= 0.0f || !col.a) return;
@@ -584,7 +688,6 @@ reaktor_edge_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     R = (float)r;
     T = (float)t;
     if (r >= t) {
-        /* The mask's middle texels, so the sides match the corners. */
         float M = (float)m, D = 2.0f * M;
         struct nk_image top = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
                                                  nk_rect(M - 1.0f, 0.0f, 1.0f, M));
@@ -608,18 +711,13 @@ reaktor_edge_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
         return;
     }
     /* Square, or a radius under the width: no pixel is covered twice. */
-    inset = R < T ? R : T;
-    side  = R > T ? R : T;
-    if (inset > 0.0f) {
-        nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - 2.0f * R, inset), 0.0f, col);
-        nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - inset, b.w - 2.0f * R, inset),
+    if (r) {
+        nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - 2.0f * R, R), 0.0f, col);
+        nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - 2.0f * R, R),
                      0.0f, col);
     }
-    if (T > inset) {
-        nk_fill_rect(cv, nk_rect(b.x, b.y + inset, b.w, T - inset), 0.0f, col);
-        nk_fill_rect(cv, nk_rect(b.x, b.y + b.h - T, b.w, T - inset), 0.0f, col);
-    }
-    nk_fill_rect(cv, nk_rect(b.x, b.y + side, T, b.h - 2.0f * side), 0.0f, col);
-    nk_fill_rect(cv, nk_rect(b.x + b.w - T, b.y + side, T, b.h - 2.0f * side),
-                 0.0f, col);
+    nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, T - R), 0.0f, col);
+    nk_fill_rect(cv, nk_rect(b.x, b.y + b.h - T, b.w, T - R), 0.0f, col);
+    nk_fill_rect(cv, nk_rect(b.x, b.y + T, T, b.h - 2.0f * T), 0.0f, col);
+    nk_fill_rect(cv, nk_rect(b.x + b.w - T, b.y + T, T, b.h - 2.0f * T), 0.0f, col);
 }

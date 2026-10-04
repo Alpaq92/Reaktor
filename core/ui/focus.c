@@ -1,4 +1,5 @@
 #include "internal.h"
+#include "reaktor/launch.h"
 
 enum {
     FOCUS_NEXT = 1, FOCUS_PREV,
@@ -58,7 +59,6 @@ focus_move(App *app, int step)
 
     for (i = 0; i < n; i++)
         if (t[i].id == app->focus_id) { cur = i; break; }
-    /* Keys stay in an open popup, else in the top modal and what is above it. */
     lo = 0;
     hi = n - 1;
     if (app->popup_hi >= 0 && app->popup_hi < n) {
@@ -95,11 +95,11 @@ focus_move(App *app, int step)
     app->focus_visible = 1;
     app->dirty = 1;
     focus_reveal(app, t, n, pick);
-    if (t[pick].role == REAKTOR_A11Y_TEXTBOX) key_click_ask(app);
+    if (t[pick].role == REAKTOR_A11Y_TEXTBOX) reaktor_key_click_ask(app);
 }
 
 void
-key_click_ask(App *app)
+reaktor_key_click_ask(App *app)
 {
     app->key_click = app->key_click >= KEY_CLICK_RELEASE ? KEY_CLICK_AGAIN
                                                          : KEY_CLICK_ASKED;
@@ -217,51 +217,48 @@ void
 reader_activate(void *user, unsigned id)
 {
     App *app = (App *)user;
-    SDL_Event e;
 
     reader_focus(user, id);
     if (app->focus_id != id) return;
     app->activate_id = id;
-    SDL_zero(e);
-    e.type = SDL_EVENT_USER;
-    SDL_PushEvent(&e);
+    reaktor_wake(app);
+}
+
+static int
+held_back(const App *app)
+{
+    return reaktor_popup_open(app->ctx->current) || app->layer_held;
 }
 
 int
 reaktor_focus_activated(App *app, unsigned id)
 {
-    const struct nk_window *w = app->ctx->current;
-
     if (!id || id != app->activate_id) return 0;
     app->activate_id = 0;
-    /* Behind an open popup or a modal floater nothing is pressed. */
-    return !(w && w->popup.win && w->popup.active) && !app->layer_held;
+    return !held_back(app);
 }
 
 int
 reaktor_focus_step(App *app, unsigned id)
 {
-    const struct nk_window *w = app->ctx->current;
     int s;
 
     if (!id || id != app->focus_id || !app->focus_step) return 0;
     s = app->focus_step;
     app->focus_step = 0;
-    return (w && w->popup.win && w->popup.active) || app->layer_held ? 0 : s;
+    return held_back(app) ? 0 : s;
 }
 
-/* Whether a click at the focus lands elsewhere; a combo's header is not
-   behind its own list. */
 int
-focus_covered(App *app)
+reaktor_focus_covered(App *app)
 {
     const struct nk_context *ctx = app->ctx;
-    const struct nk_window *focus = (const struct nk_window *)app->focus_win, *w;
+    const struct nk_window *focus = app->focus_win, *w;
     float x = app->focus_rect.x + app->focus_rect.w * 0.5f;
     float y = app->focus_rect.y + app->focus_rect.h * 0.5f;
     int above = 0;
 
-    if (focus && focus->popup.win && focus->popup.active) {
+    if (reaktor_popup_open(focus)) {
         const struct nk_rect h = focus->popup.header;
 
         if (focus->popup.type != NK_PANEL_COMBO ||
@@ -269,7 +266,7 @@ focus_covered(App *app)
             return 1;
     }
     for (w = ctx->begin; w; w = w->next) {
-        const struct nk_window *p = w->popup.win && w->popup.active ? w->popup.win : NULL;
+        const struct nk_window *p = reaktor_popup_open(w) ? w->popup.win : NULL;
 
         if (p && w != focus && p != focus && p->seq == ctx->seq &&
             NK_INBOX(x, y, p->bounds.x, p->bounds.y, p->bounds.w, p->bounds.h))
@@ -305,16 +302,15 @@ focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv)
     if (in_page) nk_push_scissor(cv, save);
 }
 
-/* Popups draw after every window, so the ring goes on the overlay: the
-   frame's last allocation. */
+/* Popups draw after every window; the ring goes in the overlay, drawn last. */
 void
-focus_ring_overlay(App *app, struct nk_context *ctx)
+reaktor_focus_ring_overlay(App *app, struct nk_context *ctx)
 {
     struct nk_command_buffer *o = &ctx->overlay;
 
     o->base         = &ctx->memory;
     o->use_clipping = NK_CLIPPING_ON;
-    o->clip         = nk_rect(-8192.0f, -8192.0f, 16384.0f, 16384.0f);
+    o->clip         = REAKTOR_NO_CLIP;
     o->begin = o->end = o->last = ctx->memory.allocated;
     focus_ring(app, ctx, o);
     o->end = ctx->memory.allocated;

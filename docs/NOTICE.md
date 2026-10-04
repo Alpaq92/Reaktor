@@ -56,8 +56,9 @@ is marked `REAKTOR`: an 8-bit indexed atlas, a 1×1 white texture for
 untextured geometry, pixel snapping, fills and strokes feathered apart, the
 atlas palette shared with the Text module, rectangles drawn from device pixels
 by `nk_sdl_quad` on the software renderer, `tex_null` repointed after every
-bake, a key-up dropped for a key Nuklear does not hold, and text input of any
-length fed one rune at a time.
+bake, a key-up dropped for a key Nuklear does not hold, text input of any
+length fed one rune at a time, and textures clamped rather than tested for
+wrapping.
 
 It cannot stay an include because the first change is inside
 `nk_sdl_font_stash_end`, and submodules are not edited. The cost: when

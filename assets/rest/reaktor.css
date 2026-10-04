@@ -45,6 +45,10 @@ td {
     font-size: 13px;
 }
 
+dialog {
+    padding: 12px 16px;
+}
+
 .toast {
     background-color: var(--background-body);
     color: var(--text-main);
@@ -61,12 +65,15 @@ td {
     background-color: var(--button-hover);
 }
 
-.sidebar-item {
-    background-color: rgba(0, 0, 0, 0);
-    color: var(--text-main);
+.sidebar-item, .sidebar-current {
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 16px;
+}
+
+.sidebar-item {
+    background-color: rgba(0, 0, 0, 0);
+    color: var(--text-main);
 }
 
 .sidebar-item:hover {
@@ -76,9 +83,6 @@ td {
 .sidebar-current {
     background-color: var(--background-body);
     color: var(--links);
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 16px;
 }
 
 .sidebar-edge {
@@ -86,12 +90,15 @@ td {
     width: 3px;
 }
 
-.tab {
+.tab, .tab-current {
     background-color: rgba(0, 0, 0, 0);
-    color: var(--text-muted);
     border-radius: 6px;
     padding: 8px 14px;
     font-size: 16px;
+}
+
+.tab {
+    color: var(--text-muted);
 }
 
 .tab:hover {
@@ -99,11 +106,7 @@ td {
 }
 
 .tab-current {
-    background-color: rgba(0, 0, 0, 0);
     color: var(--links);
-    border-radius: 6px;
-    padding: 8px 14px;
-    font-size: 16px;
 }
 
 .tab-edge {

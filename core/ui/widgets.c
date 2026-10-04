@@ -1,5 +1,6 @@
 #include "internal.h"
 #include "declare.h"
+#include "reaktor/launch.h"
 
 static int g_note_mute;
 
@@ -205,7 +206,7 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
     const struct nk_style_slider *st = &ctx->style.slider;
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
-    struct nk_rect b = nk_widget_bounds(ctx);
+    struct nk_rect b = reaktor_rect_trunc(nk_widget_bounds(ctx));
     int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
     const struct nk_style_item *ci = hot ? &st->cursor_hover
                                          : &st->cursor_normal;
@@ -283,7 +284,7 @@ reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max
     const struct nk_style_progress *st = &ctx->style.progress;
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
-    struct nk_rect b = nk_widget_bounds(ctx);
+    struct nk_rect b = reaktor_rect_trunc(nk_widget_bounds(ctx));
     struct nk_vec2 pad = nk_vec2(st->padding.x + st->border,
                                  st->padding.y + st->border);
     struct nk_rect fill = nk_rect(b.x + pad.x, b.y + pad.y,
@@ -562,7 +563,7 @@ reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
     nk_style_push_color(ctx, &ctx->style.button.border_color, fill);
     reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, "");
-    reaktor_button_disarm();
+    reaktor_chrome_disarm();
     nk_style_pop_color(ctx);
     nk_style_pop_style_item(ctx);
     nk_style_pop_style_item(ctx);
@@ -728,7 +729,7 @@ reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
     hot_push(app, bounds, 2, 0);
 
     f = push_edit_style(ctx, &s, 0);
-    edit_edge(app, ctx, bounds, &s);
+    reaktor_edit_edge(app, ctx, bounds, &s);
     if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
     if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;
     /* One byte short, so the value is always there to be read as a string. */
@@ -755,7 +756,6 @@ static void SDLCALL
 file_chosen(void *userdata, const char * const *filelist, int filter)
 {
     App *app = (App *)userdata;
-    SDL_Event wake;
 
     (void)filter;
     app->file_ok = 0;
@@ -766,10 +766,10 @@ file_chosen(void *userdata, const char * const *filelist, int filter)
         app->file_ok = 1;
     }
 
-    SDL_zero(wake);
-    wake.type = app->wake_event;
     SDL_SetAtomicInt(&app->file_ready, 1);
-    SDL_PushEvent(&wake);
+    reaktor_wake(app);
+    /* The last touch: a closed window's App may be freed after it. */
+    SDL_SetAtomicInt(&app->file_done, 1);
 }
 
 int
@@ -777,6 +777,7 @@ reaktor_file_open(App *app)
 {
     if (app->file_pending) return 0;
     app->file_pending = 1;
+    SDL_SetAtomicInt(&app->file_done, 0);
     SDL_ShowOpenFileDialog(file_chosen, app, app->win, g_file_filters,
                            (int)NK_LEN(g_file_filters), NULL, false);
     return 1;
@@ -795,12 +796,8 @@ a11y_dump_once(App *app)
     path = app->dump_path;
     if (!path) { done = 1; return; }
     if (++frames < A11Y_DUMP_FRAME || !reaktor_frame_settled(app)) {
-        SDL_Event e;
-
         app->dirty = 1;
-        SDL_zero(e);
-        e.type = SDL_EVENT_USER;
-        SDL_PushEvent(&e);
+        reaktor_wake(app);
         return;
     }
     done = 1;
@@ -1006,18 +1003,27 @@ reaktor_menu_edge(App *app, struct nk_context *ctx)
     nk_push_scissor(out, keep);
 }
 
-/* Nuklear keeps ROM until its own popups end, so a hold's is cleared here.
-   A held layer sees no input. */
-void
-reaktor_hold_input(App *app, struct nk_context *ctx, const char *name, int hold,
-                   int *held)
+int
+reaktor_popup_open(const struct nk_window *w)
+{
+    return w && w->popup.win && w->popup.active;
+}
+
+/* Nuklear keeps ROM until its own popups end. */
+static void
+lift_rom(struct nk_window *w)
+{
+    if (!reaktor_popup_open(w)) w->flags &= ~(nk_flags)NK_WINDOW_ROM;
+}
+
+static void
+hold_input(App *app, struct nk_context *ctx, const char *name, int hold, int *held)
 {
     struct nk_window *w = nk_window_find(ctx, name);
     struct nk_input *in = &ctx->input;
     int all = hold == HOLD_ALL;
 
-    if (w && *held && !all && !(w->popup.win && w->popup.active))
-        w->flags &= ~(nk_flags)NK_WINDOW_ROM;
+    if (w && *held && !all) lift_rom(w);
     *held = all;
     app->layer_held = all;
     app->input_held = hold != HOLD_NONE;
@@ -1029,8 +1035,8 @@ reaktor_hold_input(App *app, struct nk_context *ctx, const char *name, int hold,
     in->mouse.delta = in->mouse.scroll_delta = nk_vec2(0.0f, 0.0f);
 }
 
-void
-reaktor_hold_end(App *app, struct nk_context *ctx)
+static void
+hold_end(App *app, struct nk_context *ctx)
 {
     if (app->input_held) ctx->input = app->held_input;
     app->layer_held = app->input_held = 0;
@@ -1045,8 +1051,7 @@ reaktor_layer_focus(struct nk_context *ctx, struct nk_window *to)
         return;
     }
     ctx->active = to;
-    if (!(to->flags & NK_WINDOW_NO_INPUT) && !(to->popup.win && to->popup.active))
-        to->flags &= ~(nk_flags)NK_WINDOW_ROM;
+    if (!(to->flags & NK_WINDOW_NO_INPUT)) lift_rom(to);
 }
 
 int
@@ -1054,7 +1059,7 @@ reaktor_layer_begin(App *app, struct nk_context *ctx, const char *name,
                     struct nk_rect r, nk_flags flags, int layer, int trap,
                     int hold, int *held)
 {
-    reaktor_hold_input(app, ctx, name, hold, held);
+    hold_input(app, ctx, name, hold, held);
     app->layer      = layer;
     app->layer_trap = trap;
     /* ROM alone: a click activates the window, and activation lifts it. */
@@ -1074,7 +1079,7 @@ reaktor_layer_end(App *app, struct nk_context *ctx, int shown)
         focus_ring(app, ctx, cv);
     }
     nk_end(ctx);
-    reaktor_hold_end(app, ctx);
+    hold_end(app, ctx);
     app->layer      = FOCUS_PAGE;
     app->layer_trap = 0;
 }
@@ -1092,8 +1097,7 @@ reaktor_floater_frame(App *app, struct nk_context *ctx, struct nk_rect window,
 
     reaktor_style_get("dialog", &s);
     surf = reaktor_rule_surface(&s, reaktor_popup_rounding());
-    dim = reaktor_token("--dialog-backdrop", app->dark ? nk_rgba(255, 255, 255, 26)
-                                                       : nk_rgba(0, 0, 0, 26));
+    dim = reaktor_token("--dialog-backdrop", nk_rgba(0, 0, 0, 0));
 
     if (modal) {
         nk_push_scissor(out, window);
