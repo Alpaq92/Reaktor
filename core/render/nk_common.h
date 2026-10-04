@@ -13,9 +13,12 @@
 /* A browser delivers press and release in one task. */
 #define NK_BUTTON_TRIGGER_ON_RELEASE
 
+#include <stddef.h>
+
 #include "../../external/nuklear/nuklear.h"
 
 /* The caller SDL_frees the ranges. */
+int      reaktor_font_valid(const void *ttf, size_t size);
 nk_rune *reaktor_font_ranges(const unsigned char *ttf, const unsigned *cp,
                              int n);
 

@@ -32,6 +32,8 @@ float reaktor_animate(unsigned id, unsigned channel, float to,
 
 float reaktor_anim_progress(unsigned id, unsigned channel);
 
+void reaktor_anim_scope(const void *owner);
+
 int reaktor_anim_tick(float dt_ms);
 
 void reaktor_anim_evict(const reaktor_a11y_change *changes, int n);

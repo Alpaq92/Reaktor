@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "reaktor.h"
+
 #define CACHE_MAX 64
 
 typedef struct cache_entry {
@@ -44,8 +46,8 @@ static void base_reset(void)
     g.root_ready = 0;
 }
 
-int reaktor_style_init(const char *const *css_paths, int count,
-                       const char *theme)
+static int style_load(const char *const *css_paths, int count,
+                      const char *theme)
 {
     char *flat;
     css_parser_t *parser;
@@ -101,6 +103,19 @@ int reaktor_style_init(const char *const *css_paths, int count,
     }
     g.root_ready = 1;
     return 1;
+}
+
+/* libcss reads numbers with sscanf, which takes the locale's decimal mark. */
+int reaktor_style_init(const char *const *css_paths, int count,
+                       const char *theme)
+{
+    char *was = reaktor_c_locale_keep(1);
+    int ok;
+
+    reaktor_c_locale_put(1, NULL);
+    ok = style_load(css_paths, count, theme);
+    reaktor_c_locale_put(1, was);
+    return ok;
 }
 
 void reaktor_style_shutdown(void)

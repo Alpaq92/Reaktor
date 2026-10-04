@@ -23,22 +23,18 @@ reaktor_locale_start(const char *lang)
 }
 
 unsigned *
-reaktor_locale_glyphs(const char *font_path)
+reaktor_locale_glyphs(const unsigned char *ttf)
 {
     unsigned *cp, *ranges = NULL;
-    void     *ttf = NULL;
-    size_t    size = 0;
     int       n = reaktor_locale_codepoints(NULL, 0);
 
-    if (n <= 0 || !font_path) return NULL;
+    if (n <= 0 || !ttf) return NULL;
 
     cp = SDL_malloc((size_t)n * sizeof *cp);
-    if (cp) ttf = SDL_LoadFile(font_path, &size);
-    if (cp && ttf) {
+    if (cp) {
         reaktor_locale_codepoints(cp, n);
         ranges = reaktor_font_ranges(ttf, cp, n);
     }
-    SDL_free(ttf);
     SDL_free(cp);
     return ranges;
 }

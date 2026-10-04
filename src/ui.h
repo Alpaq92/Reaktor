@@ -39,6 +39,9 @@ struct nk_image reaktor_ionicon(App *app, const char *name, int px);
 
 void reaktor_fill_round(App *app, struct nk_command_buffer *cv,
                         struct nk_rect b, float rounding, struct nk_color col);
+void reaktor_edge_round(App *app, struct nk_command_buffer *cv,
+                        struct nk_rect b, float rounding, float width,
+                        struct nk_color col);
 struct nk_color reaktor_on(struct nk_color bg);
 
 void reaktor_hot(App *app, struct nk_rect r, int cursor, int repaint);
@@ -67,6 +70,21 @@ void  reaktor_menu_style_push(struct nk_context *ctx);
 void  reaktor_menu_style_pop(struct nk_context *ctx);
 float reaktor_menu_height(int rows);
 void  reaktor_menu_edge(App *app, struct nk_context *ctx);
+typedef struct reaktor_toast_spec {
+    const char *text;
+    const char *icon;
+    const char *action;
+    void      (*on_action)(App *app, void *user);
+    void      (*content)(App *app, struct nk_context *ctx, void *user);
+    float       content_w;
+    void       *user;
+    int         timeout_ms;
+    int         no_close;
+} reaktor_toast_spec;
+
+/* Main thread; hooks get the main window's App. */
+void  reaktor_toast(App *app, const reaktor_toast_spec *spec);
+
 int   reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,
                         const char *accel, int contextual);
 
@@ -88,7 +106,6 @@ unsigned reaktor_note_here(App *app, struct nk_context *ctx,
                            unsigned state);
 
 int reaktor_file_open(App *app);
-int reaktor_file_taken(App *app, char *out, int cap);
 
 typedef struct reaktor_diag {
     const char *renderer;
@@ -112,7 +129,5 @@ typedef struct reaktor_diag {
 
 void reaktor_diagnostics(App *app, reaktor_diag *out);
 
-int reaktor_css_override(App *app, int on);
-int reaktor_css_override_on(App *app);
 
 #endif

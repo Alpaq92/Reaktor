@@ -161,11 +161,18 @@ draw_tooltip(App *app, struct nk_context *ctx, const char *const *lines,
 
     r = nk_rect(ctx->input.mouse.pos.x + 14.0f,
                 ctx->input.mouse.pos.y + 18.0f, w, h);
+    {
+        struct nk_rect c = canvas->clip;
 
-    nk_fill_rect(canvas, r, 6.0f, fill);
-    nk_stroke_rect(canvas, nk_rect(r.x + 0.5f, r.y + 0.5f, r.w - 1.0f,
-                                   r.h - 1.0f), 6.0f, 1.0f,
-                   nk_rgba(edge.r, edge.g, edge.b, 140));
+        if (r.x + r.w > c.x + c.w) r.x = ctx->input.mouse.pos.x - 4.0f - w;
+        if (r.y + r.h > c.y + c.h) r.y = ctx->input.mouse.pos.y - 4.0f - h;
+        if (r.x < c.x) r.x = c.x;
+        if (r.y < c.y) r.y = c.y;
+    }
+
+    reaktor_fill_round(app, canvas, r, 6.0f, fill);
+    reaktor_edge_round(app, canvas, r, 6.0f, 1.0f,
+                       nk_rgba(edge.r, edge.g, edge.b, 140));
 
     for (i = 0; i < n; i++) {
         struct nk_rect t = nk_rect(r.x + pad, r.y + pad + (float)i * line,
@@ -176,10 +183,11 @@ draw_tooltip(App *app, struct nk_context *ctx, const char *const *lines,
     if (bar >= 0.0f) {
         struct nk_rect track = nk_rect(r.x + pad, r.y + h - pad - 6.0f,
                                        r.w - 2.0f * pad, 6.0f);
-        nk_fill_rect(canvas, track, 3.0f,
-                     reaktor_token("--background-body", nk_rgb(37, 37, 37)));
+        reaktor_fill_round(app, canvas, track, 3.0f,
+                           reaktor_token("--background-body",
+                                         nk_rgb(37, 37, 37)));
         track.w *= bar;
-        nk_fill_rect(canvas, track, 3.0f, acc);
+        reaktor_fill_round(app, canvas, track, 3.0f, acc);
     }
 }
 
@@ -700,7 +708,6 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                               .box = { .w = 440.0f,
                                        .flags = REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
-                    /* Its step buttons light up inside its own rect. */
                     reaktor_hot_follow(app, nk_widget_bounds(ctx), 0);
                     nk_property_float(ctx, "R:", 0.0f, &s->tint.r, 1.0f,
                                       0.01f, 0.005f);
@@ -1063,11 +1070,37 @@ page_display(App *app, struct nk_context *ctx, showcase_state *s)
 }
 
 static void
+tabs_demo(App *app, struct nk_context *ctx)
+{
+    static const char *const names[3] = { "Overview", "Details", "History" };
+    static const char *const notes[3] = {
+        "A row of entries sized to their labels; the current one is marked.",
+        "The same list as the sidebar on the left, laid out across.",
+        "Styled by the .tab, .tab:hover, .tab-current and .tab-edge rules."
+    };
+    static int tab;
+
+    section(app, ctx, "Tabs",
+            "A tab bar, and the sidebar at the left of this window: one list, "
+            "drawn across or down. Each answers the entry chosen.");
+    api(app, ctx, "reaktor_tabs  /  reaktor_sidebar");
+    REAKTOR_COLUMN(.gap = 8.0f) {
+        reaktor_tabs(&(reaktor_tabs_spec){
+            .items = names, .count = 3, .chosen = &tab, .name = "Sections",
+            .box = { .flags = REAKTOR_LAY_FILL_X } });
+        reaktor_label(&(reaktor_label_spec){
+            .text = notes[tab], .color = "--text-muted",
+            .box  = { .h = 24.0f, .flags = REAKTOR_LAY_FILL_X } });
+    }
+}
+
+static void
 page_layout(App *app, struct nk_context *ctx, showcase_state *s)
 {
     int i;
 
     (void)s;
+    tabs_demo(app, ctx);
 
     section(app, ctx, "Rows and columns",
             "A row lays its children out left to right, a column top to "
@@ -1229,12 +1262,319 @@ page_layout(App *app, struct nk_context *ctx, showcase_state *s)
     nk_spacer(ctx);
 }
 
+static int g_plain_floater, g_modal_floater;
+
+static void
+forget_id(App *app, void *user)
+{
+    (void)app;
+    *(int *)user = 0;
+}
+
+static void
+floater_text(App *app, struct nk_context *ctx, const char *title,
+           const char *text)
+{
+    nk_layout_row_dynamic(ctx, 22.0f, 1);
+    nk_style_push_font(ctx, reaktor_style_font(app, ".popup-title", 16, 1));
+    nk_label_colored(ctx, title, NK_TEXT_LEFT,
+                     reaktor_token("--text-bright", ctx->style.text.color));
+    nk_style_pop_font(ctx);
+
+    nk_layout_row_dynamic(ctx, 8.0f, 1);
+    nk_spacer(ctx);
+
+    nk_layout_row_dynamic(ctx, 44.0f, 1);
+    nk_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
+    nk_label_colored_wrap(ctx, text,
+                          reaktor_token("--text-muted", ctx->style.text.color));
+    nk_style_pop_font(ctx);
+
+    nk_layout_row_dynamic(ctx, 12.0f, 1);
+    nk_spacer(ctx);
+
+    nk_layout_row_template_begin(ctx, 36.0f);
+    nk_layout_row_template_push_dynamic(ctx);
+    nk_layout_row_template_push_static(ctx, 96.0f);
+    nk_layout_row_template_push_static(ctx, 96.0f);
+    nk_layout_row_template_end(ctx);
+    nk_spacer(ctx);
+}
+
+static void
+modal_floater(App *app, struct nk_context *ctx, int w, int h, void *user)
+{
+    (void)w; (void)h;
+    floater_text(app, ctx, "Close without saving?",
+               "Everything behind this is dimmed and takes no input until it "
+               "is closed.");
+    if (reaktor_button_label(app, ctx, "Cancel"))
+        reaktor_floater_close(app, *(int *)user);
+    if (reaktor_button_accent(app, ctx, "OK"))
+        reaktor_floater_close(app, *(int *)user);
+}
+
+static void
+plain_floater(App *app, struct nk_context *ctx, int w, int h, void *user)
+{
+    (void)w; (void)h;
+    floater_text(app, ctx, "A floater",
+               "The page under this stays live: it scrolls, and its buttons "
+               "and fields still answer.");
+    nk_spacer(ctx);
+    if (reaktor_button_label(app, ctx, "Close"))
+        reaktor_floater_close(app, *(int *)user);
+}
+
+void
+showcase_open_floater(App *app, int modal)
+{
+    int *id = modal ? &g_modal_floater : &g_plain_floater;
+
+    if (*id) return;
+    *id = reaktor_floater_open(app, &(reaktor_floater){
+        .title = modal ? "Close without saving?" : "A floater",
+        .w     = 328.0f,
+        .h     = 22.0f + 8.0f + 44.0f + 12.0f + 36.0f + 4.0f * REAKTOR_MENU_GAP,
+        .modal = modal, .body = modal ? modal_floater : plain_floater,
+        .closed = forget_id, .user = id });
+}
+
+static void
+floater_demos(App *app, struct nk_context *ctx)
+{
+    section(app, ctx, "Floaters",
+            "Dialogs drawn inside the window, above the page. A modal one dims "
+            "the window and holds its input until it closes; the other leaves "
+            "the page live under it.");
+    api(app, ctx, "reaktor_floater_open  /  reaktor_floater_close");
+
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        if (reaktor_button(&(reaktor_button_spec){
+                .label    = "Open a floater",
+                .disabled = (unsigned char)(g_plain_floater != 0),
+                .box      = { .flags = REAKTOR_LAY_FILL_X } }))
+            showcase_open_floater(app, 0);
+        if (reaktor_button(&(reaktor_button_spec){
+                .label    = "Open a modal floater",
+                .box      = { .flags = REAKTOR_LAY_FILL_X } }))
+            showcase_open_floater(app, 1);
+    }
+}
+
+static int     g_plain_win, g_modal_win;
+static nk_bool g_win_ticked = 1;
+
+static void
+window_page(App *app, struct nk_context *ctx, int w, int h, void *user)
+{
+    int modal = user == &g_modal_win;
+
+    (void)ctx;
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_COLUMN(.w = w - 40.0f, .h = h - 40.0f, .ml = 20.0f, .mt = 20.0f,
+                       .gap = 10.0f) {
+            reaktor_label(&(reaktor_label_spec){
+                .text  = modal ? "A modal window" : "A window of its own",
+                .style = "h4", .color = "--text-bright",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } });
+            reaktor_label(&(reaktor_label_spec){
+                .text  = modal
+                    ? "The main window takes no input until this one closes."
+                    : "Its own renderer, fonts and Nuklear context, drawn by "
+                      "the same widgets and sheets as the main window.",
+                .color = "--text-muted", .wrap = 1,
+                .box   = { .h = 44.0f, .flags = REAKTOR_LAY_FILL_X } });
+            reaktor_check(&(reaktor_check_spec){
+                .label = "Input reaches it", .on = &g_win_ticked });
+            REAKTOR_ROW(.h = 34.0f,
+                        .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_PACK_END) {
+                if (reaktor_button(&(reaktor_button_spec){
+                        .label = "Close", .box = { .w = 96.0f } }))
+                    reaktor_window_close(app, *(int *)user);
+            }
+        }
+    }
+}
+
+void
+showcase_open_window(App *app, int modal)
+{
+    int *id = modal ? &g_modal_win : &g_plain_win;
+
+    if (*id) return;
+    *id = reaktor_window_open(app, &(reaktor_window){
+        .window = { .title = modal ? "A modal window" : "A window of its own",
+                    .w = 420, .h = 230 },
+        .modal = modal, .page = window_page, .closed = forget_id,
+        .user = id });
+}
+
+static void
+window_demos(App *app, struct nk_context *ctx)
+{
+#ifdef __EMSCRIPTEN__
+    const unsigned char none = 1;
+#else
+    const unsigned char none = 0;
+#endif
+
+    section(app, ctx, "Windows",
+            none ? "Real windows of the system's own, each with its own "
+                   "renderer. A page in a browser has none, so these are off "
+                   "here."
+                 : "Real windows of the system's own, each with its own "
+                   "renderer, fonts and Nuklear context, drawn by the same "
+                   "widgets. A modal one keeps the main window from input "
+                   "until it closes.");
+    api(app, ctx, "reaktor_window_open  /  reaktor_window_close");
+
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        if (reaktor_button(&(reaktor_button_spec){
+                .label    = "Open a window",
+                .disabled = (unsigned char)(none || g_plain_win),
+                .box      = { .flags = REAKTOR_LAY_FILL_X } }))
+            showcase_open_window(app, 0);
+        if (reaktor_button(&(reaktor_button_spec){
+                .label    = "Open a modal window",
+                .disabled = (unsigned char)(none || g_modal_win),
+                .box      = { .flags = REAKTOR_LAY_FILL_X } }))
+            showcase_open_window(app, 1);
+    }
+}
+
+static void
+tray_demo(App *app, struct nk_context *ctx)
+{
+    nk_bool on = (nk_bool)showcase_tray_on();
+
+    section(app, ctx, "Tray",
+            on ? "The window's icon in the system's tray, with a menu: show "
+                 "the window, send a toast, pick the theme, quit."
+               : "The window's icon in the system's tray, with a menu. It is "
+                 "off here, or the system has no tray.");
+    api(app, ctx, "reaktor_tray_open  /  reaktor_tray_check  /  reaktor_tray_close");
+    REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X) {
+        if (reaktor_check(&(reaktor_check_spec){ .label = "Icon in the tray",
+                                                 .on = &on }))
+            showcase_tray_show(app, on);
+    }
+}
+
+static void
+closing_demo(App *app, struct nk_context *ctx)
+{
+    static nk_bool ask;
+
+    section(app, ctx, "Closing",
+            "A close can ask first. The close button, the tray's Quit and a "
+            "first Ctrl+C show the question in a modal floater, and only its "
+            "Quit closes; the closing hook is asked before it.");
+    api(app, ctx, "reaktor_set_confirm_close  /  .confirm_close");
+    REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X) {
+        if (reaktor_check(&(reaktor_check_spec){ .label = "Ask before closing",
+                                                 .on = &ask }))
+            reaktor_set_confirm_close(app, ask ? "Close the Showcase?" : NULL);
+    }
+}
+
+static void
+undo_delete(App *app, void *user)
+{
+    (void)user;
+    reaktor_toast(app, &(reaktor_toast_spec){ .text = "'Lorem ipsum' restored",
+                                              .timeout_ms = 5000 });
+}
+
+static void
+upload_controls(App *app, struct nk_context *ctx, void *user)
+{
+    nk_size *done = (nk_size *)user;
+
+    nk_layout_row_dynamic(ctx, 26.0f, 1);
+    reaktor_progress_bar(app, ctx, done, 100, NK_FIXED);
+}
+
+static nk_size g_uploaded = 60;
+
+static const reaktor_toast_spec g_toast_icon = {
+    .text = "Connected to the printer", .icon = "print-outline",
+    .timeout_ms = 5000 };
+static const reaktor_toast_spec g_toast_upload = {
+    .text = "Uploading", .icon = "cloud-upload-outline",
+    .content = upload_controls, .content_w = 140.0f, .user = &g_uploaded };
+static const reaktor_toast_spec g_toast_undo = {
+    .text = "'Lorem ipsum' deleted", .action = "Undo",
+    .on_action = undo_delete, .timeout_ms = 5000 };
+
+void
+showcase_toasts(App *app)
+{
+    reaktor_toast(app, &g_toast_icon);
+    reaktor_toast(app, &g_toast_upload);
+    reaktor_toast(app, &g_toast_undo);
+}
+
+static void
+toast_demos(App *app, struct nk_context *ctx)
+{
+    section(app, ctx, "Toasts",
+            "Messages at the bottom of the window, stacked newest last. Each "
+            "holds text, an optional icon, an action, custom controls and a "
+            "close button. One stays until it is closed, or goes by itself "
+            "when it is given a timeout - five seconds here.");
+    api(app, ctx, "reaktor_toast");
+
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "Simple toast",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_toast(app, &(reaktor_toast_spec){ .text = "Saved",
+                                                      .timeout_ms = 5000 });
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "With an action",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_toast(app, &g_toast_undo);
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "With an icon",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_toast(app, &g_toast_icon);
+    }
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "With custom controls",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_toast(app, &g_toast_upload);
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "With a long title",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_toast(app, &(reaktor_toast_spec){
+                .text = "A toast with a title long enough to need the room "
+                        "it is given", .action = "Details", .timeout_ms = 5000 });
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "Until closed",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_toast(app, &(reaktor_toast_spec){
+                .text = "This one stays until it is closed" });
+    }
+}
+
+static float
+menu_w(struct nk_context *ctx, const char *label)
+{
+    const struct nk_user_font *f = ctx->style.font;
+    const struct nk_style_button *b = &ctx->style.menu_button;
+
+    return (float)(int)(f->width(f->userdata, f->height, label, (int)strlen(label)) +
+                        2.0f * (b->padding.x + b->border + b->rounding) + 2.5f);
+}
+
 static void
 page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 {
     char line[SC_PATH_CAP + 32];
     struct nk_rect bar;
-    int ok;
+    int ok, tip = 0;
 
     popup_style_push(ctx);
     nk_layout_row_dynamic(ctx, 40.0f, 1);
@@ -1247,9 +1587,9 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     reaktor_note_push(app, REAKTOR_A11Y_MENUBAR, "Menu bar", NULL, 0, bar);
     nk_menubar_begin(ctx);
     nk_layout_row_begin(ctx, NK_STATIC, 26.0f, 3);
-    nk_layout_row_push(ctx, 60.0f);
+    nk_layout_row_push(ctx, menu_w(ctx, "File"));
     hot(app, ctx, REAKTOR_A11Y_MENU, "File", 0);
-    if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT,
+    if (nk_menu_begin_label(ctx, "File", NK_TEXT_CENTERED,
                             nk_vec2(150.0f, reaktor_menu_height(3)))) {
         reaktor_menu_style_push(ctx);
         reaktor_menu_edge(app, ctx);
@@ -1267,9 +1607,9 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         nk_menu_end(ctx);
         reaktor_menu_style_pop(ctx);
     }
-    nk_layout_row_push(ctx, 60.0f);
+    nk_layout_row_push(ctx, menu_w(ctx, "Edit"));
     hot(app, ctx, REAKTOR_A11Y_MENU, "Edit", 0);
-    if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT,
+    if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_CENTERED,
                             nk_vec2(190.0f, reaktor_menu_height(4)))) {
         reaktor_menu_style_push(ctx);
         reaktor_menu_edge(app, ctx);
@@ -1293,9 +1633,9 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
         nk_menu_end(ctx);
         reaktor_menu_style_pop(ctx);
     }
-    nk_layout_row_push(ctx, 60.0f);
+    nk_layout_row_push(ctx, menu_w(ctx, "View"));
     hot(app, ctx, REAKTOR_A11Y_MENU, "View", 0);
-    if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT,
+    if (nk_menu_begin_label(ctx, "View", NK_TEXT_CENTERED,
                             nk_vec2(170.0f, reaktor_menu_height(2)))) {
         reaktor_menu_style_push(ctx);
         reaktor_menu_edge(app, ctx);
@@ -1311,10 +1651,9 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
     reaktor_note_pop(app);
     nk_group_end(ctx);
     }
-    nk_stroke_rect(nk_window_get_canvas(ctx),
-                   nk_rect(bar.x + 0.5f, bar.y + 0.5f, bar.w - 1.0f, bar.h - 1.0f),
-                   ctx->style.window.rounding, 1.0f,
-                   ctx->style.window.border_color);
+    reaktor_edge_round(app, nk_window_get_canvas(ctx), bar,
+                       ctx->style.window.rounding, 1.0f,
+                       ctx->style.window.border_color);
     popup_style_pop(ctx);
 
     nk_layout_row_dynamic(ctx, 8.0f, 1);
@@ -1405,11 +1744,6 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
 
     popup_style_push(ctx);
     {
-        static const char *const one[1] = { "A one-line tooltip." };
-        static const char *const many[2] = {
-            "A tooltip is not limited to a line:",
-            "this one carries a progress bar."
-        };
         struct nk_rect b;
 
         REAKTOR_ROW(.h = 34.0f,
@@ -1418,112 +1752,53 @@ page_popups(App *app, struct nk_context *ctx, showcase_state *s)
                 b = nk_rect(0, 0, 0, 0);
                 reaktor_box_rect(&b);
                 reaktor_hot_follow(app, b, 1);
+                ctx->last_widget_state = 0;
                 reaktor_button(&(reaktor_button_spec){
                     .label = "Hover for a plain tooltip",
                     .box   = { .flags = REAKTOR_LAY_FILL_X |
                                         REAKTOR_LAY_FILL_Y } });
-                if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
-                    draw_tooltip(app, ctx, one, 1, -1.0f);
+                if (ctx->last_widget_state & NK_WIDGET_STATE_HOVER) tip = 1;
             }
 
             REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
                 b = nk_rect(0, 0, 0, 0);
                 reaktor_box_rect(&b);
                 reaktor_hot_follow(app, b, 1);
+                ctx->last_widget_state = 0;
                 reaktor_button(&(reaktor_button_spec){
                     .label = "Hover for a laid-out one",
                     .box   = { .flags = REAKTOR_LAY_FILL_X |
                                         REAKTOR_LAY_FILL_Y } });
-                if (nk_input_is_mouse_hovering_rect(&ctx->input, b))
-                    draw_tooltip(app, ctx, many, 2,
-                                 (float)s->progress / 100.0f);
+                if (ctx->last_widget_state & NK_WIDGET_STATE_HOVER) tip = 2;
             }
         }
     }
     popup_style_pop(ctx);
 
-    section(app, ctx, "Popups",
-            "A static popup is a fixed rect that stays until it is closed - a "
-            "dialog. A dynamic one is sized by its contents. Both hold the "
-            "input while they are open, which is what makes the first modal "
-            "without any modality machinery.");
-    api(app, ctx, "nk_popup_begin(NK_POPUP_STATIC)  /  nk_popup_close");
-
-    {
-        REAKTOR_ROW(.h = 34.0f, .gap = 14.0f) {
-            if (reaktor_button(&(reaktor_button_spec){
-                    .label = "Open a dialog",
-                    .box   = { .w = 240.0f,
-                               .flags = REAKTOR_LAY_FILL_Y } }))
-                s->popup_open = 1;
-
-            reaktor_label(&(reaktor_label_spec){
-                .text = s->popup_open ? "open" : "closed",
-                .name = "Dialog",
-                .box  = { .flags = REAKTOR_LAY_FILL_X |
-                                   REAKTOR_LAY_CENTER_Y } });
-        }
-    }
-
-    popup_style_push(ctx);
-    if (s->popup_open) {
-        struct nk_vec2 vis = nk_window_get_content_region_size(ctx);
-        float pw = 360.0f;
-        float ph = (22.0f + 8.0f + 44.0f + 12.0f + 36.0f)
-                 + 4.0f * 2.0f
-                 + 2.0f * 12.0f;
-        struct nk_rect at = nk_rect((vis.x - pw) * 0.5f, (vis.y - ph) * 0.5f,
-                                    pw, ph);
-
-        if (nk_popup_begin(ctx, NK_POPUP_STATIC, "Confirm",
-                           NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR, at)) {
-            reaktor_menu_style_push(ctx);
-            nk_layout_row_dynamic(ctx, 22.0f, 1);
-            nk_style_push_font(ctx, reaktor_style_font(app, ".popup-title",
-                                                       16, 1));
-            nk_label_colored(ctx, "Close without saving?", NK_TEXT_LEFT,
-                             reaktor_token("--text-bright",
-                                           ctx->style.text.color));
-            nk_style_pop_font(ctx);
-
-            nk_layout_row_dynamic(ctx, 8.0f, 1);
-            nk_spacer(ctx);
-
-            nk_layout_row_dynamic(ctx, 44.0f, 1);
-            nk_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
-            nk_label_colored_wrap(ctx,
-                "Everything behind this is inert until the popup is closed - "
-                "which is what makes it modal, with no modality machinery.",
-                reaktor_token("--text-muted", ctx->style.text.color));
-            nk_style_pop_font(ctx);
-
-            nk_layout_row_dynamic(ctx, 12.0f, 1);
-            nk_spacer(ctx);
-
-            nk_layout_row_template_begin(ctx, 36.0f);
-            nk_layout_row_template_push_dynamic(ctx);
-            nk_layout_row_template_push_static(ctx, 96.0f);
-            nk_layout_row_template_push_static(ctx, 96.0f);
-            nk_layout_row_template_end(ctx);
-            nk_spacer(ctx);
-            if (reaktor_button_label(app, ctx, "Cancel")) {
-                s->popup_open = 0;
-                nk_popup_close(ctx);
-            }
-            if (reaktor_button_accent(app, ctx, "OK")) {
-                s->popup_open = 0;
-                nk_popup_close(ctx);
-            }
-            reaktor_menu_style_pop(ctx);
-            nk_popup_end(ctx);
-        } else {
-            s->popup_open = 0;
-        }
-    }
-    popup_style_pop(ctx);
+    floater_demos(app, ctx);
+    window_demos(app, ctx);
+    closing_demo(app, ctx);
+    tray_demo(app, ctx);
+    toast_demos(app, ctx);
 
     nk_layout_row_dynamic(ctx, 8.0f, 1);
     nk_spacer(ctx);
+
+    /* Last, so nothing the page draws after its button lands on top. */
+    if (tip) {
+        static const char *const one[1] = { "A one-line tooltip." };
+        static const char *const many[2] = {
+            "A tooltip is not limited to a line:",
+            "this one carries a progress bar."
+        };
+        struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+        struct nk_rect keep = cv->clip;
+
+        nk_push_scissor(cv, ctx->current->layout->clip);
+        if (tip == 1) draw_tooltip(app, ctx, one, 1, -1.0f);
+        else draw_tooltip(app, ctx, many, 2, (float)s->progress / 100.0f);
+        nk_push_scissor(cv, keep);
+    }
 }
 
 static void
@@ -1760,7 +2035,9 @@ rule_says(const char *selector)
 static void
 page_styling(App *app, struct nk_context *ctx, showcase_state *s)
 {
-    nk_bool on = (nk_bool)reaktor_css_override_on(app);
+    static const reaktor_asset simple_css = {
+        .path = "external/simplecss/simple.css" };
+    static nk_bool on;
 
     section(app, ctx, "Change the stylesheet, change the application",
             "Nothing on this page is about Reaktor. The switch below stops "
@@ -1776,7 +2053,7 @@ page_styling(App *app, struct nk_context *ctx, showcase_state *s)
                 .name  = "Override stylesheet",
                 .on    = &on,
                 .box   = { .w = 380.0f, .flags = REAKTOR_LAY_CENTER_Y } }))
-            reaktor_css_override(app, on);
+            reaktor_set_css(app, on ? &simple_css : NULL, on ? 1 : 0);
         reaktor_soak();
     }
 
@@ -2195,9 +2472,11 @@ sample_state(void)
 }
 
 void
-sample_file_taken(App *app)
+sample_file_opened(App *app, const char *path)
 {
-    reaktor_file_taken(app, g_show.file_pick, (int)sizeof(g_show.file_pick));
+    (void)app;
+    SDL_strlcpy(g_show.file_pick, path ? path : "no file",
+                sizeof(g_show.file_pick));
 }
 
 void

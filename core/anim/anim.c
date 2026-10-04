@@ -7,6 +7,7 @@
 #define REAKTOR_ANIM_SLOTS 128
 
 typedef struct reaktor_anim_slot {
+    const void *owner;
     unsigned key;
     float    from, to, value;
     float    elapsed, duration;
@@ -18,6 +19,7 @@ typedef struct reaktor_anim_slot {
 } reaktor_anim_slot;
 
 static reaktor_anim_slot g_slot[REAKTOR_ANIM_SLOTS];
+static const void       *g_scope;
 
 #define PI_F 3.14159265358979323846f
 
@@ -154,16 +156,23 @@ reaktor_ease_name(unsigned char curve)
     return curve < REAKTOR_EASE_COUNT ? n[curve] : "?";
 }
 
+void
+reaktor_anim_scope(const void *owner)
+{
+    g_scope = owner;
+}
+
 static unsigned
 key_of(unsigned id, unsigned channel)
 {
-    unsigned k = id * 2654435761u + channel * 0x9e3779b9u;
+    unsigned k = id * 2654435761u + channel * 0x9e3779b9u +
+                 (unsigned)(size_t)g_scope * 0x85ebca6bu;
     k ^= k >> 15;
     return k ? k : 1u;
 }
 
 static reaktor_anim_slot *
-slot_of(unsigned key, int make)
+slot_of(unsigned key, const void *owner, int make)
 {
     unsigned i = key & (REAKTOR_ANIM_SLOTS - 1);
     unsigned n;
@@ -171,10 +180,11 @@ slot_of(unsigned key, int make)
     for (n = 0; n < REAKTOR_ANIM_SLOTS; n++) {
         reaktor_anim_slot *s = &g_slot[i];
 
-        if (s->key == key) return s;
+        if (s->key == key && s->owner == owner) return s;
         if (!s->key) {
             if (!make) return NULL;
-            s->key = key;
+            s->key   = key;
+            s->owner = owner;
             return s;
         }
         i = (i + 1) & (REAKTOR_ANIM_SLOTS - 1);
@@ -194,7 +204,7 @@ compact(void)
         reaktor_anim_slot *s;
 
         if (!old[i].key || old[i].dead) continue;
-        s = slot_of(old[i].key, 1);
+        s = slot_of(old[i].key, old[i].owner, 1);
         if (s) *s = old[i];
     }
 }
@@ -202,7 +212,7 @@ compact(void)
 float
 reaktor_anim_progress(unsigned id, unsigned channel)
 {
-    reaktor_anim_slot *s = slot_of(key_of(id, channel), 0);
+    reaktor_anim_slot *s = slot_of(key_of(id, channel), g_scope, 0);
 
     if (!s || !s->moving || s->duration <= 0.0f) return -1.0f;
     return s->elapsed / s->duration;
@@ -218,7 +228,7 @@ reaktor_animate(unsigned id, unsigned channel, float to, float ms,
     if (ms <= 0.0f) return to;
 
     key = key_of(id, channel);
-    s = slot_of(key, 1);
+    s = slot_of(key, g_scope, 1);
     if (!s) return to;
     s->seen = 1;
 
@@ -251,7 +261,7 @@ reaktor_anim_tick(float dt_ms)
     for (i = 0; i < REAKTOR_ANIM_SLOTS; i++) {
         reaktor_anim_slot *s = &g_slot[i];
 
-        if (!s->key || !s->moving) continue;
+        if (!s->key || !s->moving || s->owner != g_scope) continue;
         s->elapsed += dt_ms;
         if (s->elapsed >= s->duration) {
             s->elapsed = s->duration;
@@ -261,8 +271,9 @@ reaktor_anim_tick(float dt_ms)
             float t = s->elapsed / s->duration;
             s->value = s->from
                      + (s->to - s->from) * reaktor_ease_at(s->curve, t);
-            moving++;
         }
+        /* The landing step needs a frame too. */
+        moving++;
     }
     return moving;
 }
@@ -277,7 +288,7 @@ reaktor_anim_evict(const reaktor_a11y_change *c, int n)
 
         if (c[i].kind != REAKTOR_A11Y_REMOVED) continue;
         for (ch = 0; ch < 16u; ch++) {
-            reaktor_anim_slot *s = slot_of(key_of(c[i].id, ch), 0);
+            reaktor_anim_slot *s = slot_of(key_of(c[i].id, ch), g_scope, 0);
             if (s && !s->dead) { s->dead = 1; removed++; }
         }
     }
@@ -285,7 +296,7 @@ reaktor_anim_evict(const reaktor_a11y_change *c, int n)
     for (i = 0; i < REAKTOR_ANIM_SLOTS; i++) {
         reaktor_anim_slot *s = &g_slot[i];
 
-        if (!s->key || s->dead) continue;
+        if (!s->key || s->dead || s->owner != g_scope) continue;
         if (!s->seen) { s->dead = 1; removed++; continue; }
         s->seen = 0;
     }

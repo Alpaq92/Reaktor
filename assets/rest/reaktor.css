@@ -44,3 +44,86 @@ th {
 td {
     font-size: 13px;
 }
+
+dialog {
+    padding: 12px 16px;
+}
+
+.toast {
+    background-color: var(--background-body);
+    color: var(--text-main);
+    border: 1px solid var(--background-hover);
+    padding: 6px 6px 6px 16px;
+}
+
+.toast-close {
+    background-color: rgba(0, 0, 0, 0);
+    border-radius: 0.5rem;
+}
+
+.toast-close:hover {
+    background-color: var(--button-hover);
+}
+
+.sidebar-item, .sidebar-current {
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 16px;
+}
+
+.sidebar-item {
+    background-color: rgba(0, 0, 0, 0);
+    color: var(--text-main);
+}
+
+.sidebar-item:hover {
+    background-color: var(--button-hover);
+}
+
+.sidebar-current {
+    background-color: var(--background-body);
+    color: var(--links);
+}
+
+.sidebar-edge {
+    background-color: var(--links);
+    width: 3px;
+}
+
+.tab, .tab-current {
+    background-color: rgba(0, 0, 0, 0);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 16px;
+}
+
+.tab {
+    color: var(--text-muted);
+}
+
+.tab:hover {
+    background-color: var(--button-hover);
+}
+
+.tab-current {
+    color: var(--links);
+}
+
+.tab-edge {
+    background-color: var(--links);
+    height: 2px;
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --button-hover: var(--background);
+    }
+
+    .sidebar-item:hover {
+        background-color: color-mix(in srgb, var(--text-main) 12%, var(--background));
+    }
+
+    .sidebar-current {
+        background-color: color-mix(in srgb, var(--links) 16%, var(--button-base));
+    }
+}

@@ -5,6 +5,7 @@
 #include "nk_common.h"
 #include "nk_sdl3_renderer.h"
 #include "text.h"
+#include "reaktor.h"
 
 #include "../../external/nuklear/src/stb_truetype.h"
 #include "kb_text_shape.h"
@@ -174,9 +175,7 @@ font_name(text_font *f)
             f->name[at++] = s[i + 1];
     f->name[at] = 0;
     if (at > 0) return;
-    base = SDL_strrchr(f->path, '/');
-    if (SDL_strrchr(f->path, 92) > base) base = SDL_strrchr(f->path, 92);
-    base = base ? base + 1 : f->path;
+    base = reaktor_path_leaf(f->path);
     dot  = SDL_strrchr(base, '.');
     SDL_snprintf(f->name, sizeof f->name, "%.*s",
                  dot ? (int)(dot - base) : (int)SDL_strlen(base), base);
@@ -191,10 +190,10 @@ font_open(int i)
 
     if (f->state) return f->state > 0;
     f->state = -1;
-    f->data  = SDL_LoadFile(f->path, &size);
-    if (f->data && size <= (size_t)SDL_MAX_SINT32) {
+    f->data  = (unsigned char *)reaktor_asset_load(f->path, &size);
+    if (f->data && reaktor_font_valid(f->data, size)) {
         at = stbtt_GetFontOffsetForIndex(f->data, 0);
-        if (at >= 0 && stbtt_InitFont(&f->info, f->data, at)) {
+        if (stbtt_InitFont(&f->info, f->data, at)) {
             /* Nuklear's stb_truetype allocates through userdata. */
             if (!g_raster.alloc) g_raster = nk_sdl_allocator();
             f->info.userdata = &g_raster;
@@ -209,7 +208,7 @@ font_open(int i)
         }
     }
     SDL_Log("text: could not open the font %s", f->path);
-    SDL_free(f->data);
+    reaktor_free(f->data);
     f->data = NULL;
     return 0;
 }
@@ -219,6 +218,7 @@ reaktor_text_add_fallback(const char *path)
 {
     int i = path ? font_add(path) : -1;
 
+    if (i < 0 && path) SDL_Log("text: no room for the font %s", path);
     if (i >= 0 && g_fallbacks < FONTS_MAX) g_fallback[g_fallbacks++] = i;
 }
 

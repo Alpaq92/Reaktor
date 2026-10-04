@@ -14,11 +14,20 @@
 
 #include <SDL3/SDL.h>
 
-static struct {
-    HWND    hwnd;
-    WNDPROC prev_proc;
-    int     wanted;
-} g;
+/* Slot 0 is the main window's. */
+#define BRIDGES 9
+
+typedef struct bridge {
+    SDL_Window   *win;
+    HWND          hwnd;
+    WNDPROC       prev_proc;
+    int           wanted;
+    unsigned      last_focus;
+    LONG          gen;
+    reaktor_snap *snap;
+} bridge;
+
+static bridge g_b[BRIDGES];
 
 static long
 control_type(unsigned char role)
@@ -59,10 +68,11 @@ typedef struct Provider {
     IRangeValueProvider             range;
     LONG                            ref;
     unsigned                        id;
+    bridge                         *b;
+    LONG                            gen;
 } Provider;
 
-static Provider *provider_new(unsigned id);
-static unsigned  g_last_focus;
+static Provider *provider_new(bridge *b, unsigned id);
 
 #define FROM_SIMPLE(p)   ((Provider *)((char *)(p) - offsetof(Provider, simple)))
 #define FROM_FRAGMENT(p) ((Provider *)((char *)(p) - offsetof(Provider, fragment)))
@@ -79,29 +89,37 @@ provider_is_root(const Provider *p)
     return p->id == 0;
 }
 
-static int
-node_of(unsigned id, reaktor_snap_node *out, char *buf, size_t cap)
+/* A provider outlives its window; a slot given to another is not its tree. */
+static reaktor_snap *
+snap_of(const Provider *p)
 {
-    return reaktor_snap_get(id, out, buf, cap);
+    return p->gen == p->b->gen ? p->b->snap : NULL;
 }
 
 static int
-node_role_is(unsigned id, unsigned char a, unsigned char b, unsigned char c)
+node_of(const Provider *p, unsigned id, reaktor_snap_node *out, char *buf,
+        size_t cap)
+{
+    return reaktor_snap_get_in(snap_of(p), id, out, buf, cap);
+}
+
+static int
+node_role_is(const Provider *p, unsigned char a, unsigned char b, unsigned char c)
 {
     reaktor_snap_node n;
     char buf[REAKTOR_SNAP_TEXT];
 
-    if (!node_of(id, &n, buf, sizeof(buf))) return 0;
+    if (!node_of(p, p->id, &n, buf, sizeof(buf))) return 0;
     return n.role == a || (b && n.role == b) || (c && n.role == c);
 }
 
 static int
-node_is_range(unsigned id)
+node_is_range(const Provider *p)
 {
     reaktor_snap_node n;
     char buf[REAKTOR_SNAP_TEXT];
 
-    return node_of(id, &n, buf, sizeof(buf)) && n.hi > n.lo;
+    return node_of(p, p->id, &n, buf, sizeof(buf)) && n.hi > n.lo;
 }
 
 static HRESULT
@@ -117,29 +135,29 @@ provider_qi(Provider *p, REFIID iid, void **out)
              provider_is_root(p))
         *out = &p->root;
     else if (IsEqualIID(iid, &IID_IInvokeProvider)) {
-        if (!node_role_is(p->id, REAKTOR_A11Y_BUTTON, REAKTOR_A11Y_LINK,
+        if (!node_role_is(p, REAKTOR_A11Y_BUTTON, REAKTOR_A11Y_LINK,
                           REAKTOR_A11Y_MENUITEM) &&
-            !node_role_is(p->id, REAKTOR_A11Y_TAB, 0, 0))
+            !node_role_is(p, REAKTOR_A11Y_TAB, 0, 0))
             return E_NOINTERFACE;
         *out = &p->invoke;
     } else if (IsEqualIID(iid, &IID_IValueProvider)) {
         reaktor_snap_node n;
         char buf[REAKTOR_SNAP_TEXT];
 
-        if (!node_of(p->id, &n, buf, sizeof(buf)) || !n.value)
+        if (!node_of(p, p->id, &n, buf, sizeof(buf)) || !n.value)
             return E_NOINTERFACE;
         *out = &p->value;
     } else if (IsEqualIID(iid, &IID_IToggleProvider)) {
-        if (!node_role_is(p->id, REAKTOR_A11Y_CHECKBOX, 0, 0))
+        if (!node_role_is(p, REAKTOR_A11Y_CHECKBOX, 0, 0))
             return E_NOINTERFACE;
         *out = &p->toggle;
     } else if (IsEqualIID(iid, &IID_ISelectionItemProvider)) {
-        if (!node_role_is(p->id, REAKTOR_A11Y_TAB, REAKTOR_A11Y_LISTITEM,
+        if (!node_role_is(p, REAKTOR_A11Y_TAB, REAKTOR_A11Y_LISTITEM,
                           REAKTOR_A11Y_RADIO))
             return E_NOINTERFACE;
         *out = &p->selection;
     } else if (IsEqualIID(iid, &IID_IRangeValueProvider)) {
-        if (!node_is_range(p->id)) return E_NOINTERFACE;
+        if (!node_is_range(p)) return E_NOINTERFACE;
         *out = &p->range;
     } else {
         return E_NOINTERFACE;
@@ -241,10 +259,9 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
     char buf[REAKTOR_SNAP_TEXT];
 
     VariantInit(out);
+    /* The root has no name of its own: the window's title is its host's. */
     if (provider_is_root(p)) {
-        if (prop == UIA_NamePropertyId) {
-            str_variant(out, "Reaktor");
-        } else if (prop == UIA_ControlTypePropertyId) {
+        if (prop == UIA_ControlTypePropertyId) {
             out->vt = VT_I4;
             out->lVal = UIA_WindowControlTypeId;
         } else if (prop == UIA_IsControlElementPropertyId ||
@@ -253,7 +270,7 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
         }
         return S_OK;
     }
-    if (!node_of(p->id, &n, buf, sizeof(buf))) return S_OK;
+    if (!node_of(p, p->id, &n, buf, sizeof(buf))) return S_OK;
     {
         if (prop == UIA_NamePropertyId) {
             str_variant(out, n.name);
@@ -301,8 +318,8 @@ simple_get_HostRawElementProvider(IRawElementProviderSimple *self,
     Provider *p = FROM_SIMPLE(self);
 
     *out = NULL;
-    if (!provider_is_root(p)) return S_OK;
-    return UiaHostProviderFromHwnd(g.hwnd, out);
+    if (!provider_is_root(p) || !snap_of(p)) return S_OK;
+    return UiaHostProviderFromHwnd(p->b->hwnd, out);
 }
 
 static IRawElementProviderSimpleVtbl g_simple_vtbl = {
@@ -316,35 +333,45 @@ fragment_Navigate(IRawElementProviderFragment *self,
                   enum NavigateDirection dir, IRawElementProviderFragment **out)
 {
     Provider *p = FROM_FRAGMENT(self);
+    reaktor_snap *t = snap_of(p);
     unsigned to = 0;
 
     *out = NULL;
+    if (!t) return S_OK;
     if (provider_is_root(p)) {
-        if (dir == NavigateDirection_FirstChild) to = reaktor_snap_child(0, 0);
-        else if (dir == NavigateDirection_LastChild) to = reaktor_snap_child(0, 1);
+        if (dir == NavigateDirection_FirstChild)
+            to = reaktor_snap_child_in(t, 0, 0);
+        else if (dir == NavigateDirection_LastChild)
+            to = reaktor_snap_child_in(t, 0, 1);
     } else {
         switch (dir) {
         case NavigateDirection_Parent:
-            to = reaktor_snap_parent(p->id);
+            to = reaktor_snap_parent_in(t, p->id);
             if (!to) {
-                Provider *r = provider_new(0);
+                Provider *r = provider_new(p->b, 0);
                 if (!r) return E_OUTOFMEMORY;
                 *out = &r->fragment;
                 return S_OK;
             }
             break;
-        case NavigateDirection_FirstChild:  to = reaktor_snap_child(p->id, 0); break;
-        case NavigateDirection_LastChild:   to = reaktor_snap_child(p->id, 1); break;
-        case NavigateDirection_NextSibling: to = reaktor_snap_sibling(p->id, 0); break;
+        case NavigateDirection_FirstChild:
+            to = reaktor_snap_child_in(t, p->id, 0);
+            break;
+        case NavigateDirection_LastChild:
+            to = reaktor_snap_child_in(t, p->id, 1);
+            break;
+        case NavigateDirection_NextSibling:
+            to = reaktor_snap_sibling_in(t, p->id, 0);
+            break;
         case NavigateDirection_PreviousSibling:
-            to = reaktor_snap_sibling(p->id, 1);
+            to = reaktor_snap_sibling_in(t, p->id, 1);
             break;
         default: break;
         }
     }
     if (!to) return S_OK;
     {
-        Provider *q = provider_new(to);
+        Provider *q = provider_new(p->b, to);
         if (!q) return E_OUTOFMEMORY;
         *out = &q->fragment;
     }
@@ -382,12 +409,12 @@ fragment_get_BoundingRectangle(IRawElementProviderFragment *self,
 
     out->left = out->top = out->width = out->height = 0.0;
     if (provider_is_root(p)) return S_OK;
-    if (!node_of(p->id, &n, buf, sizeof(buf))) return S_OK;
+    if (!node_of(p, p->id, &n, buf, sizeof(buf))) return S_OK;
     out->left = n.x; out->top = n.y;
     out->width = n.w; out->height = n.h;
 
     origin.x = origin.y = 0;
-    if (ClientToScreen(g.hwnd, &origin)) {
+    if (ClientToScreen(p->b->hwnd, &origin)) {
         out->left += origin.x;
         out->top  += origin.y;
     }
@@ -408,7 +435,7 @@ fragment_SetFocus(IRawElementProviderFragment *self)
 {
     Provider *p = FROM_FRAGMENT(self);
 
-    if (!provider_is_root(p)) reaktor_snap_request_focus(p->id);
+    if (!provider_is_root(p)) reaktor_snap_request_focus_in(snap_of(p), p->id);
     return S_OK;
 }
 
@@ -418,9 +445,8 @@ fragment_get_FragmentRoot(IRawElementProviderFragment *self,
 {
     Provider *r;
 
-    (void)self;
     *out = NULL;
-    r = provider_new(0);
+    r = provider_new(FROM_FRAGMENT(self)->b, 0);
     if (!r) return E_OUTOFMEMORY;
     *out = &r->root;
     return S_OK;
@@ -438,17 +464,18 @@ root_ElementProviderFromPoint(IRawElementProviderFragmentRoot *self,
                               double x, double y,
                               IRawElementProviderFragment **out)
 {
+    Provider *p = FROM_ROOT(self);
     POINT origin;
     unsigned hit;
 
-    (void)self;
     *out = NULL;
     origin.x = origin.y = 0;
-    if (!ClientToScreen(g.hwnd, &origin)) return S_OK;
-    hit = reaktor_snap_hit((float)(x - origin.x), (float)(y - origin.y));
+    if (!snap_of(p) || !ClientToScreen(p->b->hwnd, &origin)) return S_OK;
+    hit = reaktor_snap_hit_in(snap_of(p), (float)(x - origin.x),
+                              (float)(y - origin.y));
     if (!hit) return S_OK;
     {
-        Provider *q = provider_new(hit);
+        Provider *q = provider_new(p->b, hit);
         if (!q) return E_OUTOFMEMORY;
         *out = &q->fragment;
     }
@@ -459,14 +486,14 @@ static HRESULT STDMETHODCALLTYPE
 root_GetFocus(IRawElementProviderFragmentRoot *self,
               IRawElementProviderFragment **out)
 {
+    Provider *p = FROM_ROOT(self);
     unsigned id;
 
-    (void)self;
     *out = NULL;
-    id = reaktor_snap_focus();
+    id = reaktor_snap_focus_in(snap_of(p));
     if (!id) return S_OK;
     {
-        Provider *q = provider_new(id);
+        Provider *q = provider_new(p->b, id);
         if (!q) return E_OUTOFMEMORY;
         *out = &q->fragment;
     }
@@ -481,7 +508,8 @@ static IRawElementProviderFragmentRootVtbl g_root_vtbl = {
 static HRESULT STDMETHODCALLTYPE
 invoke_Invoke(IInvokeProvider *self)
 {
-    reaktor_snap_request_activate(FROM_INVOKE(self)->id);
+    reaktor_snap_request_activate_in(snap_of(FROM_INVOKE(self)),
+                                     FROM_INVOKE(self)->id);
     return S_OK;
 }
 
@@ -527,7 +555,8 @@ static IValueProviderVtbl g_value_vtbl = {
 static HRESULT STDMETHODCALLTYPE
 toggle_Toggle(IToggleProvider *self)
 {
-    reaktor_snap_request_activate(FROM_TOGGLE(self)->id);
+    reaktor_snap_request_activate_in(snap_of(FROM_TOGGLE(self)),
+                                     FROM_TOGGLE(self)->id);
     return S_OK;
 }
 
@@ -538,7 +567,7 @@ toggle_get_ToggleState(IToggleProvider *self, enum ToggleState *out)
     char buf[REAKTOR_SNAP_TEXT];
 
     *out = ToggleState_Indeterminate;
-    if (node_of(FROM_TOGGLE(self)->id, &n, buf, sizeof(buf)))
+    if (node_of(FROM_TOGGLE(self), FROM_TOGGLE(self)->id, &n, buf, sizeof(buf)))
         *out = (n.state & REAKTOR_A11Y_CHECKED) ? ToggleState_On
                                               : ToggleState_Off;
     return S_OK;
@@ -552,7 +581,8 @@ static IToggleProviderVtbl g_toggle_vtbl = {
 static HRESULT STDMETHODCALLTYPE
 select_Select(ISelectionItemProvider *self)
 {
-    reaktor_snap_request_activate(FROM_SELECT(self)->id);
+    reaktor_snap_request_activate_in(snap_of(FROM_SELECT(self)),
+                                     FROM_SELECT(self)->id);
     return S_OK;
 }
 
@@ -576,7 +606,7 @@ select_get_IsSelected(ISelectionItemProvider *self, BOOL *out)
     char buf[REAKTOR_SNAP_TEXT];
 
     *out = FALSE;
-    if (node_of(FROM_SELECT(self)->id, &n, buf, sizeof(buf)))
+    if (node_of(FROM_SELECT(self), FROM_SELECT(self)->id, &n, buf, sizeof(buf)))
         *out = (n.state & (REAKTOR_A11Y_SELECTED | REAKTOR_A11Y_CHECKED))
              ? TRUE : FALSE;
     return S_OK;
@@ -586,12 +616,13 @@ static HRESULT STDMETHODCALLTYPE
 select_get_SelectionContainer(ISelectionItemProvider *self,
                               IRawElementProviderSimple **out)
 {
-    unsigned parent = reaktor_snap_parent(FROM_SELECT(self)->id);
+    Provider *p = FROM_SELECT(self);
+    unsigned parent = reaktor_snap_parent_in(snap_of(p), p->id);
 
     *out = NULL;
     if (!parent) return S_OK;
     {
-        Provider *q = provider_new(parent);
+        Provider *q = provider_new(p->b, parent);
         if (!q) return E_OUTOFMEMORY;
         *out = &q->simple;
     }
@@ -618,7 +649,7 @@ range_field(IRangeValueProvider *self, size_t off, double *out)
     char buf[REAKTOR_SNAP_TEXT];
 
     *out = 0.0;
-    if (node_of(FROM_RANGE(self)->id, &n, buf, sizeof(buf)))
+    if (node_of(FROM_RANGE(self), FROM_RANGE(self)->id, &n, buf, sizeof(buf)))
         *out = *(float *)((char *)&n + off);
     return S_OK;
 }
@@ -664,7 +695,7 @@ static IRangeValueProviderVtbl g_range_vtbl = {
 };
 
 static Provider *
-provider_new(unsigned id)
+provider_new(bridge *b, unsigned id)
 {
     Provider *p = (Provider *)calloc(1, sizeof(Provider));
 
@@ -679,25 +710,74 @@ provider_new(unsigned id)
     p->range.lpVtbl    = &g_range_vtbl;
     p->ref = 1;
     p->id  = id;
+    p->b   = b;
+    p->gen = b->gen;
     return p;
+}
+
+static bridge *
+by_hwnd(HWND h)
+{
+    int i;
+
+    for (i = 0; i < BRIDGES; i++)
+        if (g_b[i].hwnd == h) return &g_b[i];
+    return NULL;
+}
+
+static bridge *
+by_window(const SDL_Window *win)
+{
+    int i;
+
+    for (i = 0; win && i < BRIDGES; i++)
+        if (g_b[i].win == win) return &g_b[i];
+    return NULL;
 }
 
 static LRESULT CALLBACK
 wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
+    bridge *b = by_hwnd(h);
+
+    if (!b) return DefWindowProcW(h, msg, wp, lp);
     if (msg == WM_GETOBJECT && (DWORD)lp == (DWORD)UiaRootObjectId) {
-        Provider *r = provider_new(0);
+        Provider *r = provider_new(b, 0);
         LRESULT res;
 
         if (!r) return 0;
-        g.wanted = 1;
+        b->wanted = 1;
         res = UiaReturnRawElementProvider(h, wp, lp,
                                           (IRawElementProviderSimple *)&r->simple);
         IRawElementProviderSimple_Release(&r->simple);
         return res;
     }
     if (msg == WM_DESTROY) UiaReturnRawElementProvider(h, 0, 0, NULL);
-    return CallWindowProcW(g.prev_proc, h, msg, wp, lp);
+    return CallWindowProcW(b->prev_proc, h, msg, wp, lp);
+}
+
+static int
+attach(bridge *b, SDL_Window *win)
+{
+    HWND h = (HWND)SDL_GetPointerProperty(SDL_GetWindowProperties(win),
+                                          SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+                                          NULL);
+
+    if (!h) {
+        SDL_Log("a11y: no HWND; UI Automation is not served");
+        return 0;
+    }
+    b->win  = win;
+    b->hwnd = h;
+    b->prev_proc = (WNDPROC)SetWindowLongPtrW(h, GWLP_WNDPROC, (LONG_PTR)wnd_proc);
+    if (!b->prev_proc) {
+        SDL_Log("a11y: could not subclass the window (%lu)",
+                (unsigned long)GetLastError());
+        b->win  = NULL;
+        b->hwnd = NULL;
+        return 0;
+    }
+    return 1;
 }
 
 void
@@ -708,22 +788,10 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
     int count = 0;
 
     if (!reaktor_snap_init(activate, focus, user)) return;
-
+    g_b[0].snap = reaktor_snap_main();
     wins = SDL_GetWindows(&count);
-    if (wins && count > 0)
-        g.hwnd = (HWND)SDL_GetPointerProperty(
-            SDL_GetWindowProperties(wins[0]),
-            SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+    if (wins && count > 0) attach(&g_b[0], wins[0]);
     SDL_free(wins);
-    if (!g.hwnd) {
-        SDL_Log("a11y: no HWND; UI Automation is not served");
-        return;
-    }
-    g.prev_proc = (WNDPROC)SetWindowLongPtrW(g.hwnd, GWLP_WNDPROC,
-                                             (LONG_PTR)wnd_proc);
-    if (!g.prev_proc)
-        SDL_Log("a11y: could not subclass the window (%lu)",
-                (unsigned long)GetLastError());
 }
 
 void
@@ -732,12 +800,12 @@ reaktor_a11y_platform_drain(void)
     reaktor_snap_drain();
 }
 
-void
-reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
+static void
+push_into(bridge *b, const reaktor_a11y *a, unsigned focus_id)
 {
-    if (!reaktor_snap_update(a, focus_id)) return;
+    if (!reaktor_snap_update_in(b->snap, a, focus_id)) return;
 
-    if (!g.wanted || !UiaClientsAreListening()) return;
+    if (!b->wanted || !UiaClientsAreListening()) return;
     {
         int m, i, structural = 0;
         const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);
@@ -749,7 +817,7 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
                 break;
             }
         if (structural) {
-            Provider *r = provider_new(0);
+            Provider *r = provider_new(b, 0);
 
             if (!r) return;
             UiaRaiseStructureChangedEvent(
@@ -758,10 +826,10 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
             IRawElementProviderSimple_Release(&r->simple);
         }
     }
-    if (focus_id != g_last_focus) {
-        g_last_focus = focus_id;
+    if (focus_id != b->last_focus) {
+        b->last_focus = focus_id;
         if (focus_id) {
-            Provider *f = provider_new(focus_id);
+            Provider *f = provider_new(b, focus_id);
 
             if (!f) return;
             UiaRaiseAutomationEvent((IRawElementProviderSimple *)&f->simple,
@@ -769,6 +837,58 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
             IRawElementProviderSimple_Release(&f->simple);
         }
     }
+}
+
+void
+reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
+{
+    if (g_b[0].snap) push_into(&g_b[0], a, focus_id);
+}
+
+void
+reaktor_a11y_platform_window_push(struct SDL_Window *win, const reaktor_a11y *a,
+                                  unsigned focus_id, reaktor_a11y_action activate,
+                                  reaktor_a11y_action focus, void *user)
+{
+    bridge *b = by_window(win);
+    int i;
+
+    if (!b) {
+        for (i = 1; i < BRIDGES && g_b[i].win; i++) {}
+        if (i == BRIDGES) return;
+        b = &g_b[i];
+        if (!b->snap)
+            b->snap = reaktor_snap_new(activate, focus, user, SDL_GetWindowID(win));
+        else
+            reaktor_snap_bind(b->snap, activate, focus, user, SDL_GetWindowID(win));
+        if (!b->snap || !attach(b, win)) return;
+    }
+    push_into(b, a, focus_id);
+}
+
+void
+reaktor_a11y_platform_window_drain(struct SDL_Window *win)
+{
+    bridge *b = by_window(win);
+
+    if (b) reaktor_snap_drain_in(b->snap);
+}
+
+void
+reaktor_a11y_platform_window_gone(struct SDL_Window *win)
+{
+    bridge *b = by_window(win);
+
+    if (!b || b == &g_b[0]) return;
+    SetWindowLongPtrW(b->hwnd, GWLP_WNDPROC, (LONG_PTR)b->prev_proc);
+    UiaReturnRawElementProvider(b->hwnd, 0, 0, NULL);
+    InterlockedIncrement(&b->gen);
+    reaktor_snap_bind(b->snap, NULL, NULL, NULL, 0);
+    b->win        = NULL;
+    b->hwnd       = NULL;
+    b->prev_proc  = NULL;
+    b->wanted     = 0;
+    b->last_focus = 0;
 }
 
 #endif

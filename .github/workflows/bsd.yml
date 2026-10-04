@@ -1,0 +1,171 @@
+name: BSD
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bsd:
+    name: ${{ matrix.os }} ${{ matrix.version }} ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout }}
+    continue-on-error: ${{ matrix.arch == 'arm64' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: freebsd, version: '15.1', arch: x86-64, timeout: 60 }
+          - { os: freebsd, version: '15.1', arch: arm64, timeout: 240 }
+          - { os: openbsd, version: '7.9', arch: x86-64, timeout: 60 }
+          - { os: openbsd, version: '7.9', arch: arm64, timeout: 240 }
+          - { os: netbsd, version: '11.0', arch: x86-64, timeout: 60 }
+          - { os: netbsd, version: '11.0', arch: arm64, timeout: 240 }
+    defaults:
+      run:
+        shell: cpa.sh {0} --sync-files none
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Start VM
+        id: vm
+        uses: cross-platform-actions/action@e0b9770014ba65d5e0815f15b74031c3a635f641 # v1.6.0
+        with:
+          operating_system: ${{ matrix.os }}
+          version: ${{ matrix.version }}
+          architecture: ${{ matrix.arch }}
+          shell: sh
+          cpu_count: 4
+          memory: 8G
+          sync_files: runner-to-vm
+
+      - name: Install packages
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          case "$(uname -s)" in
+            FreeBSD)
+              sudo env IGNORE_OSVERSION=yes pkg install -y \
+                cmake-core ninja pkgconf dbus xorg-vfbserver xorgproto \
+                libX11 libXext libXcursor libXi libXfixes libXrandr libXrender libXtst \
+                libxkbcommon wayland wayland-protocols libglvnd </dev/null
+              ;;
+            OpenBSD)
+              sudo pkg_add -I cmake-core ninja dbus libxkbcommon wayland wayland-protocols </dev/null
+              ;;
+            NetBSD)
+              sudo -E pkgin -y update </dev/null
+              sudo -E pkgin -y install cmake ninja-build pkgconf dbus libxkbcommon wayland wayland-protocols </dev/null
+              ;;
+          esac
+
+      - name: Build
+        id: build
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          case "$(uname -s)" in
+            OpenBSD) ulimit -Sd "$(ulimit -Hd)" ;;
+          esac
+          uname -a
+          cc --version
+          cmake --version
+          ./build.sh </dev/null
+
+      - name: Console tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          fail=0
+          for t in onlaytest keytest a11ytest animtest localetest laytest texttest; do
+            echo "== $t"
+            if ./build/$t </dev/null; then :; else echo "$t: exit status $?"; fail=1; fi
+          done
+          exit "$fail"
+
+      - name: Shots and dumps
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          case "$(uname -s)" in
+            FreeBSD) xvfb=/usr/local/bin/Xvfb ;;
+            OpenBSD) xvfb=/usr/X11R6/bin/Xvfb ;;
+            NetBSD) xvfb=/usr/X11R7/bin/Xvfb ;;
+          esac
+          rm -rf smoke
+          mkdir smoke
+          "$xvfb" :99 -screen 0 1280x1024x24 -nolisten tcp >smoke/xvfb.log 2>&1 &
+          xvfb_pid=$!
+          trap 'kill "$xvfb_pid" 2>/dev/null || :' EXIT
+          n=0
+          while [ ! -S /tmp/.X11-unix/X99 ]; do
+            n=$((n + 1))
+            if [ "$n" -gt 60 ] || ! kill -0 "$xvfb_pid" 2>/dev/null; then
+              echo "Xvfb did not start"
+              cat smoke/xvfb.log || :
+              exit 1
+            fi
+            sleep 1
+          done
+          fail=0
+          shot() {
+            name=$1
+            driver=$2
+            shift 2
+            if DISPLAY=:99 dbus-run-session -- \
+                timeout 600 "$@" --video "$driver" \
+                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
+                </dev/null >"smoke/$name.log" 2>&1; then
+              if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
+                echo "$name: ok"
+                return 0
+              fi
+              echo "$name: exited 0 without both a shot and a dump"
+            else
+              echo "$name: exit status $?"
+            fi
+            cat "smoke/$name.log" || :
+            fail=1
+          }
+          shot simple x11 ./build/simple --theme light
+          shot showcase x11 ./build/showcase --tab 7 --theme dark
+          shot simple-dummy dummy ./build/simple --theme light
+          exit "$fail"
+
+      - name: Build mkicon
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          cmake --build build --target mkicon </dev/null
+
+      - name: Collect the shots
+        if: ${{ always() && steps.vm.outcome == 'success' }}
+        shell: cpa.sh {0} --sync-files vm-to-runner
+        run: |
+          mkdir -p smoke
+          for f in build/CMakeCache.txt build/CMakeFiles/CMakeConfigureLog.yaml; do
+            if [ -f "$f" ]; then cp "$f" smoke/; fi
+          done
+          rm -rf build
+
+      - name: Upload the shots
+        if: ${{ always() && steps.vm.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bsd-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}
+          path: smoke/
+          if-no-files-found: warn
+          retention-days: 14

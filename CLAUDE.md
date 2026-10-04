@@ -41,14 +41,25 @@ regression oracle for every layout or style change.
   widget that looks different under the pointer and registers none keeps its
   old look until some other input.
 - **libcss has no `em`/`rem`** — its units are px, %, dip, sp, pt. `cssflat.c`
-  converts before the engine sees the text, along with `var()`, `@media` and
-  attribute selectors.
+  converts before the engine sees the text, along with `var()`, `color-mix()`,
+  `@media` and attribute selectors.
 - **The renderer snaps every vertex to whole pixels.** Sub-pixel corrections
   are discarded, and rects that abut can round apart into a visible seam.
+- **SDL redraws a software rectangle its own way.** Its software renderer
+  turns two triangles that make a rectangle into a fill or a copy, and
+  truncates the scaled position and size apart, so at a fractional scale a run
+  a whole number of device pixels wide loses one. `nk_sdl_quad` draws every
+  such rectangle from device pixels before SDL sees it.
 - **A one-pixel stroke is two pixels here.** `nk_stroke_rect` casts its rect to
   `short`, so a half-pixel inset never reaches the draw list, and with line
   anti-aliasing on a stroke of thickness one is always two half-alpha rows.
-  An edge that has to be one pixel is two fills, as `reaktor_menu_edge` draws.
+  A border is `reaktor_edge_round`: fills for its runs, a ring mask for its
+  corners, inside the box.
+- **A rounded fill is jagged unless it is a mask.** Fill anti-aliasing is off
+  on every renderer, so a fill with corners goes through `reaktor_fill_round`,
+  and `reaktor_render` swaps each one Nuklear drew itself for masks, relinking
+  the built command list — whose end is wherever a `next` reaches
+  `ctx->memory.allocated`.
 - **Measure the present, not the draw.** On a machine with no GPU, most of a
   frame is `SDL_RenderPresent`. `build/render/present` split is on the
   Diagnostics page and in `bench --no-vsync`.
@@ -58,6 +69,11 @@ regression oracle for every layout or style change.
   Nuklear's text command, so a change to how Nuklear or the renderer places
   glyphs does not reach it. Its bidi levels are matched to mojibake's by order:
   mojibake 0.3.6 records `byte_offset` at a character's last byte.
+- **Only Nuklear's active window gets input.** Every other window carries a
+  sticky `NK_WINDOW_ROM` until a click or hover activates it inside
+  `nk_begin`. A layer that must not take input is begun
+  `NK_WINDOW_NOT_INTERACTIVE` with `ctx->input` blanked — `reaktor_layer_begin`
+  with `HOLD_ALL` — and focus is handed back with `reaktor_layer_focus`.
 - **A field's keys are its own, wherever it was declared.** Nuklear keeps
   edit-active state on the window a widget sits in, so the page's window misses
   every field inside a group; `app->editing` is what navigation asks before it
@@ -70,6 +86,13 @@ regression oracle for every layout or style change.
 - **An empty edit has no text pointer.** `nk_str_get_const` answers NULL while
   `nk_str_len_char` still answers bytes, so that pair measures a null pointer
   with a positive length.
+- **A tap focuses the canvas by itself.** The canvas is focusable, so a
+  touch's compatibility `mousedown` moves focus to it as its default action,
+  with no script involved. Only canceling the touch `pointerdown` stops it.
+- **SDL hands the app its events a frame late.** Its web handlers queue them
+  as they happen, but the app sees them only when the next iteration pumps, so
+  anything the page keeps in a queue of its own overtakes them. The page's
+  typing goes onto SDL's queue for that reason.
 - **A hidden web page runs no frames.** The web build's main loop waits on
   `requestAnimationFrame`, which never fires in a background tab, a minimized
   window or a browser pane that is not on screen. `#a11y` is made in `main()`,
@@ -80,7 +103,12 @@ regression oracle for every layout or style change.
 ## House rules
 
 - Dependencies are git submodules under `external/`, read as they ship. Never
-  transcribe a value out of one, and never generate a header from one.
+  transcribe a value out of one, and never generate a header from one. The one
+  exception is `REAKTOR_BUILTINS` in CMakeLists.txt: tiny.css's three sheets
+  and the seven Ionicons the widgets draw (three chevrons, three discs, the
+  toast's close cross) are compiled in byte for byte, beside the Aileron
+  fonts, the mark and reaktor.css. Nothing else from a submodule is — not the
+  rest of Ionicons, not simple.css.
 - American English, in code and prose.
 - No environment variables. Anything worth overriding is a command-line flag
   the runtime strips from `argv`.

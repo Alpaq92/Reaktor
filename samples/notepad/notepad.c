@@ -3,7 +3,8 @@
 #include "internal.h"
 #include "declare.h"
 #include "keys.h"
-#include "sample.h"
+#include "reaktor/launch.h"
+#include "reaktor/main.h"
 
 #define TEXT_CAP 65536
 
@@ -92,7 +93,8 @@ load(const char *path)
 static void
 save(void)
 {
-    FILE *f;
+    SDL_IOStream *io;
+    int ok;
 
     if (!g.path[0]) {
         SDL_strlcpy(g.status,
@@ -100,14 +102,15 @@ save(void)
                     sizeof(g.status));
         return;
     }
-    f = fopen(g.path, "wb");
-    if (!f) {
+    io = SDL_IOFromFile(g.path, "wb");
+    ok = io != NULL;
+    if (ok && g.len > 0) ok = SDL_WriteIO(io, g.text, (size_t)g.len) == (size_t)g.len;
+    if (io && !SDL_CloseIO(io)) ok = 0;
+    if (!ok) {
         SDL_snprintf(g.status, sizeof(g.status), "Could not write %s",
                      g.path);
         return;
     }
-    if (g.len > 0) fwrite(g.text, 1, (size_t)g.len, f);
-    fclose(f);
 
     g.saved_hash = hash_of(g.text, g.len);
     g.saved_len  = g.len;
@@ -120,17 +123,8 @@ menu_cursor(App *app, struct nk_context *ctx)
     reaktor_hot_top(app, nk_window_get_bounds(ctx), 1, 0);
 }
 
+
 static void
-quit_now(void)
-{
-    SDL_Event q;
-
-    SDL_zero(q);
-    q.type = SDL_EVENT_QUIT;
-    SDL_PushEvent(&q);
-}
-
-void
 page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 {
     char line[220];
@@ -171,7 +165,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         if (reaktor_menu_item(app, ctx, "Save", "Ctrl+S", 0))
             save();
         if (reaktor_menu_item(app, ctx, "Quit", "Ctrl+Q", 0))
-            quit_now();
+            reaktor_request_quit(app);
         nk_menu_end(ctx);
     }
 
@@ -225,7 +219,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     }
 }
 
-int
+static int
 sample_key(App *app, const SDL_Event *e)
 {
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_N)) { new_file(); return 1; }
@@ -236,7 +230,10 @@ sample_key(App *app, const SDL_Event *e)
         return 1;
     }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_S)) { save(); return 1; }
-    if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_Q)) { quit_now(); return 1; }
+    if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_Q)) {
+        reaktor_request_quit(app);
+        return 1;
+    }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_K)) {
         SDL_strlcpy(g.status,
                     "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+Q quit",
@@ -246,40 +243,36 @@ sample_key(App *app, const SDL_Event *e)
     return 0;
 }
 
-void
-sample_args(App *app, int argc, char **argv)
+static int
+sample_start(App *app, int argc, char **argv)
 {
     (void)app;
-    if (argc < 2 || !argv[1] || !argv[1][0]) return;
+    if (argc < 2 || !argv[1] || !argv[1][0]) return 0;
     g.seeded = 1;
     new_file();
     load(argv[1]);
+    return 0;
 }
 
-void
-sample_window(reaktor_window_spec *out)
+static void
+sample_file_opened(App *app, const char *path)
 {
-    out->w = 820;
-    out->h = 600;
-    out->title = "Notepad";
-}
-
-SDL_HitTestResult SDLCALL
-window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
-{
-    (void)win; (void)pt; (void)data;
-    return SDL_HITTEST_NORMAL;
-}
-
-void
-sample_file_taken(App *app)
-{
-    char answer[SC_PATH_CAP];
-
-    if (!reaktor_file_taken(app, answer, (int)sizeof(answer))) return;
-    if (SDL_strcmp(answer, "canceled") == 0) {
-        SDL_strlcpy(g.status, "Canceled", sizeof(g.status));
+    (void)app;
+    if (!path) {
+        SDL_strlcpy(g.status, "No file opened", sizeof(g.status));
         return;
     }
-    load(answer);
+    load(path);
+}
+
+int
+main(int argc, char **argv)
+{
+    return launchApp(argc, argv, &(reaktor_launch){
+        .name        = "Notepad",
+        .window      = { .w = 820, .h = 600 },
+        .page        = page_shell,
+        .key         = sample_key,
+        .start       = sample_start,
+        .file_opened = sample_file_opened });
 }

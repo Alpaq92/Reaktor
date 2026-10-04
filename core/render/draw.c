@@ -12,38 +12,121 @@ parse_colour(const char *spec, char *out, size_t cap)
     return 1;
 }
 
+static struct tex_slot *
+slot_at(void *slots, size_t size, int i)
+{
+    return (struct tex_slot *)((char *)slots + (size_t)i * size);
+}
+
+/* Never evicts a slot this frame's commands use. */
+static struct tex_slot *
+slot_take(App *app, void *slots, size_t size, int *count, int max)
+{
+    unsigned now = app->ctx->seq;
+    struct tex_slot *k = NULL, *s;
+    int i;
+
+    if (*count < max) return slot_at(slots, size, (*count)++);
+    for (i = 0; i < max; i++) {
+        s = slot_at(slots, size, i);
+        if (s->seen != now && (!k || now - s->seen > now - k->seen)) k = s;
+    }
+    if (k && k->tex) SDL_DestroyTexture(k->tex);
+    return k;
+}
+
 void
 img_cache_clear(App *app)
 {
     int i;
 
     for (i = 0; i < app->img_count; i++)
-        if (app->img[i].tex) SDL_DestroyTexture(app->img[i].tex);
+        if (app->img[i].s.tex) SDL_DestroyTexture(app->img[i].s.tex);
     app->img_count = 0;
-    for (i = 0; i < app->round_count; i++)
-        if (app->round[i].tex) SDL_DestroyTexture(app->round[i].tex);
-    app->round_count = 0;
+}
+
+void
+img_cache_free(App *app)
+{
+    img_cache_clear(app);
+    SDL_free(app->img);
+    app->img     = NULL;
+    app->img_cap = 0;
+    if (app->blank) SDL_DestroyTexture(app->blank);
+    app->blank = NULL;
+}
+
+static struct img_slot *
+img_grow(App *app)
+{
+    int cap = app->img_cap ? app->img_cap * 2 : IMG_CACHE_MAX;
+    struct img_slot *more =
+        (struct img_slot *)SDL_realloc(app->img, (size_t)cap * sizeof *more);
+
+    if (!more) return NULL;
+    app->img     = more;
+    app->img_cap = cap;
+    return &app->img[app->img_count++];
+}
+
+/* A missing icon is blank, not Nuklear's white quad. */
+static struct nk_image
+blank_image(App *app)
+{
+    static const Uint32 clear = 0;
+
+    if (!app->blank) {
+        app->blank = SDL_CreateTexture(app->ren, SDL_PIXELFORMAT_ARGB8888,
+                                       SDL_TEXTUREACCESS_STATIC, 1, 1);
+        if (!app->blank) return nk_image_id(0);
+        SDL_UpdateTexture(app->blank, NULL, &clear, (int)sizeof clear);
+        SDL_SetTextureBlendMode(app->blank, SDL_BLENDMODE_BLEND);
+    }
+    return nk_image_ptr(app->blank);
+}
+
+static const char *
+icon_source(App *app, const char *rel, char *out, size_t cap)
+{
+    static const char ion[] = "external/ionicons/src/svg/";
+    const char *base;
+    int i;
+
+    if (SDL_strncmp(rel, ion, sizeof(ion) - 1) != 0) return rel;
+    base = rel + sizeof(ion) - 1;
+    for (i = 0; i < app->icon_dir_count; i++) {
+        SDL_snprintf(out, cap, "%s/%s", app->icon_dirs[i], base);
+        if (reaktor_asset_exists(out)) return out;
+    }
+    SDL_snprintf(out, cap, "icons/%s", base);
+    return reaktor_asset_exists(out) ? out : rel;
 }
 
 static struct img_slot *
 img_lookup(App *app, const char *src, int px)
 {
-    char rel[192], ocol[16] = {0}, icol[16] = {0};
+    char rel[192], found[1024], ocol[16] = {0}, icol[16] = {0};
     float swk = 0.0f;
     const char *q;
     plutovg_surface_t *surf;
     SDL_Surface *sdlsurf;
     SDL_Texture *tex;
+    struct img_slot *slot;
     int i, w, h, stride;
 
     if (px < 8) px = 8;
     if (px > 512) px = 512;
 
     for (i = 0; i < app->img_count; i++)
-        if (app->img[i].px == px && strcmp(app->img[i].src, src) == 0)
-            return app->img[i].tex ? &app->img[i] : NULL;
+        if (app->img[i].px == px && strcmp(app->img[i].src, src) == 0) {
+            app->img[i].s.seen = app->ctx->seq;
+            return app->img[i].s.tex ? &app->img[i] : NULL;
+        }
 
-    if (app->img_count >= IMG_CACHE_MAX) return NULL;
+    slot = (struct img_slot *)slot_take(app, app->img, sizeof app->img[0],
+                                        &app->img_count, app->img_cap);
+    if (!slot) slot = img_grow(app);
+    if (!slot) return NULL;
 
     SDL_strlcpy(rel, src, sizeof(rel));
     q = strchr(rel, '?');
@@ -63,17 +146,17 @@ img_lookup(App *app, const char *src, int px)
         }
     }
 
-    surf = reaktor_svg_surface_path(rel, px, ocol[0] ? ocol : NULL,
+    surf = reaktor_svg_surface_path(icon_source(app, rel, found, sizeof(found)),
+                                    px, ocol[0] ? ocol : NULL,
                                     icol[0] ? icol : NULL, swk);
 
-    SDL_strlcpy(app->img[app->img_count].src, src,
-                sizeof(app->img[app->img_count].src));
-    app->img[app->img_count].px  = px;
-    app->img[app->img_count].tex = NULL;
-    app->img[app->img_count].w = 0;
-    app->img[app->img_count].h = 0;
+    SDL_strlcpy(slot->src, src, sizeof(slot->src));
+    slot->px     = px;
+    slot->s.tex  = NULL;
+    slot->w      = slot->h = 0;
+    slot->s.seen = app->ctx->seq;
 
-    if (!surf) { app->img_count++; return NULL; }
+    if (!surf) return NULL;
 
     w = plutovg_surface_get_width(surf);
     h = plutovg_surface_get_height(surf);
@@ -86,14 +169,14 @@ img_lookup(App *app, const char *src, int px)
     if (sdlsurf) SDL_DestroySurface(sdlsurf);
     plutovg_surface_destroy(surf);
 
-    if (!tex) { app->img_count++; return NULL; }
+    if (!tex) return NULL;
     SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
 
-    app->img[app->img_count].tex = tex;
-    app->img[app->img_count].w = w;
-    app->img[app->img_count].h = h;
-    return &app->img[app->img_count++];
+    slot->s.tex = tex;
+    slot->w     = w;
+    slot->h     = h;
+    return slot;
 }
 
 struct nk_image
@@ -102,8 +185,8 @@ icon_over(App *app, const char *src, int px, float over)
     int raster = (int)(px * reaktor_scale() * over + 0.5f);
     struct img_slot *slot = img_lookup(app, src, raster);
 
-    if (!slot) return nk_image_id(0);
-    return nk_subimage_ptr(slot->tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
+    if (!slot) return blank_image(app);
+    return nk_subimage_ptr(slot->s.tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
                            nk_rect(0.0f, 0.0f, (float)slot->w, (float)slot->h));
 }
 
@@ -126,22 +209,28 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
 }
 
 static struct nk_image
-round_mask(App *app, int r)
+round_mask(App *app, int r, int t)
 {
     const int ss = 4;
     int d = 2 * r, x, y, i;
+    float in = (float)(r - t);
+    struct round_slot *slot;
     SDL_Surface *surf;
     SDL_Texture *tex;
     unsigned char *px;
 
     for (i = 0; i < app->round_count; i++)
-        if (app->round[i].r == r)
-            return app->round[i].tex
-                 ? nk_subimage_ptr(app->round[i].tex, (nk_ushort)d,
+        if (app->round[i].r == r && app->round[i].t == t) {
+            app->round[i].s.seen = app->ctx->seq;
+            return app->round[i].s.tex
+                 ? nk_subimage_ptr(app->round[i].s.tex, (nk_ushort)d,
                                    (nk_ushort)d,
                                    nk_rect(0.0f, 0.0f, (float)d, (float)d))
                  : nk_image_id(0);
-    if (app->round_count >= ROUND_CACHE_MAX) return nk_image_id(0);
+        }
+    slot = (struct round_slot *)slot_take(app, app->round, sizeof app->round[0],
+                                          &app->round_count, ROUND_CACHE_MAX);
+    if (!slot) return nk_image_id(0);
 
     surf = SDL_CreateSurface(d, d, SDL_PIXELFORMAT_ARGB8888);
     tex  = NULL;
@@ -158,7 +247,11 @@ round_mask(App *app, int r)
                                  - (float)r;
                         float fy = (float)y + ((float)sy + 0.5f) / (float)ss
                                  - (float)r;
-                        if (fx * fx + fy * fy <= (float)r * (float)r) hit++;
+                        float q = fx * fx + fy * fy;
+
+                        if (q <= (float)r * (float)r &&
+                            (t <= 0 || in <= 0.0f || q > in * in))
+                            hit++;
                     }
                 }
                 p[0] = p[1] = p[2] = 255;
@@ -172,12 +265,141 @@ round_mask(App *app, int r)
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
     }
-    app->round[app->round_count].r   = r;
-    app->round[app->round_count].tex = tex;
-    app->round_count++;
+    slot->r      = r;
+    slot->t      = t;
+    slot->s.tex  = tex;
+    slot->s.seen = app->ctx->seq;
     if (!tex) return nk_image_id(0);
     return nk_subimage_ptr(tex, (nk_ushort)d, (nk_ushort)d,
                            nk_rect(0.0f, 0.0f, (float)d, (float)d));
+}
+
+static int
+mask_px(float logical)
+{
+    int n = reaktor_px(logical);
+
+    return n < 1 ? 1 : n;
+}
+
+static nk_size
+splice_fill(App *app, nk_size at, struct nk_rect clip)
+{
+    struct nk_context *ctx = app->ctx;
+    struct nk_command_rect_filled f =
+        *(struct nk_command_rect_filled *)((nk_byte *)ctx->memory.memory.ptr + at);
+    struct nk_command_buffer run;
+    nk_byte *base;
+    nk_size first;
+
+    SDL_zero(run);
+    run.base         = &ctx->memory;
+    run.use_clipping = NK_CLIPPING_OFF;
+    run.clip         = clip;
+    run.begin = run.end = run.last = ctx->memory.allocated;
+    nk_push_scissor(&run, clip);
+    first = run.last;
+    reaktor_fill_round(app, &run, nk_rect(f.x, f.y, f.w, f.h), f.rounding, f.color);
+    base = (nk_byte *)ctx->memory.memory.ptr;
+    ((struct nk_command *)(base + run.last))->next = f.header.next;
+    ((struct nk_command *)(base + at))->type = NK_COMMAND_NOP;
+    ((struct nk_command *)(base + at))->next = first;
+    return run.last;
+}
+
+static void
+mask_rounded_fills(App *app)
+{
+    struct nk_context *ctx = app->ctx;
+    const struct nk_command *c = nk__begin(ctx);
+    struct nk_rect clip = REAKTOR_NO_CLIP;
+    nk_size end = ctx->memory.allocated, at, next, tail = 0;
+    int spliced = 0;
+
+    if (!c) return;
+    at = (nk_size)((const nk_byte *)c - (const nk_byte *)ctx->memory.memory.ptr);
+    for (;;) {
+        struct nk_command *cmd =
+            (struct nk_command *)((nk_byte *)ctx->memory.memory.ptr + at);
+
+        next = cmd->next;
+        tail = at;
+        if (cmd->type == NK_COMMAND_SCISSOR) {
+            const struct nk_command_scissor *s =
+                (const struct nk_command_scissor *)cmd;
+
+            clip = nk_rect(s->x, s->y, s->w, s->h);
+        } else if (cmd->type == NK_COMMAND_RECT_FILLED &&
+                   ((struct nk_command_rect_filled *)cmd)->rounding &&
+                   ((struct nk_command_rect_filled *)cmd)->color.a) {
+            tail = splice_fill(app, at, clip);
+            spliced = 1;
+        }
+        if (next >= end) break;
+        at = next;
+    }
+    /* What ended the list at the old end must end it at the new one. */
+    if (spliced)
+        ((struct nk_command *)((nk_byte *)ctx->memory.memory.ptr + tail))->next =
+            ctx->memory.allocated;
+}
+
+/* Rounded shapes are masks; a feathered rect seams against them. */
+void
+reaktor_render(App *app)
+{
+    SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
+                           app->clear.a);
+    SDL_RenderClear(app->ren);
+    mask_rounded_fills(app);
+    nk_sdl_render_ex(app->ctx, NK_ANTI_ALIASING_OFF,
+                     app->aa && !(app->renderer_is_sw && app->sw_noaa)
+                     ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
+}
+
+struct nk_rect
+reaktor_rect_trunc(struct nk_rect b)
+{
+    return nk_rect((float)(int)b.x, (float)(int)b.y, (float)(int)b.w, (float)(int)b.h);
+}
+
+static struct nk_rect
+whole_px(struct nk_rect b)
+{
+    float x0 = (float)(int)(b.x + 0.5f);
+    float y0 = (float)(int)(b.y + 0.5f);
+    float x1 = (float)(int)(b.x + b.w + 0.5f);
+    float y1 = (float)(int)(b.y + b.h + 0.5f);
+
+    return nk_rect(x0, y0, x1 - x0, y1 - y0);
+}
+
+static int
+corner_px(struct nk_rect b, float rounding)
+{
+    int r = (int)(rounding + 0.5f);
+
+    if (2 * r > (int)b.w) r = (int)b.w / 2;
+    if (2 * r > (int)b.h) r = (int)b.h / 2;
+    return r;
+}
+
+static void
+draw_corners(struct nk_command_buffer *cv, struct nk_image mask, int m,
+             struct nk_rect b, int r, struct nk_color col)
+{
+    float M = (float)m, D = (float)(2 * m), R = (float)r;
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        struct nk_rect at = nk_rect((i & 1) ? b.x + b.w - R : b.x,
+                                    (i & 2) ? b.y + b.h - R : b.y, R, R);
+        struct nk_image q = nk_subimage_handle(
+            mask.handle, (nk_ushort)D, (nk_ushort)D,
+            nk_rect((i & 1) ? M : 0.0f, (i & 2) ? M : 0.0f, M, M));
+
+        nk_draw_image(cv, at, &q, col);
+    }
 }
 
 void
@@ -185,64 +407,29 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
                    float rounding, struct nk_color col)
 {
     struct nk_image disc;
-    nk_handle h;
-    float fr = rounding;
-    int r;
+    float R, D;
+    int r, m;
 
+    if (b.w <= 0.0f || b.h <= 0.0f || !col.a) return;
+    b = whole_px(b);
     if (b.w <= 0.0f || b.h <= 0.0f) return;
-
-    /* Snapped first, or the pieces round apart. */
-    {
-        float x0 = (float)(int)(b.x + 0.5f);
-        float y0 = (float)(int)(b.y + 0.5f);
-        float x1 = (float)(int)(b.x + b.w + 0.5f);
-        float y1 = (float)(int)(b.y + b.h + 0.5f);
-
-        b.x = x0; b.y = y0;
-        b.w = x1 - x0; b.h = y1 - y0;
-        if (b.w <= 0.0f || b.h <= 0.0f) return;
-    }
-
-    if (fr > b.w * 0.5f) fr = b.w * 0.5f;
-    if (fr > b.h * 0.5f) fr = b.h * 0.5f;
-    r = (int)(fr + 0.5f);
+    r = corner_px(b, rounding);
     if (r < 1) { nk_fill_rect(cv, b, 0.0f, col); return; }
-
-    disc = round_mask(app, r);
+    m = mask_px((float)r);
+    disc = round_mask(app, m, 0);
     if (!disc.handle.ptr) { nk_fill_rect(cv, b, (float)r, col); return; }
-    h = disc.handle;
 
-    {
-        float R = (float)r, d = (float)(2 * r);
-        struct nk_image q;
-        struct nk_rect corner[4];
-        struct nk_rect from[4];
-        int i;
-
-        corner[0] = nk_rect(b.x, b.y, R, R);
-        corner[1] = nk_rect(b.x + b.w - R, b.y, R, R);
-        corner[2] = nk_rect(b.x, b.y + b.h - R, R, R);
-        corner[3] = nk_rect(b.x + b.w - R, b.y + b.h - R, R, R);
-        from[0] = nk_rect(0.0f, 0.0f, R, R);
-        from[1] = nk_rect(R, 0.0f, R, R);
-        from[2] = nk_rect(0.0f, R, R, R);
-        from[3] = nk_rect(R, R, R, R);
-        for (i = 0; i < 4; i++) {
-            q = nk_subimage_handle(h, (nk_ushort)d, (nk_ushort)d, from[i]);
-            nk_draw_image(cv, corner[i], &q, col);
-        }
-        if (b.h > d)
-            nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, b.h - d), 0.0f, col);
-        if (b.w > d) {
-            nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - d, R), 0.0f, col);
-            nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - d, R),
-                         0.0f, col);
-        }
+    draw_corners(cv, disc, m, b, r, col);
+    R = (float)r;
+    D = 2.0f * R;
+    if (b.h > D)
+        nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, b.h - D), 0.0f, col);
+    if (b.w > D) {
+        nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - D, R), 0.0f, col);
+        nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - D, R), 0.0f, col);
     }
 }
 
-#define FONT_FILE      "assets/fonts/Aileron-Regular.otf"
-#define FONT_BOLD_FILE "assets/fonts/Aileron-Bold.otf"
 
 static void
 centre_glyphs_optically(struct nk_font *f)
@@ -304,22 +491,56 @@ pick_font(App *app, int px, int bold)
     return app->ctx->style.font;
 }
 
+static const char *
+face_label(const char *name)
+{
+    const char *base = reaktor_path_leaf(name);
+
+    return SDL_strncmp(base, "Aileron-", 8) == 0 ? "Aileron" : base;
+}
+
+static char *
+take_face(const char *name, size_t *size)
+{
+    char *b = reaktor_asset_load(name, size);
+
+    if (b && !reaktor_font_valid(b, *size)) {
+        reaktor_free(b);
+        b = NULL;
+    }
+    return b;
+}
+
+static char *
+load_face(const char **name, const char *stand_in, size_t *size)
+{
+    char *b = take_face(*name, size);
+
+    if (b || SDL_strcmp(*name, stand_in) == 0) return b;
+    SDL_Log("%s is not a font that can be read; %s stands in", *name, stand_in);
+    *name = stand_in;
+    return take_face(*name, size);
+}
+
 void
 rebuild_font(App *app)
 {
     struct nk_font_atlas *atlas;
     struct nk_font *font = NULL;
-    char path[1024], bpath[1024];
-    int have_font, is_default = 0, i;
+    size_t size = 0, bsize = 0;
+    char *ttf, *bttf = NULL;
+    int is_default = 0, i;
 
-    have_font = reaktor_path(path, sizeof(path), FONT_FILE);
-    if (app->atlas && !have_font) {
-        SDL_Log("could not resolve %s; keeping the font already baked",
-                FONT_FILE);
+    ttf = load_face(&app->font_face, FONT_FILE, &size);
+    if (app->atlas && !ttf) {
+        SDL_Log("could not load %s; keeping the font already baked",
+                app->font_face);
         return;
     }
+    if (ttf) bttf = load_face(&app->font_face_bold, FONT_BOLD_FILE, &bsize);
 
-    reaktor_text_attach_font(NULL, NULL);
+    /* The Text module draws in the main window only. */
+    if (!app->secondary) reaktor_text_attach_font(NULL, NULL);
     if (app->atlas) {
         nk_font_atlas_clear(app->atlas);
         SDL_memset(app->faces, 0, sizeof(app->faces));
@@ -332,45 +553,43 @@ rebuild_font(App *app)
     atlas = nk_sdl_font_stash_begin(app->ctx);
     app->atlas = atlas;
 
-    if (have_font) {
+    if (ttf) {
         struct nk_font_config cfg = nk_font_config(0);
-        const char *slash = SDL_strrchr(path, '/');
-        const char *bslash = SDL_strrchr(path, 92);
 
-        if (bslash > slash) slash = bslash;
-        SDL_snprintf(bpath, sizeof(bpath), "%.*s%s",
-                     slash ? (int)(slash - path + 1) : 0, path,
-                     SDL_strrchr(FONT_BOLD_FILE, '/') + 1);
-        app->glyphs = reaktor_locale_glyphs(path);
+        app->glyphs = reaktor_locale_glyphs((const unsigned char *)ttf);
 
         cfg.oversample_h = 1;
         cfg.oversample_v = 1;
         cfg.pixel_snap   = 1;
         if (app->glyphs) cfg.range = app->glyphs;
         for (i = 0; i < FONT_STEPS; i++) {
-            app->faces[i] = nk_font_atlas_add_from_file(
-                atlas, path, (float)reaktor_px(g_font_px[i]), &cfg);
+            app->faces[i] = nk_font_atlas_add_from_memory(
+                atlas, ttf, size, (float)reaktor_px(g_font_px[i]), &cfg);
             if (g_font_px[i] == FONT_SIZE) font = app->faces[i];
             if (!font) font = app->faces[i];
         }
-        for (i = 0; i < FONT_STEPS; i++)
-            app->bolds[i] = nk_font_atlas_add_from_file(
-                atlas, bpath, (float)reaktor_px(g_font_px[i]), &cfg);
+        for (i = 0; bttf && i < FONT_STEPS; i++)
+            app->bolds[i] = nk_font_atlas_add_from_memory(
+                atlas, bttf, bsize, (float)reaktor_px(g_font_px[i]), &cfg);
         app->face_bold = app->bolds[0];
         if (!font)
             SDL_snprintf(app->font_status, sizeof(app->font_status),
-                         "FALLBACK (ProggyClean) - could not load %s", path);
+                         "FALLBACK (ProggyClean) - could not load %s",
+                         app->font_face);
     } else {
         SDL_snprintf(app->font_status, sizeof(app->font_status),
-                     "FALLBACK - could not resolve %s", FONT_FILE);
+                     "FALLBACK - could not load %s", app->font_face);
     }
+    /* The atlas keeps its own copy of each. */
+    reaktor_free(ttf);
+    reaktor_free(bttf);
 
     if (!font) {
         font = nk_font_atlas_add_default(atlas, (float)reaktor_px(FONT_SIZE), NULL);
         is_default = 1;
     } else {
         SDL_snprintf(app->font_status, sizeof(app->font_status),
-                     "Aileron, %d sizes %d-%dpx%s", FONT_STEPS,
+                     "%s, %d sizes %d-%dpx%s", face_label(app->font_face), FONT_STEPS,
                      reaktor_px(g_font_px[0]), reaktor_px(g_font_px[FONT_STEPS - 1]),
                      app->bolds[0] ? ", bold at each" : "");
     }
@@ -378,8 +597,10 @@ rebuild_font(App *app)
     nk_sdl_font_stash_end(app->ctx);
 
     for (i = 0; i < FONT_STEPS; i++) {
-        finish_face(app->faces[i], (float)g_font_px[i], path);
-        finish_face(app->bolds[i], (float)g_font_px[i], bpath);
+        finish_face(app->faces[i], (float)g_font_px[i],
+                    app->secondary ? NULL : app->font_face);
+        finish_face(app->bolds[i], (float)g_font_px[i],
+                    app->secondary ? NULL : app->font_face_bold);
     }
     if (is_default) finish_face(font, (float)FONT_SIZE, NULL);
 
@@ -405,26 +626,98 @@ apply_render_scale(App *app)
     SDL_SetRenderScale(app->ren, s, s);
 }
 
-void
-set_window_icon(SDL_Window *win)
+SDL_Surface *
+reaktor_icon_surface(const char *name, int px)
 {
     plutovg_surface_t *svg;
-    SDL_Surface *ico;
+    SDL_Surface *view, *copy = NULL;
     int w, h, stride;
 
-    svg = reaktor_svg_surface_path(REAKTOR_MARK, 64, NULL, NULL, 0.0f);
-    if (!svg) return;
+    svg = reaktor_svg_surface_path(name, px, NULL, NULL, 0.0f);
+    if (!svg && SDL_strcmp(name, REAKTOR_MARK) != 0)
+        svg = reaktor_svg_surface_path(REAKTOR_MARK, px, NULL, NULL, 0.0f);
+    if (!svg) return NULL;
 
     w      = plutovg_surface_get_width(svg);
     h      = plutovg_surface_get_height(svg);
     stride = plutovg_surface_get_stride(svg);
     reaktor_unpremultiply(plutovg_surface_get_data(svg), w, h, stride);
 
-    ico = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_ARGB8888,
-                                plutovg_surface_get_data(svg), stride);
-    if (ico) {
-        SDL_SetWindowIcon(win, ico);
-        SDL_DestroySurface(ico);
+    view = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_ARGB8888,
+                                 plutovg_surface_get_data(svg), stride);
+    if (view) {
+        copy = SDL_DuplicateSurface(view);
+        SDL_DestroySurface(view);
     }
     plutovg_surface_destroy(svg);
+    return copy;
+}
+
+void
+reaktor_set_window_icon(SDL_Window *win, const char *name)
+{
+    SDL_Surface *ico = reaktor_icon_surface(name, 64);
+
+    if (!ico) return;
+    SDL_SetWindowIcon(win, ico);
+    SDL_DestroySurface(ico);
+}
+
+void
+reaktor_edge_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                   float rounding, float width, struct nk_color col)
+{
+    struct nk_image ring = nk_image_id(0);
+    float R, T;
+    int r, t, m;
+
+    if (b.w <= 0.0f || b.h <= 0.0f || width <= 0.0f || !col.a) return;
+    b = whole_px(b);
+    t = (int)(width + 0.5f);
+    if (t < 1) t = 1;
+    if (2.0f * (float)t >= b.w || 2.0f * (float)t >= b.h) {
+        reaktor_fill_round(app, cv, b, rounding, col);
+        return;
+    }
+    r = corner_px(b, rounding);
+    m = mask_px((float)r);
+    if (r >= 1) ring = round_mask(app, m, mask_px((float)t));
+    if (!ring.handle.ptr) r = 0;
+    if (r) draw_corners(cv, ring, m, b, r, col);
+
+    R = (float)r;
+    T = (float)t;
+    if (r >= t) {
+        float M = (float)m, D = 2.0f * M;
+        struct nk_image top = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
+                                                 nk_rect(M - 1.0f, 0.0f, 1.0f, M));
+        struct nk_image low = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
+                                                 nk_rect(M - 1.0f, M, 1.0f, M));
+        struct nk_image lft = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
+                                                 nk_rect(0.0f, M - 1.0f, M, 1.0f));
+        struct nk_image rgt = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
+                                                 nk_rect(M, M - 1.0f, M, 1.0f));
+
+        if (b.w > 2.0f * R) {
+            nk_draw_image(cv, nk_rect(b.x + R, b.y, b.w - 2.0f * R, R), &top, col);
+            nk_draw_image(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - 2.0f * R, R),
+                          &low, col);
+        }
+        if (b.h > 2.0f * R) {
+            nk_draw_image(cv, nk_rect(b.x, b.y + R, R, b.h - 2.0f * R), &lft, col);
+            nk_draw_image(cv, nk_rect(b.x + b.w - R, b.y + R, R, b.h - 2.0f * R),
+                          &rgt, col);
+        }
+        return;
+    }
+    /* Square, or a radius under the width: no pixel is covered twice. */
+    if (r) {
+        nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - 2.0f * R, R), 0.0f, col);
+        nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - 2.0f * R, R),
+                     0.0f, col);
+    }
+    nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, T - R), 0.0f, col);
+    nk_fill_rect(cv, nk_rect(b.x, b.y + b.h - T, b.w, T - R), 0.0f, col);
+    nk_fill_rect(cv, nk_rect(b.x, b.y + T, T, b.h - 2.0f * T), 0.0f, col);
+    nk_fill_rect(cv, nk_rect(b.x + b.w - T, b.y + T, T, b.h - 2.0f * T), 0.0f, col);
 }

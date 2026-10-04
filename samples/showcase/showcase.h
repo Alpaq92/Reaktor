@@ -1,7 +1,7 @@
 #ifndef REAKTOR_SHOWCASE_H
 #define REAKTOR_SHOWCASE_H
 
-#include "sample.h"
+#include "reaktor/launch.h"
 
 enum {
     TAB_LOGIN = 0,
@@ -18,10 +18,23 @@ enum {
 };
 extern const char *const reaktor_tab_names[TAB_COUNT];
 
+int  sample_key(App *app, const SDL_Event *e);
+void sample_file_opened(App *app, const char *path);
+void showcase_open_floater(App *app, int modal);
+void showcase_open_window(App *app, int modal);
+void showcase_toasts(App *app);
+int  showcase_tray_on(void);
+void showcase_tray_show(App *app, int on);
+
 #define CARD_W        420
 #define TITLEBAR_H    36
 #define TAB_H         34
 #define TAB_PAD_X     14
+#define NAV_W         200
+#define NAV_W_NARROW   56
+#define NAV_WIDE_MIN  720
+#define PANEL_GAP     8.0f
+#define PANEL_R      10.0f
 #define RESIZE_EDGE    6
 #define CTL_SIZE      28
 #define TITLE_PAD      1
@@ -63,7 +76,6 @@ typedef struct showcase_state {
     float anim_head;
     nk_bool anim_play;
 
-    int  popup_open;
     char menu_pick[40];
     char file_pick[SC_PATH_CAP];
 
