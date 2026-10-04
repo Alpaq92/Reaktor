@@ -1,0 +1,95 @@
+name: macOS
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  macos:
+    name: macos ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-15 }
+          - { arch: x86_64, runner: macos-15-intel }
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install packages
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: brew install ninja
+
+      - name: Build
+        id: build
+        run: |
+          uname -a
+          sw_vers
+          cc --version
+          cmake --version
+          ./build.sh </dev/null
+          file build/showcase
+
+      - name: Console tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          fail=0
+          for t in onlaytest keytest a11ytest animtest localetest laytest texttest; do
+            echo "== $t"
+            if ./build/$t </dev/null; then :; else echo "$t: exit status $?"; fail=1; fi
+          done
+          exit "$fail"
+
+      - name: Shots and dumps
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          rm -rf smoke
+          mkdir smoke
+          fail=0
+          shot() {
+            name=$1
+            driver=$2
+            shift 2
+            if "$@" --video "$driver" \
+                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
+                </dev/null >"smoke/$name.log" 2>&1; then
+              if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
+                echo "$name: ok"
+                return 0
+              fi
+              echo "$name: exited 0 without both a shot and a dump"
+            else
+              echo "$name: exit status $?"
+            fi
+            cat "smoke/$name.log" || :
+            fail=1
+          }
+          shot simple cocoa ./build/simple --theme light
+          shot showcase cocoa ./build/showcase --tab 7 --theme dark
+          shot simple-dummy dummy ./build/simple --theme light
+          exit "$fail"
+
+      - name: Upload the shots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-${{ matrix.arch }}
+          path: smoke/
+          if-no-files-found: warn
+          retention-days: 14

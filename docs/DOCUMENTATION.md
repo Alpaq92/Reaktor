@@ -531,6 +531,30 @@ At rest the app uses 0% of a core. **Adding a timer or an unconditional
 repaint to make something update is the wrong fix** — mark what changed.
 [PERFORMANCE.md](PERFORMANCE.md) has the costs.
 
+## Platforms
+
+| System | Architectures | Checked on |
+| --- | --- | --- |
+| Windows | x64, x86, ARM64 | Windows Server 2025 runners for x64 and x86, a Windows 11 runner for ARM64 |
+| macOS | Apple silicon, Intel | macOS 15 runners, one of each |
+| Linux | x86-64, x86, ARM64, ARMv7 (armhf), RISC-V 64 | Debian 13: natively for x86-64, x86 and ARM64, under QEMU for ARMv7 and RISC-V |
+| FreeBSD | x86-64, ARM64 | 15.1 |
+| OpenBSD | x86-64, ARM64 | 7.9 |
+| NetBSD | x86-64, ARM64 | 11.0 |
+| Web | WebAssembly | Chromium; emscripten 6.0.9 targets Chrome 85, Firefox 79 and Safari 15 |
+
+Every pull request builds each native one, runs the seven console tests, and
+writes a `--shot` and an `--a11y-dump` of `simple` and the showcase through
+the system's video driver and SDL's `dummy` one: `.github/workflows/` holds a
+workflow per system. The BSDs run in virtual machines, ARM64 among them under
+emulation, and a job that emulates may fail without failing its run. The web
+build is checked by hand in headless Edge, as desktop, Android and iOS.
+
+`build.sh` builds for the machine it runs on. `build.ps1 -Arch x86` (or `x64`,
+`arm64`) builds that architecture with MSVC's matching toolset, into
+`build-<arch>` when it is not the machine's own; ARM64 needs Visual Studio's
+ARM64 build tools.
+
 ## Build options
 
 Passed to CMake, through either script:
@@ -639,7 +663,7 @@ Built by default and run from `build/`:
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.
