@@ -6,6 +6,9 @@ gen/
 *.pdb
 *.ilk
 build-wasm/
+build-x64/
+build-x86/
+build-arm64/
 .claude/settings.local.json
 .dart_tool/
 .gradle/

@@ -43,7 +43,8 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
 - **Modular** — accessibility, localization and text shaping each swap for a
   stub, and only what they drew stops being drawn.
 - **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources,
-  on one software rasterizer, at any display scale.
+  on one software rasterizer, at any display scale: x86 and ARM everywhere,
+  and RISC-V on Linux ([Platforms](docs/DOCUMENTATION.md#platforms)).
 - **Nothing drawn at rest** — 0% of a core while it sits there.
 
 ## Build

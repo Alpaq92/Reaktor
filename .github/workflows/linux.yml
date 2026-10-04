@@ -1,0 +1,149 @@
+name: Linux
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux:
+    name: linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    continue-on-error: ${{ matrix.emulated }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86-64, platform: linux/amd64, runner: ubuntu-24.04, emulated: false, timeout: 60 }
+          - { arch: x86, platform: linux/386, runner: ubuntu-24.04, emulated: false, timeout: 60 }
+          - { arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm, emulated: false, timeout: 60 }
+          - { arch: armhf, platform: linux/arm/v7, runner: ubuntu-24.04, emulated: true, timeout: 240 }
+          - { arch: riscv64, platform: linux/riscv64, runner: ubuntu-24.04, emulated: true, timeout: 240 }
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up QEMU
+        if: ${{ matrix.emulated }}
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: ${{ matrix.platform }}
+
+      - name: Start Debian 13
+        id: debian
+        run: |
+          docker run -d --name debian --platform ${{ matrix.platform }} \
+            -v "$PWD:/src" -w /src debian:trixie sleep infinity
+          docker exec debian uname -m
+
+      - name: Install packages
+        run: |
+          docker exec -i debian sh -eu <<'EOF'
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update </dev/null
+          apt-get install -y --no-install-recommends \
+            cmake ninja-build gcc g++ pkgconf file \
+            libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev \
+            libxrandr-dev libxrender-dev libxtst-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols libegl-dev libdbus-1-dev \
+            dbus xvfb xauth </dev/null
+          EOF
+
+      - name: Build
+        id: build
+        run: |
+          docker exec -i debian sh -eu <<'EOF'
+          uname -a
+          cc --version
+          cmake --version
+          ./build.sh </dev/null
+          file build/showcase
+          EOF
+
+      - name: Console tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          docker exec -i debian sh -u <<'EOF'
+          fail=0
+          for t in onlaytest keytest a11ytest animtest localetest laytest texttest; do
+            echo "== $t"
+            if ./build/$t </dev/null; then :; else echo "$t: exit status $?"; fail=1; fi
+          done
+          exit "$fail"
+          EOF
+
+      - name: Shots and dumps
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          docker exec -i debian sh -u <<'EOF'
+          rm -rf smoke
+          mkdir smoke
+          Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp </dev/null >smoke/xvfb.log 2>&1 &
+          xvfb_pid=$!
+          trap 'kill "$xvfb_pid" 2>/dev/null || :' EXIT
+          n=0
+          while [ ! -S /tmp/.X11-unix/X99 ]; do
+            n=$((n + 1))
+            if [ "$n" -gt 120 ] || ! kill -0 "$xvfb_pid" 2>/dev/null; then
+              echo "Xvfb did not start"
+              cat smoke/xvfb.log || :
+              exit 1
+            fi
+            sleep 1
+          done
+          fail=0
+          shot() {
+            name=$1
+            driver=$2
+            shift 2
+            if DISPLAY=:99 dbus-run-session -- \
+                timeout 600 "$@" --video "$driver" \
+                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
+                </dev/null >"smoke/$name.log" 2>&1; then
+              if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
+                echo "$name: ok"
+                return 0
+              fi
+              echo "$name: exited 0 without both a shot and a dump"
+            else
+              echo "$name: exit status $?"
+            fi
+            cat "smoke/$name.log" || :
+            fail=1
+          }
+          shot simple x11 ./build/simple --theme light
+          shot showcase x11 ./build/showcase --tab 7 --theme dark
+          shot simple-dummy dummy ./build/simple --theme light
+          exit "$fail"
+          EOF
+
+      - name: Collect the build logs
+        if: ${{ always() && steps.debian.outcome == 'success' }}
+        run: |
+          docker exec -i debian sh -u <<'EOF'
+          mkdir -p smoke
+          for f in build/CMakeCache.txt build/CMakeFiles/CMakeConfigureLog.yaml; do
+            if [ -f "$f" ]; then cp "$f" smoke/; fi
+          done
+          EOF
+
+      - name: Upload the shots
+        if: ${{ always() && steps.debian.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-${{ matrix.arch }}
+          path: smoke/
+          if-no-files-found: warn
+          retention-days: 14

@@ -6,7 +6,9 @@ C99. Widgets are declared; the look comes from CSS read at runtime.
 
 `./build.ps1` on Windows, `./build.sh` elsewhere — `cmake` is not on PATH, the
 script finds MSVC's. `./build.ps1 <target>` builds one. Targets: `showcase`,
-`notepad`, `simple`, `bench`, plus the tests in `tools/`.
+`notepad`, `simple`, `bench`, plus the tests in `tools/`. `-Arch x86` (or
+`arm64`) builds that architecture into `build-<arch>`; ARM64 needs Visual
+Studio's ARM64 tools, which this machine lacks, so CI is its only check.
 
 CMake options pass straight through: `./build.ps1 -DREAKTOR_A11Y=OFF`,
 `./build.sh -- -DREAKTOR_A11Y=OFF`. The cache keeps an option, so a later build

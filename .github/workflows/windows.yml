@@ -1,0 +1,91 @@
+name: Windows
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  windows:
+    name: windows ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-2025, out: build }
+          - { arch: x86, runner: windows-2025, out: build-x86 }
+          - { arch: arm64, runner: windows-11-arm, out: build }
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Build
+        id: build
+        run: ./build.ps1 -Arch ${{ matrix.arch }}
+
+      - name: Console tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          $fail = 0
+          foreach ($t in 'onlaytest', 'keytest', 'a11ytest', 'animtest', 'localetest', 'laytest', 'texttest') {
+            Write-Host "== $t"
+            & "./${{ matrix.out }}/$t.exe"
+            if ($LASTEXITCODE -ne 0) { Write-Host "${t}: exit status $LASTEXITCODE"; $fail = 1 }
+          }
+          exit $fail
+
+      - name: Shots and dumps
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          New-Item -ItemType Directory -Force smoke | Out-Null
+          $script:fail = 0
+          function Shot([string]$name, [string]$driver, [string]$exe, [string[]]$more) {
+            $argv = @($more) + @('--video', $driver, '--shot', "smoke/$name.bmp",
+                                 '--a11y-dump', "smoke/$name.txt")
+            $p = Start-Process -FilePath $exe -ArgumentList $argv -PassThru `
+                   -RedirectStandardOutput "smoke/$name.log" -RedirectStandardError "smoke/$name.err"
+            $null = $p.Handle
+            if (-not $p.WaitForExit(600000)) {
+              $p.Kill()
+              Write-Host "${name}: timed out"
+            } elseif ($p.ExitCode -ne 0) {
+              Write-Host "${name}: exit status $($p.ExitCode)"
+            } elseif ((Test-Path "smoke/$name.bmp") -and (Get-Item "smoke/$name.bmp").Length -gt 0 -and
+                      (Test-Path "smoke/$name.txt") -and (Get-Item "smoke/$name.txt").Length -gt 0) {
+              Write-Host "${name}: ok"
+              return
+            } else {
+              Write-Host "${name}: exited 0 without both a shot and a dump"
+            }
+            Get-Content "smoke/$name.log", "smoke/$name.err" -ErrorAction SilentlyContinue
+            $script:fail = 1
+          }
+          Shot simple windows "./${{ matrix.out }}/simple.exe" @('--theme', 'light')
+          Shot showcase windows "./${{ matrix.out }}/showcase.exe" @('--tab', '7', '--theme', 'dark')
+          Shot simple-dummy dummy "./${{ matrix.out }}/simple.exe" @('--theme', 'light')
+          exit $script:fail
+
+      - name: Upload the shots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-${{ matrix.arch }}
+          path: smoke/
+          if-no-files-found: warn
+          retention-days: 14
