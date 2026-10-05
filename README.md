@@ -10,8 +10,9 @@ Tired of C having no cross-platform GUI — nothing like
 [Avalonia](https://github.com/avaloniaui/avalonia),
 [Shaft](https://github.com/ShaftUI/Shaft) or
 [Freya](https://github.com/marc2332/freya) — and of toolkits that want hundreds
-of megabytes to put a dialog on screen? I was. So I wrote Reaktor: complete
-without being big. A 2.3 MB binary, about 10 MB of RAM, and no GPU required.
+of megabytes to put a dialog on screen? No? But I was, so I wrote Reaktor:
+complete without being big. A 2.3 MB binary, about 10 MB of RAM, and no GPU
+required.
 
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
 same program, built to WebAssembly — or
