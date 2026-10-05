@@ -673,11 +673,12 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
         int i;
 
         REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
-            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x) {
+            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X) {
                 REAKTOR_COMBO(.label = sizes[s->combo_size], .name = "Size",
                               .body_h = 130.0f,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     for (i = 0; i < 3; i++)
                         if (reaktor_combo_item(sizes[i], i == s->combo_size))
@@ -686,21 +687,22 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                 REAKTOR_COMBO(.label = sizes[s->combo_symbol],
                               .name = "Size, with a symbol",
                               .body_h = 130.0f, .disc = 1,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     for (i = 0; i < 3; i++)
                         if (reaktor_combo_item(sizes[i], i == s->combo_symbol))
                             s->combo_symbol = i;
                 }
             }
-            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x) {
+            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X) {
                 struct nk_color tint = nk_rgb_cf(s->tint);
 
                 REAKTOR_COMBO(.name = "Tint", .body_h = 150.0f,
                               .swatch = &tint,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     reaktor_hot_follow(app, nk_widget_bounds(ctx), 0);
                     nk_property_float(ctx, "R:", 0.0f, &s->tint.r, 1.0f,
@@ -714,8 +716,8 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                 }
                 REAKTOR_COMBO(.label = "Anything at all",
                               .name = "Anything at all", .body_h = 130.0f,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
                     reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f,

@@ -3,6 +3,7 @@
 
 #define TITLE_PX     16
 #define GLYPH_STROKE 2.0f
+#define BODY_PAD_X   20.0f
 
 typedef struct shell_style { int items, colors, floats, vec2s, fonts; } shell_style;
 
@@ -549,6 +550,22 @@ showcase_tray_show(App *app, int on)
 }
 
 static void
+body_metrics_push(struct nk_context *ctx, float pad_x)
+{
+    nk_style_push_vec2(ctx, &ctx->style.window.group_padding,
+                       nk_vec2(pad_x, 12.0f));
+    nk_style_push_vec2(ctx, &ctx->style.window.scrollbar_size,
+                       nk_vec2(ctx->style.window.scrollbar_size.x, 0.0f));
+}
+
+static void
+body_metrics_pop(struct nk_context *ctx)
+{
+    nk_style_pop_vec2(ctx);
+    nk_style_pop_vec2(ctx);
+}
+
+static void
 page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 {
     int   framed = reaktor_borderless(app);
@@ -639,10 +656,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_hide());
-    nk_style_push_vec2(ctx, &ctx->style.window.group_padding,
-                       nk_vec2(20.0f, 12.0f));
-    nk_style_push_vec2(ctx, &ctx->style.window.scrollbar_size,
-                       nk_vec2(ctx->style.window.scrollbar_size.x, 0.0f));
+    body_metrics_push(ctx, BODY_PAD_X);
     if (nk_group_begin(ctx, "body", 0)) {
         struct nk_vec2 sz = nk_window_get_content_region_size(ctx);
 
@@ -653,8 +667,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
             nk_push_scissor(cv, nk_rect(c.x - 2.0f, c.y, c.w + 4.0f, c.h));
         }
 
-        nk_style_pop_vec2(ctx);
-        nk_style_pop_vec2(ctx);
+        body_metrics_pop(ctx);
         nk_style_pop_style_item(ctx);
 
         reaktor_hot(app, body, 0, 0);
@@ -665,10 +678,12 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
                                              NULL, 0, body));
         reaktor_showcase_page(app, ctx, sample_tab(), sz.x, sz.y);
         reaktor_note_pop(app);
+        /* nk_group_end sets the bar this far past the content: mid-gutter. */
+        body_metrics_push(ctx, BODY_PAD_X * 0.5f);
         nk_group_end(ctx);
+        body_metrics_pop(ctx);
     } else {
-        nk_style_pop_vec2(ctx);
-        nk_style_pop_vec2(ctx);
+        body_metrics_pop(ctx);
         nk_style_pop_style_item(ctx);
     }
 
