@@ -1,7 +1,16 @@
 #ifndef REAKTOR_SHOWCASE_H
 #define REAKTOR_SHOWCASE_H
 
-#include "reaktor/launch.h"
+#include "reaktor/reaktor.h"
+
+#define SC_TEXT_CAP  64
+#define SC_BOX_CAP   512
+#define SC_SERIES_N  32
+#define SC_LIST_N    64
+#define SC_PATH_CAP  520
+
+#define WINDOW_WIDTH  1100
+#define WINDOW_HEIGHT 680
 
 enum {
     TAB_LOGIN = 0,

@@ -18,8 +18,8 @@ effective_dark(const App *app)
     return reaktor_prefers_dark() > 0;
 }
 
-size_t reaktor_rss[RSS_STEPS];
-size_t reaktor_priv[RSS_STEPS];
+size_t reaktor_rss[REAKTOR_RSS_STEPS];
+size_t reaktor_priv[REAKTOR_RSS_STEPS];
 
 static reaktor_launch g_launch;
 static App           *g_app;
@@ -517,7 +517,7 @@ app_init(void **appstate, int argc, char *argv[])
 {
     App *app;
 
-    reaktor_rss_mark(RSS_ENTRY);
+    reaktor_rss_mark(REAKTOR_RSS_ENTRY);
     app = (App *)SDL_calloc(1, sizeof(App));
     if (!app) return SDL_APP_FAILURE;
     *appstate = app;
@@ -546,7 +546,7 @@ app_init(void **appstate, int argc, char *argv[])
     if (g_launch.console == REAKTOR_CONSOLE_DEBUG)
         SDL_SetLogPriorities(SDL_LOG_PRIORITY_DEBUG);
 
-    reaktor_rss_mark(RSS_SDL);
+    reaktor_rss_mark(REAKTOR_RSS_SDL);
     take_assets(app);
 
     if (app->renderer_pref && SDL_strcmp(app->renderer_pref, "software") != 0) {
@@ -645,21 +645,21 @@ app_init(void **appstate, int argc, char *argv[])
     if (app->borderless && g_launch.window.hit_test)
         SDL_SetWindowHitTest(app->win, g_launch.window.hit_test, app);
 
-    reaktor_rss_mark(RSS_WINDOW);
+    reaktor_rss_mark(REAKTOR_RSS_WINDOW);
 
     reaktor_set_window_icon(app->win, reaktor_launch_icon());
     reaktor_set_scale(reaktor_dpi_query_scale(app->win));
     apply_render_scale(app);
-    reaktor_rss_mark(RSS_ICON);
+    reaktor_rss_mark(REAKTOR_RSS_ICON);
 
     app->ctx = nk_sdl_init(app->win, app->ren, nk_sdl_allocator());
     if (!app->ctx) return fail(app, "The interface could not start");
-    reaktor_rss_mark(RSS_NUKLEAR);
+    reaktor_rss_mark(REAKTOR_RSS_NUKLEAR);
 
     /* Before the atlas, which bakes what the catalogs need. */
     reaktor_locale_start(app->lang_pref);
     rebuild_font(app);
-    reaktor_rss_mark(RSS_FONT);
+    reaktor_rss_mark(REAKTOR_RSS_FONT);
 
     app->cur_default = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
     app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
@@ -678,7 +678,7 @@ app_init(void **appstate, int argc, char *argv[])
 
     take_pending(app);
     load_theme(app);
-    reaktor_rss_mark(RSS_STYLE);
+    reaktor_rss_mark(REAKTOR_RSS_STYLE);
 
     app->dirty = 1;
 
@@ -1486,7 +1486,6 @@ app_iterate(void *appstate)
         SDL_SyncWindow(app->win);
         SDL_GetWindowSize(app->win, &w, &h);
         SDL_SetWindowSize(app->win, w, h);
-        app->ctl_n = 0;
         app->dirty = 1;
         app->borderless_lock_frames = 3;
     }
@@ -1725,4 +1724,53 @@ reaktor_user(App *app)
 {
     (void)app;
     return g_launch.user;
+}
+
+SDL_Window *
+reaktor_sdl_window(App *app)
+{
+    return app ? app->win : NULL;
+}
+
+SDL_Renderer *
+reaktor_sdl_renderer(App *app)
+{
+    return app ? app->ren : NULL;
+}
+
+int
+reaktor_dark(App *app)
+{
+    return app && app->dark;
+}
+
+reaktor_theme
+reaktor_get_theme(App *app)
+{
+    return app ? (reaktor_theme)app->theme_mode : REAKTOR_THEME_SYSTEM;
+}
+
+void
+reaktor_set_borderless(App *app, int on)
+{
+    if (!app || !app->win || app->secondary || !on == !app->borderless) return;
+#ifdef __APPLE__
+    if (app->borderless_lock_frames == 0) {
+        app->borderless_pending = 1;
+        app->dirty = 1;
+    }
+#else
+    app->borderless = on != 0;
+    SDL_SetWindowBordered(app->win, app->borderless ? false : true);
+    SDL_SetWindowHitTest(app->win,
+                         app->borderless ? g_launch.window.hit_test : NULL,
+                         app->borderless ? app : NULL);
+    app->dirty = 1;
+#endif
+}
+
+int
+reaktor_borderless(App *app)
+{
+    return app && app->borderless;
 }

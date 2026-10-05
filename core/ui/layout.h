@@ -3,33 +3,7 @@
 
 #include "nk_common.h"
 #include "onlay.h"
-
-enum {
-    REAKTOR_LAY_ROW = 0,
-    REAKTOR_LAY_COLUMN,
-    REAKTOR_LAY_FREE
-};
-
-enum {
-    REAKTOR_LAY_FILL_X = 1u << 0,
-    REAKTOR_LAY_FILL_Y = 1u << 1,
-    REAKTOR_LAY_WRAP   = 1u << 2,
-    REAKTOR_LAY_CENTER_X = 1u << 3,
-    REAKTOR_LAY_CENTER_Y = 1u << 4,
-    REAKTOR_LAY_PACK_CENTER = 1u << 5,
-    REAKTOR_LAY_PACK_END    = 1u << 6,
-    REAKTOR_LAY_PACK_SPREAD = 1u << 7
-};
-
-typedef struct reaktor_box {
-    unsigned char dir;
-    const char   *name;
-    float         w, h;
-    float         weight;
-    float         gap;
-    float         ml, mt, mr, mb;
-    unsigned      flags;
-} reaktor_box;
+#include "reaktor/widgets.h"
 
 #define REAKTOR_LAY_MAX   256
 #define REAKTOR_LAY_DEPTH 32

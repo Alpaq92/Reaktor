@@ -1,12 +1,47 @@
-#include "internal.h"
 #include "showcase.h"
-#include "declare.h"
 #include "reaktor/main.h"
+
+#define TITLE_PX     16
+#define GLYPH_STROKE 2.0f
+
+typedef struct shell_style { int items, colors, floats, vec2s, fonts; } shell_style;
+
+static struct nk_rect g_ctl[3];
+static int            g_ctl_n;
+static int            g_show_contact;
+
+static void
+pop_style(struct nk_context *ctx, shell_style f)
+{
+    int i;
+    for (i = 0; i < f.fonts;  i++) nk_style_pop_font(ctx);
+    for (i = 0; i < f.vec2s;  i++) nk_style_pop_vec2(ctx);
+    for (i = 0; i < f.floats; i++) nk_style_pop_float(ctx);
+    for (i = 0; i < f.colors; i++) nk_style_pop_color(ctx);
+    for (i = 0; i < f.items;  i++) nk_style_pop_style_item(ctx);
+}
+
+static void
+image_centered(struct nk_context *ctx, struct nk_image im, int px)
+{
+    struct nk_rect b = nk_widget_bounds(ctx);
+    float s = (float)px;
+    struct nk_rect r = nk_rect(b.x + (b.w - s) * 0.5f,
+                               b.y + (b.h - s) * 0.5f, s, s);
+
+    nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
+    nk_spacing(ctx, 1);
+}
+
+static struct nk_color
+text_main(void)
+{
+    return reaktor_token("--text-main", nk_rgb(51, 51, 51));
+}
 
 static SDL_HitTestResult SDLCALL
 window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
 {
-    App *app = (App *)data;
     int w = 0, h = 0, i;
     int left, right, top, bottom;
 
@@ -28,9 +63,10 @@ window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
         if (right)           return SDL_HITTEST_RESIZE_RIGHT;
     }
 
+    (void)data;
     if (pt->y < TITLEBAR_H) {
-        for (i = 0; i < app->ctl_n; i++) {
-            struct nk_rect r = app->ctl[i];
+        for (i = 0; i < g_ctl_n; i++) {
+            struct nk_rect r = g_ctl[i];
             const int m = 4;
             if (pt->x >= r.x - m && pt->x <= r.x + r.w + m &&
                 pt->y >= r.y - m && pt->y <= r.y + r.h + m)
@@ -83,7 +119,7 @@ set_tab(App *app, int tab)
 {
     if (tab == sample_tab()) return;
     g_tab = tab;
-    app->dirty = 1;
+    reaktor_wake(app);
 }
 
 static int
@@ -91,19 +127,19 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
                 const char *name, int px)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
-    style_frame f = { 0, 0, 0, 0, 0 };
+    shell_style f = { 0, 0, 0, 0, 0 };
     unsigned char c[4];
     struct nk_color clear = nk_rgba(0, 0, 0, 0);
     struct nk_color wash = reaktor_style_token("--background-hover", c)
-                         ? col_of(c) : nk_rgba(255, 255, 255, 26);
+                         ? reaktor_col(c) : nk_rgba(255, 255, 255, 26);
     char src[176];
     float pad_x, pad_y;
     int clicked;
 
-    hot_push(app, b, 1, 1);
+    reaktor_hot(app, b, 1, 1);
     reaktor_note(app, REAKTOR_A11Y_BUTTON, name, NULL, 0, b);
-    if (app->ctl_n < (int)(sizeof(app->ctl) / sizeof(app->ctl[0])))
-        app->ctl[app->ctl_n++] = b;
+    if (g_ctl_n < (int)(sizeof(g_ctl) / sizeof(g_ctl[0])))
+        g_ctl[g_ctl_n++] = b;
 
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
                              nk_style_item_color(clear));
@@ -127,19 +163,21 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
                        nk_vec2(pad_x, pad_y));
     f.vec2s = 2;
 
-    if (app->dark) {
-        SDL_snprintf(src, sizeof(src),
-                     "external/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
-                     glyph, app->icon_hex, (double)GLYPH_STROKE);
+    if (reaktor_dark(app)) {
+        if (!reaktor_style_token("--text-muted", c)) {
+            c[0] = 0x6a; c[1] = 0x6a; c[2] = 0x6a;
+        }
     } else {
-        SDL_snprintf(src, sizeof(src),
-                     "external/ionicons/src/svg/%s.svg"
-                     "?stroke=#%02x%02x%02x&sw=%.2f",
-                     glyph, app->text.r, app->text.g, app->text.b,
-                     (double)GLYPH_STROKE);
-    }
+        struct nk_color t = text_main();
 
-    clicked = nk_button_image_label(ctx, icon(app, src, px), "",
+        c[0] = t.r; c[1] = t.g; c[2] = t.b;
+    }
+    SDL_snprintf(src, sizeof(src),
+                 "external/ionicons/src/svg/%s.svg"
+                 "?stroke=#%02x%02x%02x&sw=%.2f",
+                 glyph, c[0], c[1], c[2], (double)GLYPH_STROKE);
+
+    clicked = nk_button_image_label(ctx, reaktor_svg(app, src, px), "",
                                     NK_TEXT_CENTERED);
     pop_style(ctx, f);
     return clicked;
@@ -149,10 +187,11 @@ static void
 titlebar(App *app, struct nk_context *ctx, int win_w)
 {
     unsigned char c[4];
-    int maximised = (SDL_GetWindowFlags(app->win) & SDL_WINDOW_MAXIMIZED) != 0;
+    SDL_Window *win = reaktor_sdl_window(app);
+    int maximised = (SDL_GetWindowFlags(win) & SDL_WINDOW_MAXIMIZED) != 0;
     struct nk_rect bar;
 
-    app->ctl_n = 0;
+    g_ctl_n = 0;
     bar = nk_widget_bounds(ctx);
     if (!nk_group_begin(ctx, "titlebar", NK_WINDOW_NO_SCROLLBAR)) return;
     reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Title bar", NULL, 0, bar);
@@ -163,16 +202,16 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
     nk_spacing(ctx, 1);
 
     nk_layout_row_push(ctx, (float)MARK_SIZE);
-    image_centred(ctx, icon(app, REAKTOR_MARK, MARK_SIZE), MARK_SIZE);
+    image_centered(ctx, reaktor_svg(app, REAKTOR_MARK, MARK_SIZE), MARK_SIZE);
 
     nk_layout_row_push(ctx, (float)(win_w - TITLE_PAD - MARK_SIZE -
                                     3 * CTL_SIZE - 2 * 4 - 5 * 4));
     {
-        nk_style_push_font(ctx, pick_font(app, TITLE_PX, 1));
-        if (app->dark && reaktor_style_token("--text-muted", c))
-            nk_style_push_color(ctx, &ctx->style.text.color, col_of(c));
+        nk_style_push_font(ctx, reaktor_font(app, TITLE_PX, 1));
+        if (reaktor_dark(app) && reaktor_style_token("--text-muted", c))
+            nk_style_push_color(ctx, &ctx->style.text.color, reaktor_col(c));
         else
-            nk_style_push_color(ctx, &ctx->style.text.color, app->text);
+            nk_style_push_color(ctx, &ctx->style.text.color, text_main());
         nk_style_push_vec2(ctx, &ctx->style.text.padding, nk_vec2(3.0f, 0.0f));
         reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, "Reaktor", 0);
         nk_label(ctx, "Reaktor", NK_TEXT_LEFT);
@@ -183,15 +222,15 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx, "remove-outline", "Minimize", GLYPH_MINIMISE))
-        SDL_MinimizeWindow(app->win);
+        SDL_MinimizeWindow(win);
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx,
                         maximised ? "copy-outline" : "square-outline",
                         maximised ? "Restore" : "Maximize",
                         GLYPH_MAXIMISE)) {
-        if (maximised) SDL_RestoreWindow(app->win);
-        else           SDL_MaximizeWindow(app->win);
+        if (maximised) SDL_RestoreWindow(win);
+        else           SDL_MaximizeWindow(win);
     }
 
     nk_layout_row_push(ctx, (float)CTL_SIZE);
@@ -231,7 +270,7 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
            float body_y, float body_h)
 {
     struct nk_rect at;
-    float card_h = card_height(app->show_contact);
+    float card_h = card_height(g_show_contact);
     float side = body_x + (body_w - (float)CARD_W) * 0.5f;
     float top  = body_y + (body_h - card_height(0)) * 0.5f;
 
@@ -246,7 +285,8 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
     at = nk_widget_bounds(ctx);
 
     reaktor_fill_round(app, nk_window_get_canvas(ctx), at,
-                       ctx->style.button.rounding, app->card_bg);
+                       ctx->style.button.rounding,
+                       reaktor_token("--background", nk_rgb(226, 226, 226)));
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(nk_rgba(0, 0, 0, 0)));
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
@@ -292,13 +332,13 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
                          .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
             if (reaktor_link(&(reaktor_link_spec){
-                    .text = app->show_contact ? "hide contact" : "contact",
+                    .text = g_show_contact ? "hide contact" : "contact",
                     .style = ".card-link",
                     .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
                              .ml = CARD_PAD_X, .mr = CARD_PAD_X } }))
-                app->show_contact = !app->show_contact;
+                g_show_contact = !g_show_contact;
 
-            if (app->show_contact) {
+            if (g_show_contact) {
                 static const char *const lines[CONTACT_ROWS] = {
                     "support@reaktor.example",
                     "+44 20 7946 0958",
@@ -319,7 +359,7 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
     nk_style_pop_style_item(ctx);
 }
 
-static style_frame
+static shell_style
 push_strip_look(struct nk_context *ctx, struct nk_color fg, struct nk_color wash)
 {
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
@@ -333,7 +373,7 @@ push_strip_look(struct nk_context *ctx, struct nk_color fg, struct nk_color wash
     nk_style_push_color(ctx, &ctx->style.button.text_active, fg);
     nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
     nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
-    return (style_frame){ 3, 3, 2, 0, 0 };
+    return (shell_style){ 3, 3, 2, 0, 0 };
 }
 
 static struct nk_color
@@ -346,9 +386,9 @@ int
 sample_option(App *app, struct nk_context *ctx, const char *label, float w,
               int on)
 {
-    struct nk_color fg = reaktor_token(on ? "--links" : "--text-muted", app->text);
+    struct nk_color fg = reaktor_token(on ? "--links" : "--text-muted", text_main());
     struct nk_rect  b;
-    style_frame     look;
+    shell_style     look;
     unsigned        id;
     int             hit;
 
@@ -359,7 +399,7 @@ sample_option(App *app, struct nk_context *ctx, const char *label, float w,
     }
     nk_layout_row_push(ctx, w);
     b = nk_widget_bounds(ctx);
-    hot_push(app, b, 1, 1);
+    reaktor_hot(app, b, 1, 1);
 
     look = push_strip_look(ctx, fg, strip_wash());
     id   = reaktor_note(app, REAKTOR_A11Y_RADIO, label, NULL,
@@ -374,19 +414,8 @@ sample_option(App *app, struct nk_context *ctx, const char *label, float w,
 static void
 toggle_titlebar(App *app)
 {
-#ifdef __APPLE__
-    if (app->borderless_lock_frames == 0) {
-        app->borderless_pending = 1;
-        app->dirty = 1;
-    }
-#else
-    app->borderless = !app->borderless;
-    SDL_SetWindowBordered(app->win, app->borderless ? false : true);
-    SDL_SetWindowHitTest(app->win, app->borderless ? window_hit_test : NULL,
-                         app->borderless ? app : NULL);
-    app->ctl_n = 0;
-    app->dirty = 1;
-#endif
+    reaktor_set_borderless(app, !reaktor_borderless(app));
+    g_ctl_n = 0;
 }
 #endif
 
@@ -407,7 +436,7 @@ nav(App *app, float w, float h)
     const char *key_of[TAB_COUNT];
     char all[160];
     unsigned char narrow = w < (float)NAV_W;
-    int tab = sample_tab(), scheme = app->theme_mode, i;
+    int tab = sample_tab(), scheme = (int)reaktor_get_theme(app), i;
 
     for (i = 0; i < TAB_COUNT; i++) {
         sample_tab_keys(i, keys[i], (int)sizeof(keys[i]));
@@ -437,7 +466,7 @@ nav(App *app, float w, float h)
             const char *bar[1];
             int pick = -1;
 
-            bar[0] = app->borderless ? "Native titlebar" : "Custom titlebar";
+            bar[0] = reaktor_borderless(app) ? "Native titlebar" : "Custom titlebar";
             if (reaktor_sidebar(&(reaktor_sidebar_spec){
                     .items = bar, .icons = bar_icon, .count = 1, .chosen = &pick,
                     .name = "Window", .kind = REAKTOR_NAV_ACTIONS,
@@ -460,8 +489,8 @@ static void
 tray_show(App *app, int checked, void *user)
 {
     (void)checked; (void)user;
-    SDL_RestoreWindow(app->win);
-    SDL_RaiseWindow(app->win);
+    SDL_RestoreWindow(reaktor_sdl_window(app));
+    SDL_RaiseWindow(reaktor_sdl_window(app));
 }
 
 static void
@@ -522,34 +551,38 @@ showcase_tray_show(App *app, int on)
 static void
 page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 {
-    float top    = app->borderless ? (float)TITLEBAR_H : 0.0f;
+    int   framed = reaktor_borderless(app);
+    float top    = framed ? (float)TITLEBAR_H : 0.0f;
     float nav_w  = win_w < NAV_WIDE_MIN ? (float)NAV_W_NARROW : (float)NAV_W;
     float body_h = (float)win_h - top;
-    struct nk_rect panel = nk_rect(nav_w, top + (app->borderless ? 0.0f : PANEL_GAP),
+    struct nk_rect panel = nk_rect(nav_w, top + (framed ? 0.0f : PANEL_GAP),
                                    (float)win_w - nav_w - PANEL_GAP, 0.0f);
-    struct nk_rect body;
+    struct nk_rect body, reveal;
+    struct nk_color card = reaktor_token("--background", nk_rgb(226, 226, 226));
+    reaktor_theme scheme = reaktor_get_theme(app);
 
     panel.h = (float)win_h - panel.y - PANEL_GAP;
     if (panel.w < 1.0f) panel.w = 1.0f;
     if (panel.h < 1.0f) panel.h = 1.0f;
     if (body_h < 1.0f) body_h = 1.0f;
     body = nk_rect(panel.x, panel.y + PANEL_R * 0.5f, panel.w, panel.h - PANEL_R);
-    reaktor_tray_check(app, TRAY_SYSTEM, app->theme_mode == REAKTOR_THEME_SYSTEM);
-    reaktor_tray_check(app, TRAY_LIGHT, app->theme_mode == REAKTOR_THEME_LIGHT);
-    reaktor_tray_check(app, TRAY_DARK, app->theme_mode == REAKTOR_THEME_DARK);
+    reaktor_tray_check(app, TRAY_SYSTEM, scheme == REAKTOR_THEME_SYSTEM);
+    reaktor_tray_check(app, TRAY_LIGHT, scheme == REAKTOR_THEME_LIGHT);
+    reaktor_tray_check(app, TRAY_DARK, scheme == REAKTOR_THEME_DARK);
     {
         struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
 
         nk_fill_rect(cv, nk_rect(0.0f, 0.0f, (float)win_w, (float)win_h), 0.0f,
-                     app->card_bg);
-        reaktor_fill_round(app, cv, panel, PANEL_R, app->page);
+                     card);
+        reaktor_fill_round(app, cv, panel, PANEL_R,
+                           reaktor_token("--background-body", nk_rgb(247, 247, 247)));
     }
 
     nk_layout_space_begin(ctx, NK_STATIC, (float)win_h, 3);
 
-    if (app->borderless) {
+    if (framed) {
         nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
-                                 nk_style_item_color(app->card_bg));
+                                 nk_style_item_color(card));
         nk_layout_space_push(ctx, nk_rect(0, 0, (float)win_w,
                                           (float)TITLEBAR_H));
         titlebar(app, ctx, win_w);
@@ -557,7 +590,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     }
 
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
-                             nk_style_item_color(app->card_bg));
+                             nk_style_item_color(card));
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
     nk_layout_space_push(ctx, nk_rect(0, top, nav_w, body_h));
     if (nk_group_begin(ctx, "nav", NK_WINDOW_NO_SCROLLBAR)) {
@@ -588,10 +621,9 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
             reaktor_wake(app);
         }
     }
-    app->body_rect = body;
-    if (app->focus_scroll) {
+    if (reaktor_focus_scroll(app, &reveal)) {
         const float air = 12.0f;
-        struct nk_rect r = app->focus_scroll_rect;
+        struct nk_rect r = reveal;
         nk_uint sx, sy;
         float dy = 0.0f;
 
@@ -602,8 +634,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
             dy = r.y + r.h - (body.y + body.h - air);
         if ((float)sy + dy < 0.0f) dy = -(float)sy;
         nk_group_set_scroll(ctx, "body", sx, (nk_uint)((float)sy + dy));
-        app->focus_scroll = 0;
-        app->dirty = 1;
+        reaktor_wake(app);
     }
 
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
@@ -626,12 +657,12 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         nk_style_pop_vec2(ctx);
         nk_style_pop_style_item(ctx);
 
-        hot_push(app, app->body_rect, 0, 0);
+        reaktor_hot(app, body, 0, 0);
 
-        app->page_node =
-            reaktor_note_push(app, REAKTOR_A11Y_GROUP,
-                              reaktor_tab_names[sample_tab()], NULL, 0,
-                              app->body_rect);
+        reaktor_focus_area(app, body,
+                           reaktor_note_push(app, REAKTOR_A11Y_GROUP,
+                                             reaktor_tab_names[sample_tab()],
+                                             NULL, 0, body));
         reaktor_showcase_page(app, ctx, sample_tab(), sz.x, sz.y);
         reaktor_note_pop(app);
         nk_group_end(ctx);

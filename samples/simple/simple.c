@@ -1,8 +1,5 @@
-#include "internal.h"
-#include "declare.h"
-#include "reaktor/launch.h"
+#include "reaktor/reaktor.h"
 #include "reaktor/main.h"
-#include "keys.h"
 
 static void
 page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)

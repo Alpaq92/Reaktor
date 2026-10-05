@@ -196,6 +196,12 @@ icon(App *app, const char *src, int px)
     return icon_over(app, src, px, 2.0f);
 }
 
+struct nk_image
+reaktor_svg(App *app, const char *src, int px)
+{
+    return icon(app, src, px);
+}
+
 void
 image_centred(struct nk_context *ctx, struct nk_image im, int px)
 {

@@ -1,10 +1,18 @@
 cmake_minimum_required(VERSION 3.16)
-project(reaktor C CXX)
+project(reaktor VERSION 0.2.0 LANGUAGES C CXX)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(_reaktor_top ON)
+else()
+    set(_reaktor_top OFF)
+endif()
+option(REAKTOR_SAMPLES "Build the samples" ${_reaktor_top})
+option(REAKTOR_TESTS "Build the tests" ${_reaktor_top})
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+if(_reaktor_top AND NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
@@ -116,7 +124,7 @@ add_library(onlay STATIC ${TP}/onlay/onlay.c)
 target_include_directories(onlay PUBLIC ${TP}/onlay)
 target_compile_definitions(onlay PUBLIC LAY_FLOAT=1)
 
-if(NOT EMSCRIPTEN)
+if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(onlaytest ${TP}/onlay/test_onlay.c)
     target_link_libraries(onlaytest PRIVATE onlay)
     set_target_properties(onlaytest PROPERTIES
@@ -167,12 +175,15 @@ if(NOT _old STREQUAL _gen)
 endif()
 message(STATUS "assets: ${_n} compiled in")
 
+add_library(reaktor_headers INTERFACE)
+target_include_directories(reaktor_headers INTERFACE include "${TP}/nuklear")
+
 add_library(reaktor_core STATIC
     core/base/util.c
     core/render/appicon.c
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
-target_link_libraries(reaktor_core PUBLIC plutosvg)
+target_link_libraries(reaktor_core PUBLIC plutosvg reaktor_headers)
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")
@@ -182,23 +193,26 @@ target_link_libraries(mkicon PRIVATE reaktor_core)
 set_target_properties(mkicon PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-if(NOT EMSCRIPTEN)
+if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(keytest tools/keytest.c core/ui/keys.c)
+    target_link_libraries(keytest PRIVATE reaktor_headers)
     target_include_directories(keytest PRIVATE core/ui)
     target_link_libraries(keytest PRIVATE SDL3::SDL3-static)
     set_target_properties(keytest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
-if(NOT EMSCRIPTEN)
+if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(a11ytest tools/a11ytest.c core/a11y/a11y.c)
+    target_link_libraries(a11ytest PRIVATE reaktor_headers)
     target_include_directories(a11ytest PRIVATE core/a11y core/render)
     set_target_properties(a11ytest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
-if(NOT EMSCRIPTEN)
+if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(animtest tools/animtest.c core/anim/anim.c)
+    target_link_libraries(animtest PRIVATE reaktor_headers)
     target_include_directories(animtest PRIVATE core/anim core/a11y core/render
                                                 platform)
     target_link_libraries(animtest PRIVATE SDL3::SDL3)
@@ -208,12 +222,14 @@ if(NOT EMSCRIPTEN)
     add_executable(localetest tools/localetest.c
                    core/locale/locale.c core/locale/plural.c
                    core/locale/format.c)
+    target_link_libraries(localetest PRIVATE reaktor_headers)
     target_include_directories(localetest PRIVATE core/locale)
     target_compile_definitions(localetest PRIVATE REAKTOR_LOCALE_EMBEDDED)
     set_target_properties(localetest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     add_executable(laytest tools/laytest.c core/ui/layout.c)
+    target_link_libraries(laytest PRIVATE reaktor_headers)
     target_include_directories(laytest PRIVATE core/ui core/render)
     target_link_libraries(laytest PRIVATE onlay)
     set_target_properties(laytest PROPERTIES
@@ -375,8 +391,9 @@ else()
     target_link_libraries(reaktor_text INTERFACE Mojibake::mojibake kb_text_shape)
     message(STATUS "text: shaping by kb_text_shape; direction and line breaking by mojibake")
 
-    if(NOT EMSCRIPTEN)
+    if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
         add_executable(texttest tools/texttest.c core/render/nk_impl.c)
+        target_link_libraries(texttest PRIVATE reaktor_headers)
         target_include_directories(texttest PRIVATE core/render core/text)
         target_link_libraries(texttest PRIVATE reaktor_text reaktor_core
                               SDL3::SDL3-static)
@@ -475,6 +492,9 @@ function(reaktor_add_app name)
         endif()
     endforeach()
     target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
+    if(MSVC)
+        target_compile_options(${name} PRIVATE /we4013)
+    endif()
     set_target_properties(${name} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
     if(EMSCRIPTEN)
@@ -510,6 +530,7 @@ function(reaktor_add_app name)
     endif()
 endfunction()
 
+if(REAKTOR_SAMPLES)
 reaktor_add_app(showcase SOURCES
     samples/showcase/shell.c
     samples/showcase/shortcuts.c
@@ -632,9 +653,7 @@ endif()
 
 if(MSVC)
     target_compile_options(showcase PRIVATE /wd5287 /wd4101)
-    target_compile_options(plutovg PRIVATE /wd4244 /wd4267 /wd4018)
     target_compile_definitions(showcase PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_definitions(reaktor_core PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 if(APPLE AND NOT EMSCRIPTEN)
@@ -650,4 +669,115 @@ if(APPLE AND NOT EMSCRIPTEN)
                 "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Assembling reaktor.app"
         VERBATIM)
+endif()
+endif()
+
+if(MSVC)
+    target_compile_options(plutovg PRIVATE /wd4244 /wd4267 /wd4018)
+    target_compile_definitions(reaktor_core PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+add_library(reaktor_modules STATIC)
+target_link_libraries(reaktor_modules PRIVATE reaktor_runtime reaktor_a11y reaktor_locale reaktor_text)
+set_target_properties(reaktor_modules PROPERTIES EXCLUDE_FROM_ALL ON)
+
+set(_parts reaktor_runtime reaktor_core reaktor_modules plutosvg plutovg lcui onlay SDL3-static)
+foreach(_t mojibake_lib kb_text_shape)
+    if(TARGET ${_t})
+        list(APPEND _parts ${_t})
+    endif()
+endforeach()
+set(_files "")
+foreach(_t IN LISTS _parts)
+    list(APPEND _files "$<TARGET_FILE:${_t}>")
+endforeach()
+
+set(REAKTOR_LINK_LIBS "")
+set(REAKTOR_LINK_DIRS "")
+set(REAKTOR_LINK_OPTIONS "")
+set(REAKTOR_PC_LIBS "")
+if(WIN32)
+    set(REAKTOR_LINK_LIBS kernel32 user32 gdi32 winmm imm32 version advapi32 setupapi
+                          shell32 ole32 oleaut32 uuid uiautomationcore dxguid)
+elseif(APPLE)
+    foreach(_f Cocoa IOKit Carbon Foundation Metal QuartzCore CoreVideo CoreMedia)
+        list(APPEND REAKTOR_LINK_LIBS "-framework ${_f}")
+        string(APPEND REAKTOR_PC_LIBS " -framework ${_f}")
+    endforeach()
+    set(REAKTOR_LINK_OPTIONS "SHELL:-Xlinker -weak_framework -Xlinker UniformTypeIdentifiers")
+    string(APPEND REAKTOR_PC_LIBS " -Wl,-weak_framework,UniformTypeIdentifiers")
+elseif(EMSCRIPTEN)
+    set(REAKTOR_LINK_OPTIONS -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sSTACK_SIZE=4MB
+                             -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sEXIT_RUNTIME=0)
+    string(JOIN " " REAKTOR_PC_LIBS ${REAKTOR_LINK_OPTIONS})
+else()
+    set(REAKTOR_LINK_LIBS m pthread)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        list(APPEND REAKTOR_LINK_LIBS dl)
+    endif()
+    if(REAKTOR_DBUS_FOUND)
+        list(APPEND REAKTOR_LINK_LIBS dbus-1)
+        set(REAKTOR_LINK_DIRS ${REAKTOR_DBUS_LIBRARY_DIRS})
+    endif()
+    foreach(_d IN LISTS REAKTOR_LINK_DIRS)
+        string(APPEND REAKTOR_PC_LIBS " -L${_d}")
+    endforeach()
+    foreach(_l IN LISTS REAKTOR_LINK_LIBS)
+        string(APPEND REAKTOR_PC_LIBS " -l${_l}")
+    endforeach()
+endif()
+
+if(MSVC)
+    set(REAKTOR_LIB_NAME reaktor.lib)
+else()
+    set(REAKTOR_LIB_NAME libreaktor.a)
+endif()
+set(_lib "${CMAKE_BINARY_DIR}/lib/${REAKTOR_LIB_NAME}")
+if(MSVC)
+    set(_merge "${CMAKE_AR}" /NOLOGO "/OUT:${_lib}" ${_files})
+elseif(APPLE)
+    find_program(REAKTOR_LIBTOOL NAMES libtool PATHS /usr/bin NO_DEFAULT_PATH)
+    set(_merge "${REAKTOR_LIBTOOL}" -static -o "${_lib}" ${_files})
+else()
+    set(_mri "CREATE ${_lib}\n")
+    foreach(_f IN LISTS _files)
+        string(APPEND _mri "ADDLIB ${_f}\n")
+    endforeach()
+    string(APPEND _mri "SAVE\nEND\n")
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor.mri" CONTENT "${_mri}")
+    set(_merge "${CMAKE_COMMAND}" "-DAR=${CMAKE_AR}" "-DMRI=${CMAKE_BINARY_DIR}/reaktor.mri"
+               -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/merge-lib.cmake")
+endif()
+add_custom_command(OUTPUT "${_lib}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/lib"
+    COMMAND "${CMAKE_COMMAND}" -E remove -f "${_lib}"
+    COMMAND ${_merge}
+    DEPENDS ${_parts}
+    COMMENT "Merging libreaktor"
+    VERBATIM)
+add_custom_target(libreaktor DEPENDS "${_lib}")
+
+option(REAKTOR_INSTALL "Install libreaktor's files" ${_reaktor_top})
+if(REAKTOR_INSTALL)
+    include(CMakePackageConfigHelpers)
+    configure_file(tools/reaktorConfig.cmake.in "${CMAKE_BINARY_DIR}/reaktorConfig.cmake" @ONLY)
+    write_basic_package_version_file("${CMAKE_BINARY_DIR}/reaktorConfigVersion.cmake"
+        COMPATIBILITY SameMinorVersion)
+    install(FILES "${_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
+    install(DIRECTORY include/reaktor DESTINATION include COMPONENT libreaktor)
+    install(FILES "${TP}/nuklear/nuklear.h" DESTINATION include COMPONENT libreaktor)
+    install(DIRECTORY "${TP}/SDL/include/SDL3" DESTINATION include COMPONENT libreaktor)
+    install(FILES "${CMAKE_BINARY_DIR}/reaktorConfig.cmake"
+                  "${CMAKE_BINARY_DIR}/reaktorConfigVersion.cmake"
+            DESTINATION lib/cmake/reaktor COMPONENT libreaktor)
+    if(NOT MSVC)
+        configure_file(tools/reaktor.pc.in "${CMAKE_BINARY_DIR}/reaktor.pc" @ONLY)
+        install(FILES "${CMAKE_BINARY_DIR}/reaktor.pc" DESTINATION lib/pkgconfig
+                COMPONENT libreaktor)
+    endif()
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/licenses/" DESTINATION share/reaktor/licenses
+            COMPONENT libreaktor)
+    install(FILES assets/fonts/Aileron-Notice.txt DESTINATION share/reaktor/licenses
+            COMPONENT libreaktor)
+    install(FILES docs/NOTICE.md DESTINATION share/reaktor COMPONENT libreaktor)
 endif()

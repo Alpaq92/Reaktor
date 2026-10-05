@@ -41,8 +41,8 @@ enum {
     KEY_CLICK_AGAIN
 };
 
-extern size_t reaktor_rss[RSS_STEPS];
-extern size_t reaktor_priv[RSS_STEPS];
+extern size_t reaktor_rss[REAKTOR_RSS_STEPS];
+extern size_t reaktor_priv[REAKTOR_RSS_STEPS];
 void reaktor_rss_mark(int step);
 
 #define GLYPH_STROKE  2.0f
@@ -130,8 +130,6 @@ struct App {
     int            borderless_pending;
     int            borderless_lock_frames;
 #endif
-    struct nk_rect ctl[3];
-    int            ctl_n;
 
     const char    *shot_path;
     const char    *dump_path;
@@ -151,7 +149,7 @@ struct App {
     int      ime_valid;
 
     SDL_AtomicInt file_ready, file_done;
-    char          file_answer[SC_PATH_CAP];
+    char          file_answer[520];
     int           file_pending;
 
     int   theme_mode;
@@ -172,7 +170,6 @@ struct App {
     unsigned char  hot_last_repaint;
 
     int   dirty;
-    int   show_contact;
 
     struct input_queue {
         SDL_Event     *ev;

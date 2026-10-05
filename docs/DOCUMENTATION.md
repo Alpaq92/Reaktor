@@ -19,7 +19,7 @@
 web it returns at once, and a second call returns 1.
 
 ```c
-#include "reaktor/launch.h"
+#include "reaktor/reaktor.h"
 #include "reaktor/main.h"   /* in the one file that defines main */
 
 int
@@ -38,6 +38,14 @@ and the accessibility tree; the application owns what is drawn and what the
 keys mean. Only `.page` is required. `launchApp` is an inline alias of
 `reaktor_launch_app`, left out under `REAKTOR_NO_SHORT_NAMES`.
 [`samples/simple/simple.c`](../samples/simple/simple.c) is a whole application.
+
+`reaktor/reaktor.h` is the whole public API: it includes the rest of
+[`include/reaktor/`](../include/reaktor/) — Nuklear as Reaktor configures it,
+`launch.h`, `widgets.h`, `keys.h`, `a11y.h`, `ui.h`, `anim.h`, `locale.h`,
+`style.h` and `text.h` — and nothing from `src/` or `core/`. `App` is opaque:
+the calls below ask it what an application may know. Every sample includes
+only these headers, and MSVC builds an app with implicit declarations as
+errors, so an internal function cannot slip back in.
 
 | Hook | When |
 | --- | --- |
@@ -59,6 +67,9 @@ keys mean. Only `.page` is required. `launchApp` is an inline alias of
 | `reaktor_set_confirm_close(app, question)` | Ask `question` before quitting, or with `NULL` stop asking |
 | `reaktor_file_open(app)` | Show the platform's file picker; the answer goes to `file_opened` |
 | `reaktor_user(app)` | The launch's `.user` |
+| `reaktor_sdl_window(app)`, `reaktor_sdl_renderer(app)` | That App's SDL window and renderer |
+| `reaktor_dark(app)`, `reaktor_get_theme(app)` | Whether it draws dark; the scheme chosen |
+| `reaktor_set_borderless(app, on)`, `reaktor_borderless(app)` | Switch the main window's frame off for a titlebar of your own, drawn with `.window.hit_test` |
 
 The `set` calls are for the main thread, take effect at the next frame, and do
 nothing when nothing changes.
@@ -102,7 +113,7 @@ if (reaktor_button(&(reaktor_button_spec){
 Every spec has `.name` (the accessible name, and how layout finds the widget
 again), `.style` (a selector to read instead of the widget's own) and `.box`
 ([Layout](#layout)). They are declared in
-[`core/ui/declare.h`](../core/ui/declare.h).
+[`include/reaktor/widgets.h`](../include/reaktor/widgets.h).
 
 | Widget | Call | Answers 1 | Its own fields |
 | --- | --- | --- | --- |
@@ -222,7 +233,7 @@ logs the box.
 Above the page, inside the main window: floaters, then toasts. Windows and
 the tray are the system's. Their specs are in
 [`include/reaktor/launch.h`](../include/reaktor/launch.h), except the toast's,
-in [`src/ui.h`](../src/ui.h); all of them are main-thread calls.
+in [`include/reaktor/ui.h`](../include/reaktor/ui.h); all of them are main-thread calls.
 
 ### Floaters
 
@@ -386,7 +397,7 @@ test that the look is not in the code.
 A field keeps the arrows, Home, End, Enter and Space while it is edited; Tab
 leaves it. A modal floater or an open popup keeps focus inside. A spec's
 `.keys` only announces a shortcut; bind it in the `key` hook.
-[`core/ui/keys.h`](../core/ui/keys.h) matches events against a table of
+[`include/reaktor/keys.h`](../include/reaktor/keys.h) matches events against a table of
 shortcuts (`reaktor_shortcut_match`) and writes the same table as text for
 `.keys` (`reaktor_shortcut_text`), so the two never disagree.
 
@@ -430,23 +441,27 @@ Nuklear is still there. Groups, trees, list views, charts, menus and popup
 bodies have no spec, and the samples call `nk_*` for them. A declared tree and
 `nk_layout_row_*` cannot share a panel, so convert a whole container at a
 time; a group or popup is its own panel and may be laid out by hand inside a
-declared page. [`src/ui.h`](../src/ui.h) has the pieces the specs are made of:
+declared page. [`include/reaktor/ui.h`](../include/reaktor/ui.h) has the pieces the specs are made of:
 
 | Helper | For |
 | --- | --- |
 | `reaktor_token`, `reaktor_col`, `reaktor_on`, `reaktor_visible` | Colors from the sheet; readable text on a background |
 | `reaktor_font`, `reaktor_style_font` | A baked face, by size or by selector |
 | `reaktor_ionicon` | An Ionicon as an `nk_image` |
+| `reaktor_svg`, `REAKTOR_MARK` | Any SVG asset, recolored by `?stroke=#rrggbb&fill=&sw=`; the mark's name |
 | `reaktor_fill_round`, `reaktor_edge_round` | Rounded fills and borders, smooth on the software renderer |
 | `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)) |
 | `reaktor_button_label`, `reaktor_button_accent`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside `nk_` layouts |
 | `reaktor_menu_item`, `reaktor_menu_style_push`, `_pop`, `reaktor_menu_height`, `reaktor_menu_edge`, `reaktor_popup_rounding` | Menus and popups |
 | `reaktor_note`, `_push`, `_pop`, `_here`, `_keys`, `_value`, `_bounds`, `reaktor_focus_activated` | The accessibility tree, and keyboard presses |
-| `reaktor_diagnostics` | What the Diagnostics page shows |
+| `reaktor_focus_area`, `reaktor_focus_scroll` | A scrolling page body: the area and node focus moves within, and the rectangle it asks to see |
+| `reaktor_diagnostics`, `reaktor_frame_ms` | What the Diagnostics page shows; one frame's build, render and present |
+| `reaktor_process_memory`, `reaktor_process_cpu_ms` | The process's resident and private bytes, and its CPU time |
 
-The rest is by subject: [`keys.h`](../core/ui/keys.h),
-[`anim.h`](../core/anim/anim.h), [`locale.h`](../core/locale/locale.h),
-[`text.h`](../core/text/text.h) and [`style.h`](../core/css/style.h).
+The rest is by subject: [`keys.h`](../include/reaktor/keys.h),
+[`anim.h`](../include/reaktor/anim.h), [`locale.h`](../include/reaktor/locale.h),
+[`text.h`](../include/reaktor/text.h), [`style.h`](../include/reaktor/style.h)
+and [`a11y.h`](../include/reaktor/a11y.h).
 
 ---
 
@@ -560,8 +575,9 @@ ARM64 build tools.
 **Releases.** Pushing a `v*` tag runs `release.yml`: the four native
 workflows again, with every job required, a web build, and a GitHub release
 of what they packed — one archive per system and architecture, the three
-WebAssembly programs, and the source with its submodules, which GitHub's own
-archives leave out. `tools/package.sh <build> <folder> [.exe]` packs a native
+WebAssembly programs, libreaktor for each ([In your own project](#in-your-own-project)),
+the source with its submodules, which GitHub's own archives leave out, and a
+`SHA256SUMS` of them all. `tools/package.sh <build> <folder> [.exe]` packs a native
 one: the four programs without their symbols, the `.reaktor-root` marker, the
 files they read at runtime (`tools/assets.sh`, which the macOS app bundle uses
 too), `licenses/` and `NOTICE.md`. Each job runs the packed showcase and
@@ -569,6 +585,48 @@ checks it draws its Translations page as the built one does. Windows links the
 C runtime statically (`-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`); the macOS
 app is signed ad hoc, not notarized; Linux needs glibc 2.36, or 2.41 on
 RISC-V; a BSD package wants the release it was built on.
+
+## In your own project
+
+**Embedded.** Add the checkout, submodules and all, and declare the app:
+
+```cmake
+add_subdirectory(reaktor)    # or FetchContent, which clones the submodules too
+reaktor_add_app(myapp SOURCES main.c)
+```
+
+Under another project Reaktor builds none of its samples or tests and
+installs nothing (`REAKTOR_SAMPLES`, `REAKTOR_TESTS` and `REAKTOR_INSTALL`
+default to on only at the top), and its settings stay in its own directory.
+
+**libreaktor.** Each release carries `libreaktor-<version>-<system>-<arch>`
+for every platform above, and `-wasm`. Build one yourself with:
+
+```bash
+cmake --build build --target libreaktor
+cmake --install build --prefix libreaktor --component libreaktor
+```
+
+It is one static library — `reaktor.lib` with MSVC, `libreaktor.a` elsewhere
+— holding Reaktor, every module, SDL, libcss, plutosvg, Onlay, mojibake and
+kb_text_shape, merged with `lib.exe`, Apple's `libtool` or an `ar` MRI
+script. Beside it go the public headers with Nuklear's and SDL's, a CMake
+package, a pkg-config file and `share/reaktor/licenses`:
+
+```cmake
+find_package(reaktor 0.2 REQUIRED)
+add_executable(app WIN32 main.c)
+target_link_libraries(app PRIVATE reaktor::reaktor)
+```
+
+`pkg-config --cflags --libs reaktor` answers the same outside CMake. The
+library takes the C runtime its build used: the release's Windows ones use
+the DLL runtime, CMake's default, while the programs in a release link it
+statically. On the web, point `reaktor_DIR` at its `lib/cmake/reaktor`, as
+the emscripten toolchain searches only its own sysroot.
+[`examples/consumer`](../examples/consumer) builds `samples/simple/simple.c`
+against an installed package: every CI job does, and checks it draws as the
+in-tree build does.
 
 ## Build options
 
@@ -586,6 +644,8 @@ Passed to CMake, through either script:
 | `REAKTOR_LOCALE_EMBED` | `OFF` | Compile the catalogs in rather than read them at startup |
 | `REAKTOR_TEXT` | `ON` | Direction, shaping, fallback glyphs and Unicode line breaks — [Text](#text) |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Linux and the BSDs |
+| `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tools/` |
+| `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
 **CMake keeps an option**, so a build without the flag keeps the last value;
 pass `=ON` to switch one back.

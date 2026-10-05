@@ -5,20 +5,14 @@
 
 #include <SDL3/SDL.h>
 
-#include "nk_common.h"
-#include "ui.h"
 #include "showcase.h"
-#include "declare.h"
-#include "anim.h"
-#include "locale.h"
-#include "style.h"
 
 
 #define ROW       30.0f
 #define ROW_TALL  34.0f
 #define ROW_SMALL 22.0f
 
-const char *const reaktor_rss_names[RSS_STEPS] = {
+static const char *const rss_names[REAKTOR_RSS_STEPS] = {
     "before any of it", "SDL_Init(VIDEO)", "window and renderer",
     "window icon", "Nuklear context", "font atlas", "stylesheets"
 };
@@ -2445,16 +2439,16 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
         int i;
 
         SDL_snprintf(v, sizeof(v), "%.1f MB private, %.1f MB resident",
-                     d.priv_at[RSS_ENTRY] / 1048576.0,
-                     d.rss_at[RSS_ENTRY] / 1048576.0);
+                     d.priv_at[REAKTOR_RSS_ENTRY] / 1048576.0,
+                     d.rss_at[REAKTOR_RSS_ENTRY] / 1048576.0);
         DIAG_ROWS(ctx) {
-            diag_row(app, ctx, reaktor_rss_names[RSS_ENTRY], v);
-            for (i = RSS_ENTRY + 1; i < RSS_STEPS; i++) {
+            diag_row(app, ctx, rss_names[REAKTOR_RSS_ENTRY], v);
+            for (i = REAKTOR_RSS_ENTRY + 1; i < REAKTOR_RSS_STEPS; i++) {
                 double dp = (d.priv_at[i] - (double)d.priv_at[i - 1]) / 1048576.0;
                 double dr = (d.rss_at[i] - (double)d.rss_at[i - 1]) / 1048576.0;
                 SDL_snprintf(v, sizeof(v), "%+.1f MB private   %+.1f MB resident",
                              dp, dr);
-                diag_row(app, ctx, reaktor_rss_names[i], v);
+                diag_row(app, ctx, rss_names[i], v);
             }
         }
     }

@@ -126,7 +126,38 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-macos-${{ matrix.arch }}
-          path: dist/*.zip
+          path: dist/reaktor-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check and zip libreaktor
+        id: libcheck
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          version='${{ inputs.version || 'dev' }}'
+          name="libreaktor-${version#v}-macos-${{ matrix.arch }}"
+          cmake --build build --target libreaktor </dev/null
+          cmake --install build --prefix "dist/$name" --component libreaktor </dev/null
+          cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" </dev/null
+          cmake --build build-consumer </dev/null
+          mkdir -p check
+          for from in "lib-built build/simple" "lib-linked build-consumer/simple"; do
+            set -- $from
+            "$2" --theme light --video dummy \
+              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
+          done
+          for e in bmp txt; do
+            cmp "check/lib-built.$e" "check/lib-linked.$e"
+          done
+          ditto -c -k --keepParent "dist/$name" "dist/$name.zip"
+
+      - name: Upload libreaktor
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-macos-${{ matrix.arch }}
+          path: dist/libreaktor-*.zip
           if-no-files-found: error
           retention-days: 14
 
