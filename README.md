@@ -9,7 +9,8 @@ A Nuklear-powered GUI library for C.
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
 same program, built to WebAssembly — or
 **[download it](https://github.com/Alpaq92/Reaktor/releases/latest)** for
-Windows, macOS or Linux.
+Windows, macOS, Linux, FreeBSD, OpenBSD or NetBSD, or as WebAssembly to serve
+yourself.
 
 Tired of C having no cross-platform GUI — nothing like
 [Avalonia](https://github.com/avaloniaui/avalonia),

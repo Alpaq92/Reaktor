@@ -24,6 +24,17 @@ jobs:
       version: ${{ github.ref_name }}
       strict: true
 
+  bsd:
+    uses: ./.github/workflows/bsd.yml
+    with:
+      version: ${{ github.ref_name }}
+      strict: true
+
+  web:
+    uses: ./.github/workflows/web.yml
+    with:
+      version: ${{ github.ref_name }}
+
   source:
     runs-on: ubuntu-24.04
     steps:
@@ -47,7 +58,7 @@ jobs:
           retention-days: 14
 
   publish:
-    needs: [windows, macos, linux, source]
+    needs: [windows, macos, linux, bsd, web, source]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -70,11 +81,16 @@ jobs:
           | Windows | x64, x86, ARM64 | \`reaktor-$v-windows-<arch>.zip\` |
           | macOS | Apple silicon (arm64), Intel (x86_64) | \`reaktor-$v-macos-<arch>.zip\` |
           | Linux | x86-64, x86, ARM64, ARMv7 (armhf), RISC-V 64 | \`reaktor-$v-linux-<arch>.tar.gz\` |
+          | FreeBSD 15.1 | x86-64, ARM64 | \`reaktor-$v-freebsd-<arch>.tar.gz\` |
+          | OpenBSD 7.9 | x86-64, ARM64 | \`reaktor-$v-openbsd-<arch>.tar.gz\` |
+          | NetBSD 11.0 | x86-64, ARM64 | \`reaktor-$v-netbsd-<arch>.tar.gz\` |
+          | Web | WebAssembly | \`reaktor-$v-web.zip\` |
           | Source | every submodule included | \`reaktor-$v-source.tar.gz\` |
 
-          Each package holds the showcase, Notepad, Simple and the bench, the files
-          they read at runtime, and every license (\`licenses/\`, \`NOTICE.md\`).
-          Unpack it anywhere and run \`showcase\`; it finds its files beside itself.
+          Each native package holds the showcase, Notepad, Simple and the bench,
+          the files they read at runtime, and every license (\`licenses/\`,
+          \`NOTICE.md\`). Unpack it anywhere and run \`showcase\`; it finds its files
+          beside itself.
 
           - **Windows**: the C runtime is linked in, so there is nothing to install.
             The programs are not signed, and SmartScreen may ask before the first run.
@@ -82,7 +98,11 @@ jobs:
             notarized: open it from its context menu the first time.
           - **Linux**: glibc 2.36 or newer (2.41 for RISC-V), libdbus-1, and X11 or
             Wayland.
-          - **Web**: the same showcase runs at https://alpaq92.github.io/Reaktor/.
+          - **BSDs**: the release named above, the dbus package, and X11.
+          - **Web**: the showcase, Notepad and Simple as \`.html\`, \`.js\`, \`.wasm\`
+            and \`.data\`. Serve the folder over HTTP (a \`file://\` page cannot fetch
+            the \`.wasm\`) and open \`showcase.html\`; the same showcase runs at
+            https://alpaq92.github.io/Reaktor/.
 
           GitHub's own source archives below leave the submodules out; the
           \`-source.tar.gz\` above has them.
