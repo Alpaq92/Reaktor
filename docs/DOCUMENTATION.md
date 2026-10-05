@@ -549,23 +549,26 @@ writes a `--shot` and an `--a11y-dump` of `simple` and the showcase through
 the system's video driver and SDL's `dummy` one: `.github/workflows/` holds a
 workflow per system. The BSDs run in virtual machines, ARM64 among them under
 emulation, and a job that emulates may fail without failing its run. The web
-build is checked by hand in headless Edge, as desktop, Android and iOS.
+build is built and packed on every pull request too (`web.yml`), and checked
+by hand in headless Edge, as desktop, Android and iOS.
 
 `build.sh` builds for the machine it runs on. `build.ps1 -Arch x86` (or `x64`,
 `arm64`) builds that architecture with MSVC's matching toolset, into
 `build-<arch>` when it is not the machine's own; ARM64 needs Visual Studio's
 ARM64 build tools.
 
-**Releases.** Pushing a `v*` tag runs `release.yml`: the three workflows
-again, with every job required, and a GitHub release of what they packed —
-one archive per system and architecture, and the source with its submodules,
-which GitHub's own archives leave out. `tools/package.sh <build> <folder>
-[.exe]` packs one: the four programs without their symbols, the `.reaktor-root` marker, the files
-they read at runtime (`tools/assets.sh`, which the macOS app bundle uses too),
-`licenses/` and `NOTICE.md`. Each job runs the packed showcase and checks it
-draws its Translations page as the built one does. Windows links the C runtime
-statically (`-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`); the macOS app is
-signed ad hoc, not notarized; Linux needs glibc 2.36, or 2.41 on RISC-V.
+**Releases.** Pushing a `v*` tag runs `release.yml`: the four native
+workflows again, with every job required, a web build, and a GitHub release
+of what they packed — one archive per system and architecture, the three
+WebAssembly programs, and the source with its submodules, which GitHub's own
+archives leave out. `tools/package.sh <build> <folder> [.exe]` packs a native
+one: the four programs without their symbols, the `.reaktor-root` marker, the
+files they read at runtime (`tools/assets.sh`, which the macOS app bundle uses
+too), `licenses/` and `NOTICE.md`. Each job runs the packed showcase and
+checks it draws its Translations page as the built one does. Windows links the
+C runtime statically (`-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`); the macOS
+app is signed ad hoc, not notarized; Linux needs glibc 2.36, or 2.41 on
+RISC-V; a BSD package wants the release it was built on.
 
 ## Build options
 

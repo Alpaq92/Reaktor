@@ -5,12 +5,20 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ''
+      strict:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: bsd-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -18,7 +26,7 @@ jobs:
     name: ${{ matrix.os }} ${{ matrix.version }} ${{ matrix.arch }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout }}
-    continue-on-error: ${{ matrix.arch == 'arm64' }}
+    continue-on-error: ${{ matrix.arch == 'arm64' && !inputs.strict }}
     strategy:
       fail-fast: false
       matrix:
@@ -151,6 +159,27 @@ jobs:
           export PATH
           cmake --build build --target mkicon </dev/null
 
+      - name: Package
+        id: package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          version='${{ inputs.version || 'dev' }}'
+          name="reaktor-${version#v}-${{ matrix.os }}-${{ matrix.arch }}"
+          sh tools/package.sh build "dist/$name"
+          mkdir -p check
+          for from in "built build" "packed dist/$name"; do
+            set -- $from
+            dbus-run-session -- "$2/showcase" --tab 8 --theme light --video dummy \
+              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
+          done
+          for e in bmp txt; do
+            cmp "check/built.$e" "check/packed.$e"
+          done
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          rm -rf "dist/$name"
+
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
         shell: cpa.sh {0} --sync-files vm-to-runner
@@ -160,6 +189,15 @@ jobs:
             if [ -f "$f" ]; then cp "$f" smoke/; fi
           done
           rm -rf build
+
+      - name: Upload the package
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
