@@ -5,12 +5,17 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: windows-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -37,7 +42,7 @@ jobs:
 
       - name: Build
         id: build
-        run: ./build.ps1 -Arch ${{ matrix.arch }}
+        run: ./build.ps1 -Arch ${{ matrix.arch }} '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
 
       - name: Console tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -80,6 +85,46 @@ jobs:
           Shot showcase windows "./${{ matrix.out }}/showcase.exe" @('--tab', '7', '--theme', 'dark')
           Shot simple-dummy dummy "./${{ matrix.out }}/simple.exe" @('--theme', 'light')
           exit $script:fail
+
+      - name: Package
+        id: package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          version='${{ inputs.version || 'dev' }}'
+          name="reaktor-${version#v}-windows-${{ matrix.arch }}"
+          sh tools/package.sh "${{ matrix.out }}" "dist/$name" .exe
+          echo "name=$name" >>"$GITHUB_OUTPUT"
+
+      - name: Check and zip the package
+        id: check
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: |
+          $dir = "dist/${{ steps.package.outputs.name }}"
+          New-Item -ItemType Directory -Force check | Out-Null
+          foreach ($from in @(@('built', "${{ matrix.out }}"), @('packed', $dir))) {
+            $p = Start-Process -FilePath "$($from[1])/showcase.exe" -PassThru -ArgumentList @(
+                   '--tab', '8', '--theme', 'light', '--video', 'dummy',
+                   '--shot', "check/$($from[0]).bmp", '--a11y-dump', "check/$($from[0]).txt")
+            $null = $p.Handle
+            if (-not $p.WaitForExit(600000)) { $p.Kill(); throw "$($from[0]): timed out" }
+            if ($p.ExitCode -ne 0) { throw "$($from[0]): exit status $($p.ExitCode)" }
+          }
+          foreach ($e in 'bmp', 'txt') {
+            if ((Get-FileHash "check/built.$e").Hash -ne (Get-FileHash "check/packed.$e").Hash) {
+              throw "the packaged showcase draws its Translations page differently ($e)"
+            }
+          }
+          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
+
+      - name: Upload the package
+        if: ${{ !cancelled() && steps.check.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-windows-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload the shots
         if: ${{ always() }}

@@ -298,7 +298,8 @@ reaktor_window_open(app, &(reaktor_window){
 ### Tray
 
 `reaktor_tray_open` puts the app's icon in the system tray, with a menu, and
-answers 0 where there is no tray: the web, or a desktop without one. An entry
+answers 0 where there is no tray: the web, a desktop without one, or SDL's
+`dummy` and `offscreen` video drivers. An entry
 is a button, a checkbox (`.checkbox`, `.checked`) or, without a `.label`, a
 separator; `.disabled` grays it out. Choosing one runs `.chosen(app, checked,
 user)` on the main thread, then draws a frame. A click toggles a checkbox
@@ -537,7 +538,7 @@ repaint to make something update is the wrong fix** — mark what changed.
 | --- | --- | --- |
 | Windows | x64, x86, ARM64 | Windows Server 2025 runners for x64 and x86, a Windows 11 runner for ARM64 |
 | macOS | Apple silicon, Intel | macOS 15 runners, one of each |
-| Linux | x86-64, x86, ARM64, ARMv7 (armhf), RISC-V 64 | Debian 13: natively for x86-64, x86 and ARM64, under QEMU for ARMv7 and RISC-V |
+| Linux | x86-64, x86, ARM64, ARMv7 (armhf), RISC-V 64 | Debian 12 (13 for RISC-V): natively for x86-64, x86 and ARM64, under QEMU for ARMv7 and RISC-V |
 | FreeBSD | x86-64, ARM64 | 15.1 |
 | OpenBSD | x86-64, ARM64 | 7.9 |
 | NetBSD | x86-64, ARM64 | 11.0 |
@@ -554,6 +555,17 @@ build is checked by hand in headless Edge, as desktop, Android and iOS.
 `arm64`) builds that architecture with MSVC's matching toolset, into
 `build-<arch>` when it is not the machine's own; ARM64 needs Visual Studio's
 ARM64 build tools.
+
+**Releases.** Pushing a `v*` tag runs `release.yml`: the three workflows
+again, with every job required, and a GitHub release of what they packed —
+one archive per system and architecture, and the source with its submodules,
+which GitHub's own archives leave out. `tools/package.sh <build> <folder>
+[.exe]` packs one: the four programs without their symbols, the `.reaktor-root` marker, the files
+they read at runtime (`tools/assets.sh`, which the macOS app bundle uses too),
+`licenses/` and `NOTICE.md`. Each job runs the packed showcase and checks it
+draws its Translations page as the built one does. Windows links the C runtime
+statically (`-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`); the macOS app is
+signed ad hoc, not notarized; Linux needs glibc 2.36, or 2.41 on RISC-V.
 
 ## Build options
 

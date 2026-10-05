@@ -28,10 +28,14 @@ reaktor_tray_open(App *app, const reaktor_tray *spec)
 #else
     SDL_TrayMenu *menu;
     SDL_Surface  *icon;
+    const char   *drv = SDL_GetCurrentVideoDriver();
     int i;
 
     reaktor_tray_close(app);
     if (!spec) return 0;
+    /* No display, no tray: macOS aborts creating one under dummy. */
+    if (!drv || SDL_strcmp(drv, "dummy") == 0 || SDL_strcmp(drv, "offscreen") == 0)
+        return 0;
     icon   = reaktor_icon_surface(reaktor_launch_icon(), 32);
     {
         /* GTK, under the tray on Linux and the BSDs, sets the user's locale. */

@@ -31,40 +31,6 @@ if command -v iconutil >/dev/null 2>&1 && command -v sips >/dev/null 2>&1 \
     rm -rf "$(dirname "$iconset")"
 fi
 
-copy() {
-    src=$1
-    rel=$2
-    mkdir -p "$bundle/Contents/Resources/$(dirname "$rel")"
-    cp "$src" "$bundle/Contents/Resources/$rel"
-}
-
-for f in \
-    external/tinycss/src/variables-dark.css \
-    external/tinycss/src/variables-light.css \
-    external/tinycss/src/core.css \
-    assets/fonts/Aileron-Regular.otf \
-    assets/fonts/Aileron-Bold.otf \
-    assets/icons/reaktor-icon.svg
-do
-    if [ -f "$root/$f" ]; then
-        copy "$root/$f" "$f"
-    fi
-done
-
-# Same set as the WASM scan in CMakeLists.txt.
-srcs=$(ls "$root/src/"*.h "$root/core/"*/*.c "$root/core/"*/*.h \
-          "$root/platform/"*.c "$root/platform/"*/*.c \
-          "$root/runtime/"*.c "$root/samples/"*.h \
-          "$root/samples/"*/*.c "$root/samples/"*/*.h 2>/dev/null)
-mkdir -p "$bundle/Contents/Resources/external/ionicons/src/svg"
-{
-    grep -ohE '[a-z0-9]+(-[a-z0-9]+)*-outline' $srcs 2>/dev/null
-    grep -ohE '"[a-z0-9]+(-[a-z0-9]+)*"' $srcs 2>/dev/null | tr -d '"'
-} | sort -u | while read -r name; do
-    src="$root/external/ionicons/src/svg/$name.svg"
-    if [ -f "$src" ]; then
-        cp "$src" "$bundle/Contents/Resources/external/ionicons/src/svg/"
-    fi
-done
+sh "$root/tools/assets.sh" "$root" "$bundle/Contents/Resources"
 
 echo "assembled: $bundle"

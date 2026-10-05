@@ -5,12 +5,20 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ''
+      strict:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: linux-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -18,16 +26,16 @@ jobs:
     name: linux ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
-    continue-on-error: ${{ matrix.emulated }}
+    continue-on-error: ${{ matrix.emulated && !inputs.strict }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { arch: x86-64, platform: linux/amd64, runner: ubuntu-24.04, emulated: false, timeout: 60 }
-          - { arch: x86, platform: linux/386, runner: ubuntu-24.04, emulated: false, timeout: 60 }
-          - { arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm, emulated: false, timeout: 60 }
-          - { arch: armhf, platform: linux/arm/v7, runner: ubuntu-24.04, emulated: true, timeout: 240 }
-          - { arch: riscv64, platform: linux/riscv64, runner: ubuntu-24.04, emulated: true, timeout: 240 }
+          - { arch: x86-64, platform: linux/amd64, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: false, timeout: 60 }
+          - { arch: x86, platform: linux/386, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: false, timeout: 60 }
+          - { arch: arm64, platform: linux/arm64, image: 'debian:bookworm', runner: ubuntu-24.04-arm, emulated: false, timeout: 60 }
+          - { arch: armhf, platform: linux/arm/v7, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: true, timeout: 240 }
+          - { arch: riscv64, platform: linux/riscv64, image: 'debian:trixie', runner: ubuntu-24.04, emulated: true, timeout: 240 }
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,12 +49,12 @@ jobs:
         with:
           platforms: ${{ matrix.platform }}
 
-      - name: Start Debian 13
+      - name: Start Debian
         id: debian
         run: |
           docker run -d --name debian --platform ${{ matrix.platform }} \
-            -v "$PWD:/src" -w /src debian:trixie sleep infinity
-          docker exec debian uname -m
+            -v "$PWD:/src" -w /src ${{ matrix.image }} sleep infinity
+          docker exec debian sh -c 'uname -m; cat /etc/debian_version'
 
       - name: Install packages
         run: |
@@ -54,7 +62,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update </dev/null
           apt-get install -y --no-install-recommends \
-            cmake ninja-build gcc g++ pkgconf file \
+            cmake ninja-build gcc g++ pkgconf file diffutils \
             libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev \
             libxrandr-dev libxrender-dev libxtst-dev libxkbcommon-dev \
             libwayland-dev wayland-protocols libegl-dev libdbus-1-dev \
@@ -70,6 +78,7 @@ jobs:
           cmake --version
           ./build.sh </dev/null
           file build/showcase
+          echo "needs $(objdump -T build/showcase | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
           EOF
 
       - name: Console tests
@@ -128,6 +137,35 @@ jobs:
           shot simple-dummy dummy ./build/simple --theme light
           exit "$fail"
           EOF
+
+      - name: Package
+        id: package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          version='${{ inputs.version || 'dev' }}'
+          name="reaktor-${version#v}-linux-${{ matrix.arch }}"
+          docker exec -i -e name="$name" debian sh -eu <<'EOF'
+          sh tools/package.sh build "dist/$name"
+          mkdir -p check
+          for from in "built build" "packed dist/$name"; do
+            set -- $from
+            timeout 600 "$2/showcase" --tab 8 --theme light --video dummy \
+              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
+          done
+          for e in bmp txt; do
+            cmp "check/built.$e" "check/packed.$e"
+          done
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          EOF
+
+      - name: Upload the package
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-linux-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Collect the build logs
         if: ${{ always() && steps.debian.outcome == 'success' }}

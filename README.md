@@ -3,11 +3,13 @@
 A Nuklear-powered GUI library for C.
 
 <p align="center">
-  <img src="assets/screenshots/screenshot.png" alt="The Reaktor showcase split along the diagonal: the light scheme above the line and the dark scheme below it, with the sidebar of pages on the left and the Login page's card in a rounded panel">
+  <img src="assets/screenshots/screenshot.png" alt="Two Reaktor showcase windows, the light scheme behind and the dark scheme in front: each has the sidebar of pages with its own scheme chosen at the foot, and the front one shows the Login page's card in a rounded panel">
 </p>
 
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
-same program, built to WebAssembly.
+same program, built to WebAssembly — or
+**[download it](https://github.com/Alpaq92/Reaktor/releases/latest)** for
+Windows, macOS or Linux.
 
 Tired of C having no cross-platform GUI — nothing like
 [Avalonia](https://github.com/avaloniaui/avalonia),

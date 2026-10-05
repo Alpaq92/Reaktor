@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 if(MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL" CACHE STRING "" FORCE)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL" CACHE STRING "")
 endif()
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/external")
@@ -448,6 +448,8 @@ foreach(_lic SDL/LICENSE.txt lcui/LICENSE.TXT plutosvg/LICENSE nuklear/LICENSE
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/${_lic}"
                    "${CMAKE_BINARY_DIR}/licenses/${_who}.txt" COPYONLY)
 endforeach()
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/plutosvg/plutovg/LICENSE"
+               "${CMAKE_BINARY_DIR}/licenses/plutovg.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
