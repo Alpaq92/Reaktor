@@ -298,7 +298,8 @@ reaktor_window_open(app, &(reaktor_window){
 ### Tray
 
 `reaktor_tray_open` puts the app's icon in the system tray, with a menu, and
-answers 0 where there is no tray: the web, or a desktop without one. An entry
+answers 0 where there is no tray: the web, a desktop without one, or SDL's
+`dummy` and `offscreen` video drivers. An entry
 is a button, a checkbox (`.checkbox`, `.checked`) or, without a `.label`, a
 separator; `.disabled` grays it out. Choosing one runs `.chosen(app, checked,
 user)` on the main thread, then draws a frame. A click toggles a checkbox
@@ -559,7 +560,7 @@ ARM64 build tools.
 again, with every job required, and a GitHub release of what they packed —
 one archive per system and architecture, and the source with its submodules,
 which GitHub's own archives leave out. `tools/package.sh <build> <folder>
-[.exe]` packs one: the four programs, the `.reaktor-root` marker, the files
+[.exe]` packs one: the four programs without their symbols, the `.reaktor-root` marker, the files
 they read at runtime (`tools/assets.sh`, which the macOS app bundle uses too),
 `licenses/` and `NOTICE.md`. Each job runs the packed showcase and checks it
 draws its Translations page as the built one does. Windows links the C runtime

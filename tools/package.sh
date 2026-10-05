@@ -10,9 +10,11 @@ rm -rf "$dest"
 mkdir -p "$dest/licenses"
 for p in showcase notepad simple bench; do
     cp "$build/$p$ext" "$dest/"
+    if [ -z "$ext" ]; then strip "$dest/$p"; fi
 done
 if [ -d "$build/reaktor.app" ]; then
     cp -R "$build/reaktor.app" "$dest/"
+    strip "$dest/reaktor.app/Contents/MacOS/reaktor"
 fi
 : >"$dest/.reaktor-root"
 sh "$root/tools/assets.sh" "$root" "$dest"

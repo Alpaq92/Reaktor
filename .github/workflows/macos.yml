@@ -97,6 +97,9 @@ jobs:
           version='${{ inputs.version || 'dev' }}'
           name="reaktor-${version#v}-macos-${{ matrix.arch }}"
           sh tools/package.sh build "dist/$name"
+          for p in showcase notepad simple bench; do
+            codesign --force --sign - "dist/$name/$p"
+          done
           codesign --force --deep --sign - "dist/$name/reaktor.app"
           echo "name=$name" >>"$GITHUB_OUTPUT"
 

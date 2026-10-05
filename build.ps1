@@ -1,6 +1,7 @@
 param([string]$Target = "", [ValidateSet("", "x64", "x86", "arm64")][string]$Arch = "")
 
 $extra = @($args)
+if ($Target -like '-*') { $extra = @($Target) + $extra; $Target = "" }
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $hostArch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
