@@ -1,4 +1,5 @@
-param([string]$Target = "", [ValidateSet("", "x64", "x86", "arm64")][string]$Arch = "")
+param([string]$Target = "", [ValidateSet("", "x64", "x86", "arm64")][string]$Arch = "",
+      [string]$Out = "", [string]$Source = "")
 
 $extra = @($args)
 if ($Target -like '-*') { $extra = @($Target) + $extra; $Target = "" }
@@ -11,6 +12,8 @@ $hostArch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchi
 }
 if (-not $Arch) { $Arch = $hostArch }
 $outDir = Join-Path $root $(if ($Arch -eq $hostArch) { "build" } else { "build-$Arch" })
+if ($Out) { $outDir = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Out)) }
+$srcDir = if ($Source) { [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Source)) } else { $root }
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found - install Visual Studio Build Tools" }
@@ -42,7 +45,7 @@ $bat = Join-Path $env:TEMP "reaktor_build_$PID.bat"
 @(
   '@echo off',
   ('call "' + $vcvars + '" ' + $vcarch + ' >nul 2>&1'),
-  ('"' + $cmake + '" -S "' + $root + '" -B "' + $outDir + '" -G Ninja ' +
+  ('"' + $cmake + '" -S "' + $srcDir + '" -B "' + $outDir + '" -G Ninja ' +
    '-DCMAKE_MAKE_PROGRAM="' + $ninja + '" -DCMAKE_BUILD_TYPE=Release' +
    (($extra | ForEach-Object { ' "' + $_ + '"' }) -join '')),
   'if errorlevel 1 exit /b 1',
@@ -64,4 +67,5 @@ try {
 if ($rc -ne 0) { throw "build failed ($rc)" }
 Write-Host ""
 if ($Target) { Write-Host "built target: $Target ($Arch)" }
+elseif ($Source) { Write-Host "built: $outDir ($Arch)" }
 else { Write-Host "built: $outDir\showcase.exe (plus simple.exe and notepad.exe), $Arch" }

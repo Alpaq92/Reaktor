@@ -1,0 +1,9 @@
+prefix=${pcfiledir}/../..
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: reaktor
+Description: A Nuklear-powered GUI library for C
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lreaktor @REAKTOR_PC_LIBS@

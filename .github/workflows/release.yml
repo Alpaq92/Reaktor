@@ -104,9 +104,30 @@ jobs:
             the \`.wasm\`) and open \`showcase.html\`; the same showcase runs at
             https://alpaq92.github.io/Reaktor/.
 
-          GitHub's own source archives below leave the submodules out; the
-          \`-source.tar.gz\` above has them.
+          ### libreaktor
+
+          The library itself, for building your own applications: the same
+          systems and architectures, \`libreaktor-$v-<system>-<arch>\`, and
+          \`libreaktor-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
+          on Windows, built against the DLL C runtime; \`libreaktor.a\` elsewhere)
+          with SDL, libcss, plutosvg, Onlay, mojibake and kb_text_shape inside it,
+          the public headers (\`#include "reaktor/reaktor.h"\`, with Nuklear's and
+          SDL's), a CMake package and a pkg-config file, and the licenses.
+
+          \`\`\`cmake
+          find_package(reaktor 0.2 REQUIRED)  # with CMAKE_PREFIX_PATH at the unpacked folder
+          add_executable(app WIN32 main.c)
+          target_link_libraries(app PRIVATE reaktor::reaktor)
+          \`\`\`
+
+          or \`cc main.c \$(pkg-config --cflags --libs reaktor)\` with
+          \`PKG_CONFIG_PATH\` at its \`lib/pkgconfig\`.
+
+          \`SHA256SUMS\` lists every download's checksum. GitHub's own source
+          archives below leave the submodules out; the \`-source.tar.gz\` above has
+          them.
           EOF
+          (cd dist && sha256sum -- * >SHA256SUMS)
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
             --title "Reaktor $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
             --verify-tag

@@ -1,0 +1,12 @@
+get_filename_component(_reaktor_prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+if(NOT TARGET reaktor::reaktor)
+    add_library(reaktor::reaktor STATIC IMPORTED)
+    set_target_properties(reaktor::reaktor PROPERTIES
+        IMPORTED_LOCATION "${_reaktor_prefix}/lib/@REAKTOR_LIB_NAME@"
+        IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+        INTERFACE_INCLUDE_DIRECTORIES "${_reaktor_prefix}/include"
+        INTERFACE_LINK_LIBRARIES "@REAKTOR_LINK_LIBS@"
+        INTERFACE_LINK_DIRECTORIES "@REAKTOR_LINK_DIRS@"
+        INTERFACE_LINK_OPTIONS "@REAKTOR_LINK_OPTIONS@")
+endif()
+unset(_reaktor_prefix)

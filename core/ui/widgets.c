@@ -1158,6 +1158,14 @@ reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,
     return hit;
 }
 void
+reaktor_frame_ms(App *app, double *build, double *render, double *present)
+{
+    if (build)   *build   = app->build_ms_x100 / 100.0;
+    if (render)  *render  = app->render_ms_x100 / 100.0;
+    if (present) *present = app->present_ms_x100 / 100.0;
+}
+
+void
 reaktor_diagnostics(App *app, reaktor_diag *out)
 {
     out->renderer   = SDL_GetRendererName(app->ren);
@@ -1213,7 +1221,7 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     out->atlas_bpp  = app->atlas_bpp;
     {
         int i;
-        for (i = 0; i < RSS_STEPS; i++) {
+        for (i = 0; i < REAKTOR_RSS_STEPS; i++) {
             out->rss_at[i]  = (unsigned long)reaktor_rss[i];
             out->priv_at[i] = (unsigned long)reaktor_priv[i];
         }

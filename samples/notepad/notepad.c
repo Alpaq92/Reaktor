@@ -1,9 +1,6 @@
 #include <stdio.h>
 
-#include "internal.h"
-#include "declare.h"
-#include "keys.h"
-#include "reaktor/launch.h"
+#include "reaktor/reaktor.h"
 #include "reaktor/main.h"
 
 #define TEXT_CAP 65536
@@ -11,7 +8,7 @@
 static struct {
     char     text[TEXT_CAP];
     int      len;
-    char     path[SC_PATH_CAP];
+    char     path[520];
     unsigned saved_hash;
     int      saved_len;
     char     status[160];
@@ -66,7 +63,7 @@ static void
 load(const char *path)
 {
     size_t n = 0;
-    char *body = reaktor_read_file(path, &n);
+    char *body = (char *)SDL_LoadFile(path, &n);
 
     if (!body) {
         SDL_snprintf(g.status, sizeof(g.status), "Could not read %s", path);
@@ -76,13 +73,13 @@ load(const char *path)
         SDL_snprintf(g.status, sizeof(g.status),
                      "%s is %.0f KB, and this editor holds %d KB",
                      path, (double)n / 1024.0, TEXT_CAP / 1024);
-        reaktor_free(body);
+        SDL_free(body);
         return;
     }
     SDL_memcpy(g.text, body, n);
     g.text[n] = '\0';
     g.len = (int)n;
-    reaktor_free(body);
+    SDL_free(body);
 
     SDL_strlcpy(g.path, path, sizeof(g.path));
     g.saved_hash = hash_of(g.text, g.len);

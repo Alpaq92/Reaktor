@@ -1,8 +1,5 @@
-#include "internal.h"
-#include "declare.h"
-#include "reaktor/launch.h"
+#include "reaktor/reaktor.h"
 #include "reaktor/main.h"
-#include "keys.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -28,19 +25,21 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 {
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
     double now_ms;
+    double build, render, present;
     float  t;
     int    i;
 
     if (!g_started) {
         g_started = 1;
-        if (g_no_vsync) SDL_SetRenderVSync(app->ren, 0);
+        if (g_no_vsync) SDL_SetRenderVSync(reaktor_sdl_renderer(app), 0);
         g_t0   = SDL_GetTicks();
         g_cpu0 = reaktor_process_cpu_ms();
     }
 
-    g_build_ms   += app->build_ms_x100 / 100.0;
-    g_render_ms  += app->render_ms_x100 / 100.0;
-    g_present_ms += app->present_ms_x100 / 100.0;
+    reaktor_frame_ms(app, &build, &render, &present);
+    g_build_ms   += build;
+    g_render_ms  += render;
+    g_present_ms += present;
     g_work_ms     = g_build_ms + g_render_ms + g_present_ms;
 
     t = (float)(SDL_GetTicks() - g_t0) / 1000.0f;
@@ -101,7 +100,6 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         else                g_due_ns = now;
     }
 
-    app->dirty = 1;
     reaktor_wake(app);
 }
 

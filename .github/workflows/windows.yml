@@ -122,7 +122,48 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-windows-${{ matrix.arch }}
-          path: dist/*.zip
+          path: dist/reaktor-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build libreaktor
+        id: lib
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: ./build.ps1 -Arch ${{ matrix.arch }} -Out build-lib libreaktor
+
+      - name: Check and zip libreaktor
+        id: libcheck
+        if: ${{ !cancelled() && steps.lib.outcome == 'success' }}
+        run: |
+          $version = '${{ inputs.version || 'dev' }}' -replace '^v', ''
+          $name = "libreaktor-$version-windows-${{ matrix.arch }}"
+          cmake --install build-lib --prefix "dist/$name" --component libreaktor
+          if ($LASTEXITCODE -ne 0) { throw "install failed" }
+          ./build.ps1 -Arch ${{ matrix.arch }} -Source examples/consumer -Out build-consumer `
+                      "-DCMAKE_PREFIX_PATH=$PWD/dist/$name"
+          New-Item -ItemType Directory -Force check | Out-Null
+          foreach ($from in @(@('lib-built', "${{ matrix.out }}/simple.exe"),
+                              @('lib-linked', 'build-consumer/simple.exe'))) {
+            $p = Start-Process -FilePath $from[1] -PassThru -ArgumentList @(
+                   '--theme', 'light', '--video', 'dummy',
+                   '--shot', "check/$($from[0]).bmp", '--a11y-dump', "check/$($from[0]).txt")
+            $null = $p.Handle
+            if (-not $p.WaitForExit(600000)) { $p.Kill(); throw "$($from[0]): timed out" }
+            if ($p.ExitCode -ne 0) { throw "$($from[0]): exit status $($p.ExitCode)" }
+          }
+          foreach ($e in 'bmp', 'txt') {
+            if ((Get-FileHash "check/lib-built.$e").Hash -ne (Get-FileHash "check/lib-linked.$e").Hash) {
+              throw "simple linked against libreaktor draws differently ($e)"
+            }
+          }
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+
+      - name: Upload libreaktor
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-windows-${{ matrix.arch }}
+          path: dist/libreaktor-*.zip
           if-no-files-found: error
           retention-days: 14
 

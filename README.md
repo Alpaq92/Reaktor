@@ -66,6 +66,11 @@ cd Reaktor
 [emsdk](https://emscripten.org)) builds the web versions into `build-wasm/`, to
 be served over HTTP.
 
+To build your own application, add Reaktor with `add_subdirectory` and declare
+it with `reaktor_add_app`, or take a `libreaktor` package from the
+[releases](https://github.com/Alpaq92/Reaktor/releases/latest) and
+`find_package(reaktor)`: [In your own project](docs/DOCUMENTATION.md#in-your-own-project).
+
 ## Usage
 
 ```c

@@ -9,6 +9,8 @@ build-wasm/
 build-x64/
 build-x86/
 build-arm64/
+build-lib/
+build-consumer/
 .claude/settings.local.json
 .dart_tool/
 .gradle/

@@ -113,6 +113,10 @@ regression oracle for every layout or style change.
   toast's close cross) are compiled in byte for byte, beside the Aileron
   fonts, the mark and reaktor.css. Nothing else from a submodule is — not the
   rest of Ionicons, not simple.css.
+- Applications see only `include/reaktor/`. The samples include
+  `reaktor/reaktor.h` and `reaktor/main.h`, nothing from `src/` or `core/`, and
+  `App` is opaque to them; what a sample needs becomes a public call there.
+  MSVC builds apps with implicit declarations as errors, which catches a miss.
 - American English, in code and prose.
 - No environment variables. Anything worth overriding is a command-line flag
   the runtime strips from `argv`.

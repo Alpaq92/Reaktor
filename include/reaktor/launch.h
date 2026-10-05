@@ -121,6 +121,14 @@ void  reaktor_set_title(App *app, const char *title);
 void  reaktor_set_confirm_close(App *app, const char *question);
 void *reaktor_user(App *app);
 
+SDL_Window   *reaktor_sdl_window(App *app);
+SDL_Renderer *reaktor_sdl_renderer(App *app);
+int           reaktor_dark(App *app);
+reaktor_theme reaktor_get_theme(App *app);
+/* The main window's. */
+void          reaktor_set_borderless(App *app, int on);
+int           reaktor_borderless(App *app);
+
 /* Main thread. Answers 0 on the web. */
 int   reaktor_window_open(App *app, const reaktor_window *window);
 void  reaktor_window_close(App *app, int id);

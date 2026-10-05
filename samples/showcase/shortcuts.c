@@ -1,6 +1,4 @@
-#include "internal.h"
 #include "showcase.h"
-#include "keys.h"
 
 enum {
     ACT_NEXT_PAGE = 1,

@@ -5,20 +5,14 @@
 
 #include <SDL3/SDL.h>
 
-#include "nk_common.h"
-#include "ui.h"
 #include "showcase.h"
-#include "declare.h"
-#include "anim.h"
-#include "locale.h"
-#include "style.h"
 
 
 #define ROW       30.0f
 #define ROW_TALL  34.0f
 #define ROW_SMALL 22.0f
 
-const char *const reaktor_rss_names[RSS_STEPS] = {
+static const char *const rss_names[REAKTOR_RSS_STEPS] = {
     "before any of it", "SDL_Init(VIDEO)", "window and renderer",
     "window icon", "Nuklear context", "font atlas", "stylesheets"
 };
@@ -679,11 +673,12 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
         int i;
 
         REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
-            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x) {
+            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X) {
                 REAKTOR_COMBO(.label = sizes[s->combo_size], .name = "Size",
                               .body_h = 130.0f,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     for (i = 0; i < 3; i++)
                         if (reaktor_combo_item(sizes[i], i == s->combo_size))
@@ -692,21 +687,22 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                 REAKTOR_COMBO(.label = sizes[s->combo_symbol],
                               .name = "Size, with a symbol",
                               .body_h = 130.0f, .disc = 1,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     for (i = 0; i < 3; i++)
                         if (reaktor_combo_item(sizes[i], i == s->combo_symbol))
                             s->combo_symbol = i;
                 }
             }
-            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x) {
+            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x,
+                        .flags = REAKTOR_LAY_FILL_X) {
                 struct nk_color tint = nk_rgb_cf(s->tint);
 
                 REAKTOR_COMBO(.name = "Tint", .body_h = 150.0f,
                               .swatch = &tint,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     reaktor_hot_follow(app, nk_widget_bounds(ctx), 0);
                     nk_property_float(ctx, "R:", 0.0f, &s->tint.r, 1.0f,
@@ -720,8 +716,8 @@ page_inputs(App *app, struct nk_context *ctx, showcase_state *s)
                 }
                 REAKTOR_COMBO(.label = "Anything at all",
                               .name = "Anything at all", .body_h = 130.0f,
-                              .box = { .w = 440.0f,
-                                       .flags = REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL_X |
+                                                REAKTOR_LAY_FILL_Y }) {
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     nk_label(ctx, "A combo is just a popup", NK_TEXT_LEFT);
                     reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f,
@@ -2445,16 +2441,16 @@ page_diagnostics(App *app, struct nk_context *ctx, showcase_state *st)
         int i;
 
         SDL_snprintf(v, sizeof(v), "%.1f MB private, %.1f MB resident",
-                     d.priv_at[RSS_ENTRY] / 1048576.0,
-                     d.rss_at[RSS_ENTRY] / 1048576.0);
+                     d.priv_at[REAKTOR_RSS_ENTRY] / 1048576.0,
+                     d.rss_at[REAKTOR_RSS_ENTRY] / 1048576.0);
         DIAG_ROWS(ctx) {
-            diag_row(app, ctx, reaktor_rss_names[RSS_ENTRY], v);
-            for (i = RSS_ENTRY + 1; i < RSS_STEPS; i++) {
+            diag_row(app, ctx, rss_names[REAKTOR_RSS_ENTRY], v);
+            for (i = REAKTOR_RSS_ENTRY + 1; i < REAKTOR_RSS_STEPS; i++) {
                 double dp = (d.priv_at[i] - (double)d.priv_at[i - 1]) / 1048576.0;
                 double dr = (d.rss_at[i] - (double)d.rss_at[i - 1]) / 1048576.0;
                 SDL_snprintf(v, sizeof(v), "%+.1f MB private   %+.1f MB resident",
                              dp, dr);
-                diag_row(app, ctx, reaktor_rss_names[i], v);
+                diag_row(app, ctx, rss_names[i], v);
             }
         }
     }

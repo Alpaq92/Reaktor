@@ -238,6 +238,22 @@ reaktor_focus_activated(App *app, unsigned id)
     return !held_back(app);
 }
 
+void
+reaktor_focus_area(App *app, struct nk_rect area, unsigned node)
+{
+    app->body_rect = area;
+    app->page_node = node;
+}
+
+int
+reaktor_focus_scroll(App *app, struct nk_rect *reveal)
+{
+    if (!app->focus_scroll) return 0;
+    app->focus_scroll = 0;
+    if (reveal) *reveal = app->focus_scroll_rect;
+    return 1;
+}
+
 int
 reaktor_focus_step(App *app, unsigned id)
 {
