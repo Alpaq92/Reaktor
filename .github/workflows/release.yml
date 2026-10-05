@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    uses: ./.github/workflows/windows.yml
+    with:
+      version: ${{ github.ref_name }}
+
+  macos:
+    uses: ./.github/workflows/macos.yml
+    with:
+      version: ${{ github.ref_name }}
+
+  linux:
+    uses: ./.github/workflows/linux.yml
+    with:
+      version: ${{ github.ref_name }}
+      strict: true
+
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+          path: src
+
+      - name: Archive
+        run: |
+          name="reaktor-${GITHUB_REF_NAME#v}-source"
+          mkdir dist
+          tar --exclude=.git --transform "s,^src,$name," -czf "dist/$name.tar.gz" src
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-source
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [windows, macos, linux, source]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          v=${GITHUB_REF_NAME#v}
+          cat >notes.md <<EOF
+          | System | Architectures | Download |
+          | --- | --- | --- |
+          | Windows | x64, x86, ARM64 | \`reaktor-$v-windows-<arch>.zip\` |
+          | macOS | Apple silicon (arm64), Intel (x86_64) | \`reaktor-$v-macos-<arch>.zip\` |
+          | Linux | x86-64, x86, ARM64, ARMv7 (armhf), RISC-V 64 | \`reaktor-$v-linux-<arch>.tar.gz\` |
+          | Source | every submodule included | \`reaktor-$v-source.tar.gz\` |
+
+          Each package holds the showcase, Notepad, Simple and the bench, the files
+          they read at runtime, and every license (\`licenses/\`, \`NOTICE.md\`).
+          Unpack it anywhere and run \`showcase\`; it finds its files beside itself.
+
+          - **Windows**: the C runtime is linked in, so there is nothing to install.
+            The programs are not signed, and SmartScreen may ask before the first run.
+          - **macOS**: \`reaktor.app\` is the showcase as an app, signed ad hoc and not
+            notarized: open it from its context menu the first time.
+          - **Linux**: glibc 2.36 or newer (2.41 for RISC-V), libdbus-1, and X11 or
+            Wayland.
+          - **Web**: the same showcase runs at https://alpaq92.github.io/Reaktor/.
+
+          GitHub's own source archives below leave the submodules out; the
+          \`-source.tar.gz\` above has them.
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "Reaktor $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
+            --verify-tag
