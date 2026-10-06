@@ -272,16 +272,15 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
 {
     struct nk_rect at;
     float card_h = card_height(g_show_contact);
-    float side = body_x + (body_w - (float)CARD_W) * 0.5f;
+    float card_w = body_w - 16.0f < (float)CARD_W ? body_w - 16.0f : (float)CARD_W;
+    float side = body_x + (body_w - card_w) * 0.5f;
     float top  = body_y + (body_h - card_height(0)) * 0.5f;
-
-    if (side < body_x + 8.0f) side = body_x + 8.0f;
 
     if (top + card_h > body_y + body_h - 8.0f)
         top = body_y + body_h - card_h - 8.0f;
     if (top  < body_y + 8.0f) top = body_y + 8.0f;
 
-    nk_layout_space_push(ctx, nk_rect(side, top, (float)CARD_W, card_h));
+    nk_layout_space_push(ctx, nk_rect(side, top, card_w, card_h));
 
     at = nk_widget_bounds(ctx);
 
@@ -293,7 +292,7 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
     if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
         REAKTOR_COLUMN(.name = "Proceed with login",
-                       .w = CARD_W, .h = card_h, .gap = ROW_GAP) {
+                       .w = card_w, .h = card_h, .gap = ROW_GAP) {
             REAKTOR_ROW(.h = ROW_BRAND, .gap = 10, .flags = REAKTOR_LAY_FILL_X,
                         .ml = CARD_PAD_X, .mr = CARD_PAD_X, .mt = CARD_PAD_Y) {
                 reaktor_icon(&(reaktor_icon_spec){
