@@ -43,7 +43,10 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
   each language writes them.
 - **Text past Latin-1** — direction, shaping, fallback fonts and Unicode line
   breaking, so Japanese wraps properly.
-- **Animation** — 31 easing curves, keyed per widget.
+- **Animation** — tweens keyed per widget on 31 curves, springs, steps and
+  béziers; keyframed clips staggered across a grid; motion paths,
+  oscillators, noise and shakes; colors blended in five spaces; and text
+  that arrives a glyph at a time.
 - **Modular** — accessibility, localization and text shaping each swap for a
   stub, and only what they drew stops being drawn.
 - **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources,

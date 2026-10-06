@@ -123,8 +123,8 @@ each toolchain fetches its own framework, and none is part of a Reaktor build.
 ## What is redistributed
 
 A native build links SDL, libcss, yutil, plutosvg and plutovg statically, plus
-mojibake and kb_text_shape with the Text module, and compiles in Nuklear and
-Onlay, so it carries the zlib and MIT terms above. Each license is copied
+mojibake and kb_text_shape with the Text module, and compiles in Nuklear,
+NukAnim and Onlay, so it carries the zlib and MIT terms above. Each license is copied
 unchanged into `licenses/` beside the programs: ship that folder, and this
 file, with a binary.
 

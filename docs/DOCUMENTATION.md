@@ -639,13 +639,13 @@ cmake --install build --prefix libreaktor --component libreaktor
 ```
 
 It is one static library — `reaktor.lib` with MSVC, `libreaktor.a` elsewhere
-— holding Reaktor, every module, SDL, libcss, plutosvg, Onlay, mojibake and
-kb_text_shape, merged with `lib.exe`, Apple's `libtool` or an `ar` MRI
-script. Beside it go the public headers with Nuklear's and SDL's, a CMake
-package, a pkg-config file and `share/reaktor/licenses`:
+— holding Reaktor, every module, SDL, libcss, plutosvg, Onlay, NukAnim,
+mojibake and kb_text_shape, merged with `lib.exe`, Apple's `libtool` or an
+`ar` MRI script. Beside it go the public headers with Nuklear's, NukAnim's
+and SDL's, a CMake package, a pkg-config file and `share/reaktor/licenses`:
 
 ```cmake
-find_package(reaktor 0.2 REQUIRED)
+find_package(reaktor 0.3 REQUIRED)
 add_executable(app WIN32 main.c)
 target_link_libraries(app PRIVATE reaktor::reaktor)
 ```
