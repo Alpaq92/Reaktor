@@ -68,6 +68,7 @@ errors, so an internal function cannot slip back in.
 | `reaktor_file_open(app)` | Show the platform's file picker; the answer goes to `file_opened` |
 | `reaktor_user(app)` | The launch's `.user` |
 | `reaktor_sdl_window(app)`, `reaktor_sdl_renderer(app)` | That App's SDL window and renderer |
+| `reaktor_icon_surface(name, px)` | An SVG asset as an `SDL_Surface`, for a tray or icon of the app's own |
 | `reaktor_dark(app)`, `reaktor_get_theme(app)` | Whether it draws dark; the scheme chosen |
 | `reaktor_lang_pref(app)` | The language `--lang` asked for, or `NULL` |
 | `reaktor_set_borderless(app, on)`, `reaktor_borderless(app)` | Switch the main window's frame off for a titlebar of your own, drawn with `.window.hit_test` |
@@ -448,11 +449,11 @@ declared page. [`include/reaktor/ui.h`](../include/reaktor/ui.h) has the pieces 
 | --- | --- |
 | `reaktor_token`, `reaktor_col`, `reaktor_on`, `reaktor_visible` | Colors from the sheet; readable text on a background |
 | `reaktor_font`, `reaktor_style_font` | A baked face, by size or by selector |
-| `reaktor_ionicon` | An Ionicon as an `nk_image` |
+| `reaktor_ionicon`, `reaktor_ionicon_exact`, `reaktor_glyph_at` | An Ionicon as an `nk_image`, in any color, or drawn into a rectangle |
 | `reaktor_svg`, `REAKTOR_MARK` | Any SVG asset, recolored by `?stroke=#rrggbb&fill=&sw=`; the mark's name |
 | `reaktor_fill_round`, `reaktor_edge_round` | Rounded fills and borders, smooth on the software renderer |
 | `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)) |
-| `reaktor_button_label`, `reaktor_button_accent`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside `nk_` layouts |
+| `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside `nk_` layouts |
 | `reaktor_menu_item`, `reaktor_menu_style_push`, `_pop`, `reaktor_menu_height`, `reaktor_menu_edge`, `reaktor_popup_rounding` | Menus and popups |
 | `reaktor_note`, `_push`, `_pop`, `_here`, `_keys`, `_value`, `_bounds`, `reaktor_focus_activated` | The accessibility tree, and keyboard presses |
 | `reaktor_focus_area`, `reaktor_focus_scroll` | A scrolling page body: the area and node focus moves within, and the rectangle it asks to see |

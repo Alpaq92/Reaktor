@@ -123,6 +123,9 @@ void *reaktor_user(App *app);
 
 SDL_Window   *reaktor_sdl_window(App *app);
 SDL_Renderer *reaktor_sdl_renderer(App *app);
+/* An SVG asset at px, for a tray or window icon of one's own; the caller
+ * destroys it. NULL when the asset cannot be read. */
+SDL_Surface  *reaktor_icon_surface(const char *name, int px);
 int           reaktor_dark(App *app);
 reaktor_theme reaktor_get_theme(App *app);
 /* --lang's value, or NULL; the language in use is reaktor_locale_current(). */
