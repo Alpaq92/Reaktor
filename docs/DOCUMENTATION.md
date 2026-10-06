@@ -119,7 +119,7 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 
 | Widget | Call | Answers 1 | Its own fields |
 | --- | --- | --- | --- |
-| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press` |
+| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press`, `.fit_content` (exactly as large as its label and icon, whatever `.box` asks) |
 | Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press` |
 | Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTRE`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
 | Icon | `reaktor_icon` | — | `.name` (an Ionicon), `.accent` |
@@ -136,6 +136,9 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Color | `reaktor_colour_pick` | — | `.value`, a `struct nk_colorf` |
 | Sidebar | `reaktor_sidebar` | when an entry is chosen | [below](#sidebar-and-tabs) |
 | Tabs | `reaktor_tabs` | when an entry is chosen | [below](#sidebar-and-tabs) |
+
+**An icon gives way to its label**: a button too narrow for both draws the
+label alone. `.fit_content` makes it as large as both need.
 
 **A field writes back** its bytes into `.buf` and its length into `*.len`, and
 reads both next frame, so the length must be the field's own: one from
@@ -536,6 +539,13 @@ own frames: a wake carries the window it is for.
 While a mouse button is held, frames follow the display's refresh, with two
 more after the release. A turn of the wheel takes two frames, because Nuklear
 scrolls a panel after drawing it.
+
+A finger that moves mostly up or down, by more than 8 pixels, scrolls the
+panel under it: the runtime releases what the finger pressed away from every
+widget, so nothing is clicked, and turns its movement into wheel steps sized
+to the page body `reaktor_focus_area` names, or to the window. A fast swipe
+coasts on after the finger lifts, and a touch stops it. Sideways drags, and
+drags that start in a text field, stay drags.
 
 Nuklear reads input as it stands at a frame's end: a button pressed and
 released within one frame was never down. So a frame takes one change — a

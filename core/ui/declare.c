@@ -335,6 +335,40 @@ box_from_style(reaktor_box *box, const char *text, const char *selector,
     }
 }
 
+static void
+fit_button(reaktor_box *box, const reaktor_button_spec *s)
+{
+    const struct nk_style_button *nb = &g_ctx->style.button;
+    const char                   *sel = rule_or(s->style, "button");
+    const struct nk_user_font    *f = style_font(sel);
+    reaktor_style                 st;
+    float pad_x, pad_y, border, edge, text = 0.0f, w;
+
+    box->w = box->h = 0.0f;
+    box->flags &= ~(REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y);
+    box_from_style(box, NULL, s->style, "button", nb->padding.x, nb->padding.y);
+
+    reaktor_style_get(sel, &st);
+    pad_x  = st.matched ? st.pad_x : nb->padding.x;
+    pad_y  = st.matched ? st.pad_y : nb->padding.y;
+    border = st.matched ? st.border : nb->border;
+    edge   = border + (st.matched ? st.rounding : nb->rounding);
+    if (s->label)
+        text = f->width(f->userdata, f->height, s->label, (int)strlen(s->label));
+
+    w = text + 2.0f * (pad_x + (st.matched ? border : edge));
+    if (s->icon && s->label) {
+        float room = SDL_max(box->h * 0.5f - edge, 0.0f);
+        float icon = box->h - 2.0f * SDL_min(pad_y, room)
+                   - 2.0f * nb->image_padding.x;
+
+        w = SDL_max(w, text + 2.0f * (3.0f * pad_x + nb->image_padding.x + icon));
+    } else if (s->icon) {
+        w = box->h;
+    }
+    box->w = SDL_ceilf(w);
+}
+
 void
 reaktor_gap(float w, float h)
 {
@@ -367,9 +401,12 @@ reaktor_button(const reaktor_button_spec *s)
 
     if (!g_app || !s) return 0;
     box = s->box;
-    box_from_style(&box, s->label, s->style, "button",
-                   g_ctx->style.button.padding.x,
-                   g_ctx->style.button.padding.y);
+    if (s->fit_content)
+        fit_button(&box, s);
+    else
+        box_from_style(&box, s->label, s->style, "button",
+                       g_ctx->style.button.padding.x,
+                       g_ctx->style.button.padding.y);
 
     if (!place(REAKTOR_A11Y_BUTTON, s->name ? s->name : s->label, NULL,
                s->disabled ? REAKTOR_A11Y_DISABLED : 0u, s->keys, &box, &id))

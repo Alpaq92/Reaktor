@@ -124,6 +124,13 @@ struct App {
     int  dragging;
     int  drag_mouse;
 
+    int    touch, touch_in_field, touch_n;
+    float  touch_x0, touch_y0, touch_last, touch_unit;
+    float  touch_ys[4];
+    Uint64 touch_ns[4];
+    float  fling_v;
+    Uint64 fling_ns;
+
     int            restore_rate;
     int            borderless;
 #ifdef __APPLE__

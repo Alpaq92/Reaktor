@@ -1145,6 +1145,198 @@ bare_quit(App *app)
 #endif
 }
 
+static void
+feed(App *app, SDL_Event *event)
+{
+    if (hold_for_next_frame(app, event)) app->dirty = 1;
+    else take_event(app, event);
+}
+
+enum { TOUCH_NONE, TOUCH_PRESSED, TOUCH_CAUGHT, TOUCH_DRAGGING, TOUCH_SCROLLING };
+
+#define TOUCH_SLOP   8.0f
+#define FLING_TAU_MS 325.0f
+#define FLING_MIN    60.0f
+#define FLING_STOP   20.0f
+
+static void
+touch_pointer(App *app, float x, float y, int release)
+{
+    SDL_Event e;
+
+    SDL_zero(e);
+    e.type            = SDL_EVENT_MOUSE_MOTION;
+    e.motion.windowID = SDL_GetWindowID(app->win);
+    e.motion.which    = SDL_TOUCH_MOUSEID;
+    e.motion.x        = x;
+    e.motion.y        = y;
+    feed(app, &e);
+    if (!release) return;
+    SDL_zero(e);
+    e.type            = SDL_EVENT_MOUSE_BUTTON_UP;
+    e.button.windowID = SDL_GetWindowID(app->win);
+    e.button.which    = SDL_TOUCH_MOUSEID;
+    e.button.button   = SDL_BUTTON_LEFT;
+    e.button.clicks   = 1;
+    e.button.x        = x;
+    e.button.y        = y;
+    feed(app, &e);
+}
+
+static void
+touch_wheel(App *app, float dy)
+{
+    SDL_Event e;
+
+    if (dy == 0.0f || app->touch_unit <= 0.0f) return;
+    SDL_zero(e);
+    e.type           = SDL_EVENT_MOUSE_WHEEL;
+    e.wheel.windowID = SDL_GetWindowID(app->win);
+    e.wheel.which    = SDL_TOUCH_MOUSEID;
+    e.wheel.y        = dy / app->touch_unit;
+    e.wheel.mouse_x  = app->touch_x0;
+    e.wheel.mouse_y  = app->touch_y0;
+    feed(app, &e);
+}
+
+static void
+touch_sample(App *app, float y, Uint64 ns)
+{
+    app->touch_ys[app->touch_n % 4] = y;
+    app->touch_ns[app->touch_n % 4] = ns;
+    app->touch_n++;
+}
+
+/* Nuklear moves a panel a tenth of its height per wheel step. */
+static float
+touch_unit(const App *app)
+{
+    struct nk_rect b = app->body_rect;
+    float h = (float)app->laid_h;
+
+    if (b.h > 0.0f && app->touch_x0 >= b.x && app->touch_x0 < b.x + b.w &&
+        app->touch_y0 >= b.y && app->touch_y0 < b.y + b.h)
+        h = b.h;
+    return 0.1f * h;
+}
+
+static void
+fling_start(App *app, Uint64 now)
+{
+    int    last = app->touch_n - 1, first = last, i;
+    Uint64 t;
+    float  v;
+
+    if (last < 1 || now - app->touch_ns[last % 4] > 100000000u) return;
+    for (i = last - 1; i >= 0 && i > last - 4; i--) {
+        if (app->touch_ns[last % 4] - app->touch_ns[i % 4] > 100000000u) break;
+        first = i;
+    }
+    t = app->touch_ns[last % 4] - app->touch_ns[first % 4];
+    if (first == last || !t) return;
+    v = (app->touch_ys[last % 4] - app->touch_ys[first % 4]) / ((float)t / 1e9f);
+    if (SDL_fabsf(v) < FLING_MIN) return;
+    app->fling_v      = v;
+    app->fling_ns     = now;
+    app->restore_rate = 0;
+    hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
+    app->dirty = 1;
+}
+
+static void
+fling_step(App *app)
+{
+    Uint64 now = SDL_GetTicksNS();
+    float  dt;
+
+    if (app->fling_v == 0.0f) return;
+    dt = (float)(now - app->fling_ns) / 1e9f;
+    app->fling_ns = now;
+    if (app->touch_unit > 0.0f)
+        nk_input_scroll(app->ctx, nk_vec2(0.0f, app->fling_v * dt / app->touch_unit));
+    app->fling_v *= SDL_expf(-dt * 1000.0f / FLING_TAU_MS);
+    if (SDL_fabsf(app->fling_v) < FLING_STOP) {
+        app->fling_v      = 0.0f;
+        app->restore_rate = 2;
+    }
+}
+
+/* A finger that moves mostly up or down scrolls, and presses nothing. */
+static int
+touch_takes(App *app, const SDL_Event *e)
+{
+    struct nk_rect r = app->field_rect;
+    float dx, dy;
+    int   was = app->touch;
+
+    switch (e->type) {
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        if (e->button.which != SDL_TOUCH_MOUSEID || e->button.button != SDL_BUTTON_LEFT)
+            return 0;
+        app->touch_x0 = e->button.x;
+        app->touch_y0 = e->button.y;
+        app->touch_n  = 0;
+        touch_sample(app, e->button.y, e->button.timestamp);
+        app->touch_in_field = app->field_rect_valid &&
+                              e->button.x >= r.x && e->button.x <= r.x + r.w &&
+                              e->button.y >= r.y && e->button.y <= r.y + r.h;
+        if (app->fling_v != 0.0f) {
+            app->fling_v      = 0.0f;
+            app->restore_rate = 2;
+            app->touch        = TOUCH_CAUGHT;
+            return 1;
+        }
+        app->touch = TOUCH_PRESSED;
+        return 0;
+
+    case SDL_EVENT_MOUSE_MOTION:
+        if (e->motion.which != SDL_TOUCH_MOUSEID) return 0;
+        switch (app->touch) {
+        case TOUCH_SCROLLING:
+            touch_wheel(app, e->motion.y - app->touch_last);
+            app->touch_last = e->motion.y;
+            touch_sample(app, e->motion.y, e->motion.timestamp);
+            return 1;
+        case TOUCH_PRESSED:
+        case TOUCH_CAUGHT:
+            dx = e->motion.x - app->touch_x0;
+            dy = e->motion.y - app->touch_y0;
+            if (SDL_fabsf(dx) <= TOUCH_SLOP && SDL_fabsf(dy) <= TOUCH_SLOP)
+                return app->touch == TOUCH_CAUGHT;
+            if (app->touch_in_field || SDL_fabsf(dy) <= SDL_fabsf(dx)) {
+                if (app->touch == TOUCH_CAUGHT) return 1;
+                app->touch = TOUCH_DRAGGING;
+                return 0;
+            }
+            /* Released away from every widget, the press clicks nothing. */
+            if (app->touch == TOUCH_PRESSED) touch_pointer(app, -1e4f, -1e4f, 1);
+            touch_pointer(app, app->touch_x0, app->touch_y0, 0);
+            app->touch      = TOUCH_SCROLLING;
+            app->touch_unit = touch_unit(app);
+            app->touch_last = app->touch_y0 + (dy > 0.0f ? TOUCH_SLOP : -TOUCH_SLOP);
+            touch_wheel(app, e->motion.y - app->touch_last);
+            app->touch_last = e->motion.y;
+            touch_sample(app, e->motion.y, e->motion.timestamp);
+            return 1;
+        default:
+            return 0;
+        }
+
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        if (e->button.which != SDL_TOUCH_MOUSEID || e->button.button != SDL_BUTTON_LEFT)
+            return 0;
+        app->touch = TOUCH_NONE;
+        if (was == TOUCH_SCROLLING) {
+            fling_start(app, e->button.timestamp);
+            return 1;
+        }
+        return was == TOUCH_CAUGHT;
+
+    default:
+        return 0;
+    }
+}
+
 static SDL_AppResult
 app_event(void *appstate, SDL_Event *event)
 {
@@ -1169,8 +1361,7 @@ app_event(void *appstate, SDL_Event *event)
         }
         if (!(to = app)) return SDL_APP_CONTINUE;
     }
-    if (hold_for_next_frame(to, event)) to->dirty = 1;
-    else take_event(to, event);
+    if (!touch_takes(to, event)) feed(to, event);
     return SDL_APP_CONTINUE;
 }
 
@@ -1220,6 +1411,7 @@ reaktor_app_due(App *app, int w, int h)
     SDL_Window *over = SDL_GetMouseFocus();
 
     if (w != app->laid_w || h != app->laid_h) app->dirty = 1;
+    if (app->fling_v != 0.0f) app->dirty = 1;
 
     if (app->hover_pending &&
         SDL_GetTicks() - app->last_draw_ms >= g_hover_gap_ms) {
@@ -1341,6 +1533,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     if (is_main) reaktor_a11y_platform_drain();
     else reaktor_a11y_platform_window_drain(app->win);
     key_click(app);
+    fling_step(app);
     nk_input_end(ctx);
     ctx->style.text.color = app->text;
     file_answer(app);
