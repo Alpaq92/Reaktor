@@ -69,6 +69,7 @@ errors, so an internal function cannot slip back in.
 | `reaktor_user(app)` | The launch's `.user` |
 | `reaktor_sdl_window(app)`, `reaktor_sdl_renderer(app)` | That App's SDL window and renderer |
 | `reaktor_dark(app)`, `reaktor_get_theme(app)` | Whether it draws dark; the scheme chosen |
+| `reaktor_lang_pref(app)` | The language `--lang` asked for, or `NULL` |
 | `reaktor_set_borderless(app, on)`, `reaktor_borderless(app)` | Switch the main window's frame off for a titlebar of your own, drawn with `.window.hit_test` |
 
 The `set` calls are for the main thread, take effect at the next frame, and do
@@ -851,9 +852,12 @@ how its language writes numbers the way it says "Save" — Polish puts
 no-break spaces between digit groups and before its symbol — and a symbol of
 letters is always kept a space off the amount: `PLN 12.00`.
 
-**The language** is `--lang` when a catalog has it, else the first of the
-system's preferred languages that one has, else English, else the first
-catalog. `reaktor_locale_set` switches at any time.
+**The language** is `--lang` when a catalog has it, else the system's: the
+first of its preferred languages that a catalog has, else English, else the
+first catalog, and it changes when the system's does.
+`reaktor_locale_set(code)` switches at any time and stops following the
+system; `reaktor_locale_set(NULL)` follows it again, and
+`reaktor_locale_system()` says whether it does.
 
 **Leave `.name` to the translated text**, so a screen reader reads what is
 drawn; the cost is that a switch makes each translated widget new, placed a

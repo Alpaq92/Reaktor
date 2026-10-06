@@ -5,6 +5,7 @@
 
 int  reaktor_locale_init(void);
 int  reaktor_locale_find(const char *code);
+const char *reaktor_locale_system_code(void);
 int  reaktor_locale_codepoints(unsigned *out, int cap);
 long reaktor_plural_eval(const char *expr, unsigned long n);
 

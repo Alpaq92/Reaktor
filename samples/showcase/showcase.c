@@ -2258,14 +2258,17 @@ page_translations(App *app, struct nk_context *ctx, showcase_state *s)
         int            i, n = reaktor_locale_count();
         struct nk_rect row;
 
-        nk_layout_row_begin(ctx, NK_STATIC, (float)(TAB_H - 6), n);
+        nk_layout_row_begin(ctx, NK_STATIC, (float)(TAB_H - 6), n + 1);
         row = nk_widget_bounds(ctx);
         row.w = nk_window_get_content_region_size(ctx).x;
         reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Language", NULL, 0, row);
+        if (sample_option(app, ctx, "System", 0.0f, reaktor_locale_system()))
+            reaktor_locale_set(NULL);
         for (i = 0; i < n; i++) {
             const char *code = reaktor_locale_code(i);
 
             if (sample_option(app, ctx, reaktor_locale_name(i), 0.0f,
+                              !reaktor_locale_system() &&
                               !strcmp(code, reaktor_locale_current())))
                 reaktor_locale_set(code);
         }

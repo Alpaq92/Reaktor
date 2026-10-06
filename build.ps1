@@ -12,8 +12,8 @@ $hostArch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchi
 }
 if (-not $Arch) { $Arch = $hostArch }
 $outDir = Join-Path $root $(if ($Arch -eq $hostArch) { "build" } else { "build-$Arch" })
-if ($Out) { $outDir = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Out)) }
-$srcDir = if ($Source) { [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Source)) } else { $root }
+if ($Out) { $outDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Out) }
+$srcDir = if ($Source) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Source) } else { $root }
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found - install Visual Studio Build Tools" }

@@ -125,6 +125,8 @@ SDL_Window   *reaktor_sdl_window(App *app);
 SDL_Renderer *reaktor_sdl_renderer(App *app);
 int           reaktor_dark(App *app);
 reaktor_theme reaktor_get_theme(App *app);
+/* --lang's value, or NULL; the language in use is reaktor_locale_current(). */
+const char   *reaktor_lang_pref(App *app);
 /* The main window's. */
 void          reaktor_set_borderless(App *app, int on);
 int           reaktor_borderless(App *app);

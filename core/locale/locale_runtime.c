@@ -6,20 +6,26 @@
 void
 reaktor_locale_start(const char *lang)
 {
-    SDL_Locale **pref;
-    int          i, n = 0;
-
     if (reaktor_locale_init() <= 0) return;
     if (lang) {
         if (reaktor_locale_set(lang)) return;
         SDL_Log("no catalog for --lang %s", lang);
     }
+    reaktor_locale_set(NULL);
+}
+
+const char *
+reaktor_locale_system_code(void)
+{
+    SDL_Locale **pref;
+    int          i, at = -1, n = 0;
+
     pref = SDL_GetPreferredLocales(&n);
-    for (i = 0; pref && i < n; i++)
-        if (pref[i] && reaktor_locale_set(pref[i]->language)) break;
+    for (i = 0; pref && i < n && at < 0; i++)
+        if (pref[i]) at = reaktor_locale_find(pref[i]->language);
     SDL_free(pref);
-    if (!reaktor_locale_current()[0] && !reaktor_locale_set("en"))
-        reaktor_locale_set(reaktor_locale_code(0));
+    if (at < 0) at = reaktor_locale_find("en");
+    return reaktor_locale_code(at < 0 ? 0 : at);
 }
 
 unsigned *

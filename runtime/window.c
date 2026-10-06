@@ -297,6 +297,15 @@ reaktor_windows_restyle(void)
 }
 
 void
+reaktor_windows_dirty(void)
+{
+    int i;
+
+    for (i = 0; i < g_win_n; i++)
+        g_win[i].app->dirty = 1;
+}
+
+void
 reaktor_windows_rescale(void)
 {
     int i;
