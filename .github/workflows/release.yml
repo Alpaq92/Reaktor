@@ -44,6 +44,19 @@ jobs:
           persist-credentials: false
           path: src
 
+      - name: Version
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          v=${v%%-*}
+          if ! grep -qF "project(reaktor VERSION $v " src/CMakeLists.txt; then
+            echo "$GITHUB_REF_NAME, but CMakeLists.txt is not at $v"
+            exit 1
+          fi
+          if ! grep -qF "find_package(reaktor ${v%.*} REQUIRED)" src/docs/DOCUMENTATION.md; then
+            echo "$GITHUB_REF_NAME, but docs/DOCUMENTATION.md does not ask find_package for ${v%.*}"
+            exit 1
+          fi
+
       - name: Archive
         run: |
           name="reaktor-${GITHUB_REF_NAME#v}-source"
