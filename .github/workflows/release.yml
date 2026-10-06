@@ -44,6 +44,19 @@ jobs:
           persist-credentials: false
           path: src
 
+      - name: Version
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          v=${v%%-*}
+          if ! grep -qF "project(reaktor VERSION $v " src/CMakeLists.txt; then
+            echo "$GITHUB_REF_NAME, but CMakeLists.txt is not at $v"
+            exit 1
+          fi
+          if ! grep -qF "find_package(reaktor ${v%.*} REQUIRED)" src/docs/DOCUMENTATION.md; then
+            echo "$GITHUB_REF_NAME, but docs/DOCUMENTATION.md does not ask find_package for ${v%.*}"
+            exit 1
+          fi
+
       - name: Archive
         run: |
           name="reaktor-${GITHUB_REF_NAME#v}-source"
@@ -110,12 +123,13 @@ jobs:
           systems and architectures, \`libreaktor-$v-<system>-<arch>\`, and
           \`libreaktor-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
           on Windows, built against the DLL C runtime; \`libreaktor.a\` elsewhere)
-          with SDL, libcss, plutosvg, Onlay, mojibake and kb_text_shape inside it,
-          the public headers (\`#include "reaktor/reaktor.h"\`, with Nuklear's and
-          SDL's), a CMake package and a pkg-config file, and the licenses.
+          with SDL, libcss, plutosvg, Onlay, NukAnim, mojibake and kb_text_shape
+          inside it, the public headers (\`#include "reaktor/reaktor.h"\`, with
+          Nuklear's, NukAnim's and SDL's), a CMake package and a pkg-config file,
+          and the licenses.
 
           \`\`\`cmake
-          find_package(reaktor 0.2 REQUIRED)  # with CMAKE_PREFIX_PATH at the unpacked folder
+          find_package(reaktor ${v%.*} REQUIRED)  # with CMAKE_PREFIX_PATH at the unpacked folder
           add_executable(app WIN32 main.c)
           target_link_libraries(app PRIVATE reaktor::reaktor)
           \`\`\`

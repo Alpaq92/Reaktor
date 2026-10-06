@@ -40,8 +40,11 @@ what the library draws, and where its claims are tested rather than asserted:
   and can have the showcase ask before it closes.
 - **Diagnostics** shows the renderer, and where each frame's milliseconds and
   each megabyte went, live.
-- **Animation** draws all 31 easing curves through the function the widgets
-  animate with.
+- **Animation** sends five blocks to one stop, one of them instantly, draws
+  all 31 easing curves through the function the widgets animate with, and
+  plays the rest of NukAnim: a clip staggered across a grid under its debug
+  timeline, motion along paths, oscillators, noise and a shake, one blend in
+  five color spaces, and text arriving a glyph at a time.
 
 ## Notepad
 
