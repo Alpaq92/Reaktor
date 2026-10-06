@@ -118,7 +118,7 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 
 | Widget | Call | Answers 1 | Its own fields |
 | --- | --- | --- | --- |
-| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press` |
+| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press`, `.fit_content` (exactly as large as its label and icon, whatever `.box` asks) |
 | Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press` |
 | Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTRE`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
 | Icon | `reaktor_icon` | — | `.name` (an Ionicon), `.accent` |
@@ -135,6 +135,9 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Color | `reaktor_colour_pick` | — | `.value`, a `struct nk_colorf` |
 | Sidebar | `reaktor_sidebar` | when an entry is chosen | [below](#sidebar-and-tabs) |
 | Tabs | `reaktor_tabs` | when an entry is chosen | [below](#sidebar-and-tabs) |
+
+**An icon gives way to its label**: a button too narrow for both draws the
+label alone. `.fit_content` makes it as large as both need.
 
 **A field writes back** its bytes into `.buf` and its length into `*.len`, and
 reads both next frame, so the length must be the field's own: one from

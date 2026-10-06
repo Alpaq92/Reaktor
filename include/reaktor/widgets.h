@@ -72,6 +72,7 @@ typedef struct reaktor_button_spec {
     unsigned char   accent;
     unsigned char   disabled;
     unsigned char   repeat;
+    unsigned char   fit_content;
 } reaktor_button_spec;
 
 int reaktor_button(const reaktor_button_spec *s);

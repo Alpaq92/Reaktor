@@ -185,8 +185,9 @@ push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
         if (s.pad_y > room) s.pad_y = room;
     }
 
+    /* Nuklear insets a label by the rounding as well; CSS does not. */
     nk_style_push_vec2(ctx, &ctx->style.button.padding,
-                       nk_vec2(s.pad_x, s.pad_y));
+                       nk_vec2(s.pad_x - s.rounding - 0.5f, s.pad_y));
     f.vec2s = 1;
 
     if (s.font_px > 0) {
@@ -359,20 +360,47 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     return clicked;
 }
 
+/* Where Nuklear put an icon, left of a label centered across the button. */
+static int
+icon_place(struct nk_context *ctx, struct nk_rect b, float pad_x,
+           const char *label, struct nk_rect *at)
+{
+    const struct nk_style_button *s = &ctx->style.button;
+    const struct nk_user_font    *f = ctx->style.font;
+    float text = f->width(f->userdata, f->height, label, (int)SDL_strlen(label));
+
+    at->x = b.x + 2.0f * pad_x + s->image_padding.x;
+    at->y = b.y + s->padding.y + s->image_padding.y;
+    at->w = b.h - 2.0f * s->padding.y - 2.0f * s->image_padding.x;
+    at->h = b.h - 2.0f * s->padding.y - 2.0f * s->image_padding.y;
+    return b.w >= text + 2.0f * (3.0f * pad_x + s->image_padding.x + at->w);
+}
+
 int
 css_button_icon(App *app, struct nk_context *ctx, const char *selector,
                 const char *icon_src, const char *label)
 {
+    reaktor_button_look k;
     style_frame f;
-    struct nk_image im = icon(app, icon_src, 18);
-    int clicked;
+    struct nk_rect b = nk_widget_bounds(ctx), at;
+    int clicked, drawn;
 
-    hot_push(app, nk_widget_bounds(ctx), 1, 1);
+    hot_push(app, b, 1, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
-    f = push_button_style(app, ctx, selector);
+    reaktor_button_look_of(selector, &k);
+    f = push_button_look(app, ctx, &k);
+    drawn = icon_place(ctx, b, k.s.matched ? k.s.pad_x : ctx->style.button.padding.x,
+                       label, &at);
     reaktor_button_arm(ctx);
-    clicked = nk_button_image_label(ctx, im, label, NK_TEXT_CENTERED);
+    clicked = nk_button_label(ctx, label);
     reaktor_chrome_disarm();
+    if (drawn) {
+        struct nk_image im = icon(app, icon_src, 18);
+
+        nk_draw_image(nk_window_get_canvas(ctx), at, &im,
+                      nk_rgb_factor(nk_rgb(255, 255, 255),
+                                    ctx->style.button.color_factor_background));
+    }
     pop_style(ctx, f);
     return clicked;
 }
