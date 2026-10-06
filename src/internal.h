@@ -239,7 +239,6 @@ void image_centred(struct nk_context *ctx, struct nk_image im, int px);
 const struct nk_user_font *pick_font(App *app, int px, int bold);
 void rebuild_font(App *app);
 void apply_render_scale(App *app);
-SDL_Surface *reaktor_icon_surface(const char *name, int px);
 void reaktor_set_window_icon(SDL_Window *win, const char *name);
 
 struct nk_color col_of(const unsigned char c[4]);
@@ -360,8 +359,6 @@ void note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
 void draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
                const reaktor_style *s);
 
-struct nk_image reaktor_ionicon_exact(App *app, const char *name, int px,
-                                      struct nk_color stroke, float sw);
 struct nk_image reaktor_ionicon_col(App *app, const char *name, int px,
                                     struct nk_color stroke);
 
@@ -371,8 +368,6 @@ void reaktor_image(App *app, struct nk_context *ctx, struct nk_image im,
 int  reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b);
 void reaktor_unfit_label(struct nk_context *ctx, int fitted);
 
-void reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
-                      const char *name, struct nk_color col, int px, float sw);
 #define REAKTOR_DISC_ROUND   "ellipse"
 #define REAKTOR_DISC_RING    "radio-button-off"
 #define REAKTOR_DISC_OUTLINE "ellipse-outline"
@@ -396,14 +391,9 @@ void reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h,
 
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);
-int reaktor_button_icon(App *app, struct nk_context *ctx,
-                        const char *ionicon, const char *label);
 int reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
                          struct nk_color fill);
 
-nk_flags reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
-                       char *buf, int *len, int cap, const char *hint,
-                       nk_plugin_filter filter, float pad_x, float pad_y);
 void field_undo_clear(App *app);
 
 int reaktor_focus_step(App *app, unsigned id);

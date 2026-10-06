@@ -29,6 +29,12 @@ struct nk_color            reaktor_visible(struct nk_color want,
 const struct nk_user_font *reaktor_font(App *app, int px, int bold);
 
 struct nk_image reaktor_ionicon(App *app, const char *name, int px);
+/* In stroke's color; sw is the stroke width, 0 for the default at px. */
+struct nk_image reaktor_ionicon_exact(App *app, const char *name, int px,
+                                      struct nk_color stroke, float sw);
+/* That Ionicon drawn centered in slot on the current window's canvas. */
+void reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
+                      const char *name, struct nk_color col, int px, float sw);
 
 #define REAKTOR_MARK "assets/icons/reaktor-icon.svg"
 /* An SVG by asset name; ?stroke=#rrggbb, &fill=, &sw= recolor it. */
@@ -46,6 +52,13 @@ void reaktor_hot_top(App *app, struct nk_rect r, int cursor, int repaint);
 void reaktor_hot_follow(App *app, struct nk_rect r, int cursor);
 
 int reaktor_button_label(App *app, struct nk_context *ctx, const char *label);
+int reaktor_button_icon(App *app, struct nk_context *ctx,
+                        const char *ionicon, const char *label);
+/* A styled single-line field over buf, which holds *len bytes of cap; hint
+ * shows while it is empty, and pad_x, pad_y above 0 replace the padding. */
+nk_flags reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
+                            char *buf, int *len, int cap, const char *hint,
+                            nk_plugin_filter filter, float pad_x, float pad_y);
 void reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id,
                         float *val, float lo, float hi, float step);
 
