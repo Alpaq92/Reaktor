@@ -536,6 +536,13 @@ While a mouse button is held, frames follow the display's refresh, with two
 more after the release. A turn of the wheel takes two frames, because Nuklear
 scrolls a panel after drawing it.
 
+A finger that moves mostly up or down, by more than 8 pixels, scrolls the
+panel under it: the runtime releases what the finger pressed away from every
+widget, so nothing is clicked, and turns its movement into wheel steps sized
+to the page body `reaktor_focus_area` names, or to the window. A fast swipe
+coasts on after the finger lifts, and a touch stops it. Sideways drags, and
+drags that start in a text field, stay drags.
+
 Nuklear reads input as it stands at a frame's end: a button pressed and
 released within one frame was never down. So a frame takes one change — a
 button or a key — or a run of text, and faster input is spread over the frames
