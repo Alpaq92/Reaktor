@@ -27,6 +27,7 @@ typedef struct locale_catalog {
 static locale_catalog g_cat[LOCALE_MAX];
 static int            g_count;
 static int            g_current = -1;
+static int            g_system;
 
 static int
 by_code(const void *a, const void *b)
@@ -157,6 +158,7 @@ release(void)
     }
     g_count   = 0;
     g_current = -1;
+    g_system  = 0;
 }
 
 #ifdef REAKTOR_LOCALE_EMBEDDED
@@ -245,11 +247,19 @@ reaktor_locale_name(int index)
 int
 reaktor_locale_set(const char *code)
 {
-    int i = reaktor_locale_find(code);
+    int follow = !code;
+    int i = reaktor_locale_find(follow ? reaktor_locale_system_code() : code);
 
     if (i < 0) return 0;
     g_current = i;
+    g_system  = follow;
     return 1;
+}
+
+int
+reaktor_locale_system(void)
+{
+    return g_system;
 }
 
 const char *

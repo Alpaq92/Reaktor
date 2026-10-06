@@ -57,6 +57,15 @@ const int reaktor_locale_catalog_count =
 
 static int failures;
 
+/* locale_runtime.c asks SDL; the test answers for it. */
+static const char *g_system_code = "en";
+
+const char *
+reaktor_locale_system_code(void)
+{
+    return g_system_code;
+}
+
 static void
 check(const char *what, long got, long want)
 {
@@ -220,8 +229,17 @@ catalogs(void)
     check("codepoints include the kanji in the language name", has_ni, 1);
     check("codepoints leave out Latin-1", has_o, 0);
 
+    g_system_code = "pl";
+    check("NULL follows the system", reaktor_locale_set(NULL), 1);
+    check_str("to the system's language", reaktor_locale_current(), "pl");
+    check("and says it follows", reaktor_locale_system(), 1);
+    check("a code stops following",
+          reaktor_locale_set("ja") && !reaktor_locale_system(), 1);
+    reaktor_locale_set(NULL);
+
     check("init again reloads cleanly", reaktor_locale_init(), 3);
     check_str("and forgets the current catalog", reaktor_locale_current(), "");
+    check("and stops following", reaktor_locale_system(), 0);
 }
 
 static void

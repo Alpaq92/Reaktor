@@ -8,6 +8,7 @@ int         reaktor_locale_count(void)              { return 0; }
 const char *reaktor_locale_code(int i)              { (void)i; return NULL; }
 const char *reaktor_locale_name(int i)              { (void)i; return NULL; }
 int         reaktor_locale_set(const char *c)       { (void)c; return 0; }
+int         reaktor_locale_system(void)             { return 0; }
 const char *reaktor_locale_current(void)            { return ""; }
 const char *reaktor_tr(const char *key)             { return key; }
 

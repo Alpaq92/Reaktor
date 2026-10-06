@@ -7,7 +7,9 @@ void        reaktor_locale_start(const char *lang);
 int         reaktor_locale_count(void);
 const char *reaktor_locale_code(int index);
 const char *reaktor_locale_name(int index);
+/* NULL follows the system's language, and keeps following it. */
 int         reaktor_locale_set(const char *code);
+int         reaktor_locale_system(void);
 const char *reaktor_locale_current(void);
 
 const char *reaktor_tr(const char *key);

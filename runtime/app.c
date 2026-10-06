@@ -944,6 +944,7 @@ take_event(App *app, SDL_Event *event)
     case SDL_EVENT_WINDOW_FOCUS_LOST:
     case SDL_EVENT_WINDOW_MOUSE_LEAVE:
     case SDL_EVENT_SYSTEM_THEME_CHANGED:
+    case SDL_EVENT_LOCALE_CHANGED:
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
         app->dirty = 1;
         break;
@@ -1000,6 +1001,11 @@ take_event(App *app, SDL_Event *event)
 
     case SDL_EVENT_SYSTEM_THEME_CHANGED:
         if (app->theme_mode == REAKTOR_THEME_SYSTEM) load_theme(app);
+        break;
+
+    case SDL_EVENT_LOCALE_CHANGED:
+        if (!app->secondary && reaktor_locale_system() && reaktor_locale_set(NULL))
+            reaktor_windows_dirty();
         break;
 
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
@@ -1748,6 +1754,14 @@ reaktor_theme
 reaktor_get_theme(App *app)
 {
     return app ? (reaktor_theme)app->theme_mode : REAKTOR_THEME_SYSTEM;
+}
+
+const char *
+reaktor_lang_pref(App *app)
+{
+    App *m = reaktor_main_app();
+
+    return app && m ? m->lang_pref : NULL;
 }
 
 void
