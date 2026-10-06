@@ -1540,7 +1540,8 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
 
     app->focus_seen = 0;
     app->popup_lo = app->popup_hi = app->trap_lo = app->trap_hi = -1;
-    reaktor_anim_scope(app);
+    if (!app->anim) app->anim = reaktor_anim_create();
+    if (app->anim) reaktor_anim_frame(app->anim, app->frame_gap_ms);
     reaktor_a11y_begin(&app->a11y, title, area);
     reaktor_frame_begin(app, ctx, area);
 
@@ -1599,13 +1600,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
                                           reader_activate, reader_focus, app);
     }
 
-    {
-        int n = 0;
-        const reaktor_a11y_change *c = reaktor_a11y_changes(&app->a11y, &n);
-
-        reaktor_anim_evict(c, n);
-    }
-    if (reaktor_anim_tick(app->frame_gap_ms) > 0) {
+    if (app->anim && reaktor_anim_settle()) {
         app->dirty = 1;
         wake_app(app);
     }
@@ -1737,6 +1732,8 @@ app_quit(void *appstate, SDL_AppResult result)
     if (app->ctx) nk_sdl_shutdown(app->ctx);
     if (app->ren) SDL_DestroyRenderer(app->ren);
     if (app->win) SDL_DestroyWindow(app->win);
+    reaktor_anim_destroy(app->anim);
+    app->anim = NULL;
     /* The picker's thread still writes into it. */
     if (!app->file_pending) SDL_free(app);
     g_app = NULL;
@@ -1910,6 +1907,13 @@ App *
 reaktor_main_app(void)
 {
     return g_app;
+}
+
+struct nka_context *
+reaktor_anim(App *app)
+{
+    if (app && !app->anim) app->anim = reaktor_anim_create();
+    return app ? app->anim : NULL;
 }
 
 const char *

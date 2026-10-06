@@ -422,7 +422,8 @@ The tree is still built, because layout and animation key on its ids.
 
 ## Animation
 
-A number that takes time to change, keyed by a box's id.
+[NukAnim](https://github.com/Alpaq92/NukAnim), in `external/nukanim`, runs it.
+The simplest of it is a number that takes time to change, keyed by a box's id.
 
 ```c
 REAKTOR_COLUMN(.name = "Track", .h = 56.0f) {
@@ -437,8 +438,26 @@ The first call starts at its target: nothing has changed yet. A new target
 starts a run from wherever the value is, so a change mid-flight redirects
 rather than restarts. `channel`, the second argument, tells several numbers on
 one box apart, and each window keeps its own. There are 31 curves, and `reaktor_ease_at(curve, t)` draws
-them. An entry dies with its node, and a page with nothing moving asks for no
-frames.
+them; `reaktor_anim_progress` says how far a run has got.
+
+The rest of `nukanim.h` works on the window's context, `reaktor_anim(app)`:
+springs, steps and béziers, colors blended in OKLAB, clips and timelines,
+motion paths, oscillators and noise, and ImAnimate's way of animating a value
+that keeps its own state:
+
+```c
+if (hovered) nka_animate(reaktor_anim(app), 1.0f, 1.1f, 150.0f, &size, NKA_EASE_OUT_CUBIC);
+else         nka_animate(reaktor_anim(app), 1.1f, 1.0f, 250.0f, &size, NKA_EASE_OUT_CUBIC);
+```
+
+The runtime moves the context's time before each page and draws another frame
+while anything the page sampled is still moving, so a page with nothing moving
+asks for no frames. What is not sampled for 600 frames is forgotten. Something
+that changes under the pointer needs a hot rectangle, `reaktor_hot`, for the
+pointer's motion to run a frame. NukAnim's debug timeline,
+`nka_show_debug_timeline`, lays out a row of its own, so it goes between
+declared blocks rather than inside one, and its tooltips follow the pointer
+only across a `reaktor_hot_follow` rectangle.
 
 ## Beyond the specs
 
@@ -497,7 +516,7 @@ core/css         cssflat and the libcss front end
 core/render      Nuklear, the SDL3 backend, drawing, SVG icons
 core/ui          specs, layout, widgets, the style map, keys, focus, floaters, toasts
 core/a11y        the shadow tree and its diff
-core/anim        eased values
+core/anim        NukAnim, a context a window
 core/locale      the Locale module
 core/text        the Text module
 platform/        theme, process lifecycle, the accessibility bridges, the web keyboard
@@ -505,7 +524,7 @@ runtime/         the main window and its loop, other windows, the tray
 samples/         showcase, notepad, simple, bench
 tools/           the tests, the icon compiler, vmwalk
 benchmarks/      bench in four other frameworks, and the sampler
-external/        ten submodules, read as they ship
+external/        eleven submodules, read as they ship
 ```
 
 `runtime/` and `core/` build `reaktor_runtime`, a static library every
@@ -746,7 +765,7 @@ Built by default and run from `build/`:
 | `laytest` | The layout engine's placement |
 | `onlaytest` | Onlay's own suite, unmodified |
 | `a11ytest` | Node identity, the diff, the pool |
-| `animtest` | Curves, retargeting, eviction |
+| `animtest` | Curves, retargeting, a context a window |
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |

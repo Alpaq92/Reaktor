@@ -1,6 +1,14 @@
 #ifndef REAKTOR_ANIM_PUBLIC_H
 #define REAKTOR_ANIM_PUBLIC_H
 
+#include "reaktor/nuklear.h"
+#include <nukanim.h>
+
+#ifndef REAKTOR_APP_FWD
+#define REAKTOR_APP_FWD
+typedef struct App App;
+#endif
+
 enum {
     REAKTOR_EASE_LINEAR = 0,
 
@@ -29,5 +37,8 @@ float reaktor_animate(unsigned id, unsigned channel, float to,
                       float ms, unsigned char curve);
 
 float reaktor_anim_progress(unsigned id, unsigned channel);
+
+/* The window's NukAnim context, for all of nukanim.h; its time moves every frame. */
+struct nka_context *reaktor_anim(App *app);
 
 #endif

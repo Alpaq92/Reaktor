@@ -1,13 +1,15 @@
 #ifndef REAKTOR_ANIM_H
 #define REAKTOR_ANIM_H
 
-#include "a11y.h"
 #include "reaktor/anim.h"
 
-void reaktor_anim_scope(const void *owner);
+struct nka_context *reaktor_anim_create(void);
+void reaktor_anim_destroy(struct nka_context *a);
 
-int reaktor_anim_tick(float dt_ms);
+/* Before the page: makes a the context reaktor_animate uses and moves its time on. */
+void reaktor_anim_frame(struct nka_context *a, float dt_ms);
 
-void reaktor_anim_evict(const reaktor_a11y_change *changes, int n);
+/* After the page: nonzero while something it drew is still moving. */
+int reaktor_anim_settle(void);
 
 #endif
