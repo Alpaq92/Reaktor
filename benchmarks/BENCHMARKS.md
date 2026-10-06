@@ -132,3 +132,50 @@ colliding with Shaft itself.
   exactly one more. Skipping vsyncs that are not due looks simpler and drifts:
   to 41.6 fps in Flutter and 42.7 in Compose, which is why every arm prints
   `fps`.
+
+## Bundle sizes
+
+Reaktor's arm ships as one file. SDL, the CSS engine, the SVG rasterizer, the
+fonts and the default look are linked into every program, so `bench.exe`
+needs nothing beside it. Built the way the release builds them — Windows x64,
+MSVC 14.44 Release, the C runtime linked in:
+
+| Program | Bytes |
+| --- | --- |
+| `bench.exe` | 2,752,512 |
+| `simple.exe` | 2,760,192 |
+| `notepad.exe` | 2,797,568 |
+| `showcase.exe` | 3,782,656 |
+
+The C runtime is about 300 KB of each; a default `./build.ps1` links its DLL
+instead. Only the showcase links the three optional modules, and Text is
+0.8 MB of the difference ([Modules](../docs/PERFORMANCE.md#modules)).
+
+The v0.2.0 downloads, as GitHub Actions built and published them:
+
+| System | Architecture | Programs | libreaktor |
+| --- | --- | --- | --- |
+| Windows | x64 | 6.2 MB | 4.4 MB |
+| Windows | x86 | 5.4 MB | 3.6 MB |
+| Windows | ARM64 | 5.6 MB | 4.4 MB |
+| macOS | Apple silicon | 8.3 MB | 2.8 MB |
+| macOS | Intel | 9.2 MB | 2.9 MB |
+| Linux | x86-64 | 7.6 MB | 3.2 MB |
+| Linux | x86 | 7.2 MB | 3.1 MB |
+| Linux | ARM64 | 7.0 MB | 3.1 MB |
+| Linux | ARMv7 | 5.7 MB | 2.6 MB |
+| Linux | RISC-V 64 | 7.3 MB | 5.1 MB |
+| FreeBSD 15.1 | x86-64 | 6.4 MB | 2.9 MB |
+| FreeBSD 15.1 | ARM64 | 5.9 MB | 2.8 MB |
+| OpenBSD 7.9 | x86-64 | 6.9 MB | 3.3 MB |
+| OpenBSD 7.9 | ARM64 | 6.7 MB | 3.4 MB |
+| NetBSD 11.0 | x86-64 | 7.1 MB | 3.0 MB |
+| NetBSD 11.0 | ARM64 | 6.8 MB | 3.0 MB |
+| Web | WebAssembly | 2.7 MB | 2.0 MB |
+
+A program archive holds the showcase, Notepad, Simple and, natively, the
+bench, with the files they read at runtime and every license; macOS's also
+carries the showcase as `reaktor.app`. A libreaktor archive is one static
+library with the public headers, Nuklear's and SDL's, a CMake package, a
+pkg-config file outside Windows, and the licenses. The source, every submodule
+included, is 23.2 MB.
