@@ -100,6 +100,7 @@ value and position.
 software renderer. libcss, from [LCUI](https://github.com/lc-soft/LCUI), parses
 the stylesheets, and [Onlay](https://github.com/Alpaq92/Onlay), a fork of
 [randrew/layout](https://github.com/randrew/layout), computes the rectangles.
+[NukAnim](https://github.com/Alpaq92/NukAnim), a port of ImAnim, moves them.
 Every dependency is a submodule, used as it ships; the full list is in
 [NOTICE.md](docs/NOTICE.md).
 

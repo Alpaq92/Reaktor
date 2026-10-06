@@ -182,7 +182,7 @@ endif()
 message(STATUS "assets: ${_n} compiled in")
 
 add_library(reaktor_headers INTERFACE)
-target_include_directories(reaktor_headers INTERFACE include "${TP}/nuklear")
+target_include_directories(reaktor_headers INTERFACE include "${TP}/nuklear" "${TP}/nukanim")
 
 add_library(reaktor_core STATIC
     core/base/util.c
@@ -217,11 +217,10 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
 endif()
 
 if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
-    add_executable(animtest tools/animtest.c core/anim/anim.c)
-    target_link_libraries(animtest PRIVATE reaktor_headers)
-    target_include_directories(animtest PRIVATE core/anim core/a11y core/render
-                                                platform)
-    target_link_libraries(animtest PRIVATE SDL3::SDL3)
+    add_executable(animtest tools/animtest.c core/anim/anim.c core/render/nk_impl.c)
+    target_include_directories(animtest PRIVATE core/anim core/render
+                                                "${TP}/nuklear/demo/sdl3_renderer")
+    target_link_libraries(animtest PRIVATE reaktor_core SDL3::SDL3-static)
     set_target_properties(animtest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
@@ -471,7 +470,7 @@ set(REAKTOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
 
 # MIT wants each notice in every copy: they go beside the programs, unchanged.
 foreach(_lic SDL/LICENSE.txt lcui/LICENSE.TXT plutosvg/LICENSE nuklear/LICENSE
-             onlay/LICENSE tinycss/LICENSE ionicons/LICENSE mojibake/LICENSE
+             nukanim/LICENSE onlay/LICENSE tinycss/LICENSE ionicons/LICENSE mojibake/LICENSE
              kb/LICENSE)
     string(REGEX REPLACE "/.*" "" _who "${_lic}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/${_lic}"
@@ -909,6 +908,7 @@ if(REAKTOR_INSTALL)
     install(FILES "${_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
     install(DIRECTORY include/reaktor DESTINATION include COMPONENT libreaktor)
     install(FILES "${TP}/nuklear/nuklear.h" DESTINATION include COMPONENT libreaktor)
+    install(FILES "${TP}/nukanim/nukanim.h" DESTINATION include COMPONENT libreaktor)
     install(DIRECTORY "${TP}/SDL/include/SDL3" DESTINATION include COMPONENT libreaktor)
     install(FILES "${CMAKE_BINARY_DIR}/reaktorConfig.cmake"
                   "${CMAKE_BINARY_DIR}/reaktorConfigVersion.cmake"

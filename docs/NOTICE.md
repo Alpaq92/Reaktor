@@ -9,6 +9,7 @@ from the project's own license file at the pinned revision.
 | --- | --- | --- |
 | [SDL](https://github.com/libsdl-org/SDL) | Window, input, renderer, system theme, file dialog, tray | zlib |
 | [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) | Widgets, font baking, the SDL3 backend, and the stb_truetype the Text module rasterizes with | MIT **or** public domain |
+| [NukAnim](https://github.com/Alpaq92/NukAnim) | Every animation, and `nukanim.h` for applications — a port of [ImAnim](https://github.com/soufianekhiat/ImAnim) with [ImAnimate](https://github.com/RaidcoreGG/ImAnimate)'s `animate` | MIT |
 | [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parse, match, cascade) and `yutil` | MIT |
 | [Onlay](https://github.com/Alpaq92/Onlay) | The rectangles — a fork of [randrew/layout](https://github.com/randrew/layout) | MIT |
 | [tiny.css](https://github.com/ihsan6133/tiny.css) | The stylesheet the look comes from, compiled in | MIT |
@@ -24,7 +25,9 @@ static, without audio, joystick, haptic, HID, sensor, camera, power, GPU,
 offscreen or the render backends Reaktor never selects. Its tray is built: on
 Linux and the BSDs it loads AppIndicator and GTK 3 when a tray opens, and
 nothing links them. mojibake is built without its collation, IDNA, security
-and character-name tables. kb_text_shape is one header, compiled in
+and character-name tables. NukAnim is one header, compiled in
+`core/anim/anim.c`; its own Nuklear submodule, which only its tests use, comes
+with a recursive checkout and is not built. kb_text_shape is one header, compiled in
 `core/text/kb.c`; it shapes, and the Text module rasterizes with Nuklear's
 stb_truetype.
 

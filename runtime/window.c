@@ -1,4 +1,5 @@
 #include "internal.h"
+#include "anim.h"
 #include "declare.h"
 #include "reaktor/launch.h"
 
@@ -77,6 +78,8 @@ teardown(App *a)
     if (a->ren) SDL_DestroyRenderer(a->ren);
     if (a->win) SDL_DestroyWindow(a->win);
     SDL_free(a->glyphs);
+    reaktor_anim_destroy(a->anim);
+    a->anim = NULL;
     a->win = NULL;
     a->ren = NULL;
     a->ctx = NULL;

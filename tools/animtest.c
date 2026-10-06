@@ -5,6 +5,7 @@
 #include "anim.h"
 
 static int g_fail;
+static int g_moving;
 
 static void
 ok(const char *what, int cond)
@@ -13,16 +14,30 @@ ok(const char *what, int cond)
     if (!cond) g_fail = 1;
 }
 
-static int
-advance(float ms)
+/* A frame of a page that shows one value: time moves, the page asks, the runtime settles. */
+static float
+frame(struct nka_context *a, unsigned id, unsigned channel, float to, float ms,
+      unsigned char curve, float gap_ms)
 {
-    int moving = 0;
-    while (ms > 0.0f) {
-        float step = ms > 16.0f ? 16.0f : ms;
-        moving = reaktor_anim_tick(step);
-        ms -= step;
+    float v;
+    reaktor_anim_frame(a, gap_ms);
+    v = reaktor_animate(id, channel, to, ms, curve);
+    g_moving = reaktor_anim_settle();
+    return v;
+}
+
+/* Frames 16 ms apart until total has passed. */
+static float
+frames(struct nka_context *a, unsigned id, unsigned channel, float to, float ms,
+       unsigned char curve, float total)
+{
+    float v = 0.0f;
+    while (total > 0.0f) {
+        float step = total > 16.0f ? 16.0f : total;
+        v = frame(a, id, channel, to, ms, curve, step);
+        total -= step;
     }
-    return moving;
+    return v;
 }
 
 static int
@@ -109,63 +124,85 @@ static void
 test_table(void)
 {
     const unsigned id = 4242u;
+    const unsigned char lin = REAKTOR_EASE_LINEAR;
+    struct nka_context *a = reaktor_anim_create();
     float v;
+    int n;
 
     puts("");
     puts("a value starts where it is asked to, not at zero");
-    v = reaktor_animate(id, 0, 0.75f, 200.0f, REAKTOR_EASE_LINEAR);
+    v = frame(a, id, 0, 0.75f, 200.0f, lin, 16.0f);
     ok("the first sight of it is its target", near(v, 0.75f));
-    ok("and nothing is moving", advance(16.0f) == 0);
+    ok("and nothing is moving", !g_moving);
 
     puts("");
     puts("a new target starts a run, and the run ends");
-    v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
+    v = frame(a, id, 0, 0.0f, 200.0f, lin, 0.0f);
     ok("the frame that asks still sees the old value", near(v, 0.75f));
-    ok("something is moving now", advance(100.0f) == 1);
-    v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
-    ok("half way through a linear run is half way there",
-       near(v, 0.375f));
-    ok("the step that lands asks for the frame that shows it",
-       advance(100.0f) == 1);
-    ok("then nothing is moving", advance(16.0f) == 0);
-    v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
-    ok("and it arrives exactly", near(v, 0.0f));
+    ok("something is moving now", g_moving);
+    v = frames(a, id, 0, 0.0f, 200.0f, lin, 100.0f);
+    ok("half way through a linear run is half way there", near(v, 0.375f));
+    ok("and the dot on its curve says so", near(reaktor_anim_progress(id, 0), 0.5f));
+    v = frames(a, id, 0, 0.0f, 200.0f, lin, 100.0f);
+    ok("the frame that lands shows it arrived exactly", near(v, 0.0f));
+    ok("and asks for no more", !g_moving && reaktor_anim_progress(id, 0) < 0.0f);
 
     puts("");
     puts("a target that changes mid-flight redirects rather than restarts");
-    reaktor_animate(id, 0, 1.0f, 200.0f, REAKTOR_EASE_LINEAR);
-    advance(100.0f);
-    v = reaktor_animate(id, 0, 1.0f, 200.0f, REAKTOR_EASE_LINEAR);
+    frame(a, id, 0, 1.0f, 200.0f, lin, 0.0f);
+    v = frames(a, id, 0, 1.0f, 200.0f, lin, 100.0f);
     ok("half way to 1", near(v, 0.5f));
-    reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
-    advance(100.0f);
-    v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
+    frame(a, id, 0, 0.0f, 200.0f, lin, 0.0f);
+    v = frames(a, id, 0, 0.0f, 200.0f, lin, 100.0f);
     ok("and half way back from there, not from the end", near(v, 0.25f));
 
     puts("");
     puts("a channel is a separate value on the same widget");
-    reaktor_animate(id, 1, 10.0f, 200.0f, REAKTOR_EASE_LINEAR);
-    v = reaktor_animate(id, 1, 10.0f, 200.0f, REAKTOR_EASE_LINEAR);
+    v = frame(a, id, 1, 10.0f, 200.0f, lin, 16.0f);
     ok("channel 1 starts at its own target", near(v, 10.0f));
-    v = reaktor_animate(id, 0, 0.0f, 200.0f, REAKTOR_EASE_LINEAR);
-    ok("and channel 0 is where it was left", near(v, 0.25f));
+    reaktor_anim_frame(a, 0.0f);
+    v = reaktor_animate(id, 0, 0.0f, 200.0f, lin);
+    ok("and channel 0 is still on its way", v > 0.0f && v < 0.25f);
 
     puts("");
     puts("a long gap between frames does not teleport a run");
     {
-        float start = reaktor_animate(id, 0, 1.0f, 1000.0f,
-                                      REAKTOR_EASE_LINEAR);
+        float start = frame(a, id, 0, 1.0f, 1000.0f, lin, 16.0f);
 
-        reaktor_anim_tick(5000.0f);
-        v = reaktor_animate(id, 0, 1.0f, 1000.0f, REAKTOR_EASE_LINEAR);
+        v = frame(a, id, 0, 1.0f, 1000.0f, lin, 5000.0f);
         ok("five seconds of sleep move it forward", v > start);
-        ok("...by one capped step, not by all five seconds",
-           v - start < 0.10f);
-        ok("and the run is still going", advance(16.0f) == 1);
-        ok("it does finish, given the frames", advance(1000.0f) == 0);
-        v = reaktor_animate(id, 0, 1.0f, 1000.0f, REAKTOR_EASE_LINEAR);
+        ok("...by one capped step, not by all five seconds", v - start < 0.10f);
+        ok("and the run is still going", g_moving);
+        for (n = 0; g_moving && n < 200; n++)
+            v = frame(a, id, 0, 1.0f, 1000.0f, lin, 16.0f);
+        ok("it does finish, given the frames", !g_moving && n < 200);
         ok("exactly where it was sent", near(v, 1.0f));
     }
+
+    puts("");
+    puts("a settled value holds still when only its curve changes");
+    v = frame(a, id, 0, 1.0f, 300.0f, REAKTOR_EASE_BOUNCE_OUT, 16.0f);
+    ok("it stays where it is", near(v, 1.0f) && !g_moving);
+    ok("with no dot running on its curve", reaktor_anim_progress(id, 0) < 0.0f);
+    frame(a, id, 0, 0.0f, 300.0f, REAKTOR_EASE_BOUNCE_OUT, 0.0f);
+    v = frames(a, id, 0, 0.0f, 300.0f, REAKTOR_EASE_BOUNCE_OUT, 150.0f);
+    ok("and the next run takes the new curve",
+       near(v, 1.0f - reaktor_ease_at(REAKTOR_EASE_BOUNCE_OUT, 0.5f)));
+
+    puts("");
+    puts("each window has a table of its own");
+    {
+        struct nka_context *b = reaktor_anim_create();
+
+        v = frame(b, id, 0, 42.0f, 200.0f, lin, 16.0f);
+        ok("the same id starts afresh in another", near(v, 42.0f));
+        v = frame(a, id, 0, 0.0f, 300.0f, REAKTOR_EASE_BOUNCE_OUT, 0.0f);
+        ok("and the first one is left as it was", v > 0.0f && v < 1.0f);
+        reaktor_anim_destroy(b);
+    }
+    reaktor_anim_destroy(a);
+    ok("a destroyed table leaves reaktor_animate answering its target",
+       near(reaktor_animate(id, 0, 3.0f, 200.0f, lin), 3.0f));
 }
 
 int

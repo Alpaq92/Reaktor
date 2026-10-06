@@ -28,3 +28,6 @@
 [submodule "external/kb"]
 	path = external/kb
 	url = https://github.com/JimmyLefevre/kb.git
+[submodule "external/nukanim"]
+	path = external/nukanim
+	url = https://github.com/Alpaq92/NukAnim.git

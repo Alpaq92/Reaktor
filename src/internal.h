@@ -226,6 +226,7 @@ struct App {
     Uint64 fps_t0;
     Uint64 last_frame_ms;
     float  frame_gap_ms;
+    struct nka_context *anim;
     int   style_ms_x100;
     int   sheets;
     const char *font_face, *font_face_bold;

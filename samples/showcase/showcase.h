@@ -84,6 +84,12 @@ typedef struct showcase_state {
     int   anim_ms;
     float anim_head;
     nk_bool anim_play;
+    float grow[4];
+    int   path_runs, text_plays;
+    nk_bool fx_play, color_swap;
+    struct nk_vec2 trail[16];
+    int   trail_n;
+    double trail_at;
 
     char menu_pick[40];
     char file_pick[SC_PATH_CAP];
