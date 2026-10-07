@@ -47,6 +47,8 @@ static struct {
     const nk_bool        *on;
     struct nk_style_item *slot, saved;
     float                *border, border_was;
+    int                   edges;
+    struct nk_color       edge_hover, edge_active;
 } g_chrome;
 
 static void
@@ -74,6 +76,7 @@ void
 reaktor_chrome_disarm(void)
 {
     g_chrome.armed = 0;
+    g_chrome.edges = 0;
 }
 
 static int
@@ -94,16 +97,20 @@ button_chrome_begin(struct nk_command_buffer *out, nk_handle user)
     App *app = (App *)user.ptr;
     struct nk_style_button *st = &app->ctx->style.button;
     nk_flags state = app->ctx->last_widget_state;
-    struct nk_color col;
+    struct nk_color col, edge = st->border_color;
 
     if (!g_chrome.armed ||
         !chrome_take((state & NK_WIDGET_STATE_HOVER)   ? &st->hover
                    : (state & NK_WIDGET_STATE_ACTIVED) ? &st->active
                                                        : &st->normal, &col))
         return;
+    /* Nuklear keeps one border color; a rule can give each state its own. */
+    if (g_chrome.edges)
+        edge = (state & NK_WIDGET_STATE_HOVER)   ? g_chrome.edge_hover
+             : (state & NK_WIDGET_STATE_ACTIVED) ? g_chrome.edge_active : edge;
     reaktor_paint_surface(app, out, g_chrome.b, &(reaktor_surface){
         nk_rgb_factor(col, st->color_factor_background),
-        nk_rgb_factor(st->border_color, st->color_factor_background),
+        nk_rgb_factor(edge, st->color_factor_background),
         st->border, st->rounding });
     g_chrome.border     = &st->border;
     g_chrome.border_was = st->border;
@@ -173,6 +180,9 @@ push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
     nk_style_push_color(ctx, &ctx->style.button.border_color,
                         col_of(s.border_col));
     f.colors = 4;
+    g_chrome.edges       = 1;
+    g_chrome.edge_hover  = col_of(hov->matched ? hov->border_col : s.border_col);
+    g_chrome.edge_active = col_of(act->matched ? act->border_col : s.border_col);
 
     nk_style_push_float(ctx, &ctx->style.button.rounding, s.rounding);
     nk_style_push_float(ctx, &ctx->style.button.border, s.border);
@@ -317,7 +327,7 @@ reaktor_visible(struct nk_color want, struct nk_color behind,
 
 int
 css_button_accent(App *app, struct nk_context *ctx, const char *selector,
-                  const char *label, const char *token)
+                  const char *label, struct nk_color accent)
 {
     style_frame f, a = { 0, 0, 0, 0, 0 };
     unsigned char c[4];
@@ -328,7 +338,8 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
 
     f = push_button_style(app, ctx, selector);
 
-    if (reaktor_style_token(token, c)) {
+    c[0] = accent.r; c[1] = accent.g; c[2] = accent.b; c[3] = accent.a;
+    {
         unsigned char hov[4];
         memcpy(hov, c, 4);
         reaktor_style_darken(hov, 0.12f);
@@ -341,6 +352,7 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
                                  nk_style_item_color(col_of(hov)));
         a.items = 3;
         nk_style_push_color(ctx, &ctx->style.button.border_color, col_of(c));
+        g_chrome.edge_hover = g_chrome.edge_active = col_of(c);
 
         {
             struct nk_color label_col =
@@ -395,11 +407,15 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     clicked = nk_button_label(ctx, label);
     reaktor_chrome_disarm();
     if (drawn) {
+        const struct nk_style_button *bs = &ctx->style.button;
+        nk_flags state = ctx->last_widget_state;
         struct nk_image im = icon(app, icon_src, 18);
+        struct nk_color ink = (state & NK_WIDGET_STATE_HOVER)   ? bs->text_hover
+                            : (state & NK_WIDGET_STATE_ACTIVED) ? bs->text_active
+                                                                : bs->text_normal;
 
         nk_draw_image(nk_window_get_canvas(ctx), at, &im,
-                      nk_rgb_factor(nk_rgb(255, 255, 255),
-                                    ctx->style.button.color_factor_background));
+                      nk_rgb_factor(ink, bs->color_factor_text));
     }
     pop_style(ctx, f);
     return clicked;
@@ -461,8 +477,8 @@ push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset)
     style_frame f = { 0, 0, 0, 0, 0 };
     unsigned char body[4];
 
-    reaktor_style_get("input", &s);
-    reaktor_style_get("input:focus", &foc);
+    reaktor_style_get("input.type-text", &s);
+    reaktor_style_get("input.type-text:focus", &foc);
     reaktor_style_get("button", &btn);
     if (btn.matched) s.rounding = btn.rounding;
     s.pad_x += s.border;
@@ -702,26 +718,26 @@ apply_widget_style(App *app)
     struct nk_color on_accent, thumb, thumb_hi;
     struct nk_style_item i_none, i_base, i_hover, i_accent;
     reaktor_style btn, btn_hov, inp, sel, det, sum, dlg;
-    reaktor_style rng, acc;
+    reaktor_style rng;
     unsigned char c[4], ac[4];
 
     if (!app->ctx) return;
     ctx = app->ctx;
     st  = &ctx->style;
 
-    body   = reaktor_token("--background-body", app->page);
+    body   = app->page;
     base   = reaktor_token("--background", app->card_bg);
     hover  = reaktor_token("--background-hover", base);
-    text   = reaktor_token("--text-main", app->text);
+    text   = app->text;
     muted  = reaktor_token("--text-muted", text);
     bright = reaktor_token("--text-bright", text);
-    accent = reaktor_token("--links", text);
+    accent = app->accent;
     focus  = reaktor_token("--focus", accent);
 
     edge = hover;
 
-    on_accent = reaktor_style_token("--links", ac)
-              ? readable_on(ac, "--text-bright", "--background-body") : bright;
+    ac[0] = accent.r; ac[1] = accent.g; ac[2] = accent.b; ac[3] = accent.a;
+    on_accent = readable_on(ac, "--text-bright", "--background-body");
 
     thumb    = nk_rgba(muted.r, muted.g, muted.b, 110);
     thumb_hi = nk_rgba(muted.r, muted.g, muted.b, 175);
@@ -756,8 +772,10 @@ apply_widget_style(App *app)
     st->button.userdata   = nk_handle_ptr(app);
     st->button.draw_begin = button_chrome_begin;
     st->button.draw_end   = chrome_end;
+    /* A disabled button is faded, not darkened: see reaktor_button. */
+    st->button.disabled_factor = 1.0f;
 
-    reaktor_style_get("input", &inp);
+    reaktor_style_get("input.type-text", &inp);
     if (inp.matched) {
         struct nk_color sel_text = reaktor_style_token("--focus", c)
                                  ? readable_on(c, "--text-bright",
@@ -802,7 +820,6 @@ apply_widget_style(App *app)
     st->selectable.image_padding = nk_vec2(7.0f, 7.0f);
 
     reaktor_style_get("input", &rng);
-    reaktor_style_get("a", &acc);
 
     st->slider.normal        = i_none;
     st->slider.hover         = i_none;
@@ -810,9 +827,8 @@ apply_widget_style(App *app)
     st->slider.bar_normal    = rng.matched ? col_of(rng.bg) : edge;
     st->slider.bar_hover     = st->slider.bar_normal;
     st->slider.bar_active    = st->slider.bar_normal;
-    st->slider.bar_filled    = acc.matched ? col_of(acc.fg) : accent;
-    st->slider.cursor_normal = acc.matched
-                             ? nk_style_item_color(col_of(acc.fg)) : i_accent;
+    st->slider.bar_filled    = accent;
+    st->slider.cursor_normal = i_accent;
     st->slider.cursor_hover  = nk_style_item_color(focus);
     st->slider.cursor_active = nk_style_item_color(focus);
     st->slider.border_color  = rng.matched ? col_of(rng.border_col) : edge;
@@ -830,7 +846,7 @@ apply_widget_style(App *app)
     st->knob.knob_hover        = hover;
     st->knob.knob_active       = hover;
     st->knob.knob_border_color = btn.matched ? col_of(btn.border_col) : edge;
-    st->knob.cursor_normal     = acc.matched ? col_of(acc.fg) : accent;
+    st->knob.cursor_normal     = accent;
     st->knob.cursor_hover      = focus;
     st->knob.cursor_active     = focus;
     st->knob.border_color      = btn.matched ? col_of(btn.border_col) : edge;
@@ -840,14 +856,12 @@ apply_widget_style(App *app)
                                      : i_base;
     st->progress.hover               = st->progress.normal;
     st->progress.active              = st->progress.normal;
-    st->progress.cursor_normal       = acc.matched
-                                     ? nk_style_item_color(col_of(acc.fg))
-                                     : i_accent;
+    st->progress.cursor_normal       = i_accent;
     st->progress.cursor_hover        = nk_style_item_color(focus);
     st->progress.cursor_active       = nk_style_item_color(focus);
     st->progress.border_color        = rng.matched ? col_of(rng.border_col)
                                                    : edge;
-    st->progress.cursor_border_color = acc.matched ? col_of(acc.fg) : accent;
+    st->progress.cursor_border_color = accent;
     st->progress.border              = 0.0f;
     st->progress.cursor_border       = 0.0f;
     {

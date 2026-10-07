@@ -74,7 +74,7 @@ api(App *app, struct nk_context *ctx, const char *text)
     nk_layout_row_dynamic(ctx, 18.0f, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, text, 0);
     nk_label_colored(ctx, text, NK_TEXT_LEFT,
-                     reaktor_token("--links", ctx->style.text.color));
+                     reaktor_accent_color(app));
     nk_style_pop_font(ctx);
     nk_layout_row_dynamic(ctx, 4.0f, 1);
     nk_spacer(ctx);
@@ -139,7 +139,7 @@ draw_tooltip(App *app, struct nk_context *ctx, const char *const *lines,
     struct nk_color ink  = reaktor_token("--text-main", nk_rgb(247, 247, 247));
     struct nk_color edge = reaktor_token("--text-muted",
                                          nk_rgb(192, 192, 192));
-    struct nk_color acc  = reaktor_token("--links", nk_rgb(86, 199, 255));
+    struct nk_color acc  = reaktor_accent_color(app);
     float pad = 10.0f, line = f->height + 6.0f;
     float w = 0.0f, h = 2.0f * pad + (float)n * line;
     struct nk_rect r;
@@ -177,9 +177,7 @@ draw_tooltip(App *app, struct nk_context *ctx, const char *const *lines,
     if (bar >= 0.0f) {
         struct nk_rect track = nk_rect(r.x + pad, r.y + h - pad - 6.0f,
                                        r.w - 2.0f * pad, 6.0f);
-        reaktor_fill_round(app, canvas, track, 3.0f,
-                           reaktor_token("--background-body",
-                                         nk_rgb(37, 37, 37)));
+        reaktor_fill_round(app, canvas, track, 3.0f, reaktor_page_color(app));
         track.w *= bar;
         reaktor_fill_round(app, canvas, track, 3.0f, acc);
     }
@@ -832,8 +830,8 @@ section_grid(App *app, struct nk_context *ctx)
     even    = reaktor_token("--table-bg-alt", nk_rgb(37, 37, 37));
 
     {
-        struct nk_color page = reaktor_token("--background-body", nk_rgb(37, 37, 37));
-        struct nk_color accent = reaktor_token("--links", nk_rgb(0, 112, 224));
+        struct nk_color page = reaktor_page_color(app);
+        struct nk_color accent = reaktor_accent_color(app);
         struct nk_color want = head_s.matched && head_s.bg[3]
                              ? reaktor_col(head_s.bg)
                              : reaktor_token("--table", accent);
@@ -1803,8 +1801,8 @@ ease_plot(App *app, struct nk_context *ctx, struct nk_rect slot,
           unsigned char curve, float head, int strong)
 {
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
-    struct nk_color line = reaktor_token(strong ? "--links" : "--text-muted",
-                                         nk_rgb(0, 112, 224));
+    struct nk_color line = strong ? reaktor_accent_color(app)
+                                  : reaktor_token("--text-muted", nk_rgb(0, 112, 224));
     struct nk_color grid = reaktor_token("--background-hover",
                                          nk_rgba(128, 128, 128, 90));
     const float over = 0.28f;
@@ -1857,7 +1855,7 @@ track_at(App *app, struct nk_context *ctx, struct nk_rect r, float where,
                                + where * (r.w - box - 2.0f * inset),
                                r.y + inset, box, r.h - 2.0f * inset),
                        5.0f,
-                       lit ? reaktor_token("--links", nk_rgb(0, 112, 224))
+                       lit ? reaktor_accent_color(app)
                            : reaktor_token("--text-muted",
                                            nk_rgb(140, 140, 140)));
 }
@@ -1946,7 +1944,7 @@ clip_demo(App *app, struct nk_context *ctx)
             struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
             struct nka_stagger_grid_opts grid = nka_stagger_grid_opts_default();
             struct nk_colorf rest = nk_color_cf(well_color());
-            struct nk_colorf lit = nk_color_cf(reaktor_token("--links", nk_rgb(0, 112, 224)));
+            struct nk_colorf lit = nk_color_cf(reaktor_accent_color(app));
             int cols = (int)(r.w / cell), n;
             float x0;
 
@@ -2098,7 +2096,7 @@ path_demo(App *app, struct nk_context *ctx, showcase_state *s)
                 tip = nk_vec2(p.x + 18.0f * cosf(angle), p.y + 18.0f * sinf(angle));
                 nk_stroke_line(cv, p.x, p.y, tip.x, tip.y, 2.0f, well_ink(1.0f));
                 reaktor_fill_round(app, cv, nk_rect(p.x - 8.0f, p.y - 8.0f, 16.0f, 16.0f), 8.0f,
-                                   reaktor_token("--links", nk_rgb(0, 112, 224)));
+                                   reaktor_accent_color(app));
                 reaktor_fill_round(app, cv, nk_rect(tip.x - 3.0f, tip.y - 3.0f, 6.0f, 6.0f), 3.0f,
                                    well_ink(1.0f));
             }
@@ -2166,7 +2164,7 @@ fx_demo(App *app, struct nk_context *ctx, showcase_state *s)
                     float ax = r.w * 0.34f, ay = (r.h - 24.0f) * 0.36f;
                     struct nk_vec2 c = nk_vec2(r.x + r.w * 0.5f, r.y + (r.h - 24.0f) * 0.5f);
                     struct nk_vec2 d = nk_vec2(0.0f, 0.0f);
-                    struct nk_color dot = reaktor_token("--links", nk_rgb(0, 112, 224));
+                    struct nk_color dot = reaktor_accent_color(app);
                     int j;
 
                     reaktor_fill_round(app, cv, r, 6.0f, well_color());
@@ -2542,7 +2540,7 @@ page_animation(App *app, struct nk_context *ctx, showcase_state *s)
         struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
         const struct nk_user_font *f = ctx->style.font;
         struct nk_colorf rest = nk_color_cf(reaktor_token("--background-alt", nk_rgb(48, 48, 48)));
-        struct nk_colorf lit = nk_color_cf(reaktor_token("--links", nk_rgb(0, 112, 224)));
+        struct nk_colorf lit = nk_color_cf(reaktor_accent_color(app));
 
         for (i = 0; i < 4; i++)
             REAKTOR_ROW(.name = word[i], .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {

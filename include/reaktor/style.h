@@ -22,6 +22,7 @@ typedef struct reaktor_style {
     float         min_width, min_height;
     float         max_width, max_height;
     float         line_height;
+    float         opacity;
 
     int           font_px;
     int           bold;

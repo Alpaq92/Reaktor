@@ -39,8 +39,6 @@ void  reaktor_free(void *p);
 
 void reaktor_release_free_memory(void);
 
-#define REAKTOR_BRAND "#6b4ee6"
-
 #define REAKTOR_MARK "assets/icons/reaktor-icon.svg"
 
 #endif

@@ -239,6 +239,12 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(laytest PRIVATE onlay)
     set_target_properties(laytest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+    add_executable(csstest tools/csstest.c core/css/cssflat.c)
+    target_include_directories(csstest PRIVATE core/css core/base)
+    target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS)
+    set_target_properties(csstest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 if(WIN32 AND NOT EMSCRIPTEN)

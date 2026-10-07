@@ -264,6 +264,18 @@ round_mask(App *app, int r, int t)
                 p[3] = (unsigned char)((hit * 255) / (ss * ss));
             }
         }
+        /* A border's straight runs are cut from the middle texels, which sit
+         * half a texel off the arc's apex, so they carry the straight band. */
+        if (t > 0) {
+            for (y = 0; y < d; y++)
+                for (x = r - 1; x <= r; x++)
+                    px[(size_t)y * surf->pitch + x * 4 + 3] =
+                        y < t || y >= d - t ? 255 : 0;
+            for (x = 0; x < d; x++)
+                for (y = r - 1; y <= r; y++)
+                    px[(size_t)y * surf->pitch + x * 4 + 3] =
+                        x < t || x >= d - t ? 255 : 0;
+        }
         tex = SDL_CreateTextureFromSurface(app->ren, surf);
         SDL_DestroySurface(surf);
     }
@@ -361,6 +373,74 @@ reaktor_render(App *app)
     nk_sdl_render_ex(app->ctx, NK_ANTI_ALIASING_OFF,
                      app->aa && !(app->renderer_is_sw && app->sw_noaa)
                      ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
+}
+
+/* The last command so far, or none: what reaktor_fade_since starts after. */
+nk_size
+reaktor_fade_mark(const struct nk_command_buffer *cv)
+{
+    return cv->begin == cv->end ? (nk_size)-1 : cv->last;
+}
+
+static void
+fade(struct nk_color *c, float opacity)
+{
+    c->a = (nk_byte)((float)c->a * opacity + 0.5f);
+}
+
+/* Every command drawn since the mark, at the opacity a rule gave it. */
+void
+reaktor_fade_since(struct nk_context *ctx, const struct nk_command_buffer *cv,
+                   nk_size mark, float opacity)
+{
+    nk_byte *base = (nk_byte *)ctx->memory.memory.ptr;
+    nk_size at;
+
+    if (cv->begin == cv->end || cv->last == mark) return;
+    at = mark == (nk_size)-1 ? cv->begin
+                             : ((const struct nk_command *)(base + mark))->next;
+    for (;;) {
+        struct nk_command *c = (struct nk_command *)(base + at);
+
+        switch (c->type) {
+        case NK_COMMAND_LINE:   fade(&((struct nk_command_line *)c)->color, opacity); break;
+        case NK_COMMAND_CURVE:  fade(&((struct nk_command_curve *)c)->color, opacity); break;
+        case NK_COMMAND_RECT:   fade(&((struct nk_command_rect *)c)->color, opacity); break;
+        case NK_COMMAND_RECT_FILLED:
+            fade(&((struct nk_command_rect_filled *)c)->color, opacity); break;
+        case NK_COMMAND_RECT_MULTI_COLOR: {
+            struct nk_command_rect_multi_color *m = (struct nk_command_rect_multi_color *)c;
+            fade(&m->left, opacity); fade(&m->top, opacity);
+            fade(&m->right, opacity); fade(&m->bottom, opacity);
+            break;
+        }
+        case NK_COMMAND_CIRCLE: fade(&((struct nk_command_circle *)c)->color, opacity); break;
+        case NK_COMMAND_CIRCLE_FILLED:
+            fade(&((struct nk_command_circle_filled *)c)->color, opacity); break;
+        case NK_COMMAND_ARC:    fade(&((struct nk_command_arc *)c)->color, opacity); break;
+        case NK_COMMAND_ARC_FILLED:
+            fade(&((struct nk_command_arc_filled *)c)->color, opacity); break;
+        case NK_COMMAND_TRIANGLE:
+            fade(&((struct nk_command_triangle *)c)->color, opacity); break;
+        case NK_COMMAND_TRIANGLE_FILLED:
+            fade(&((struct nk_command_triangle_filled *)c)->color, opacity); break;
+        case NK_COMMAND_POLYGON:
+            fade(&((struct nk_command_polygon *)c)->color, opacity); break;
+        case NK_COMMAND_POLYGON_FILLED:
+            fade(&((struct nk_command_polygon_filled *)c)->color, opacity); break;
+        case NK_COMMAND_POLYLINE:
+            fade(&((struct nk_command_polyline *)c)->color, opacity); break;
+        case NK_COMMAND_TEXT: {
+            struct nk_command_text *t = (struct nk_command_text *)c;
+            fade(&t->background, opacity); fade(&t->foreground, opacity);
+            break;
+        }
+        case NK_COMMAND_IMAGE:  fade(&((struct nk_command_image *)c)->col, opacity); break;
+        default: break;
+        }
+        if (at == cv->last) break;
+        at = c->next;
+    }
 }
 
 struct nk_rect
