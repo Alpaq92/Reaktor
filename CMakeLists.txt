@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(reaktor VERSION 0.3.0 LANGUAGES C CXX)
+project(reaktor VERSION 0.4.0 LANGUAGES C CXX)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(_reaktor_top ON)
