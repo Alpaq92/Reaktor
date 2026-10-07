@@ -10,6 +10,8 @@ typedef struct shell_style { int items, colors, floats, vec2s, fonts; } shell_st
 static struct nk_rect g_ctl[3];
 static int            g_ctl_n;
 static int            g_show_contact;
+static float          g_nav_room;
+static int            g_nav_over;
 
 static void
 pop_style(struct nk_context *ctx, shell_style f)
@@ -420,7 +422,7 @@ toggle_titlebar(App *app)
 #endif
 
 static void
-nav(App *app, float w, float h)
+nav(App *app, float w, float inner_w, float h)
 {
     static const char *const icons[TAB_COUNT] = {
         "person-outline", "tablet-landscape-outline", "create-outline",
@@ -444,16 +446,31 @@ nav(App *app, float w, float h)
     }
     sample_tablist_keys(all, (int)sizeof(all));
 
-    REAKTOR_FREE(.w = w, .h = h)
-    REAKTOR_COLUMN(.w = w - 16.0f, .h = h - 16.0f, .ml = 8.0f, .mt = 8.0f,
+    REAKTOR_FREE(.w = inner_w)
+    REAKTOR_COLUMN(.w = inner_w - 16.0f, .ml = 8.0f, .mt = 8.0f, .mb = 8.0f,
                    .gap = 2.0f) {
+        struct nk_rect laid;
+
+        /* The scheme sits at the foot when the window has room for both
+         * lists; when it has none, the sidebar scrolls. */
+        if (reaktor_box_rect(&laid)) {
+            float room = h - 16.0f - (laid.h - g_nav_room);
+            int   over = room < 0.0f;
+
+            if (over) room = 0.0f;
+            if (room != g_nav_room || over != g_nav_over) {
+                g_nav_room = room;
+                g_nav_over = over;
+                reaktor_wake(app);
+            }
+        }
         if (reaktor_sidebar(&(reaktor_sidebar_spec){
                 .items = reaktor_tab_names, .icons = icons, .keys = key_of,
                 .count = TAB_COUNT, .chosen = &tab, .name = "Pages",
                 .list_keys = all, .narrow = narrow,
                 .box = { .flags = REAKTOR_LAY_FILL_X } }))
             set_tab(app, tab);
-        REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {}
+        REAKTOR_COLUMN(.h = g_nav_room, .flags = REAKTOR_LAY_FILL_X) {}
         if (reaktor_sidebar(&(reaktor_sidebar_spec){
                 .items = schemes, .icons = scheme_icons, .count = 3,
                 .chosen = &scheme, .name = "Color scheme",
@@ -609,8 +626,8 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
                              nk_style_item_color(card));
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
     nk_layout_space_push(ctx, nk_rect(0, top, nav_w, body_h));
-    if (nk_group_begin(ctx, "nav", NK_WINDOW_NO_SCROLLBAR)) {
-        nav(app, nav_w, body_h);
+    if (nk_group_begin(ctx, "nav", g_nav_over ? 0 : NK_WINDOW_NO_SCROLLBAR)) {
+        nav(app, nav_w, nk_window_get_content_region_size(ctx).x, body_h);
         nk_group_end(ctx);
     }
     nk_style_pop_vec2(ctx);
