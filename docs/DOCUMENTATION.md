@@ -629,6 +629,12 @@ reaktor_add_app(myapp SOURCES main.c)
 Under another project Reaktor builds none of its samples or tests and
 installs nothing (`REAKTOR_SAMPLES`, `REAKTOR_TESTS` and `REAKTOR_INSTALL`
 default to on only at the top), and its settings stay in its own directory.
+A module's sources compile in the app's directory, so the one that needs a
+language of its own, the macOS accessibility bridge in Objective-C, is
+compiled in Reaktor's instead: the app needs no Objective-C, and no ARC flag.
+[`examples/embedded`](../examples/embedded) declares Simple this way from a
+directory of its own; the macOS jobs and Linux x86-64 build it and check it
+draws as the in-tree build does.
 
 **libreaktor.** Each release carries `libreaktor-<version>-<system>-<arch>`
 for every platform above, and `-wasm`. Build one yourself with:

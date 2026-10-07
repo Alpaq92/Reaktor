@@ -191,6 +191,23 @@ jobs:
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           EOF
 
+      - name: Check an app that embeds Reaktor
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
+        run: |
+          docker exec -i debian sh -eu <<'EOF'
+          cmake -S examples/embedded -B build-embedded -G Ninja -DCMAKE_BUILD_TYPE=Release </dev/null
+          cmake --build build-embedded --target simple </dev/null
+          mkdir -p check
+          for from in "tree build/simple" "embedded build-embedded/simple"; do
+            set -- $from
+            timeout 600 dbus-run-session -- "$2" --theme light --video dummy \
+              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
+          done
+          for e in bmp txt; do
+            cmp "check/tree.$e" "check/embedded.$e"
+          done
+          EOF
+
       - name: Upload libreaktor
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
