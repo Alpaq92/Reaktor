@@ -215,23 +215,38 @@ load_theme(App *app)
     app->style_ms_x100 = (int)(100000.0 * (double)(t1 - t0) /
                                (double)SDL_GetPerformanceFrequency());
 
-    app->page    = reaktor_style_token("--background-body", c)
-                 ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(247, 247, 247);
+    {
+        reaktor_style body;
+
+        reaktor_style_get("body", &body);
+        app->page = body.matched && body.bg[3]
+                  ? nk_rgba(body.bg[0], body.bg[1], body.bg[2], body.bg[3])
+                  : reaktor_style_token("--background-body", c)
+                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(247, 247, 247);
+        app->text = body.matched && body.fg[3]
+                  ? nk_rgba(body.fg[0], body.fg[1], body.fg[2], body.fg[3])
+                  : reaktor_style_token("--text-main", c)
+                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(51, 51, 51);
+    }
+    {
+        reaktor_style link;
+
+        reaktor_style_get("a:link", &link);
+        app->accent = link.matched && link.fg[3]
+                    ? nk_rgba(link.fg[0], link.fg[1], link.fg[2], link.fg[3])
+                    : reaktor_style_token("--links", c)
+                    ? nk_rgba(c[0], c[1], c[2], c[3]) : app->text;
+    }
     app->card_bg = reaktor_style_token("--background", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(226, 226, 226);
-    app->text    = reaktor_style_token("--text-main", c)
-                 ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(51, 51, 51);
     if (reaktor_style_token("--text-muted", c))
         SDL_snprintf(app->icon_hex, sizeof(app->icon_hex),
                      "#%02x%02x%02x", c[0], c[1], c[2]);
     else
         SDL_strlcpy(app->icon_hex, "#6a6a6a", sizeof(app->icon_hex));
 
-    if (reaktor_style_token("--links", c))
-        SDL_snprintf(app->accent_hex, sizeof(app->accent_hex),
-                     "#%02x%02x%02x", c[0], c[1], c[2]);
-    else
-        SDL_strlcpy(app->accent_hex, REAKTOR_BRAND, sizeof(app->accent_hex));
+    SDL_snprintf(app->accent_hex, sizeof(app->accent_hex), "#%02x%02x%02x",
+                 app->accent.r, app->accent.g, app->accent.b);
 
     reaktor_window_set_dark(app->win, app->dark);
 
@@ -1945,6 +1960,18 @@ int
 reaktor_dark(App *app)
 {
     return app && app->dark;
+}
+
+struct nk_color
+reaktor_page_color(App *app)
+{
+    return app ? app->page : nk_rgb(247, 247, 247);
+}
+
+struct nk_color
+reaktor_accent_color(App *app)
+{
+    return app ? app->accent : nk_rgb(0, 112, 224);
 }
 
 reaktor_theme

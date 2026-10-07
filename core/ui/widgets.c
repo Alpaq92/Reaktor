@@ -133,7 +133,7 @@ reaktor_link_label(App *app, struct nk_context *ctx, const char *label, int acti
             clicked = 1;
     }
 
-    col = active ? reaktor_token("--links", app->text)
+    col = active ? app->accent
                  : reaktor_token("--text-muted", app->text);
 
     nk_style_push_color(ctx, &ctx->style.text.color, col);
@@ -497,7 +497,7 @@ int
 reaktor_button_accent_as(App *app, struct nk_context *ctx, const char *sel,
                          const char *label)
 {
-    return css_button_accent(app, ctx, sel, label, "--links");
+    return css_button_accent(app, ctx, sel, label, app->accent);
 }
 
 int
@@ -507,15 +507,14 @@ reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
     char src[192];
 
     SDL_snprintf(src, sizeof(src),
-                 "external/ionicons/src/svg/%s.svg?stroke=%s",
-                 ionicon, app->icon_hex);
+                 "external/ionicons/src/svg/%s.svg?stroke=#ffffff", ionicon);
     return css_button_icon(app, ctx, sel, src, label);
 }
 
 int
 reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
 {
-    return css_button_accent(app, ctx, "button", label, "--links");
+    return css_button_accent(app, ctx, "button", label, app->accent);
 }
 
 int
@@ -579,8 +578,7 @@ reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
     char src[192];
 
     SDL_snprintf(src, sizeof(src),
-                 "external/ionicons/src/svg/%s.svg?stroke=%s",
-                 ionicon, app->icon_hex);
+                 "external/ionicons/src/svg/%s.svg?stroke=#ffffff", ionicon);
     return css_button_icon(app, ctx, "button", src, label);
 }
 

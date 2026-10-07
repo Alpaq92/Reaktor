@@ -26,6 +26,10 @@ struct nk_color            reaktor_token(const char *name,
 struct nk_color            reaktor_visible(struct nk_color want,
                                            struct nk_color behind,
                                            struct nk_color fallback);
+/* The body rule's background, or --background-body when no sheet sets one. */
+struct nk_color            reaktor_page_color(App *app);
+/* The link rule's color, or --links when no sheet sets one. */
+struct nk_color            reaktor_accent_color(App *app);
 const struct nk_user_font *reaktor_font(App *app, int px, int bold);
 
 struct nk_image reaktor_ionicon(App *app, const char *name, int px);

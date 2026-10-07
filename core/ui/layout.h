@@ -9,6 +9,12 @@
 #define REAKTOR_LAY_DEPTH 32
 #define REAKTOR_LAY_SLOTS 512
 
+/* Sides whose margin a stylesheet set, in Onlay's left, top, right, bottom order. */
+#define REAKTOR_LAY_SHEET_L (1u << 28)
+#define REAKTOR_LAY_SHEET_T (1u << 29)
+#define REAKTOR_LAY_SHEET_R (1u << 30)
+#define REAKTOR_LAY_SHEET_B (1u << 31)
+
 typedef struct reaktor_lay_slot {
     unsigned       id;
     unsigned       gen;
@@ -22,6 +28,9 @@ typedef struct reaktor_layout {
     unsigned    id[REAKTOR_LAY_MAX];
     lay_id      item[REAKTOR_LAY_MAX];
     int         count;
+
+    unsigned      flags[REAKTOR_LAY_MAX];
+    unsigned char dir[REAKTOR_LAY_MAX];
 
     lay_id      stack[REAKTOR_LAY_DEPTH];
     int         depth;

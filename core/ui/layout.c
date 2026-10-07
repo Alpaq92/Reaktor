@@ -58,6 +58,7 @@ declare(reaktor_layout *l, unsigned id, const reaktor_box *b)
     if (l->count >= REAKTOR_LAY_MAX) { l->overflow_boxes++; return LAY_INVALID_ID; }
 
     it = lay_item(&l->ctx);
+    if (it < REAKTOR_LAY_MAX) { l->flags[it] = b->flags; l->dir[it] = b->dir; }
     lay_set_size_xy(&l->ctx, it, (lay_scalar)b->w, (lay_scalar)b->h);
     lay_set_contain(&l->ctx, it, contain_of(b));
     lay_set_behave(&l->ctx, it, behave_of(b));
@@ -142,12 +143,51 @@ slot_of(reaktor_layout *l, unsigned id)
     return NULL;
 }
 
+/* A stylesheet's margin only parts a widget from its neighbors. The one
+ * leading a child moves to the end of the child before it, so every wrapped
+ * line starts at the edge, and the last child's trailing one is dropped. */
+static void
+part_neighbors(reaktor_layout *l, lay_id box)
+{
+    lay_id c, prev = LAY_INVALID_ID;
+    int    lead, trail;
+
+    if (box >= REAKTOR_LAY_MAX || l->dir[box] == REAKTOR_LAY_FREE) return;
+    lead  = l->dir[box] == REAKTOR_LAY_ROW ? 0 : 1;
+    trail = lead + 2;
+
+    for (c = lay_first_child(&l->ctx, box); c != LAY_INVALID_ID;
+         prev = c, c = lay_next_sibling(&l->ctx, c)) {
+        lay_scalar m[4], p[4];
+
+        if (c >= REAKTOR_LAY_MAX || !(l->flags[c] & (REAKTOR_LAY_SHEET_L << lead)))
+            continue;
+        lay_get_margins_ltrb(&l->ctx, c, &m[0], &m[1], &m[2], &m[3]);
+        if (prev != LAY_INVALID_ID) {
+            lay_get_margins_ltrb(&l->ctx, prev, &p[0], &p[1], &p[2], &p[3]);
+            p[trail] += m[lead];
+            lay_set_margins_ltrb(&l->ctx, prev, p[0], p[1], p[2], p[3]);
+        }
+        m[lead] = 0;
+        lay_set_margins_ltrb(&l->ctx, c, m[0], m[1], m[2], m[3]);
+    }
+    if (prev != LAY_INVALID_ID && prev < REAKTOR_LAY_MAX
+        && (l->flags[prev] & (REAKTOR_LAY_SHEET_L << trail))) {
+        lay_scalar m[4];
+
+        lay_get_margins_ltrb(&l->ctx, prev, &m[0], &m[1], &m[2], &m[3]);
+        m[trail] = 0;
+        lay_set_margins_ltrb(&l->ctx, prev, m[0], m[1], m[2], m[3]);
+    }
+}
+
 void
 reaktor_layout_end(reaktor_layout *l)
 {
     int i;
 
     if (!l->started || !l->count) return;
+    for (i = 0; i < l->count; i++) part_neighbors(l, l->item[i]);
     lay_run_context(&l->ctx);
 
     l->gen++;

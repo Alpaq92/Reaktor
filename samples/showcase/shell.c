@@ -10,6 +10,7 @@ typedef struct shell_style { int items, colors, floats, vec2s, fonts; } shell_st
 static struct nk_rect g_ctl[3];
 static int            g_ctl_n;
 static int            g_show_contact;
+static float          g_card_h;
 static float          g_nav_room;
 static int            g_nav_over;
 
@@ -273,7 +274,7 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
            float body_y, float body_h)
 {
     struct nk_rect at;
-    float card_h = card_height(g_show_contact);
+    float card_h = g_card_h > 0.0f ? g_card_h : card_height(g_show_contact);
     float card_w = body_w - 16.0f < (float)CARD_W ? body_w - 16.0f : (float)CARD_W;
     float side = body_x + (body_w - card_w) * 0.5f;
     float top  = body_y + (body_h - card_height(0)) * 0.5f;
@@ -294,7 +295,14 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
     if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
         REAKTOR_COLUMN(.name = "Proceed with login",
-                       .w = card_w, .h = card_h, .gap = ROW_GAP) {
+                       .w = card_w, .gap = ROW_GAP) {
+            struct nk_rect laid;
+
+            /* The card is as tall as a sheet's margins make its rows. */
+            if (reaktor_box_rect(&laid) && laid.h != g_card_h) {
+                g_card_h = laid.h;
+                reaktor_wake(app);
+            }
             REAKTOR_ROW(.h = ROW_BRAND, .gap = 10, .flags = REAKTOR_LAY_FILL_X,
                         .ml = CARD_PAD_X, .mr = CARD_PAD_X, .mt = CARD_PAD_Y) {
                 reaktor_icon(&(reaktor_icon_spec){
@@ -337,7 +345,8 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
                     .text = g_show_contact ? "hide contact" : "contact",
                     .style = ".card-link",
                     .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
-                             .ml = CARD_PAD_X, .mr = CARD_PAD_X } }))
+                             .ml = CARD_PAD_X, .mr = CARD_PAD_X,
+                             .mb = g_show_contact ? 0.0f : CARD_PAD_Y } }))
                 g_show_contact = !g_show_contact;
 
             if (g_show_contact) {
@@ -352,7 +361,8 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
                     reaktor_label(&(reaktor_label_spec){
                         .text = lines[i], .style = ".card-link", .align = REAKTOR_CENTRE,
                         .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
-                                 .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
+                                 .ml = CARD_PAD_X, .mr = CARD_PAD_X,
+                                 .mb = i == CONTACT_ROWS - 1 ? CARD_PAD_Y : 0.0f } });
             }
         }
         nk_group_end(ctx);
@@ -388,7 +398,8 @@ int
 sample_option(App *app, struct nk_context *ctx, const char *label, float w,
               int on)
 {
-    struct nk_color fg = reaktor_token(on ? "--links" : "--text-muted", text_main());
+    struct nk_color fg = on ? reaktor_accent_color(app)
+                            : reaktor_token("--text-muted", text_main());
     struct nk_rect  b;
     shell_style     look;
     unsigned        id;
@@ -607,8 +618,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
 
         nk_fill_rect(cv, nk_rect(0.0f, 0.0f, (float)win_w, (float)win_h), 0.0f,
                      card);
-        reaktor_fill_round(app, cv, panel, PANEL_R,
-                           reaktor_token("--background-body", nk_rgb(247, 247, 247)));
+        reaktor_fill_round(app, cv, panel, PANEL_R, reaktor_page_color(app));
     }
 
     nk_layout_space_begin(ctx, NK_STATIC, (float)win_h, 3);
