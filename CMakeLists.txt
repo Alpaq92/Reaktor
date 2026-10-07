@@ -299,11 +299,15 @@ elseif(WIN32)
         "${_a11y}/a11y_snapshot.c" "${_a11y}/a11y_win32.c")
     target_link_libraries(reaktor_a11y INTERFACE uiautomationcore ole32 oleaut32)
 elseif(APPLE)
+    # Compiled here: an interface library's sources compile in the directory
+    # of whoever links it, where Objective-C may not be enabled.
     enable_language(OBJC)
+    add_library(reaktor_a11y_macos OBJECT "${_a11y}/a11y_macos.m")
+    target_compile_options(reaktor_a11y_macos PRIVATE -fobjc-arc)
+    target_compile_definitions(reaktor_a11y_macos PRIVATE REAKTOR_HAVE_NSACCESSIBILITY)
+    target_link_libraries(reaktor_a11y_macos PRIVATE reaktor_runtime)
     target_sources(reaktor_a11y INTERFACE
-        "${_a11y}/a11y_snapshot.c" "${_a11y}/a11y_macos.m")
-    set_source_files_properties("${_a11y}/a11y_macos.m" PROPERTIES
-        COMPILE_OPTIONS "-fobjc-arc")
+        "${_a11y}/a11y_snapshot.c" "$<TARGET_OBJECTS:reaktor_a11y_macos>")
     target_compile_definitions(reaktor_a11y INTERFACE REAKTOR_HAVE_NSACCESSIBILITY)
     target_link_libraries(reaktor_a11y INTERFACE "-framework Cocoa")
 else()
