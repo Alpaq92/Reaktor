@@ -21,6 +21,7 @@ static float              g_ox, g_oy;
 static struct nk_rect     g_boxrect[REAKTOR_LAY_DEPTH + 1];
 static unsigned char      g_boxok[REAKTOR_LAY_DEPTH + 1];
 static unsigned           g_boxid[REAKTOR_LAY_DEPTH + 1];
+static unsigned char      g_boxdir[REAKTOR_LAY_DEPTH + 1];
 
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
@@ -43,6 +44,11 @@ reaktor_frame_end(void)
     if (g_space) { nk_layout_space_end(g_ctx); g_space = 0; }
     reaktor_layout_end(&g_app->lay);
 
+    /* This frame's rectangles were laid out with the sizes of an older sheet. */
+    if (g_app->style_gen != reaktor_style_generation()) {
+        g_app->style_gen = reaktor_style_generation();
+        g_unsettled++;
+    }
     g_app->settled_run = g_unsettled ? 0 : g_app->settled_run + 1;
     if (!g_unsettled) {
         g_app->settle_tries = 0;
@@ -107,7 +113,10 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     id = reaktor_note_push(g_app, REAKTOR_A11Y_GROUP, box.name, NULL, 0u,
                            nk_rect(0, 0, 0, 0));
     reaktor_layout_open(&g_app->lay, id, &box);
-    if (g_depth < REAKTOR_LAY_DEPTH) g_boxid[g_depth + 1] = id;
+    if (g_depth < REAKTOR_LAY_DEPTH) {
+        g_boxid[g_depth + 1]  = id;
+        g_boxdir[g_depth + 1] = dir;
+    }
 
     if (g_widths < (int)(sizeof(g_width) / sizeof(g_width[0]))) {
         float w = box.w > 0.0f ? box.w : g_width[g_widths - 1];
@@ -328,10 +337,28 @@ box_from_style(reaktor_box *box, const char *text, const char *selector,
     }
 
     if (st.matched) {
-        if (box->mt <= 0.0f) box->mt = st.margin[REAKTOR_SIDE_TOP];
-        if (box->mr <= 0.0f) box->mr = st.margin[REAKTOR_SIDE_RIGHT];
-        if (box->mb <= 0.0f) box->mb = st.margin[REAKTOR_SIDE_BOTTOM];
-        if (box->ml <= 0.0f) box->ml = st.margin[REAKTOR_SIDE_LEFT];
+        /* A rule's margin parts a widget from its neighbors along its row or
+         * column; across it, the page has sized the box. */
+        unsigned char dir = g_depth > 0 && g_depth <= REAKTOR_LAY_DEPTH
+                          ? g_boxdir[g_depth] : REAKTOR_LAY_COLUMN;
+        int down = dir != REAKTOR_LAY_ROW, across = dir != REAKTOR_LAY_COLUMN;
+
+        if (box->mt <= 0.0f && down) {
+            box->mt = st.margin[REAKTOR_SIDE_TOP];
+            box->flags |= REAKTOR_LAY_SHEET_T;
+        }
+        if (box->mr <= 0.0f && across) {
+            box->mr = st.margin[REAKTOR_SIDE_RIGHT];
+            box->flags |= REAKTOR_LAY_SHEET_R;
+        }
+        if (box->mb <= 0.0f && down) {
+            box->mb = st.margin[REAKTOR_SIDE_BOTTOM];
+            box->flags |= REAKTOR_LAY_SHEET_B;
+        }
+        if (box->ml <= 0.0f && across) {
+            box->ml = st.margin[REAKTOR_SIDE_LEFT];
+            box->flags |= REAKTOR_LAY_SHEET_L;
+        }
     }
 }
 
@@ -390,14 +417,32 @@ reaktor_soak(void)
     (void)place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL);
 }
 
+/* A disabled button wears its sheet's :disabled rule at that rule's opacity;
+ * one the sheet does not tell apart is faded by half. */
+static float
+disabled_opacity(const char *sel, const char *dsel)
+{
+    reaktor_style on, off;
+
+    reaktor_style_get(sel, &on);
+    reaktor_style_get(dsel, &off);
+    if (!off.matched) return 0.5f;
+    if (off.opacity < 1.0f) return off.opacity;
+    return memcmp(on.bg, off.bg, 4) || memcmp(on.fg, off.fg, 4) ||
+           memcmp(on.border_col, off.border_col, 4) ? 1.0f : 0.5f;
+}
+
 int
 reaktor_button(const reaktor_button_spec *s)
 {
     reaktor_box    box;
     struct nk_rect r;
     const char    *sel;
+    char           dsel[96];
     unsigned       id = 0;
     int            hit, styled, fitted;
+    float          fade = 1.0f;
+    nk_size        mark = 0;
 
     if (!g_app || !s) return 0;
     box = s->box;
@@ -415,9 +460,17 @@ reaktor_button(const reaktor_button_spec *s)
     r = nk_widget_bounds(g_ctx);
 
     sel = rule_or(s->style, "button");
+    if (s->disabled) {
+        SDL_snprintf(dsel, sizeof(dsel), "%s.disabled:disabled", sel);
+        fade = disabled_opacity(sel, dsel);
+        sel = dsel;
+    }
     styled = push_style_font(s->style);
     if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_REPEATER);
-    if (s->disabled) nk_widget_disable_begin(g_ctx);
+    if (s->disabled) {
+        nk_widget_disable_begin(g_ctx);
+        mark = reaktor_fade_mark(nk_window_get_canvas(g_ctx));
+    }
     fitted = reaktor_fit_label(g_app, g_ctx, r);
     reaktor_note_mute(g_app, 1);
     if (s->icon && !s->label) {
@@ -428,13 +481,17 @@ reaktor_button(const reaktor_button_spec *s)
                                        px, s->name);
     } else if (s->icon)
         hit = reaktor_button_icon_as(g_app, g_ctx, sel, s->icon, s->label);
-    else if (s->accent)
+    else if (s->accent && !s->disabled)
         hit = reaktor_button_accent_as(g_app, g_ctx, sel, s->label);
     else
         hit = reaktor_button_label_as(g_app, g_ctx, sel, s->label);
     reaktor_note_mute(g_app, 0);
     reaktor_unfit_label(g_ctx, fitted);
-    if (s->disabled) nk_widget_disable_end(g_ctx);
+    if (s->disabled) {
+        nk_widget_disable_end(g_ctx);
+        if (fade < 1.0f)
+            reaktor_fade_since(g_ctx, nk_window_get_canvas(g_ctx), mark, fade);
+    }
     if (s->repeat) nk_button_set_behavior(g_ctx, NK_BUTTON_DEFAULT);
     if (styled) nk_style_pop_font(g_ctx);
 
@@ -618,8 +675,7 @@ reaktor_icon(const reaktor_icon_spec *s)
     px = (int)box.w;
 
     im = s->accent
-       ? reaktor_ionicon_col(g_app, s->name, px,
-                             reaktor_token("--links", g_app->text))
+       ? reaktor_ionicon_col(g_app, s->name, px, g_app->accent)
        : reaktor_ionicon(g_app, s->name, px);
 
     if (!place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL)) return;
@@ -634,7 +690,8 @@ reaktor_field(const reaktor_field_spec *s)
 
     if (!g_app || !s || !s->buf || !s->len) return;
     box = s->box;
-    box_from_style(&box, NULL, s->style, "input", 0.0f, 10.0f);
+    box_from_style(&box, NULL, s->style ? s->style : "input.type-text", "input",
+                   0.0f, 10.0f);
 
     if (!place(REAKTOR_A11Y_TEXTBOX, s->name ? s->name : s->hint,
                NULL, 0u, NULL, &box, &id))
@@ -810,8 +867,7 @@ reaktor_select(const reaktor_select_spec *s)
         reaktor_select_arm(b, s->on, rs.matched ? rs.rounding
                                                 : g_ctx->style.selectable.rounding);
         if (s->icon) {
-            struct nk_color accent = reaktor_token("--links",
-                                                   g_ctx->style.text.color);
+            struct nk_color accent = g_app->accent;
             struct nk_color ink = *s->on
                 ? reaktor_on(accent)
                 : reaktor_token("--text-muted", g_ctx->style.text.color);
@@ -940,7 +996,8 @@ reaktor_property(const reaktor_property_spec *s)
     else SDL_snprintf(text, sizeof(text), "%.2f", now);
 
     box = s->box;
-    box_from_style(&box, NULL, s->style, "input", 0.0f, 7.0f);
+    box_from_style(&box, NULL, s->style ? s->style : "input.type-text", "input",
+                   0.0f, 7.0f);
 
     if (!place(REAKTOR_A11Y_SPINBUTTON, s->name ? s->name : s->label, text,
                0u, NULL, &box, &id))
@@ -981,7 +1038,7 @@ reaktor_combo_open(const reaktor_combo_spec *s)
         reaktor_box field;
 
         memset(&field, 0, sizeof(field));
-        box_from_style(&field, NULL, NULL, "input", 0.0f, 10.0f);
+        box_from_style(&field, NULL, "input.type-text", "input", 0.0f, 10.0f);
         if (field.h > box.h) box.h = field.h;
     }
 
@@ -1147,11 +1204,11 @@ nav_list(const reaktor_nav_spec *s, int across)
     nav_look_of(&look[0], item);
     nav_look_of(&look[1], across ? ".tab-current" : ".sidebar-current");
     reaktor_style_get(across ? ".tab-edge" : ".sidebar-edge", &edge);
+    list = s->box;
+    reaktor_box_open(across ? REAKTOR_LAY_ROW : REAKTOR_LAY_COLUMN, &list);
     memset(&down, 0, sizeof(down));
     down.flags = REAKTOR_LAY_FILL_X;
     if (!across) box_from_style(&down, NULL, NULL, item, 12.0f, 8.0f);
-    list = s->box;
-    reaktor_box_open(across ? REAKTOR_LAY_ROW : REAKTOR_LAY_COLUMN, &list);
     id = reaktor_note_push(g_app, list_role[kind], s->name, NULL, 0u,
                            reaktor_box_rect(&r) ? r : nk_rect(0, 0, 0, 0));
     if (s->list_keys) reaktor_note_keys(g_app, id, s->list_keys);

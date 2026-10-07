@@ -29,6 +29,7 @@ static struct {
     reaktor_cssvars *vars;
     css_computed_style_t root;
     int            root_ready;
+    unsigned       generation;
 } g;
 
 static void rgba_of(css_color_value_t c, unsigned char out[4])
@@ -64,6 +65,7 @@ static int style_load(const char *const *css_paths, int count,
         css_init_library();
     }
     g.cache_n = 0;
+    g.generation++;
     base_reset();
 
     reaktor_cssvars_free(g.vars);
@@ -132,6 +134,11 @@ void reaktor_style_shutdown(void)
     g.cache_n = 0;
 }
 
+unsigned reaktor_style_generation(void)
+{
+    return g.generation;
+}
+
 int reaktor_style_token(const char *name, unsigned char rgba[4])
 {
     return reaktor_cssvars_color(g.vars, name, rgba);
@@ -159,6 +166,7 @@ static void resolve(const char *selector, reaktor_style *out)
     css_computed_style_t computed;
 
     memset(out, 0, sizeof(*out));
+    out->opacity = 1.0f;
     if (!g.ready || !selector) return;
 
     sel = css_selector_create(selector);
@@ -234,6 +242,11 @@ static void resolve(const char *selector, reaktor_style *out)
                              computed.unit_bits.max_width);
     out->max_height  = px_of(computed.max_height,
                              computed.unit_bits.max_height);
+
+    out->opacity = computed.type_bits.opacity == CSS_OPACITY_SET
+                 ? computed.opacity : 1.0f;
+    if (out->opacity < 0.0f) out->opacity = 0.0f;
+    if (out->opacity > 1.0f) out->opacity = 1.0f;
 
     out->line_height = 0.0f;
     switch (computed.type_bits.line_height) {

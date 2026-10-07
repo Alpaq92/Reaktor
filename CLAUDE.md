@@ -57,8 +57,9 @@ regression oracle for every layout or style change.
 - **A one-pixel stroke is two pixels here.** `nk_stroke_rect` casts its rect to
   `short`, so a half-pixel inset never reaches the draw list, and with line
   anti-aliasing on a stroke of thickness one is always two half-alpha rows.
-  A border is `reaktor_edge_round`: fills for its runs, a ring mask for its
-  corners, inside the box.
+  A border is `reaktor_edge_round`, inside the box: a ring mask for its
+  corners, and its runs cut from the mask's middle texels, which hold a
+  straight band so a run is sharp and as thick as its corners at any scale.
 - **A rounded fill is jagged unless it is a mask.** Fill anti-aliasing is off
   on every renderer, so a fill with corners goes through `reaktor_fill_round`,
   and `reaktor_render` swaps each one Nuklear drew itself for masks, relinking

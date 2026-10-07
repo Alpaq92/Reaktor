@@ -86,7 +86,7 @@ jobs:
         run: |
           docker exec -i debian sh -u <<'EOF'
           fail=0
-          for t in onlaytest keytest a11ytest animtest localetest laytest texttest; do
+          for t in onlaytest keytest a11ytest animtest localetest laytest texttest csstest; do
             echo "== $t"
             if ./build/$t </dev/null; then :; else echo "$t: exit status $?"; fail=1; fi
           done

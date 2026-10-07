@@ -48,7 +48,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           $fail = 0
-          foreach ($t in 'onlaytest', 'keytest', 'a11ytest', 'animtest', 'localetest', 'laytest', 'texttest') {
+          foreach ($t in 'onlaytest', 'keytest', 'a11ytest', 'animtest', 'localetest', 'laytest', 'texttest', 'csstest') {
             Write-Host "== $t"
             & "./${{ matrix.out }}/$t.exe"
             if ($LASTEXITCODE -ne 0) { Write-Host "${t}: exit status $LASTEXITCODE"; $fail = 1 }

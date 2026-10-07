@@ -161,7 +161,7 @@ struct App {
 
     int   theme_mode;
     int   theme_pending;
-    struct nk_color page, card_bg, text;
+    struct nk_color page, card_bg, text, accent;
     char  icon_hex[10];
     char  accent_hex[10];
 
@@ -236,6 +236,7 @@ struct App {
     int         shot_failed, dump_failed;
     int         secondary;
     int         settled_run, settle_tries;
+    unsigned    style_gen;
     int   build_ms_x100, render_ms_x100, present_ms_x100;
 };
 
@@ -278,7 +279,7 @@ void pop_style(struct nk_context *ctx, style_frame f);
 void css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
                const char *hint);
 int  css_button_accent(App *app, struct nk_context *ctx, const char *selector,
-                       const char *label, const char *token);
+                       const char *label, struct nk_color accent);
 int  reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
                       struct nk_image im, float px, const char *name);
 void reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w,
@@ -305,6 +306,9 @@ reaktor_surface reaktor_rule_surface(const reaktor_style *s, float radius);
 void reaktor_paint_surface(App *app, struct nk_command_buffer *cv, struct nk_rect r,
                            const reaktor_surface *s);
 struct nk_rect reaktor_rect_trunc(struct nk_rect b);
+nk_size reaktor_fade_mark(const struct nk_command_buffer *cv);
+void reaktor_fade_since(struct nk_context *ctx, const struct nk_command_buffer *cv,
+                        nk_size mark, float opacity);
 
 App *reaktor_main_app(void);
 const char *reaktor_asset_name(const reaktor_asset *a, const char *fallback);

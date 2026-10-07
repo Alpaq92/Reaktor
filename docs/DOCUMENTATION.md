@@ -230,8 +230,9 @@ wrap it in `REAKTOR_FREE` to inset it.
 before computed, found by accessibility id, and a box seen for the first time
 waits a frame. So a size that depends on content takes a frame to settle, and
 a widget whose text changes every frame needs a stable `.name` or it never has
-a rectangle. After sixteen unsettled frames the runtime stops redrawing and
-logs the box.
+a rectangle. The first frame after the stylesheets load counts as unsettled
+too, since its rectangles were laid out with the old sheet's sizes. After
+sixteen unsettled frames the runtime stops redrawing and logs the box.
 
 ## Layers
 
@@ -356,9 +357,10 @@ if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
 
 | Widget | Reads |
 | --- | --- |
-| Button | `button`; an accent one fills with `--links` |
+| Button | `button`; an accent one fills with the accent, a disabled one reads `button.disabled:disabled` |
 | Link | `a` |
-| Field, check, radio, property | `input` |
+| Field, property | `input.type-text`: a sheet's `input` rule and its `[type=text]` one |
+| Check, radio | `input` |
 | Slider | `input.type-range` |
 | Progress | `progress` |
 | Select, combo | `select` |
@@ -366,21 +368,43 @@ if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
 | Toast | `.toast`, `.toast-button`, `.toast-close` |
 | Sidebar, tabs | `.sidebar-item`, `.sidebar-current`, `.sidebar-edge`; `.tab`, `.tab-current`, `.tab-edge` |
 
-With `:hover` and `:active` where a widget has those states. Controls a
-document lacks borrow from what they resemble: a slider's rail from `input`,
-the accent from `a`, a knob's body from `button` — reading the accent off `a`
-rather than a token is what lets a sheet that never declares `--links` work.
+With `:hover` and `:active` where a widget has those states, a button's
+border included. Controls a document lacks borrow from what they resemble: a
+slider's rail from `input`, the accent from `a:link` (which a plain `a` rule
+answers too), a knob's body from `button` — reading the accent off the link
+rule rather than a token is what lets a sheet that never declares `--links`
+work, and it fills accent buttons, sliders, progress, checks and the accent
+icons. The page and the text on it come from `body` the same way, and
+`reaktor_page_color` and `reaktor_accent_color` hand an application the page
+and the accent. An icon on a button takes its label's color.
 
 - **A size set in code beats the sheet.** A `.box = { .h = N }` locks CSS out of
   that axis, the usual reason a rule "only changes the color".
+- **A disabled button wears the sheet's own rule.** It reads
+  `button.disabled:disabled`, so `button:disabled` and `button[disabled]` both
+  count, and that rule's `opacity` fades everything the button draws, as a
+  browser fades it. A sheet that does not tell a disabled button apart gets
+  half. Nuklear's own dimming, which multiplies colors toward black, is off.
+- **A rule's margin only parts a widget from its neighbors.** Across its row
+  or column the page has sized the box, so in a row a rule's top and bottom
+  margins are skipped, and in a column its left and right ones. Along it the
+  margins go between widgets, never before the first or after the last, so a
+  row of buttons starts and ends where the field below it does, and each line
+  of a row that wraps starts at the edge. A margin set in code always counts,
+  and a `REAKTOR_FREE` box keeps all four.
 - **libcss is not a browser.** `cssflat.c` resolves `var()`, works out
   `color-mix(in srgb, …)`, writes every `rgb()` as `rgba()` with four
-  arguments, clamped, turns `em` and `rem` into pixels, keeps the
-  `@media (prefers-color-scheme)` branch for the active scheme and drops width
-  and print queries, and rewrites `[type=range]` as `.type-range`. An operator
+  arguments, clamped, turns `em` and `rem` into pixels, works out `calc()`
+  over pixels and plain numbers (one with a percentage is left, and dropped),
+  keeps the `@media (prefers-color-scheme)` branch for the active scheme and
+  drops width and print queries, rewrites `[type=range]` as `.type-range`
+  and `[disabled]` as `.disabled`, and drops `:enabled`, since every widget
+  that asks is enabled and a disabled one asks for `:disabled`. An operator
   form like `[href^="http"]` cannot be expressed, and its rule is dropped, as
-  is a declaration with a color it cannot read. Sheets are read in the C
-  locale's numbers whatever the program's locale.
+  is a declaration with a color it cannot read, and a selector that names a
+  class or pseudo-class twice in one compound: given two `:not()`, libcss
+  frees a list and goes on using it. Sheets are read in the C locale's numbers
+  whatever the program's locale.
   reaktor.css uses the scheme branch to strengthen light hovers and tint the
   current sidebar entry from `--links`.
 
@@ -469,7 +493,7 @@ declared page. [`include/reaktor/ui.h`](../include/reaktor/ui.h) has the pieces 
 
 | Helper | For |
 | --- | --- |
-| `reaktor_token`, `reaktor_col`, `reaktor_on`, `reaktor_visible` | Colors from the sheet; readable text on a background |
+| `reaktor_token`, `reaktor_col`, `reaktor_on`, `reaktor_visible`, `reaktor_page_color`, `reaktor_accent_color` | Colors from the sheet; readable text on a background; the page and the accent |
 | `reaktor_font`, `reaktor_style_font` | A baked face, by size or by selector |
 | `reaktor_ionicon`, `reaktor_ionicon_exact`, `reaktor_glyph_at` | An Ionicon as an `nk_image`, in any color, or drawn into a rectangle |
 | `reaktor_svg`, `REAKTOR_MARK` | Any SVG asset, recolored by `?stroke=#rrggbb&fill=&sw=`; the mark's name |
@@ -768,6 +792,7 @@ Built by default and run from `build/`:
 | `animtest` | Curves, retargeting, a context a window |
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
+| `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
 | `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory) |
 

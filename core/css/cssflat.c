@@ -423,6 +423,111 @@ static void convert_units(const char *s, size_t len, float rem_px, float em_px,
     }
 }
 
+typedef struct calc_val { double v; int px; } calc_val;
+typedef struct calc_in  { const char *s; size_t i, n; } calc_in;
+
+static void calc_space(calc_in *c)
+{
+    while (c->i < c->n && isspace((unsigned char)c->s[c->i])) c->i++;
+}
+
+static int calc_sum(calc_in *c, calc_val *out);
+
+static int calc_atom(calc_in *c, calc_val *out)
+{
+    char *end;
+
+    calc_space(c);
+    if (c->i < c->n && c->s[c->i] == '-') {
+        c->i++;
+        if (!calc_atom(c, out)) return 0;
+        out->v = -out->v;
+        return 1;
+    }
+    if (c->i + 5 <= c->n && strncmp(c->s + c->i, "calc(", 5) == 0) c->i += 4;
+    if (c->i < c->n && c->s[c->i] == '(') {
+        c->i++;
+        if (!calc_sum(c, out)) return 0;
+        calc_space(c);
+        if (c->i >= c->n || c->s[c->i] != ')') return 0;
+        c->i++;
+        return 1;
+    }
+    if (c->i >= c->n || (!isdigit((unsigned char)c->s[c->i]) && c->s[c->i] != '.'))
+        return 0;
+    out->v = strtod(c->s + c->i, &end);
+    c->i = (size_t)(end - c->s);
+    out->px = c->i + 2 <= c->n && strncmp(c->s + c->i, "px", 2) == 0;
+    if (out->px) c->i += 2;
+    return c->i >= c->n || !(isalpha((unsigned char)c->s[c->i]) || c->s[c->i] == '%');
+}
+
+static int calc_product(calc_in *c, calc_val *out)
+{
+    calc_val r;
+    char     op;
+
+    if (!calc_atom(c, out)) return 0;
+    for (;;) {
+        calc_space(c);
+        if (c->i >= c->n || (c->s[c->i] != '*' && c->s[c->i] != '/')) return 1;
+        op = c->s[c->i++];
+        if (!calc_atom(c, &r)) return 0;
+        if (op == '*') {
+            if (out->px && r.px) return 0;
+            out->v *= r.v;
+            out->px |= r.px;
+        } else {
+            if (r.px || r.v == 0.0) return 0;
+            out->v /= r.v;
+        }
+    }
+}
+
+static int calc_sum(calc_in *c, calc_val *out)
+{
+    calc_val r;
+    char     op;
+
+    if (!calc_product(c, out)) return 0;
+    for (;;) {
+        calc_space(c);
+        if (c->i >= c->n || (c->s[c->i] != '+' && c->s[c->i] != '-')) return 1;
+        op = c->s[c->i++];
+        if (!calc_product(c, &r) || r.px != out->px) return 0;
+        out->v += op == '+' ? r.v : -r.v;
+    }
+}
+
+/* calc() over pixels and plain numbers; one with any other unit is left. */
+static void calc_values(buf *b)
+{
+    static const char fn[] = "calc(";
+    size_t from = 0;
+    char *at;
+
+    while (b->p && (at = strstr(b->p + from, fn))) {
+        size_t   s = (size_t)(at - b->p);
+        calc_in  c;
+        calc_val v;
+        char     out[64];
+        buf      r;
+
+        c.s = b->p;
+        c.i = s;
+        c.n = b->len;
+        if (!calc_atom(&c, &v)) { from = s + 1; continue; }
+        snprintf(out, sizeof(out), v.px ? "%gpx" : "%g", v.v);
+        memset(&r, 0, sizeof(r));
+        buf_add(&r, b->p, s);
+        buf_str(&r, out);
+        buf_add(&r, b->p + c.i, b->len - c.i);
+        free(b->p);
+        *b = r;
+        from = s + strlen(out);
+    }
+}
+
 static void strip_comments(char *s)
 {
     char *r = s, *w = s;
@@ -446,12 +551,32 @@ static void trim(const char *s, size_t *start, size_t *end)
     while (*end > *start && isspace((unsigned char)s[*end - 1])) (*end)--;
 }
 
+/* Every widget that asks is enabled; a disabled one asks for :disabled. */
+static int enabled_at(const char *s, size_t len, size_t i)
+{
+    return len - i >= 8 && memcmp(s + i, ":enabled", 8) == 0 &&
+           (i + 8 == len || !(isalnum((unsigned char)s[i + 8]) || s[i + 8] == '-'));
+}
+
+static int names_enabled(const char *s, size_t len)
+{
+    size_t i;
+
+    for (i = 0; i < len; i++)
+        if (enabled_at(s, len, i)) return 1;
+    return 0;
+}
+
 static size_t selector_rewrite(const char *s, size_t len, char *out,
                                size_t cap)
 {
     size_t i = 0, n = 0;
 
     while (i < len) {
+        if (enabled_at(s, len, i)) {
+            i += 8;
+            continue;
+        }
         if (s[i] != '[') {
             if (n + 1 >= cap) return 0;
             out[n++] = s[i++];
@@ -461,7 +586,15 @@ static size_t selector_rewrite(const char *s, size_t len, char *out,
             size_t j = i + 1, eq, ve, vs;
 
             while (j < len && s[j] != ']' && s[j] != '=') j++;
-            if (j >= len || s[j] != '=') return 0;
+            if (j >= len) return 0;
+            if (s[j] == ']') {
+                if (j == i + 1 || n + 1 + (j - i - 1) >= cap) return 0;
+                out[n++] = '.';
+                memcpy(out + n, s + i + 1, j - i - 1);
+                n += j - i - 1;
+                i = j + 1;
+                continue;
+            }
             if (j > i + 1 && strchr("^$*|~", s[j - 1])) return 0;
             eq = j;
             vs = eq + 1;
@@ -499,6 +632,32 @@ static int selector_unsupported(const char *s, size_t len)
             return 1;
     }
     return len == 0;
+}
+
+static int name_start(char c) { return c == '.' || c == ':' || c == '#'; }
+
+static size_t name_end(const char *s, size_t i, size_t len)
+{
+    for (i++; i < len && !name_start(s[i]) && !isspace((unsigned char)s[i]); i++) {}
+    return i;
+}
+
+/* LCUI goes on using a node's list after freeing it when one compound names
+ * the same class or pseudo-class twice - as two :not() do, read its way. */
+static int selector_repeats(const char *s, size_t len)
+{
+    size_t a, ae, b, be;
+
+    for (a = 0; a < len; a = ae) {
+        if (!name_start(s[a])) { ae = a + 1; continue; }
+        ae = name_end(s, a, len);
+        for (b = ae; b < len && !isspace((unsigned char)s[b]); b = be) {
+            if (!name_start(s[b])) { be = b + 1; continue; }
+            be = name_end(s, b, len);
+            if (be - b == ae - a && memcmp(s + a, s + b, ae - a) == 0) return 1;
+        }
+    }
+    return 0;
 }
 
 static int is_theme_selector(const char *s, size_t len, const char *theme)
@@ -663,6 +822,7 @@ static void emit_one(void *c, const char *p, size_t plen,
     } else {
         convert_units(tmp.p ? tmp.p : "", tmp.len,
                       ctx->rem_px, ctx->em_px, &conv);
+        calc_values(&conv);
     }
 
     buf_add(ctx->out, p, plen);
@@ -835,17 +995,19 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
                 if (part < sel_e) part++;
                 trim(src, &ps, &pe);
                 if (selector_unsupported(src + ps, pe - ps)) continue;
-                if (memchr(src + ps, '[', pe - ps)) {
-                    char   rw[256];
-                    size_t rn = selector_rewrite(src + ps, pe - ps,
-                                                 rw, sizeof(rw));
+                {
+                    char        rw[256];
+                    const char *t = src + ps;
+                    size_t      tn = pe - ps;
 
-                    if (!rn) continue;
+                    if (memchr(t, '[', tn) || names_enabled(t, tn)) {
+                        tn = selector_rewrite(t, tn, rw, sizeof(rw));
+                        t = rw;
+                        if (!tn) continue;
+                    }
+                    if (selector_repeats(t, tn)) continue;
                     if (n_emitted) buf_str(&sel, ", ");
-                    buf_add(&sel, rw, rn);
-                } else {
-                    if (n_emitted) buf_str(&sel, ", ");
-                    buf_add(&sel, src + ps, pe - ps);
+                    buf_add(&sel, t, tn);
                 }
                 n_emitted++;
             }
