@@ -21,7 +21,6 @@ static float              g_ox, g_oy;
 static struct nk_rect     g_boxrect[REAKTOR_LAY_DEPTH + 1];
 static unsigned char      g_boxok[REAKTOR_LAY_DEPTH + 1];
 static unsigned           g_boxid[REAKTOR_LAY_DEPTH + 1];
-static unsigned char      g_boxdir[REAKTOR_LAY_DEPTH + 1];
 
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
@@ -45,8 +44,8 @@ reaktor_frame_end(void)
     reaktor_layout_end(&g_app->lay);
 
     /* This frame's rectangles were laid out with the sizes of an older sheet. */
-    if (g_app->style_gen != reaktor_style_generation()) {
-        g_app->style_gen = reaktor_style_generation();
+    if (g_app->style_loads != reaktor_style_loads()) {
+        g_app->style_loads = reaktor_style_loads();
         g_unsettled++;
     }
     g_app->settled_run = g_unsettled ? 0 : g_app->settled_run + 1;
@@ -113,10 +112,7 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     id = reaktor_note_push(g_app, REAKTOR_A11Y_GROUP, box.name, NULL, 0u,
                            nk_rect(0, 0, 0, 0));
     reaktor_layout_open(&g_app->lay, id, &box);
-    if (g_depth < REAKTOR_LAY_DEPTH) {
-        g_boxid[g_depth + 1]  = id;
-        g_boxdir[g_depth + 1] = dir;
-    }
+    if (g_depth < REAKTOR_LAY_DEPTH) g_boxid[g_depth + 1] = id;
 
     if (g_widths < (int)(sizeof(g_width) / sizeof(g_width[0]))) {
         float w = box.w > 0.0f ? box.w : g_width[g_widths - 1];
@@ -339,26 +335,17 @@ box_from_style(reaktor_box *box, const char *text, const char *selector,
     if (st.matched) {
         /* A rule's margin parts a widget from its neighbors along its row or
          * column; across it, the page has sized the box. */
-        unsigned char dir = g_depth > 0 && g_depth <= REAKTOR_LAY_DEPTH
-                          ? g_boxdir[g_depth] : REAKTOR_LAY_COLUMN;
-        int down = dir != REAKTOR_LAY_ROW, across = dir != REAKTOR_LAY_COLUMN;
+        static const int side[4] = { REAKTOR_SIDE_LEFT, REAKTOR_SIDE_TOP,
+                                     REAKTOR_SIDE_RIGHT, REAKTOR_SIDE_BOTTOM };
+        float *m[4] = { &box->ml, &box->mt, &box->mr, &box->mb };
+        unsigned char dir = reaktor_layout_open_dir(&g_app->lay);
+        int k;
 
-        if (box->mt <= 0.0f && down) {
-            box->mt = st.margin[REAKTOR_SIDE_TOP];
-            box->flags |= REAKTOR_LAY_SHEET_T;
-        }
-        if (box->mr <= 0.0f && across) {
-            box->mr = st.margin[REAKTOR_SIDE_RIGHT];
-            box->flags |= REAKTOR_LAY_SHEET_R;
-        }
-        if (box->mb <= 0.0f && down) {
-            box->mb = st.margin[REAKTOR_SIDE_BOTTOM];
-            box->flags |= REAKTOR_LAY_SHEET_B;
-        }
-        if (box->ml <= 0.0f && across) {
-            box->ml = st.margin[REAKTOR_SIDE_LEFT];
-            box->flags |= REAKTOR_LAY_SHEET_L;
-        }
+        for (k = 0; k < 4; k++)
+            if (*m[k] <= 0.0f && dir != (k & 1 ? REAKTOR_LAY_ROW : REAKTOR_LAY_COLUMN)) {
+                *m[k] = st.margin[side[k]];
+                box->flags |= REAKTOR_LAY_SHEET_L << k;
+            }
     }
 }
 
@@ -697,10 +684,10 @@ reaktor_field(const reaktor_field_spec *s)
                NULL, 0u, NULL, &box, &id))
         return;
     reaktor_note_mute(g_app, 1);
-    (void)reaktor_field_text(g_app, g_ctx,
-                             s->multiline ? NK_EDIT_BOX : NK_EDIT_FIELD,
-                             s->buf, s->len, s->cap, s->hint, s->filter,
-                             s->pad_x, s->pad_y);
+    (void)reaktor_field_text_as(g_app, g_ctx, s->style,
+                                s->multiline ? NK_EDIT_BOX : NK_EDIT_FIELD,
+                                s->buf, s->len, s->cap, s->hint, s->filter,
+                                s->pad_x, s->pad_y);
     reaktor_note_mute(g_app, 0);
     reaktor_note_value(g_app, id, s->buf[0] ? s->buf : NULL);
 }
@@ -1152,9 +1139,9 @@ nav_face(struct nk_rect b, const nav_look *k, const char *icon, const char *labe
 
     if ((g_ctx->last_widget_state & NK_WIDGET_STATE_HOVER) && k->btn.hov.matched &&
         k->btn.hov.fg[3])
-        fg = col_of(k->btn.hov.fg);
+        fg = nk_rgba_bv(k->btn.hov.fg);
     else
-        fg = k->btn.s.matched && k->btn.s.fg[3] ? col_of(k->btn.s.fg) : g_app->text;
+        fg = k->btn.s.matched && k->btn.s.fg[3] ? nk_rgba_bv(k->btn.s.fg) : g_app->text;
     if (edge && edge->matched && edge->bg[3]) {
         struct nk_rect e = reaktor_rect_trunc(b);
         float t = across ? (edge->height > 0.0f ? edge->height : 2.0f)
@@ -1162,7 +1149,7 @@ nav_face(struct nk_rect b, const nav_look *k, const char *icon, const char *labe
         struct nk_rect r = across ? nk_rect(e.x, e.y + e.h - t, e.w, t)
                                   : nk_rect(e.x, e.y + e.h * 0.25f, t, e.h * 0.5f);
 
-        reaktor_fill_round(g_app, cv, r, t * 0.5f, col_of(edge->bg));
+        reaktor_fill_round(g_app, cv, r, t * 0.5f, nk_rgba_bv(edge->bg));
     }
     x = label ? b.x + (k->btn.s.pad[REAKTOR_SIDE_LEFT] > 0.0f
                        ? k->btn.s.pad[REAKTOR_SIDE_LEFT] : 12.0f)

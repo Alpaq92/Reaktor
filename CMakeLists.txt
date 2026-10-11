@@ -189,7 +189,7 @@ add_library(reaktor_core STATIC
     core/render/appicon.c
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
-target_link_libraries(reaktor_core PUBLIC plutosvg reaktor_headers)
+target_link_libraries(reaktor_core PUBLIC plutosvg reaktor_headers SDL3::SDL3-static)
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")
@@ -227,7 +227,7 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(localetest tools/localetest.c
                    core/locale/locale.c core/locale/plural.c
                    core/locale/format.c)
-    target_link_libraries(localetest PRIVATE reaktor_headers)
+    target_link_libraries(localetest PRIVATE reaktor_headers SDL3::SDL3-static)
     target_include_directories(localetest PRIVATE core/locale)
     target_compile_definitions(localetest PRIVATE REAKTOR_LOCALE_EMBEDDED)
     set_target_properties(localetest PROPERTIES

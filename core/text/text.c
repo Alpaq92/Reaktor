@@ -788,7 +788,7 @@ draw(void *canvas, short x, short y, unsigned short w, unsigned short h,
     int                  e, i;
 
     if (data.id < 0 || data.id >= g_draws) return;
-    if (!(clip.x < x + w && x < clip.x + clip.w && clip.y < y + h && y < clip.y + clip.h))
+    if (!NK_INTERSECT(x, y, w, h, clip.x, clip.y, clip.w, clip.h))
         return;
     d = &g_draw[data.id];
     f = &g_face[d->face];

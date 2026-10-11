@@ -134,7 +134,7 @@ void reaktor_style_shutdown(void)
     g.cache_n = 0;
 }
 
-unsigned reaktor_style_generation(void)
+unsigned reaktor_style_loads(void)
 {
     return g.generation;
 }

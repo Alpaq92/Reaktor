@@ -1,9 +1,9 @@
 #include "internal.h"
 
-struct nk_color
-col_of(const unsigned char c[4])
+static void
+bytes_of(struct nk_color col, unsigned char c[4])
 {
-    return nk_rgba(c[0], c[1], c[2], c[3]);
+    c[0] = col.r; c[1] = col.g; c[2] = col.b; c[3] = col.a;
 }
 
 void
@@ -165,24 +165,24 @@ push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
     }
 
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
-                             nk_style_item_color(col_of(s.bg)));
+                             nk_style_item_color(nk_rgba_bv(s.bg)));
     nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                             nk_style_item_color(col_of(hover)));
+                             nk_style_item_color(nk_rgba_bv(hover)));
     nk_style_push_style_item(ctx, &ctx->style.button.active,
-                             nk_style_item_color(col_of(active)));
+                             nk_style_item_color(nk_rgba_bv(active)));
     f.items = 3;
 
-    nk_style_push_color(ctx, &ctx->style.button.text_normal, col_of(s.fg));
+    nk_style_push_color(ctx, &ctx->style.button.text_normal, nk_rgba_bv(s.fg));
     nk_style_push_color(ctx, &ctx->style.button.text_hover,
-                        col_of(hov->matched && hov->fg[3] ? hov->fg : s.fg));
+                        nk_rgba_bv(hov->matched && hov->fg[3] ? hov->fg : s.fg));
     nk_style_push_color(ctx, &ctx->style.button.text_active,
-                        col_of(act->matched && act->fg[3] ? act->fg : s.fg));
+                        nk_rgba_bv(act->matched && act->fg[3] ? act->fg : s.fg));
     nk_style_push_color(ctx, &ctx->style.button.border_color,
-                        col_of(s.border_col));
+                        nk_rgba_bv(s.border_col));
     f.colors = 4;
     g_chrome.edges       = 1;
-    g_chrome.edge_hover  = col_of(hov->matched ? hov->border_col : s.border_col);
-    g_chrome.edge_active = col_of(act->matched ? act->border_col : s.border_col);
+    g_chrome.edge_hover  = nk_rgba_bv(hov->matched ? hov->border_col : s.border_col);
+    g_chrome.edge_active = nk_rgba_bv(act->matched ? act->border_col : s.border_col);
 
     nk_style_push_float(ctx, &ctx->style.button.rounding, s.rounding);
     nk_style_push_float(ctx, &ctx->style.button.border, s.border);
@@ -304,13 +304,13 @@ readable_on(const unsigned char bg[4], const char *preferred,
     unsigned char a[4], b[4];
 
     if (reaktor_style_token(preferred, a)) {
-        if (contrast_ratio(bg, a) >= READABLE_MIN) return col_of(a);
+        if (contrast_ratio(bg, a) >= READABLE_MIN) return nk_rgba_bv(a);
         if (reaktor_style_token(fallback, b) &&
             contrast_ratio(bg, b) > contrast_ratio(bg, a))
-            return col_of(b);
-        return col_of(a);
+            return nk_rgba_bv(b);
+        return nk_rgba_bv(a);
     }
-    if (reaktor_style_token(fallback, b)) return col_of(b);
+    if (reaktor_style_token(fallback, b)) return nk_rgba_bv(b);
     return nk_rgb(255, 255, 255);
 }
 
@@ -327,10 +327,11 @@ reaktor_visible(struct nk_color want, struct nk_color behind,
 
 int
 css_button_accent(App *app, struct nk_context *ctx, const char *selector,
-                  const char *label, struct nk_color accent)
+                  const char *label)
 {
     style_frame f, a = { 0, 0, 0, 0, 0 };
-    unsigned char c[4];
+    unsigned char c[4], hov[4];
+    struct nk_color label_col;
     int clicked;
 
     hot_push(app, nk_widget_bounds(ctx), 1, 1);
@@ -338,31 +339,24 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
 
     f = push_button_style(app, ctx, selector);
 
-    c[0] = accent.r; c[1] = accent.g; c[2] = accent.b; c[3] = accent.a;
-    {
-        unsigned char hov[4];
-        memcpy(hov, c, 4);
-        reaktor_style_darken(hov, 0.12f);
+    bytes_of(app->accent, c);
+    memcpy(hov, c, 4);
+    reaktor_style_darken(hov, 0.12f);
+    label_col = readable_on(c, "--text-bright", "--background-body");
 
-        nk_style_push_style_item(ctx, &ctx->style.button.normal,
-                                 nk_style_item_color(col_of(c)));
-        nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                                 nk_style_item_color(col_of(hov)));
-        nk_style_push_style_item(ctx, &ctx->style.button.active,
-                                 nk_style_item_color(col_of(hov)));
-        a.items = 3;
-        nk_style_push_color(ctx, &ctx->style.button.border_color, col_of(c));
-        g_chrome.edge_hover = g_chrome.edge_active = col_of(c);
-
-        {
-            struct nk_color label_col =
-                readable_on(c, "--text-bright", "--background-body");
-            nk_style_push_color(ctx, &ctx->style.button.text_normal, label_col);
-            nk_style_push_color(ctx, &ctx->style.button.text_hover, label_col);
-            nk_style_push_color(ctx, &ctx->style.button.text_active, label_col);
-        }
-        a.colors = 4;
-    }
+    nk_style_push_style_item(ctx, &ctx->style.button.normal,
+                             nk_style_item_color(app->accent));
+    nk_style_push_style_item(ctx, &ctx->style.button.hover,
+                             nk_style_item_color(nk_rgba_bv(hov)));
+    nk_style_push_style_item(ctx, &ctx->style.button.active,
+                             nk_style_item_color(nk_rgba_bv(hov)));
+    a.items = 3;
+    nk_style_push_color(ctx, &ctx->style.button.border_color, app->accent);
+    nk_style_push_color(ctx, &ctx->style.button.text_normal, label_col);
+    nk_style_push_color(ctx, &ctx->style.button.text_hover, label_col);
+    nk_style_push_color(ctx, &ctx->style.button.text_active, label_col);
+    a.colors = 4;
+    g_chrome.edge_hover = g_chrome.edge_active = app->accent;
 
     reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, label);
@@ -471,16 +465,19 @@ edit_paste_clipboard(struct nk_text_edit *edit)
 }
 
 style_frame
-push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset)
+push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
+                const char *sel)
 {
     reaktor_style s, foc, btn;
     style_frame f = { 0, 0, 0, 0, 0 };
     unsigned char body[4];
+    char focus[96];
 
-    reaktor_style_get("input.type-text", &s);
-    reaktor_style_get("input.type-text:focus", &foc);
+    if (!sel) sel = "input.type-text";
+    SDL_snprintf(focus, sizeof(focus), "%s:focus", sel);
+    reaktor_style_get(sel, &s);
+    reaktor_style_get(focus, &foc);
     reaktor_style_get("button", &btn);
-    if (btn.matched) s.rounding = btn.rounding;
     s.pad_x += s.border;
     if (btn.matched && btn.pad_x > s.pad_x) s.pad_x = btn.pad_x;
     if (s.pad_x < 16.0f) s.pad_x = 16.0f;
@@ -507,30 +504,22 @@ push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset)
                       win->edit.seq == win->edit.name;
         struct nk_color line;
 
-        if (focused && foc.matched) {
-            line = col_of(foc.border_col);
-        } else {
-            unsigned char c[4];
-            line = col_of(s.border_col);
-            if (line.a == 0)
-                line = reaktor_style_token("--background-hover", c)
-                     ? col_of(c) : nk_rgba(128, 128, 128, 90);
-        }
+        line = nk_rgba_bv(focused && foc.matched ? foc.border_col : s.border_col);
         nk_style_push_color(ctx, &ctx->style.edit.border_color, line);
         out->border_col[0] = line.r; out->border_col[1] = line.g;
         out->border_col[2] = line.b; out->border_col[3] = line.a;
     }
-    nk_style_push_color(ctx, &ctx->style.edit.text_normal, col_of(s.fg));
-    nk_style_push_color(ctx, &ctx->style.edit.text_hover, col_of(s.fg));
-    nk_style_push_color(ctx, &ctx->style.edit.text_active, col_of(s.fg));
-    nk_style_push_color(ctx, &ctx->style.edit.cursor_normal, col_of(s.fg));
+    nk_style_push_color(ctx, &ctx->style.edit.text_normal, nk_rgba_bv(s.fg));
+    nk_style_push_color(ctx, &ctx->style.edit.text_hover, nk_rgba_bv(s.fg));
+    nk_style_push_color(ctx, &ctx->style.edit.text_active, nk_rgba_bv(s.fg));
+    nk_style_push_color(ctx, &ctx->style.edit.cursor_normal, nk_rgba_bv(s.fg));
 
     {
         unsigned char sel[4];
         struct nk_color selbg, seltx;
 
         if (reaktor_style_token("--focus", sel)) {
-            selbg = col_of(sel);
+            selbg = nk_rgba_bv(sel);
             seltx = readable_on(sel, "--text-bright", "--background-body");
         } else {
             selbg = nk_rgb(0x7a, 0xa3, 0xfc);
@@ -559,7 +548,7 @@ reaktor_edit_edge(App *app, struct nk_context *ctx, struct nk_rect b,
 {
     if (!s->matched) return;
     reaktor_paint_surface(app, nk_window_get_canvas(ctx), reaktor_rect_trunc(b),
-                          &(reaktor_surface){ col_of(s->bg), col_of(s->border_col),
+                          &(reaktor_surface){ nk_rgba_bv(s->bg), nk_rgba_bv(s->border_col),
                                               s->border, s->rounding });
 }
 
@@ -571,7 +560,7 @@ draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
     const struct nk_user_font *font = ctx->style.font;
     unsigned char muted[4];
     struct nk_color gray = reaktor_style_token("--text-muted", muted)
-                         ? col_of(muted) : nk_rgb(0x9a, 0x9a, 0x9a);
+                         ? nk_rgba_bv(muted) : nk_rgb(0x9a, 0x9a, 0x9a);
     float pad = s->matched ? s->pad_x : 9.0f;
     struct nk_rect r = nk_rect(bounds.x + pad,
                                bounds.y + (bounds.h - font->height) * 0.5f,
@@ -642,7 +631,7 @@ css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
 
     hot_push(app, bounds, 2, 0);
 
-    f = push_edit_style(ctx, &s, 1);
+    f = push_edit_style(ctx, &s, 1, NULL);
     reaktor_edit_edge(app, ctx, bounds, &s);
     {
         nk_flags st = nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit,
@@ -692,18 +681,21 @@ style_flat_button(struct nk_style_button *b, struct nk_color hover,
 }
 
 static void
-style_toggle(struct nk_style_toggle *t, struct nk_style_item bg,
+style_toggle(struct nk_style_toggle *t, const char *rule, struct nk_style_item bg,
              struct nk_style_item hov, struct nk_style_item cursor,
              struct nk_color border, struct nk_color text,
              struct nk_color back)
 {
-    t->normal        = bg;
+    reaktor_style r;
+
+    reaktor_style_get(rule, &r);
+    t->normal        = r.matched && r.bg[3] ? nk_style_item_color(nk_rgba_bv(r.bg)) : bg;
     t->hover         = hov;
     t->active        = hov;
     t->cursor_normal = cursor;
     t->cursor_hover  = cursor;
-    t->border_color  = border;
-    t->border        = 1.0f;
+    t->border_color  = r.matched ? nk_rgba_bv(r.border_col) : border;
+    t->border        = r.matched ? r.border : 1.0f;
     t->padding       = nk_vec2(2.0f, 2.0f);
     t->text_normal   = t->text_hover = t->text_active = text;
     t->text_background = back;
@@ -724,6 +716,7 @@ apply_widget_style(App *app)
     if (!app->ctx) return;
     ctx = app->ctx;
     st  = &ctx->style;
+    nk_style_set_font(ctx, base_font(app));
 
     body   = app->page;
     base   = reaktor_token("--background", app->card_bg);
@@ -736,7 +729,7 @@ apply_widget_style(App *app)
 
     edge = hover;
 
-    ac[0] = accent.r; ac[1] = accent.g; ac[2] = accent.b; ac[3] = accent.a;
+    bytes_of(accent, ac);
     on_accent = readable_on(ac, "--text-bright", "--background-body");
 
     thumb    = nk_rgba(muted.r, muted.g, muted.b, 110);
@@ -757,14 +750,14 @@ apply_widget_style(App *app)
         memcpy(act, btn_hov.matched && btn_hov.bg[3] ? btn_hov.bg : btn.bg, 4);
         reaktor_style_darken(act, 0.10f);
 
-        st->button.normal = nk_style_item_color(col_of(btn.bg));
+        st->button.normal = nk_style_item_color(nk_rgba_bv(btn.bg));
         st->button.hover  = nk_style_item_color(
-            btn_hov.matched && btn_hov.bg[3] ? col_of(btn_hov.bg)
-                                             : col_of(btn.bg));
-        st->button.active = nk_style_item_color(col_of(act));
+            btn_hov.matched && btn_hov.bg[3] ? nk_rgba_bv(btn_hov.bg)
+                                             : nk_rgba_bv(btn.bg));
+        st->button.active = nk_style_item_color(nk_rgba_bv(act));
         st->button.text_normal = st->button.text_hover =
-            st->button.text_active = col_of(btn.fg);
-        st->button.border_color = col_of(btn.border_col);
+            st->button.text_active = nk_rgba_bv(btn.fg);
+        st->button.border_color = nk_rgba_bv(btn.border_col);
         st->button.border       = btn.border;
         st->button.rounding     = btn.rounding;
         st->button.padding      = nk_vec2(btn.pad_x, btn.pad_y);
@@ -782,11 +775,11 @@ apply_widget_style(App *app)
                                                "--background-body") : bright;
 
         st->edit.normal = st->edit.hover = st->edit.active =
-            nk_style_item_color(col_of(inp.bg));
-        st->edit.border_color = col_of(inp.border_col);
+            nk_style_item_color(nk_rgba_bv(inp.bg));
+        st->edit.border_color = nk_rgba_bv(inp.border_col);
         st->edit.text_normal  = st->edit.text_hover = st->edit.text_active =
-            col_of(inp.fg);
-        st->edit.cursor_normal = col_of(inp.fg);
+            nk_rgba_bv(inp.fg);
+        st->edit.cursor_normal = nk_rgba_bv(inp.fg);
         st->edit.selected_normal = st->edit.selected_hover = focus;
         st->edit.selected_text_normal = st->edit.selected_text_hover =
             sel_text;
@@ -798,8 +791,10 @@ apply_widget_style(App *app)
     {
         struct nk_color box = nk_rgba(muted.r, muted.g, muted.b, 150);
 
-        style_toggle(&st->checkbox, i_base, i_hover, i_accent, box, text, body);
-        style_toggle(&st->option,   i_base, i_hover, i_accent, box, text, body);
+        style_toggle(&st->checkbox, "input.type-checkbox", i_base, i_hover, i_accent,
+                     box, text, body);
+        style_toggle(&st->option, "input.type-radio", i_base, i_hover, i_accent,
+                     box, text, body);
     }
 
     st->selectable.normal         = i_none;
@@ -824,14 +819,14 @@ apply_widget_style(App *app)
     st->slider.normal        = i_none;
     st->slider.hover         = i_none;
     st->slider.active        = i_none;
-    st->slider.bar_normal    = rng.matched ? col_of(rng.bg) : edge;
+    st->slider.bar_normal    = rng.matched ? nk_rgba_bv(rng.bg) : edge;
     st->slider.bar_hover     = st->slider.bar_normal;
     st->slider.bar_active    = st->slider.bar_normal;
     st->slider.bar_filled    = accent;
     st->slider.cursor_normal = i_accent;
     st->slider.cursor_hover  = nk_style_item_color(focus);
     st->slider.cursor_active = nk_style_item_color(focus);
-    st->slider.border_color  = rng.matched ? col_of(rng.border_col) : edge;
+    st->slider.border_color  = rng.matched ? nk_rgba_bv(rng.border_col) : edge;
     st->slider.bar_height    = 6.0f;
     st->slider.rounding      = rng.matched && rng.rounding > 0.0f
                              && rng.rounding < st->slider.bar_height * 0.5f
@@ -842,24 +837,24 @@ apply_widget_style(App *app)
     st->knob.normal            = i_none;
     st->knob.hover             = i_none;
     st->knob.active            = i_none;
-    st->knob.knob_normal       = btn.matched ? col_of(btn.bg) : base;
+    st->knob.knob_normal       = btn.matched ? nk_rgba_bv(btn.bg) : base;
     st->knob.knob_hover        = hover;
     st->knob.knob_active       = hover;
-    st->knob.knob_border_color = btn.matched ? col_of(btn.border_col) : edge;
+    st->knob.knob_border_color = btn.matched ? nk_rgba_bv(btn.border_col) : edge;
     st->knob.cursor_normal     = accent;
     st->knob.cursor_hover      = focus;
     st->knob.cursor_active     = focus;
-    st->knob.border_color      = btn.matched ? col_of(btn.border_col) : edge;
+    st->knob.border_color      = btn.matched ? nk_rgba_bv(btn.border_col) : edge;
 
     st->progress.normal              = rng.matched
-                                     ? nk_style_item_color(col_of(rng.bg))
+                                     ? nk_style_item_color(nk_rgba_bv(rng.bg))
                                      : i_base;
     st->progress.hover               = st->progress.normal;
     st->progress.active              = st->progress.normal;
     st->progress.cursor_normal       = i_accent;
     st->progress.cursor_hover        = nk_style_item_color(focus);
     st->progress.cursor_active       = nk_style_item_color(focus);
-    st->progress.border_color        = rng.matched ? col_of(rng.border_col)
+    st->progress.border_color        = rng.matched ? nk_rgba_bv(rng.border_col)
                                                    : edge;
     st->progress.cursor_border_color = accent;
     st->progress.border              = 0.0f;
@@ -888,13 +883,13 @@ apply_widget_style(App *app)
     style_flat_button(&st->property.dec_button, hover, muted, 1.0f);
 
     reaktor_style_get("select", &sel);
-    st->combo.normal        = sel.matched ? nk_style_item_color(col_of(sel.bg))
+    st->combo.normal        = sel.matched ? nk_style_item_color(nk_rgba_bv(sel.bg))
                                           : i_base;
     st->combo.hover         = i_hover;
     st->combo.active        = i_hover;
-    st->combo.border_color  = sel.matched ? col_of(sel.border_col) : edge;
+    st->combo.border_color  = sel.matched ? nk_rgba_bv(sel.border_col) : edge;
     st->combo.label_normal  = st->combo.label_hover =
-        st->combo.label_active = sel.matched ? col_of(sel.fg) : text;
+        st->combo.label_active = sel.matched ? nk_rgba_bv(sel.fg) : text;
     st->combo.symbol_normal = st->combo.symbol_hover =
         st->combo.symbol_active = muted;
     st->combo.sym_normal = st->combo.sym_hover = st->combo.sym_active =
@@ -915,7 +910,7 @@ apply_widget_style(App *app)
     reaktor_style_get("details", &det);
     reaktor_style_get("summary", &sum);
     st->tab.background   = nk_style_item_color(
-        det.matched ? reaktor_visible(col_of(det.bg), body, base) : base);
+        det.matched ? reaktor_visible(nk_rgba_bv(det.bg), body, base) : base);
     st->tab.border_color = body;
     st->tab.text         = text;
     st->tab.border = 0.0f;
@@ -961,7 +956,7 @@ apply_widget_style(App *app)
     st->window.fixed_background        = i_base;
     reaktor_style_get("dialog", &dlg);
     st->window.border_color            = edge;
-    st->window.popup_border_color      = dlg.matched ? col_of(dlg.border_col)
+    st->window.popup_border_color      = dlg.matched ? nk_rgba_bv(dlg.border_col)
                                                      : edge;
     if (dlg.matched) st->window.popup_border = dlg.border;
 

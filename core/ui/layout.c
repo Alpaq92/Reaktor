@@ -128,6 +128,16 @@ reaktor_layout_close(reaktor_layout *l)
     if (l->depth > 1) l->depth--;
 }
 
+unsigned char
+reaktor_layout_open_dir(const reaktor_layout *l)
+{
+    lay_id box;
+
+    if (l->depth <= 1 || l->depth > REAKTOR_LAY_DEPTH) return REAKTOR_LAY_COLUMN;
+    box = l->stack[l->depth - 1];
+    return box < REAKTOR_LAY_MAX ? l->dir[box] : REAKTOR_LAY_COLUMN;
+}
+
 static reaktor_lay_slot *
 slot_of(reaktor_layout *l, unsigned id)
 {
@@ -141,6 +151,24 @@ slot_of(reaktor_layout *l, unsigned id)
         i = (i + 1) & (REAKTOR_LAY_SLOTS - 1);
     }
     return NULL;
+}
+
+static void
+add_margin(reaktor_layout *l, lay_id it, int side, lay_scalar by)
+{
+    lay_vec4 m = lay_get_margins(&l->ctx, it);
+
+    m.v[side] += by;
+    lay_set_margins(&l->ctx, it, m);
+}
+
+static lay_scalar
+take_margin(reaktor_layout *l, lay_id it, int side)
+{
+    lay_scalar was = lay_get_margins(&l->ctx, it).v[side];
+
+    add_margin(l, it, side, -was);
+    return was;
 }
 
 /* A stylesheet's margin only parts a widget from its neighbors. The one
@@ -158,27 +186,16 @@ part_neighbors(reaktor_layout *l, lay_id box)
 
     for (c = lay_first_child(&l->ctx, box); c != LAY_INVALID_ID;
          prev = c, c = lay_next_sibling(&l->ctx, c)) {
-        lay_scalar m[4], p[4];
+        lay_scalar moved;
 
         if (c >= REAKTOR_LAY_MAX || !(l->flags[c] & (REAKTOR_LAY_SHEET_L << lead)))
             continue;
-        lay_get_margins_ltrb(&l->ctx, c, &m[0], &m[1], &m[2], &m[3]);
-        if (prev != LAY_INVALID_ID) {
-            lay_get_margins_ltrb(&l->ctx, prev, &p[0], &p[1], &p[2], &p[3]);
-            p[trail] += m[lead];
-            lay_set_margins_ltrb(&l->ctx, prev, p[0], p[1], p[2], p[3]);
-        }
-        m[lead] = 0;
-        lay_set_margins_ltrb(&l->ctx, c, m[0], m[1], m[2], m[3]);
+        moved = take_margin(l, c, lead);
+        if (prev != LAY_INVALID_ID) add_margin(l, prev, trail, moved);
     }
     if (prev != LAY_INVALID_ID && prev < REAKTOR_LAY_MAX
-        && (l->flags[prev] & (REAKTOR_LAY_SHEET_L << trail))) {
-        lay_scalar m[4];
-
-        lay_get_margins_ltrb(&l->ctx, prev, &m[0], &m[1], &m[2], &m[3]);
-        m[trail] = 0;
-        lay_set_margins_ltrb(&l->ctx, prev, m[0], m[1], m[2], m[3]);
-    }
+        && (l->flags[prev] & (REAKTOR_LAY_SHEET_L << trail)))
+        take_margin(l, prev, trail);
 }
 
 void

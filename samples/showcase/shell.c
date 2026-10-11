@@ -287,9 +287,20 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
 
     at = nk_widget_bounds(ctx);
 
-    reaktor_fill_round(app, nk_window_get_canvas(ctx), at,
-                       ctx->style.button.rounding,
-                       reaktor_token("--background", nk_rgb(226, 226, 226)));
+    {
+        reaktor_style box;
+        float         round;
+
+        /* The card is drawn as the sheet draws a details box. */
+        reaktor_style_get("details", &box);
+        round = box.matched ? box.rounding : ctx->style.button.rounding;
+        reaktor_fill_round(app, nk_window_get_canvas(ctx), at, round,
+                           box.matched && box.bg[3] ? reaktor_col(box.bg)
+                           : reaktor_token("--background", nk_rgb(226, 226, 226)));
+        if (box.matched && box.border > 0.0f)
+            reaktor_edge_round(app, nk_window_get_canvas(ctx), at, round,
+                               box.border, reaktor_col(box.border_col));
+    }
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(nk_rgba(0, 0, 0, 0)));
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));

@@ -48,6 +48,7 @@ void reaktor_layout_begin(reaktor_layout *l, struct nk_rect root);
 void reaktor_layout_open(reaktor_layout *l, unsigned id, const reaktor_box *b);
 void reaktor_layout_leaf(reaktor_layout *l, unsigned id, const reaktor_box *b);
 void reaktor_layout_close(reaktor_layout *l);
+unsigned char reaktor_layout_open_dir(const reaktor_layout *l);
 
 void reaktor_layout_end(reaktor_layout *l);
 

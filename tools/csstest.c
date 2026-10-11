@@ -46,6 +46,12 @@ reaktor_asset_load(const char *name, size_t *len)
     return out;
 }
 
+void
+reaktor_free(void *p)
+{
+    free(p);
+}
+
 static void
 ok(const char *what, int got)
 {

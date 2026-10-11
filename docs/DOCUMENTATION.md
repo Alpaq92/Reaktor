@@ -360,7 +360,7 @@ if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
 | Button | `button`; an accent one fills with the accent, a disabled one reads `button.disabled:disabled` |
 | Link | `a` |
 | Field, property | `input.type-text`: a sheet's `input` rule and its `[type=text]` one |
-| Check, radio | `input` |
+| Check, radio | `input.type-checkbox`, `input.type-radio`: a sheet's `input` rule and its `[type=…]` one |
 | Slider | `input.type-range` |
 | Progress | `progress` |
 | Select, combo | `select` |
@@ -410,7 +410,11 @@ and the accent. An icon on a button takes its label's color.
 
 `reaktor_set_css` swaps the application's sheets at the next frame. The
 showcase's Styling page lays simple.css over tiny.css that way, which is the
-test that the look is not in the code.
+test that the look is not in the code. reaktor.css is written in tiny.css's
+names, so once such a sheet is read, `--links`, `--background-body` and
+`--text-main` are given its link, page and text colors in one more sheet read
+last; Reaktor's own chrome then follows it too. A sheet laid over tiny.css
+costs a second read.
 
 ## Keyboard
 

@@ -282,8 +282,7 @@ reaktor_a11y_end(reaktor_a11y *a)
 
             if (k < 0) break;
             v = cur[k].bounds;
-            if (b.x + b.w <= v.x || b.x >= v.x + v.w ||
-                b.y + b.h <= v.y || b.y >= v.y + v.h) {
+            if (!NK_INTERSECT(b.x, b.y, b.w, b.h, v.x, v.y, v.w, v.h)) {
                 a->node[f][i].state |= REAKTOR_A11Y_OFFSCREEN;
                 break;
             }

@@ -435,7 +435,7 @@ static int calc_sum(calc_in *c, calc_val *out);
 
 static int calc_atom(calc_in *c, calc_val *out)
 {
-    char *end;
+    const char *end;
 
     calc_space(c);
     if (c->i < c->n && c->s[c->i] == '-') {
@@ -455,7 +455,7 @@ static int calc_atom(calc_in *c, calc_val *out)
     }
     if (c->i >= c->n || (!isdigit((unsigned char)c->s[c->i]) && c->s[c->i] != '.'))
         return 0;
-    out->v = strtod(c->s + c->i, &end);
+    out->v = css_number(c->s + c->i, &end);
     c->i = (size_t)(end - c->s);
     out->px = c->i + 2 <= c->n && strncmp(c->s + c->i, "px", 2) == 0;
     if (out->px) c->i += 2;
@@ -499,8 +499,7 @@ static int calc_sum(calc_in *c, calc_val *out)
     }
 }
 
-/* calc() over pixels and plain numbers; one with any other unit is left. */
-static void calc_values(buf *b)
+static void resolve_pixel_calcs(buf *b)
 {
     static const char fn[] = "calc(";
     size_t from = 0;
@@ -822,7 +821,7 @@ static void emit_one(void *c, const char *p, size_t plen,
     } else {
         convert_units(tmp.p ? tmp.p : "", tmp.len,
                       ctx->rem_px, ctx->em_px, &conv);
-        calc_values(&conv);
+        resolve_pixel_calcs(&conv);
     }
 
     buf_add(ctx->out, p, plen);
@@ -1057,10 +1056,10 @@ char *reaktor_css_flatten(const char *const *paths, int count,
             continue;
         }
         if (!buf_str(&all, t) || !buf_str(&all, "\n")) {
-            free(t); free(all.p);
+            reaktor_free(t); free(all.p);
             return NULL;
         }
-        free(t);
+        reaktor_free(t);
     }
     if (!all.p) all.p = (char *)calloc(1, 1);
     return flatten(all.p, theme, out_vars);

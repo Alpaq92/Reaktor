@@ -163,7 +163,6 @@ struct App {
     int   theme_pending;
     struct nk_color page, card_bg, text, accent;
     char  icon_hex[10];
-    char  accent_hex[10];
 
     struct hot_region {
         struct nk_rect r;
@@ -236,7 +235,7 @@ struct App {
     int         shot_failed, dump_failed;
     int         secondary;
     int         settled_run, settle_tries;
-    unsigned    style_gen;
+    unsigned    style_loads;
     int   build_ms_x100, render_ms_x100, present_ms_x100;
 };
 
@@ -246,11 +245,11 @@ struct nk_image icon_over(App *app, const char *src, int px, float over);
 struct nk_image icon(App *app, const char *src, int px);
 void image_centred(struct nk_context *ctx, struct nk_image im, int px);
 const struct nk_user_font *pick_font(App *app, int px, int bold);
+const struct nk_user_font *base_font(App *app);
 void rebuild_font(App *app);
 void apply_render_scale(App *app);
 void reaktor_set_window_icon(SDL_Window *win, const char *name);
 
-struct nk_color col_of(const unsigned char c[4]);
 
 void reader_focus(void *user, unsigned id);
 void reader_activate(void *user, unsigned id);
@@ -279,7 +278,7 @@ void pop_style(struct nk_context *ctx, style_frame f);
 void css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
                const char *hint);
 int  css_button_accent(App *app, struct nk_context *ctx, const char *selector,
-                       const char *label, struct nk_color accent);
+                       const char *label);
 int  reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
                       struct nk_image im, float px, const char *name);
 void reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w,
@@ -338,7 +337,12 @@ int  css_button_icon(App *app, struct nk_context *ctx, const char *selector,
 
 struct nk_color readable_on(const unsigned char bg[4], const char *preferred,
                             const char *fallback);
-style_frame push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset);
+style_frame push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
+                            const char *sel);
+nk_flags reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
+                               nk_flags flags, char *buf, int *len, int cap,
+                               const char *hint, nk_plugin_filter filter,
+                               float pad_x, float pad_y);
 
 void apply_widget_style(App *app);
 

@@ -51,7 +51,6 @@ take_look(App *a, const App *m)
     a->accent     = m->accent;
     a->clear      = m->clear;
     SDL_memcpy(a->icon_hex, m->icon_hex, sizeof a->icon_hex);
-    SDL_memcpy(a->accent_hex, m->accent_hex, sizeof a->accent_hex);
 }
 
 static void

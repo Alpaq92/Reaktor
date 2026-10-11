@@ -214,16 +214,14 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
     nk_spacing(ctx, 1);
 }
 
+/* A straight middle row and column between the corners, for a border's runs. */
 static struct nk_image
 round_mask(App *app, int r, int t)
 {
-    const int ss = 4;
-    int d = 2 * r, x, y, i;
-    float in = (float)(r - t);
+    int d = 2 * r + 1, i;
     struct round_slot *slot;
-    SDL_Surface *surf;
-    SDL_Texture *tex;
-    unsigned char *px;
+    plutovg_surface_t *pv;
+    SDL_Texture *tex = NULL;
 
     for (i = 0; i < app->round_count; i++)
         if (app->round[i].r == r && app->round[i].t == t) {
@@ -238,46 +236,36 @@ round_mask(App *app, int r, int t)
                                           &app->round_count, ROUND_CACHE_MAX);
     if (!slot) return nk_image_id(0);
 
-    surf = SDL_CreateSurface(d, d, SDL_PIXELFORMAT_ARGB8888);
-    tex  = NULL;
-    if (surf) {
-        px = (unsigned char *)surf->pixels;
-        for (y = 0; y < d; y++) {
-            for (x = 0; x < d; x++) {
-                int sx, sy, hit = 0;
-                unsigned char *p = px + (size_t)y * surf->pitch + x * 4;
+    pv = plutovg_surface_create(d, d);
+    if (pv) {
+        plutovg_canvas_t *cv = plutovg_canvas_create(pv);
+        SDL_Surface *surf;
 
-                for (sy = 0; sy < ss; sy++) {
-                    for (sx = 0; sx < ss; sx++) {
-                        float fx = (float)x + ((float)sx + 0.5f) / (float)ss
-                                 - (float)r;
-                        float fy = (float)y + ((float)sy + 0.5f) / (float)ss
-                                 - (float)r;
-                        float q = fx * fx + fy * fy;
+        if (cv) {
+            plutovg_canvas_set_rgba(cv, 1.0f, 1.0f, 1.0f, 1.0f);
+            plutovg_canvas_set_fill_rule(cv, PLUTOVG_FILL_RULE_EVEN_ODD);
+            plutovg_canvas_round_rect(cv, 0.0f, 0.0f, (float)d, (float)d,
+                                      (float)r, (float)r);
+            if (t > 0 && d > 2 * t) {
+                float in = r > t ? (float)(r - t) : 0.0f;
 
-                        if (q <= (float)r * (float)r &&
-                            (t <= 0 || in <= 0.0f || q > in * in))
-                            hit++;
-                    }
-                }
-                p[0] = p[1] = p[2] = 255;
-                p[3] = (unsigned char)((hit * 255) / (ss * ss));
+                plutovg_canvas_round_rect(cv, (float)t, (float)t,
+                                          (float)(d - 2 * t), (float)(d - 2 * t),
+                                          in, in);
             }
+            plutovg_canvas_fill(cv);
+            plutovg_canvas_destroy(cv);
         }
-        /* A border's straight runs are cut from the middle texels, which sit
-         * half a texel off the arc's apex, so they carry the straight band. */
-        if (t > 0) {
-            for (y = 0; y < d; y++)
-                for (x = r - 1; x <= r; x++)
-                    px[(size_t)y * surf->pitch + x * 4 + 3] =
-                        y < t || y >= d - t ? 255 : 0;
-            for (x = 0; x < d; x++)
-                for (y = r - 1; y <= r; y++)
-                    px[(size_t)y * surf->pitch + x * 4 + 3] =
-                        x < t || x >= d - t ? 255 : 0;
+        reaktor_unpremultiply(plutovg_surface_get_data(pv), d, d,
+                              plutovg_surface_get_stride(pv));
+        surf = SDL_CreateSurfaceFrom(d, d, SDL_PIXELFORMAT_ARGB8888,
+                                     plutovg_surface_get_data(pv),
+                                     plutovg_surface_get_stride(pv));
+        if (surf) {
+            tex = SDL_CreateTextureFromSurface(app->ren, surf);
+            SDL_DestroySurface(surf);
         }
-        tex = SDL_CreateTextureFromSurface(app->ren, surf);
-        SDL_DestroySurface(surf);
+        plutovg_surface_destroy(pv);
     }
     if (tex) {
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
@@ -375,7 +363,6 @@ reaktor_render(App *app)
                      ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
 }
 
-/* The last command so far, or none: what reaktor_fade_since starts after. */
 nk_size
 reaktor_fade_mark(const struct nk_command_buffer *cv)
 {
@@ -388,7 +375,6 @@ fade(struct nk_color *c, float opacity)
     c->a = (nk_byte)((float)c->a * opacity + 0.5f);
 }
 
-/* Every command drawn since the mark, at the opacity a rule gave it. */
 void
 reaktor_fade_since(struct nk_context *ctx, const struct nk_command_buffer *cv,
                    nk_size mark, float opacity)
@@ -402,42 +388,35 @@ reaktor_fade_since(struct nk_context *ctx, const struct nk_command_buffer *cv,
     for (;;) {
         struct nk_command *c = (struct nk_command *)(base + at);
 
+#define FADE(T, f) fade(&((struct T *)c)->f, opacity)
         switch (c->type) {
-        case NK_COMMAND_LINE:   fade(&((struct nk_command_line *)c)->color, opacity); break;
-        case NK_COMMAND_CURVE:  fade(&((struct nk_command_curve *)c)->color, opacity); break;
-        case NK_COMMAND_RECT:   fade(&((struct nk_command_rect *)c)->color, opacity); break;
-        case NK_COMMAND_RECT_FILLED:
-            fade(&((struct nk_command_rect_filled *)c)->color, opacity); break;
-        case NK_COMMAND_RECT_MULTI_COLOR: {
-            struct nk_command_rect_multi_color *m = (struct nk_command_rect_multi_color *)c;
-            fade(&m->left, opacity); fade(&m->top, opacity);
-            fade(&m->right, opacity); fade(&m->bottom, opacity);
+        case NK_COMMAND_LINE:            FADE(nk_command_line, color); break;
+        case NK_COMMAND_CURVE:           FADE(nk_command_curve, color); break;
+        case NK_COMMAND_RECT:            FADE(nk_command_rect, color); break;
+        case NK_COMMAND_RECT_FILLED:     FADE(nk_command_rect_filled, color); break;
+        case NK_COMMAND_RECT_MULTI_COLOR:
+            FADE(nk_command_rect_multi_color, left);
+            FADE(nk_command_rect_multi_color, top);
+            FADE(nk_command_rect_multi_color, right);
+            FADE(nk_command_rect_multi_color, bottom);
             break;
-        }
-        case NK_COMMAND_CIRCLE: fade(&((struct nk_command_circle *)c)->color, opacity); break;
-        case NK_COMMAND_CIRCLE_FILLED:
-            fade(&((struct nk_command_circle_filled *)c)->color, opacity); break;
-        case NK_COMMAND_ARC:    fade(&((struct nk_command_arc *)c)->color, opacity); break;
-        case NK_COMMAND_ARC_FILLED:
-            fade(&((struct nk_command_arc_filled *)c)->color, opacity); break;
-        case NK_COMMAND_TRIANGLE:
-            fade(&((struct nk_command_triangle *)c)->color, opacity); break;
-        case NK_COMMAND_TRIANGLE_FILLED:
-            fade(&((struct nk_command_triangle_filled *)c)->color, opacity); break;
-        case NK_COMMAND_POLYGON:
-            fade(&((struct nk_command_polygon *)c)->color, opacity); break;
-        case NK_COMMAND_POLYGON_FILLED:
-            fade(&((struct nk_command_polygon_filled *)c)->color, opacity); break;
-        case NK_COMMAND_POLYLINE:
-            fade(&((struct nk_command_polyline *)c)->color, opacity); break;
-        case NK_COMMAND_TEXT: {
-            struct nk_command_text *t = (struct nk_command_text *)c;
-            fade(&t->background, opacity); fade(&t->foreground, opacity);
+        case NK_COMMAND_CIRCLE:          FADE(nk_command_circle, color); break;
+        case NK_COMMAND_CIRCLE_FILLED:   FADE(nk_command_circle_filled, color); break;
+        case NK_COMMAND_ARC:             FADE(nk_command_arc, color); break;
+        case NK_COMMAND_ARC_FILLED:      FADE(nk_command_arc_filled, color); break;
+        case NK_COMMAND_TRIANGLE:        FADE(nk_command_triangle, color); break;
+        case NK_COMMAND_TRIANGLE_FILLED: FADE(nk_command_triangle_filled, color); break;
+        case NK_COMMAND_POLYGON:         FADE(nk_command_polygon, color); break;
+        case NK_COMMAND_POLYGON_FILLED:  FADE(nk_command_polygon_filled, color); break;
+        case NK_COMMAND_POLYLINE:        FADE(nk_command_polyline, color); break;
+        case NK_COMMAND_TEXT:
+            FADE(nk_command_text, background);
+            FADE(nk_command_text, foreground);
             break;
-        }
-        case NK_COMMAND_IMAGE:  fade(&((struct nk_command_image *)c)->col, opacity); break;
+        case NK_COMMAND_IMAGE:           FADE(nk_command_image, col); break;
         default: break;
         }
+#undef FADE
         if (at == cv->last) break;
         at = c->next;
     }
@@ -474,7 +453,7 @@ static void
 draw_corners(struct nk_command_buffer *cv, struct nk_image mask, int m,
              struct nk_rect b, int r, struct nk_color col)
 {
-    float M = (float)m, D = (float)(2 * m), R = (float)r;
+    float M = (float)m, D = (float)(2 * m + 1), R = (float)r;
     int i;
 
     for (i = 0; i < 4; i++) {
@@ -482,7 +461,7 @@ draw_corners(struct nk_command_buffer *cv, struct nk_image mask, int m,
                                     (i & 2) ? b.y + b.h - R : b.y, R, R);
         struct nk_image q = nk_subimage_handle(
             mask.handle, (nk_ushort)D, (nk_ushort)D,
-            nk_rect((i & 1) ? M : 0.0f, (i & 2) ? M : 0.0f, M, M));
+            nk_rect((i & 1) ? M + 1.0f : 0.0f, (i & 2) ? M + 1.0f : 0.0f, M, M));
 
         nk_draw_image(cv, at, &q, col);
     }
@@ -575,6 +554,16 @@ pick_font(App *app, int px, int bold)
     if (bold && app->bolds[best]) return &app->bolds[best]->handle;
     if (app->faces[best]) return &app->faces[best]->handle;
     return app->ctx->style.font;
+}
+
+/* Text with no size of its own takes the page's, as CSS inherits it. */
+const struct nk_user_font *
+base_font(App *app)
+{
+    reaktor_style body;
+
+    reaktor_style_get("body", &body);
+    return pick_font(app, body.matched ? body.font_px : 0, 0);
 }
 
 static const char *
@@ -702,7 +691,7 @@ rebuild_font(App *app)
         }
         app->atlas_bpp = SDL_BYTESPERPIXEL(tex->format);
     }
-    if (font) nk_style_set_font(app->ctx, &font->handle);
+    if (font) nk_style_set_font(app->ctx, is_default ? &font->handle : base_font(app));
 }
 
 void
@@ -774,15 +763,15 @@ reaktor_edge_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     R = (float)r;
     T = (float)t;
     if (r >= t) {
-        float M = (float)m, D = 2.0f * M;
+        float M = (float)m, D = 2.0f * M + 1.0f;
         struct nk_image top = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
-                                                 nk_rect(M - 1.0f, 0.0f, 1.0f, M));
+                                                 nk_rect(M, 0.0f, 1.0f, M));
         struct nk_image low = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
-                                                 nk_rect(M - 1.0f, M, 1.0f, M));
+                                                 nk_rect(M, M + 1.0f, 1.0f, M));
         struct nk_image lft = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
-                                                 nk_rect(0.0f, M - 1.0f, M, 1.0f));
+                                                 nk_rect(0.0f, M, M, 1.0f));
         struct nk_image rgt = nk_subimage_handle(ring.handle, (nk_ushort)D, (nk_ushort)D,
-                                                 nk_rect(M, M - 1.0f, M, 1.0f));
+                                                 nk_rect(M + 1.0f, M, M, 1.0f));
 
         if (b.w > 2.0f * R) {
             nk_draw_image(cv, nk_rect(b.x + R, b.y, b.w - 2.0f * R, R), &top, col);
