@@ -95,7 +95,6 @@ int reaktor_root(char *out, size_t cap)
         for (i = 0; dir[i]; i++) if (dir[i] == '\\') dir[i] = '/';
         n = strlen(dir);
         while (n > 1 && dir[n - 1] == '/') dir[--n] = '\0';
-        /* A macOS bundle carries its files in Resources, with no marker. */
         if (n > 19 && strcmp(dir + n - 19, "/Contents/Resources") == 0)
             return copy_out(out, cap, dir);
 

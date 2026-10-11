@@ -14,7 +14,6 @@
 
 #include <SDL3/SDL.h>
 
-/* Slot 0 is the main window's. */
 #define BRIDGES 9
 
 typedef struct bridge {
@@ -259,7 +258,6 @@ simple_GetPropertyValue(IRawElementProviderSimple *self, PROPERTYID prop,
     char buf[REAKTOR_SNAP_TEXT];
 
     VariantInit(out);
-    /* The root has no name of its own: the window's title is its host's. */
     if (provider_is_root(p)) {
         if (prop == UIA_ControlTypePropertyId) {
             out->vt = VT_I4;

@@ -69,7 +69,6 @@ img_grow(App *app)
     return &app->img[app->img_count++];
 }
 
-/* A missing icon is blank, not Nuklear's white quad. */
 static struct nk_image
 blank_image(App *app)
 {
@@ -214,7 +213,6 @@ image_centred(struct nk_context *ctx, struct nk_image im, int px)
     nk_spacing(ctx, 1);
 }
 
-/* A straight middle row and column between the corners, for a border's runs. */
 static struct nk_image
 round_mask(App *app, int r, int t)
 {
@@ -350,7 +348,6 @@ mask_rounded_fills(App *app)
             ctx->memory.allocated;
 }
 
-/* Rounded shapes are masks; a feathered rect seams against them. */
 void
 reaktor_render(App *app)
 {
@@ -556,7 +553,6 @@ pick_font(App *app, int px, int bold)
     return app->ctx->style.font;
 }
 
-/* Text with no size of its own takes the page's, as CSS inherits it. */
 const struct nk_user_font *
 base_font(App *app)
 {
@@ -614,7 +610,6 @@ rebuild_font(App *app)
     }
     if (ttf) bttf = load_face(&app->font_face_bold, FONT_BOLD_FILE, &bsize);
 
-    /* The Text module draws in the main window only. */
     if (!app->secondary) reaktor_text_attach_font(NULL, NULL);
     if (app->atlas) {
         nk_font_atlas_clear(app->atlas);
@@ -655,7 +650,6 @@ rebuild_font(App *app)
         SDL_snprintf(app->font_status, sizeof(app->font_status),
                      "FALLBACK - could not load %s", app->font_face);
     }
-    /* The atlas keeps its own copy of each. */
     reaktor_free(ttf);
     reaktor_free(bttf);
 
@@ -785,7 +779,6 @@ reaktor_edge_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
         }
         return;
     }
-    /* Square, or a radius under the width: no pixel is covered twice. */
     if (r) {
         nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - 2.0f * R, R), 0.0f, col);
         nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - 2.0f * R, R),

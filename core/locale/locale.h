@@ -3,7 +3,6 @@
 
 #include "reaktor/locale.h"
 
-/* The caller SDL_frees them. */
 unsigned *reaktor_locale_glyphs(const unsigned char *ttf);
 
 #endif

@@ -12,7 +12,6 @@ be32(const unsigned char *p)
     return (size_t)p[0] << 24 | (size_t)p[1] << 16 | (size_t)p[2] << 8 | p[3];
 }
 
-/* stb_truetype trusts every offset, so each table must lie inside the file. */
 int
 reaktor_font_valid(const void *ttf, size_t size)
 {

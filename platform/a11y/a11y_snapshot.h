@@ -16,7 +16,6 @@ typedef struct reaktor_snap_node {
 
 #define REAKTOR_SNAP_TEXT 4096
 
-/* One window's tree, as screen readers read it from their own threads. */
 typedef struct reaktor_snap reaktor_snap;
 
 int  reaktor_snap_init(reaktor_a11y_action activate, reaktor_a11y_action focus,

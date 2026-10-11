@@ -171,9 +171,6 @@ take_margin(reaktor_layout *l, lay_id it, int side)
     return was;
 }
 
-/* A stylesheet's margin only parts a widget from its neighbors. The one
- * leading a child moves to the end of the child before it, so every wrapped
- * line starts at the edge, and the last child's trailing one is dropped. */
 static void
 part_neighbors(reaktor_layout *l, lay_id box)
 {

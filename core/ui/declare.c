@@ -333,8 +333,6 @@ box_from_style(reaktor_box *box, const char *text, const char *selector,
     }
 
     if (st.matched) {
-        /* A rule's margin parts a widget from its neighbors along its row or
-         * column; across it, the page has sized the box. */
         static const int side[4] = { REAKTOR_SIDE_LEFT, REAKTOR_SIDE_TOP,
                                      REAKTOR_SIDE_RIGHT, REAKTOR_SIDE_BOTTOM };
         float *m[4] = { &box->ml, &box->mt, &box->mr, &box->mb };
@@ -404,8 +402,6 @@ reaktor_soak(void)
     (void)place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL);
 }
 
-/* A disabled button wears its sheet's :disabled rule at that rule's opacity;
- * one the sheet does not tell apart is faded by half. */
 static float
 disabled_opacity(const char *sel, const char *dsel)
 {

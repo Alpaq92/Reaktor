@@ -323,7 +323,6 @@ reaktor_windows_rescale(void)
     }
 }
 
-/* No `closed` hook at quit. */
 void
 reaktor_windows_close_all(void)
 {

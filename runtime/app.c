@@ -103,7 +103,6 @@ reaktor_rss_mark(int step)
     reaktor_process_memory(&reaktor_rss[step], &reaktor_priv[step]);
 }
 
-/* SDL_free the result. */
 static char *
 from_here(const char *path)
 {
@@ -184,7 +183,6 @@ take_flags(App *app, int argc, char **argv)
     return n;
 }
 
-/* The page, its text and the accent, from whichever rules the sheets give. */
 static void
 read_roles(App *app)
 {
@@ -200,8 +198,6 @@ read_roles(App *app)
                 : reaktor_token("--links", app->text);
 }
 
-/* reaktor.css speaks tiny.css's names; a sheet laid over it may not, so those
- * names are given its colors in a sheet read last. */
 static const char *
 role_sheet(const App *app)
 {
@@ -274,7 +270,6 @@ load_theme(App *app)
     reaktor_windows_restyle();
 }
 
-/* A window's own wake carries its id; the main window's carries none. */
 static bool
 wake_app(const App *app)
 {
@@ -1072,7 +1067,6 @@ take_event(App *app, SDL_Event *event)
         break;
 
     default:
-        /* A wake: the runtime's own, or a type the a11y bridge registered. */
         if (event->type >= SDL_EVENT_USER) {
             SDL_SetAtomicInt(&app->wake, 0);
             app->dirty = 1;

@@ -39,7 +39,6 @@ hot_push(App *app, struct nk_rect r, int cursor, int repaint)
     hot_push_ex(app, r, cursor, repaint, 0, 0);
 }
 
-/* An armed widget paints its own chrome; the item Nuklear would draw is blanked. */
 static struct {
     int                   armed;
     struct nk_rect        b;
@@ -104,7 +103,6 @@ button_chrome_begin(struct nk_command_buffer *out, nk_handle user)
                    : (state & NK_WIDGET_STATE_ACTIVED) ? &st->active
                                                        : &st->normal, &col))
         return;
-    /* Nuklear keeps one border color; a rule can give each state its own. */
     if (g_chrome.edges)
         edge = (state & NK_WIDGET_STATE_HOVER)   ? g_chrome.edge_hover
              : (state & NK_WIDGET_STATE_ACTIVED) ? g_chrome.edge_active : edge;
@@ -366,7 +364,6 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     return clicked;
 }
 
-/* Where Nuklear put an icon, left of a label centered across the button. */
 static int
 icon_place(struct nk_context *ctx, struct nk_rect b, float pad_x,
            const char *label, struct nk_rect *at)

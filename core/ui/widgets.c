@@ -845,7 +845,6 @@ focus_saw(App *app, unsigned id, struct nk_rect b)
         if (*hi < 0) *lo = n - 1;
         *hi = n - 1;
     }
-    /* A declared widget is noted before its box is placed. */
     if (id && id == app->focus_id && b.w > 0.0f && b.h > 0.0f) {
         app->focus_rect  = b;
         app->focus_seen  = 1;

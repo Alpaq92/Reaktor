@@ -38,7 +38,6 @@ float reaktor_animate(unsigned id, unsigned channel, float to,
 
 float reaktor_anim_progress(unsigned id, unsigned channel);
 
-/* The window's NukAnim context, for all of nukanim.h; its time moves every frame. */
 struct nka_context *reaktor_anim(App *app);
 
 #endif

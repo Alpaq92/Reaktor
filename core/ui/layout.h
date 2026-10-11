@@ -9,7 +9,6 @@
 #define REAKTOR_LAY_DEPTH 32
 #define REAKTOR_LAY_SLOTS 512
 
-/* Sides whose margin a stylesheet set, in Onlay's left, top, right, bottom order. */
 #define REAKTOR_LAY_SHEET_L (1u << 28)
 #define REAKTOR_LAY_SHEET_T (1u << 29)
 #define REAKTOR_LAY_SHEET_R (1u << 30)

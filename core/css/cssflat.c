@@ -641,8 +641,7 @@ static size_t name_end(const char *s, size_t i, size_t len)
     return i;
 }
 
-/* LCUI goes on using a node's list after freeing it when one compound names
- * the same class or pseudo-class twice - as two :not() do, read its way. */
+/* LCUI reuses a freed list when a compound repeats a class or pseudo-class. */
 static int selector_repeats(const char *s, size_t len)
 {
     size_t a, ae, b, be;
