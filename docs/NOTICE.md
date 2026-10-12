@@ -19,6 +19,7 @@ from the project's own license file at the pinned revision.
 | [plutovg](https://github.com/sammycage/plutovg) | plutosvg's canvas (nested submodule) | MIT |
 | [mojibake](https://github.com/zaerl/mojibake) | Bidirectional text (UAX #9) and line breaking (UAX #14), for the Text module | MIT |
 | [kb_text_shape](https://github.com/JimmyLefevre/kb) | OpenType shaping, script segmentation and font coverage, for the Text module | zlib |
+| [ini.h](https://github.com/mattiasgustavsson/libs) | Reading and writing `settings.conf` | MIT or public domain |
 
 Only LCUI's `libcss` and `yutil` are built, not the toolkit. SDL is built
 static, without audio, joystick, haptic, HID, sensor, camera, power, GPU,
@@ -124,8 +125,9 @@ each toolchain fetches its own framework, and none is part of a Reaktor build.
 
 A native build links SDL, libcss, yutil, plutosvg and plutovg statically, plus
 mojibake and kb_text_shape with the Text module, and compiles in Nuklear,
-NukAnim and Onlay, so it carries the zlib and MIT terms above. Each license
-is copied unchanged into `licenses/` beside the programs: ship that folder,
+NukAnim, Onlay and ini.h, so it carries the zlib and MIT terms above. Each license
+is copied unchanged into `licenses/` beside the programs (ini.h's sits at the
+end of the header, so the header itself is `licenses/ini.h.txt`): ship that folder,
 and this file, with a binary.
 
 The binary also carries the default assets in `REAKTOR_BUILTINS`, byte for

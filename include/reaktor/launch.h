@@ -34,6 +34,13 @@ typedef enum reaktor_quit_reason {
     REAKTOR_QUIT_SESSION
 } reaktor_quit_reason;
 
+typedef enum reaktor_save {
+    REAKTOR_SAVE_NEVER = 0,
+    REAKTOR_SAVE_ON_QUIT,
+    REAKTOR_SAVE_ON_CHANGE,
+    REAKTOR_SAVE_ON_TIMER
+} reaktor_save;
+
 typedef struct reaktor_asset {
     const char *path;
     const char *name;
@@ -79,6 +86,8 @@ typedef struct reaktor_launch {
     void (*file_opened)(App *app, const char *path);
     void  *user;
     int    remember_window;
+    reaktor_save save_settings;
+    int    save_ms;
 } reaktor_launch;
 
 typedef struct reaktor_window {

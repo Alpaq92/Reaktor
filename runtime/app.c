@@ -95,6 +95,19 @@ remembers(const App *app)
 }
 
 int
+reaktor_capturing(void)
+{
+    return g_app && (g_app->shot_path || g_app->dump_path);
+}
+
+reaktor_save
+reaktor_save_mode(int *ms)
+{
+    if (ms) *ms = g_launch.save_ms > 0 ? g_launch.save_ms : 1000;
+    return g_launch.save_settings;
+}
+
+int
 reaktor_key_hook(App *app, const SDL_Event *event)
 {
     return g_launch.key && g_launch.key(app, event);
@@ -1332,7 +1345,7 @@ app_quit(void *appstate, SDL_AppResult result)
     run_stop(app);
     if (remembers(app)) reaktor_window_remember(app);
     reaktor_timers_drop(NULL);
-    reaktor_settings_save();
+    if (g_launch.save_settings != REAKTOR_SAVE_NEVER) reaktor_settings_save();
     reaktor_settings_free();
     if (!SDL_GetAtomicInt(&g_exit_code) && (app->shot_failed || app->dump_failed))
         SDL_SetAtomicInt(&g_exit_code, app->shot_failed && app->dump_failed ? 4

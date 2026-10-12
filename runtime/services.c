@@ -1,5 +1,13 @@
 #include "internal.h"
 
+#define INI_IMPLEMENTATION
+#define INI_MALLOC(ctx, size)        ((void)(ctx), SDL_malloc(size))
+#define INI_FREE(ctx, ptr)           ((void)(ctx), SDL_free(ptr))
+#define INI_MEMCPY(dst, src, cnt)    SDL_memcpy(dst, src, cnt)
+#define INI_STRLEN(s)                SDL_strlen(s)
+#define INI_STRNICMP(s1, s2, cnt)    SDL_strncasecmp(s1, s2, cnt)
+#include "ini.h"
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -127,170 +135,173 @@ reaktor_post(App *app, reaktor_task fn, void *user)
     if (!SDL_RunOnMainThread(post_run, p, false)) SDL_free(p);
 }
 
-typedef struct setting {
-    char *key, *value;
-} setting;
-
-static setting *g_set;
-static int      g_set_n, g_set_cap, g_set_loaded, g_set_dirty;
+static ini_t   *g_ini;
+static int      g_ini_dirty;
+static unsigned g_save_timer;
 
 #ifdef __EMSCRIPTEN__
-EM_JS(char *, web_settings_load, (const char *name), {
-    var v = window['localStorage'].getItem('reaktor:' + UTF8ToString(name));
-    return v === null ? 0 : stringToNewUTF8(v);
-});
-EM_JS(void, web_settings_save, (const char *name, const char *text), {
-    window['localStorage'].setItem('reaktor:' + UTF8ToString(name), UTF8ToString(text));
+EM_JS(void, settings_persist, (void), {
+    FS.syncfs(false, function (err) { if (err) console.warn('settings: ' + err); });
 });
 #else
+static void settings_persist(void) {}
+#endif
+
 static char *
 settings_path(void)
 {
     char *dir = SDL_GetPrefPath(NULL, reaktor_app_ident());
     char *path = NULL;
 
-    if (dir) SDL_asprintf(&path, "%ssettings.txt", dir);
+    if (dir) SDL_asprintf(&path, "%ssettings.conf", dir);
     SDL_free(dir);
     return path;
 }
-#endif
 
-static int
-setting_find(const char *key)
+static ini_t *
+settings(void)
 {
-    int i;
+    char *text;
 
-    for (i = 0; i < g_set_n; i++)
-        if (SDL_strcmp(g_set[i].key, key) == 0) return i;
-    return -1;
-}
-
-static void
-setting_put(const char *key, size_t klen, const char *value, size_t vlen)
-{
-    setting *s;
-
-    if (g_set_n == g_set_cap) {
-        int      cap  = g_set_cap ? g_set_cap * 2 : 16;
-        setting *more = (setting *)SDL_realloc(g_set, (size_t)cap * sizeof *more);
-
-        if (!more) return;
-        g_set     = more;
-        g_set_cap = cap;
-    }
-    s        = &g_set[g_set_n];
-    s->key   = SDL_strndup(key, klen);
-    s->value = SDL_strndup(value, vlen);
-    if (s->key && s->value) g_set_n++;
-    else { SDL_free(s->key); SDL_free(s->value); }
-}
-
-static void
-settings_load(void)
-{
-    char *text, *line, *next;
-
-    if (g_set_loaded) return;
-    g_set_loaded = 1;
-#ifdef __EMSCRIPTEN__
-    text = web_settings_load(reaktor_app_ident());
-#else
+    if (g_ini) return g_ini;
+    if (reaktor_capturing()) return g_ini = ini_create(NULL);
     {
         char *path = settings_path();
 
         text = path ? (char *)SDL_LoadFile(path, NULL) : NULL;
         SDL_free(path);
     }
-#endif
-    for (line = text; line && *line; line = next) {
-        char *eq  = SDL_strchr(line, '=');
-        char *end = SDL_strchr(line, '\n');
-
-        next = end ? end + 1 : line + SDL_strlen(line);
-        if (!end) end = next;
-        if (eq && eq < end)
-            setting_put(line, (size_t)(eq - line), eq + 1, (size_t)(end - eq - 1));
-    }
+    g_ini = text ? ini_load(text, NULL) : ini_create(NULL);
     SDL_free(text);
+    return g_ini;
+}
+
+static int
+setting_find(const char *key, int *section, int add)
+{
+    const char *dot = SDL_strrchr(key, '.');
+    ini_t      *ini = settings();
+
+    *section = INI_GLOBAL_SECTION;
+    if (!ini) return INI_NOT_FOUND;
+    if (dot) {
+        *section = ini_find_section(ini, key, (int)(dot - key));
+        if (*section == INI_NOT_FOUND && add)
+            *section = ini_section_add(ini, key, (int)(dot - key));
+        if (*section == INI_NOT_FOUND) return INI_NOT_FOUND;
+        key = dot + 1;
+    }
+    return ini_find_property(ini, *section, key, 0);
 }
 
 void
 reaktor_settings_save(void)
 {
-    size_t bytes = 1, at = 0;
-    char  *text;
-    int    i;
+    int   size;
+    char *text;
 
-    if (!g_set_dirty) return;
-    for (i = 0; i < g_set_n; i++)
-        bytes += SDL_strlen(g_set[i].key) + SDL_strlen(g_set[i].value) + 2;
-    text = (char *)SDL_malloc(bytes);
+    if (!g_ini_dirty || !g_ini || reaktor_capturing()) return;
+    size = ini_save(g_ini, NULL, 0);
+    text = (char *)SDL_malloc((size_t)size);
     if (!text) return;
-    for (i = 0; i < g_set_n; i++)
-        at += (size_t)SDL_snprintf(text + at, bytes - at, "%s=%s\n",
-                                   g_set[i].key, g_set[i].value);
-    text[at] = '\0';
-#ifdef __EMSCRIPTEN__
-    web_settings_save(reaktor_app_ident(), text);
-#else
+    ini_save(g_ini, text, size);
     {
-        char *path = settings_path();
+        char *path = settings_path(), *tmp = NULL;
 
-        if (path && !SDL_SaveFile(path, text, at))
+        if (path) SDL_asprintf(&tmp, "%s.new", path);
+        if (!tmp || !SDL_SaveFile(tmp, text, (size_t)size - 1) || !SDL_RenamePath(tmp, path))
             SDL_Log("settings not saved: %s", SDL_GetError());
+        SDL_free(tmp);
         SDL_free(path);
     }
-#endif
+    settings_persist();
     SDL_free(text);
-    g_set_dirty = 0;
+    g_ini_dirty = 0;
+}
+
+static void
+settings_due(App *app, void *user)
+{
+    (void)app; (void)user;
+    g_save_timer = 0;
+    reaktor_settings_save();
+}
+
+static void
+settings_changed(void)
+{
+    int          ms;
+    reaktor_save mode = reaktor_save_mode(&ms);
+
+    g_ini_dirty = 1;
+#ifdef __EMSCRIPTEN__
+    if (mode == REAKTOR_SAVE_ON_QUIT) mode = REAKTOR_SAVE_ON_CHANGE;
+#endif
+    if (mode == REAKTOR_SAVE_ON_CHANGE)
+        reaktor_settings_save();
+    else if (mode == REAKTOR_SAVE_ON_TIMER && !g_save_timer)
+        g_save_timer = reaktor_timer(NULL, ms, 0, settings_due, NULL);
 }
 
 const char *
 reaktor_setting(const char *key)
 {
-    int i;
+    int section, property = key ? setting_find(key, &section, 0) : INI_NOT_FOUND;
 
-    if (!key) return NULL;
-    settings_load();
-    i = setting_find(key);
-    return i < 0 ? NULL : g_set[i].value;
+    return property == INI_NOT_FOUND ? NULL
+                                     : ini_property_value(g_ini, section, property);
 }
 
 void
 reaktor_setting_set(const char *key, const char *value)
 {
-    int i;
+    const char *name;
+    int         section, property;
 
-    if (!key || !*key || SDL_strchr(key, '=') || SDL_strchr(key, '\n') ||
-        (value && SDL_strchr(value, '\n')))
+    if (!key || !*key || SDL_strpbrk(key, "=[]\n") || (value && SDL_strchr(value, '\n')))
         return;
-    settings_load();
-    i = setting_find(key);
-    if (i >= 0 && value && SDL_strcmp(g_set[i].value, value) == 0) return;
-    if (i >= 0) {
-        SDL_free(g_set[i].key);
-        SDL_free(g_set[i].value);
-        g_set[i] = g_set[--g_set_n];
+    property = setting_find(key, &section, value != NULL);
+    name     = SDL_strrchr(key, '.') ? SDL_strrchr(key, '.') + 1 : key;
+    if (property != INI_NOT_FOUND && value &&
+        SDL_strcmp(ini_property_value(g_ini, section, property), value) == 0)
+        return;
+    if (!value && property == INI_NOT_FOUND) return;
+    if (!value)
+        ini_property_remove(g_ini, section, property);
+    else if (property != INI_NOT_FOUND)
+        ini_property_value_set(g_ini, section, property, value, 0);
+    else if (section != INI_NOT_FOUND)
+        ini_property_add(g_ini, section, name, 0, value, 0);
+    else
+        return;
+    settings_changed();
+}
+
+void
+reaktor_settings_clear(void)
+{
+    ini_destroy(g_ini);
+    g_ini       = ini_create(NULL);
+    g_ini_dirty = 0;
+    if (g_save_timer) reaktor_timer_stop(g_save_timer);
+    g_save_timer = 0;
+    if (reaktor_capturing()) return;
+    {
+        char *path = settings_path();
+
+        if (path) SDL_RemovePath(path);
+        SDL_free(path);
     }
-    if (value) setting_put(key, SDL_strlen(key), value, SDL_strlen(value));
-    g_set_dirty = 1;
-#ifdef __EMSCRIPTEN__
-    reaktor_settings_save();
-#endif
+    settings_persist();
 }
 
 void
 reaktor_settings_free(void)
 {
-    int i;
-
-    for (i = 0; i < g_set_n; i++) {
-        SDL_free(g_set[i].key);
-        SDL_free(g_set[i].value);
-    }
-    SDL_free(g_set);
-    g_set = NULL;
-    g_set_n = g_set_cap = g_set_loaded = 0;
+    ini_destroy(g_ini);
+    g_ini        = NULL;
+    g_ini_dirty  = 0;
+    g_save_timer = 0;
 }
 
 void

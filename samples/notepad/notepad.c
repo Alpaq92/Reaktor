@@ -303,5 +303,6 @@ main(int argc, char **argv)
         .key         = sample_key,
         .start       = sample_start,
         .file_opened = sample_file_opened,
-        .remember_window = 1 });
+        .remember_window = 1,
+        .save_settings   = REAKTOR_SAVE_ON_QUIT });
 }
