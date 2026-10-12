@@ -558,7 +558,16 @@ if(REAKTOR_SAMPLES)
 reaktor_add_app(showcase SOURCES
     samples/showcase/shell.c
     samples/showcase/shortcuts.c
-    samples/showcase/showcase.c)
+    samples/showcase/showcase.c
+    samples/showcase/page_animation.c
+    samples/showcase/page_buttons.c
+    samples/showcase/page_diagnostics.c
+    samples/showcase/page_display.c
+    samples/showcase/page_inputs.c
+    samples/showcase/page_layout.c
+    samples/showcase/page_popups.c
+    samples/showcase/page_styling.c
+    samples/showcase/page_translations.c)
 target_include_directories(showcase PRIVATE samples/showcase)
 
 reaktor_add_app(simple MODULES none SOURCES samples/simple/simple.c)

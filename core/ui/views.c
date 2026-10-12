@@ -319,7 +319,7 @@ reaktor_splitter(const reaktor_splitter_spec *s)
         return 0;
     keys = reaktor_focus_step(g_frame_app, id);
     if (keys) {
-        *s->value += 0.05f * (float)keys;
+        *s->value += (s->vertical ? -0.05f : 0.05f) * (float)keys;
         if (*s->value < lo) *s->value = lo;
         if (*s->value > hi) *s->value = hi;
         g_frame_app->dirty = 1;

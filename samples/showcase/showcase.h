@@ -1,6 +1,13 @@
 #ifndef REAKTOR_SHOWCASE_H
 #define REAKTOR_SHOWCASE_H
 
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+#include <SDL3/SDL.h>
+
 #include "reaktor/reaktor.h"
 
 #define SC_TEXT_CAP  64
@@ -110,5 +117,33 @@ int  sample_option(App *app, struct reaktor_context *ctx, const char *label,
 
 void reaktor_showcase_page(App *app, struct reaktor_context *ctx, int tab,
                            float w, float h);
+
+#define ROW       30.0f
+#define ROW_TALL  34.0f
+#define ROW_SMALL 22.0f
+
+void api(App *app, struct reaktor_context *ctx, const char *text);
+void compact_pop(struct reaktor_context *ctx);
+void compact_push(struct reaktor_context *ctx);
+void draw_tooltip(App *app, struct reaktor_context *ctx, const char *const *lines, int n, float bar);
+void head_and_note(App *app, struct reaktor_context *ctx, const char *title, const char *note);
+unsigned hot(App *app, struct reaktor_context *ctx, unsigned char role, const char *name, unsigned state);
+int item_with_icon(App *app, struct reaktor_context *ctx, const char *label, const char *ionicon, int contextual);
+void popup_style_pop(struct reaktor_context *ctx);
+void popup_style_push(struct reaktor_context *ctx);
+void rule(struct reaktor_context *ctx);
+void section(App *app, struct reaktor_context *ctx, const char *title, const char *note);
+void tree_chevron(App *app, struct reaktor_context *ctx, struct reaktor_rect b, int open);
+struct reaktor_rect tree_header_bounds(struct reaktor_context *ctx);
+
+void page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_display(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_layout(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_popups(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_animation(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_styling(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_translations(App *app, struct reaktor_context *ctx, showcase_state *s);
+void page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *s);
 
 #endif
