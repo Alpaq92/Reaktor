@@ -142,7 +142,14 @@ reaktor_window_open(App *app, const reaktor_window *spec)
                               reaktor_px(spec->window.h > 0 ? (float)spec->window.h : 280.0f),
                               SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
                               SDL_WINDOW_HIDDEN |
-                              (spec->window.borderless ? SDL_WINDOW_BORDERLESS : 0));
+                              (spec->window.borderless ? SDL_WINDOW_BORDERLESS : 0) |
+                              (spec->window.skip_taskbar ? SDL_WINDOW_UTILITY : 0));
+    if (a->win && spec->window.centered) {
+        SDL_DisplayID d = SDL_GetDisplayForWindow(m->win);
+
+        SDL_SetWindowPosition(a->win, SDL_WINDOWPOS_CENTERED_DISPLAY(d),
+                              SDL_WINDOWPOS_CENTERED_DISPLAY(d));
+    }
     if (a->win && (spec->window.min_w > 0 || spec->window.min_h > 0))
         SDL_SetWindowMinimumSize(a->win, reaktor_px((float)spec->window.min_w),
                                  reaktor_px((float)spec->window.min_h));

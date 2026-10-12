@@ -48,6 +48,9 @@ typedef struct reaktor_window_spec {
     int           w, h;
     int           min_w, min_h;
     int           borderless;
+    int           centered;
+    int           skip_taskbar;
+    int           hidden;
     reaktor_asset icon;
     SDL_HitTestResult (SDLCALL *hit_test)(SDL_Window *win,
                                           const SDL_Point *pt, void *data);
@@ -127,6 +130,8 @@ int           reaktor_dark(App *app);
 reaktor_theme reaktor_get_theme(App *app);
 const char   *reaktor_lang_pref(App *app);
 void          reaktor_set_borderless(App *app, int on);
+void          reaktor_set_visible(App *app, int on);
+const char   *reaktor_version(void);
 int           reaktor_borderless(App *app);
 
 int   reaktor_window_open(App *app, const reaktor_window *window);

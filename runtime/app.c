@@ -100,6 +100,28 @@ reaktor_key_hook(App *app, const SDL_Event *event)
     return g_launch.key && g_launch.key(app, event);
 }
 
+static int
+starts_hidden(const App *app)
+{
+#ifdef __EMSCRIPTEN__
+    (void)app;
+    return 0;
+#else
+    return g_launch.window.hidden && !app->shot_path && !app->dump_path;
+#endif
+}
+
+static int
+placed(const App *app)
+{
+#ifdef __EMSCRIPTEN__
+    (void)app;
+    return 0;
+#else
+    return g_launch.window.centered || remembers(app);
+#endif
+}
+
 const char *
 reaktor_app_ident(void)
 {
@@ -616,7 +638,8 @@ app_init(void **appstate, int argc, char *argv[])
         SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE |
                                 SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                 (app->borderless ? SDL_WINDOW_BORDERLESS : 0) |
-                                (remembers(app) ? SDL_WINDOW_HIDDEN : 0);
+                                (g_launch.window.skip_taskbar ? SDL_WINDOW_UTILITY : 0) |
+                                (placed(app) || starts_hidden(app) ? SDL_WINDOW_HIDDEN : 0);
 
         if (!SDL_CreateWindowAndRenderer(launch_title(), win_w, win_h, flags,
                                          &app->win, &app->ren)) {
@@ -658,9 +681,11 @@ app_init(void **appstate, int argc, char *argv[])
                                      (int)(g_launch.window.min_w * pre + 0.5f),
                                      (int)(g_launch.window.min_h * pre + 0.5f));
 #endif
-        if (remembers(app)) {
-            reaktor_window_restore(app);
-            SDL_ShowWindow(app->win);
+        if (placed(app)) {
+            if (g_launch.window.centered)
+                SDL_SetWindowPosition(app->win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+            if (remembers(app)) reaktor_window_restore(app);
+            if (!starts_hidden(app)) SDL_ShowWindow(app->win);
         }
         reaktor_session_watch(app->win);
     }
@@ -1598,4 +1623,24 @@ int
 reaktor_borderless(App *app)
 {
     return app && app->borderless;
+}
+
+void
+reaktor_set_visible(App *app, int on)
+{
+    if (!app || !app->win) return;
+    if (on) {
+        SDL_ShowWindow(app->win);
+        SDL_RaiseWindow(app->win);
+    } else {
+        SDL_HideWindow(app->win);
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+const char *
+reaktor_version(void)
+{
+    return REAKTOR_VERSION_STRING;
 }
