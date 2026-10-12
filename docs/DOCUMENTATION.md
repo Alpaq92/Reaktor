@@ -757,6 +757,21 @@ the emscripten toolchain searches only its own sysroot.
 against an installed package: every CI job does, and checks it draws as the
 in-tree build does.
 
+**As a system package.** `tools/libreaktor-pkg.sh` builds libreaktor and packs
+it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
+where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
+`-i` installs it, `-p` sets the prefix, `-o` the output folder.
+
+```bash
+sh tools/libreaktor-pkg.sh -i
+```
+
+The prefix is `/opt/reaktor` on Linux and `/usr/local/reaktor` on the BSDs,
+apart from the system's include directory, because the package carries SDL's
+and Nuklear's headers. Point `CMAKE_PREFIX_PATH` or `PKG_CONFIG_PATH` (its
+`lib/pkgconfig`) there. The package lists no dependencies: link the system
+libraries `pkg-config --libs reaktor` names.
+
 ## Build options
 
 Passed to CMake, through either script:

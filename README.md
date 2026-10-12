@@ -77,6 +77,21 @@ it with `reaktor_add_app`, or take a `libreaktor` package from the
 [releases](https://github.com/Alpaq92/Reaktor/releases/latest) and
 `find_package(reaktor)`: [In your own project](docs/DOCUMENTATION.md#in-your-own-project).
 
+## Install
+
+On Linux and the BSDs, one script builds libreaktor as the system's own
+package (`.deb`, `.rpm`, FreeBSD, OpenBSD or NetBSD) and installs it:
+
+```bash
+sh tools/libreaktor-pkg.sh -i
+```
+
+It lands in `/opt/reaktor` (`/usr/local/reaktor` on the BSDs); build against it
+with `-DCMAKE_PREFIX_PATH=/opt/reaktor`, or `pkg-config` with
+`PKG_CONFIG_PATH=/opt/reaktor/lib/pkgconfig`. Remove it with the system's
+package manager: `libreaktor-dev` on Debian, `libreaktor-devel` on Fedora,
+`libreaktor` on the BSDs.
+
 ## Usage
 
 ```c

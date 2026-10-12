@@ -191,6 +191,20 @@ jobs:
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           EOF
 
+      - name: Check the libreaktor .deb
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' && matrix.arch == 'x86-64' }}
+        run: |
+          docker exec -i debian sh -eu <<'EOF'
+          sh tools/libreaktor-pkg.sh -i -o dist-pkg </dev/null
+          dpkg -s libreaktor-dev | grep -q '^Status: install ok installed'
+          cmake -S examples/consumer -B build-pkg-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH=/opt/reaktor </dev/null
+          cmake --build build-pkg-consumer </dev/null
+          timeout 600 build-pkg-consumer/simple --theme light --video dummy \
+            --shot check/lib-packaged.bmp --a11y-dump check/lib-packaged.txt </dev/null
+          for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged.$e"; done
+          EOF
+
       - name: Check an app that embeds Reaktor
         if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
         run: |
@@ -235,3 +249,27 @@ jobs:
           path: smoke/
           if-no-files-found: warn
           retention-days: 14
+
+  rpm:
+    name: linux rpm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Build, pack and install libreaktor as an rpm
+        run: |
+          docker run --rm -i -v "$PWD:/src" -w /src fedora:latest sh -eu <<'EOF'
+          dnf install -y cmake ninja-build gcc gcc-c++ pkgconf rpm-build \
+            libX11-devel libXext-devel libXcursor-devel libXi-devel libXfixes-devel \
+            libXrandr-devel libXrender-devel libXtst-devel libxkbcommon-devel \
+            wayland-devel wayland-protocols-devel libglvnd-devel dbus-devel </dev/null
+          sh tools/libreaktor-pkg.sh -i -o dist-pkg </dev/null
+          rpm -q libreaktor-devel
+          cmake -S examples/consumer -B build-pkg-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH=/opt/reaktor </dev/null
+          cmake --build build-pkg-consumer </dev/null
+          EOF
