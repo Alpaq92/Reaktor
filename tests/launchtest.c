@@ -646,7 +646,8 @@ service_page(App *app, struct nk_context *ctx, int w, int h)
     static const char *const buttons[2] = { "Keep", "Save" };
     static unsigned repeat;
     static int chosen = -1, said = -1;
-    static float split = 0.5f;
+    static float share = 0.5f;
+    int split = is("split-keys") || is("split-vkeys");
     char line[48];
 
     (void)ctx;
@@ -686,12 +687,12 @@ service_page(App *app, struct nk_context *ctx, int w, int h)
                      row_shown(app, chosen) ? "in view" : "out of view");
         note(line);
     }
-    if (is("split-keys") && g_frames == 3) push_tap(app, SDLK_TAB);
-    if (is("split-keys") && g_frames == 5) push_tap(app, SDLK_TAB);
-    if (is("split-keys") && (g_frames == 8 || g_frames == 10)) push_tap(app, SDLK_RIGHT);
-    if (is("split-keys") && g_frames == 12) push_tap(app, SDLK_LEFT);
-    if (is("split-keys") && g_frames == 30) {
-        SDL_snprintf(line, sizeof line, "split %.2f", split);
+    if (split && (g_frames == 3 || g_frames == 5)) push_tap(app, SDLK_TAB);
+    if (split && (g_frames == 8 || g_frames == 10))
+        push_tap(app, is("split-vkeys") ? SDLK_DOWN : SDLK_RIGHT);
+    if (split && g_frames == 12) push_tap(app, is("split-vkeys") ? SDLK_UP : SDLK_LEFT);
+    if (split && g_frames == 30) {
+        SDL_snprintf(line, sizeof line, "split %.2f", share);
         note(line);
     }
     if (is("list") && chosen != said) {
@@ -713,9 +714,16 @@ service_page(App *app, struct nk_context *ctx, int w, int h)
                                                    .box = { .h = 100.0f } });
             if (is("split-keys"))
                 REAKTOR_ROW(.h = 40.0f, .w = (float)w) {
-                    REAKTOR_COLUMN(.weight = split, .flags = REAKTOR_LAY_FILL_Y) {}
-                    reaktor_splitter(&(reaktor_splitter_spec){ .value = &split });
-                    REAKTOR_COLUMN(.weight = 1.0f - split, .flags = REAKTOR_LAY_FILL_Y) {}
+                    REAKTOR_COLUMN(.weight = share, .flags = REAKTOR_LAY_FILL_Y) {}
+                    reaktor_splitter(&(reaktor_splitter_spec){ .value = &share });
+                    REAKTOR_COLUMN(.weight = 1.0f - share, .flags = REAKTOR_LAY_FILL_Y) {}
+                }
+            if (is("split-vkeys"))
+                REAKTOR_COLUMN(.h = 120.0f, .w = (float)w) {
+                    REAKTOR_ROW(.weight = share, .flags = REAKTOR_LAY_FILL_X) {}
+                    reaktor_splitter(&(reaktor_splitter_spec){ .value = &share,
+                                                               .vertical = 1 });
+                    REAKTOR_ROW(.weight = 1.0f - share, .flags = REAKTOR_LAY_FILL_X) {}
                 }
         }
     }
@@ -788,7 +796,7 @@ page(App *app, struct nk_context *ctx, int w, int h)
         return;
     }
     if (is("ask") || is("timer") || is("post") || is("settings") || is("list") ||
-        is("tip") || is("list-keys") || is("split-keys")) {
+        is("tip") || is("list-keys") || is("split-keys") || is("split-vkeys")) {
         service_page(app, ctx, w, h);
         return;
     }

@@ -184,7 +184,8 @@ eight rows and fills its row. Colors come from `thead`, `th`, `td`,
 `--table-bg` and `--table-bg-alt`, as in tiny.css.
 
 **A splitter** writes the first child's share; pass it to both children's
-`.weight`. It drags, and with focus the arrow keys step it by 5%. Screen
+`.weight`. It drags, and with focus the arrow keys step it by 5%, moving the
+divider the way they point. Screen
 readers hear a slider:
 
 ```c
@@ -906,7 +907,7 @@ Built by default and run from `build/`:
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `list`, `list-keys`, `split-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `list`, `list-keys`, `split-keys`, `split-vkeys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.
