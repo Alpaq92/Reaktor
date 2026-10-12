@@ -205,6 +205,19 @@ jobs:
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           rm -rf "dist/$name" build-consumer
 
+      - name: Check the libreaktor system package
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' && matrix.arch == 'x86-64' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          sh tools/libreaktor-pkg.sh -i -o dist-pkg </dev/null
+          cmake -S examples/consumer -B build-pkg-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH=/usr/local/reaktor </dev/null
+          cmake --build build-pkg-consumer </dev/null
+          dbus-run-session -- build-pkg-consumer/simple --theme light --video dummy \
+            --shot check/lib-packaged.bmp --a11y-dump check/lib-packaged.txt </dev/null
+          for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged.$e"; done
+
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
         shell: cpa.sh {0} --sync-files vm-to-runner
