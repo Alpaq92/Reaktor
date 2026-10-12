@@ -48,9 +48,9 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
 - **Animation** — tweens keyed per widget on 31 curves, springs, steps and
   béziers; keyframed clips staggered across a grid; motion paths,
   oscillators, noise and shakes; colors blended in five spaces; and text
-  that arrives a glyph at a time.
+  that arrives a glyph at a time, idle once everything settles.
 - **Modular** — accessibility, localization and text shaping each swap for a
-  stub, and only what they drew stops being drawn.
+  stub at build time, and only what they drew stops being drawn.
 - **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources,
   on one software rasterizer, at any display scale: x86 and ARM everywhere,
   and RISC-V on Linux ([Platforms](docs/DOCUMENTATION.md#platforms)).
