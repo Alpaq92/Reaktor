@@ -9,7 +9,6 @@
 #define REAKTOR_LAY_DEPTH 32
 #define REAKTOR_LAY_SLOTS 512
 
-/* Sides whose margin a stylesheet set, in Onlay's left, top, right, bottom order. */
 #define REAKTOR_LAY_SHEET_L (1u << 28)
 #define REAKTOR_LAY_SHEET_T (1u << 29)
 #define REAKTOR_LAY_SHEET_R (1u << 30)
@@ -48,6 +47,7 @@ void reaktor_layout_begin(reaktor_layout *l, struct nk_rect root);
 void reaktor_layout_open(reaktor_layout *l, unsigned id, const reaktor_box *b);
 void reaktor_layout_leaf(reaktor_layout *l, unsigned id, const reaktor_box *b);
 void reaktor_layout_close(reaktor_layout *l);
+unsigned char reaktor_layout_open_dir(const reaktor_layout *l);
 
 void reaktor_layout_end(reaktor_layout *l);
 

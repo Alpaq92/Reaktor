@@ -14,7 +14,6 @@ ok(const char *what, int cond)
     if (!cond) g_fail = 1;
 }
 
-/* A frame of a page that shows one value: time moves, the page asks, the runtime settles. */
 static float
 frame(struct nka_context *a, unsigned id, unsigned channel, float to, float ms,
       unsigned char curve, float gap_ms)
@@ -26,7 +25,6 @@ frame(struct nka_context *a, unsigned id, unsigned channel, float to, float ms,
     return v;
 }
 
-/* Frames 16 ms apart until total has passed. */
 static float
 frames(struct nka_context *a, unsigned id, unsigned channel, float to, float ms,
        unsigned char curve, float total)

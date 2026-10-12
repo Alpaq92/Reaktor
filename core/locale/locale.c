@@ -2,9 +2,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <SDL3/SDL.h>
 
 #ifndef REAKTOR_LOCALE_EMBEDDED
-#include <SDL3/SDL.h>
 #include "reaktor.h"
 #endif
 
@@ -132,14 +132,14 @@ add_catalog(const char *code, char *data)
     locale_catalog *c;
 
     if (g_count >= LOCALE_MAX || strlen(code) >= LOCALE_CODE) {
-        free(data);
+        SDL_free(data);
         return;
     }
     c = &g_cat[g_count];
     memset(c, 0, sizeof *c);
     strcpy(c->code, code);
     if (!parse(c, data)) {
-        free(data);
+        SDL_free(data);
         return;
     }
     c->name = lookup(c, "language");
@@ -154,7 +154,7 @@ release(void)
 
     for (i = 0; i < g_count; i++) {
         free(g_cat[i].entry);
-        free(g_cat[i].data);
+        SDL_free(g_cat[i].data);
     }
     g_count   = 0;
     g_current = -1;
@@ -169,7 +169,7 @@ load_all(void)
 
     for (i = 0; i < reaktor_locale_catalog_count; i++) {
         const struct reaktor_locale_catalog *e = &reaktor_locale_catalogs[i];
-        char *data = malloc(e->size + 1);
+        char *data = SDL_malloc(e->size + 1);
 
         if (!data) continue;
         memcpy(data, e->data, e->size);
@@ -279,24 +279,6 @@ reaktor_tr(const char *key)
 }
 
 static int
-utf8_next(const unsigned char *s, unsigned *cp)
-{
-    int len, i;
-
-    if (s[0] < 0x80)              { *cp = s[0];        return 1; }
-    else if ((s[0] & 0xE0) == 0xC0) { *cp = s[0] & 0x1F; len = 2; }
-    else if ((s[0] & 0xF0) == 0xE0) { *cp = s[0] & 0x0F; len = 3; }
-    else if ((s[0] & 0xF8) == 0xF0) { *cp = s[0] & 0x07; len = 4; }
-    else return 0;
-
-    for (i = 1; i < len; i++) {
-        if ((s[i] & 0xC0) != 0x80) return 0;
-        *cp = (*cp << 6) | (s[i] & 0x3F);
-    }
-    return len;
-}
-
-static int
 by_codepoint(const void *a, const void *b)
 {
     unsigned x = *(const unsigned *)a, y = *(const unsigned *)b;
@@ -307,15 +289,10 @@ by_codepoint(const void *a, const void *b)
 static void
 scan(const char *text, unsigned **set, int *n, int *cap)
 {
-    const unsigned char *s = (const unsigned char *)text;
+    Uint32 cp;
 
-    while (*s) {
-        unsigned cp = 0;
-        int      len = utf8_next(s, &cp);
-
-        if (!len) { s++; continue; }
-        s += len;
-        if (cp <= 0xFF) continue;
+    while ((cp = SDL_StepUTF8(&text, NULL)) != 0) {
+        if (cp <= 0xFF || cp == SDL_INVALID_UNICODE_CODEPOINT) continue;
         if (*n == *cap) {
             int       grow = *cap ? *cap * 2 : 256;
             unsigned *more = realloc(*set, (size_t)grow * sizeof **set);

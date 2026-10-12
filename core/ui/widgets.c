@@ -7,14 +7,14 @@ static int g_note_mute;
 struct nk_color
 reaktor_col(const unsigned char rgba[4])
 {
-    return col_of(rgba);
+    return nk_rgba_bv(rgba);
 }
 
 struct nk_color
 reaktor_token(const char *name, struct nk_color def)
 {
     unsigned char c[4];
-    return reaktor_style_token(name, c) ? col_of(c) : def;
+    return reaktor_style_token(name, c) ? nk_rgba_bv(c) : def;
 }
 
 const struct nk_user_font *
@@ -180,9 +180,10 @@ reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
                      h - 2.0f * (st->padding.y + st->border));
     side   = (int)h;
     dot_px = (int)dot.w;
-    if (bg.type == NK_STYLE_ITEM_COLOR)
+    if (bg.type == NK_STYLE_ITEM_COLOR && bg.data.color.a)
         reaktor_glyph_at(app, ctx, ring, REAKTOR_DISC_ROUND, bg.data.color, side, 0.0f);
-    reaktor_glyph_at(app, ctx, ring, REAKTOR_DISC_RING, st->border_color, side, 1.0f);
+    if (st->border_color.a && st->border > 0.0f)
+        reaktor_glyph_at(app, ctx, ring, REAKTOR_DISC_RING, st->border_color, side, 1.0f);
     if (on && cursor.type == NK_STYLE_ITEM_COLOR)
         reaktor_glyph_at(app, ctx, dot, REAKTOR_DISC_ROUND, cursor.data.color, dot_px, 0.0f);
     return clicked;
@@ -497,7 +498,7 @@ int
 reaktor_button_accent_as(App *app, struct nk_context *ctx, const char *sel,
                          const char *label)
 {
-    return css_button_accent(app, ctx, sel, label, app->accent);
+    return css_button_accent(app, ctx, sel, label);
 }
 
 int
@@ -514,7 +515,7 @@ reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
 int
 reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
 {
-    return css_button_accent(app, ctx, "button", label, app->accent);
+    return css_button_accent(app, ctx, "button", label);
 }
 
 int
@@ -556,9 +557,9 @@ reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
                              nk_style_item_color(fill));
     nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                             nk_style_item_color(col_of(hov)));
+                             nk_style_item_color(nk_rgba_bv(hov)));
     nk_style_push_style_item(ctx, &ctx->style.button.active,
-                             nk_style_item_color(col_of(hov)));
+                             nk_style_item_color(nk_rgba_bv(hov)));
     nk_style_push_color(ctx, &ctx->style.button.border_color, fill);
     reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, "");
@@ -718,6 +719,16 @@ reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
               char *buf, int *len, int cap, const char *hint,
               nk_plugin_filter filter, float pad_x, float pad_y)
 {
+    return reaktor_field_text_as(app, ctx, NULL, flags, buf, len, cap, hint,
+                                 filter, pad_x, pad_y);
+}
+
+nk_flags
+reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
+                      nk_flags flags, char *buf, int *len, int cap,
+                      const char *hint, nk_plugin_filter filter,
+                      float pad_x, float pad_y)
+{
     struct nk_rect bounds = nk_widget_bounds(ctx);
     reaktor_style s;
     style_frame f;
@@ -726,7 +737,7 @@ reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
     note_field_rect(app, ctx, bounds);
     hot_push(app, bounds, 2, 0);
 
-    f = push_edit_style(ctx, &s, 0);
+    f = push_edit_style(ctx, &s, 0, sel);
     reaktor_edit_edge(app, ctx, bounds, &s);
     if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
     if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;
@@ -834,7 +845,6 @@ focus_saw(App *app, unsigned id, struct nk_rect b)
         if (*hi < 0) *lo = n - 1;
         *hi = n - 1;
     }
-    /* A declared widget is noted before its box is placed. */
     if (id && id == app->focus_id && b.w > 0.0f && b.h > 0.0f) {
         app->focus_rect  = b;
         app->focus_seen  = 1;
@@ -1111,10 +1121,10 @@ reaktor_rule_surface(const reaktor_style *s, float radius)
 {
     reaktor_surface o;
 
-    o.fill   = s->matched && s->bg[3] ? col_of(s->bg)
+    o.fill   = s->matched && s->bg[3] ? nk_rgba_bv(s->bg)
              : reaktor_token("--background-body", nk_rgb(37, 37, 37));
     o.edge   = s->matched && s->border > 0.0f && s->border_col[3]
-             ? col_of(s->border_col) : reaktor_token("--background-hover", o.fill);
+             ? nk_rgba_bv(s->border_col) : reaktor_token("--background-hover", o.fill);
     o.border = s->matched && s->border > 0.0f ? s->border : 1.0f;
     o.radius = s->matched && s->rounding > 0.0f ? s->rounding : radius;
     return o;

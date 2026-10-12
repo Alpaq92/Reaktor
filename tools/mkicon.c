@@ -105,8 +105,6 @@ main(void)
             ok = 0;
             break;
         }
-        reaktor_unpremultiply(plutovg_surface_get_data(surf), n, n,
-                              plutovg_surface_get_stride(surf));
         e[i].size = n;
         if (n >= 256) {
             e[i].png = 1;
@@ -119,6 +117,9 @@ main(void)
                 free(g.p);
             }
         } else {
+            /* plutovg's PNG writer converts to straight alpha itself. */
+            reaktor_unpremultiply(plutovg_surface_get_data(surf), n, n,
+                                  plutovg_surface_get_stride(surf));
             e[i].data = bmp32(surf, n, &e[i].len);
         }
         plutovg_surface_destroy(surf);

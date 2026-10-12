@@ -1,5 +1,7 @@
 #include "locale_internal.h"
 
+#include <SDL3/SDL.h>
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -214,15 +216,6 @@ reaktor_format_money(char *buf, size_t cap, double amount, const char *currency)
     return buf;
 }
 
-static int
-weekday(int y, int m, int d)
-{
-    static const int t[12] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };
-
-    if (m < 3) y--;
-    return ((y + y / 4 - y / 100 + y / 400 + t[(m - 1) % 12] + d) % 7 + 7) % 7;
-}
-
 static const char MONTHS[] =
     "January | February | March | April | May | June | July | August | "
     "September | October | November | December";
@@ -264,8 +257,8 @@ reaktor_format_date(char *buf, size_t cap, const struct tm *t, int style)
     day    = t->tm_mday;
     hour   = t->tm_hour;
     minute = t->tm_min;
-    if (month < 1 || month > 12) return buf;
-    wd = weekday(year, month, day);
+    wd = SDL_GetDayOfWeek(year, month, day);
+    if (wd < 0) return buf;
 
     for (p = conv(keys[style], english[style]); *p; ) {
         char c = *p;

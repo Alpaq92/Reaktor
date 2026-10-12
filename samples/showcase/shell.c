@@ -287,9 +287,19 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
 
     at = nk_widget_bounds(ctx);
 
-    reaktor_fill_round(app, nk_window_get_canvas(ctx), at,
-                       ctx->style.button.rounding,
-                       reaktor_token("--background", nk_rgb(226, 226, 226)));
+    {
+        reaktor_style box;
+        float         round;
+
+        reaktor_style_get("details", &box);
+        round = box.matched ? box.rounding : ctx->style.button.rounding;
+        reaktor_fill_round(app, nk_window_get_canvas(ctx), at, round,
+                           box.matched && box.bg[3] ? reaktor_col(box.bg)
+                           : reaktor_token("--background", nk_rgb(226, 226, 226)));
+        if (box.matched && box.border > 0.0f)
+            reaktor_edge_round(app, nk_window_get_canvas(ctx), at, round,
+                               box.border, reaktor_col(box.border_col));
+    }
     nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
                              nk_style_item_color(nk_rgba(0, 0, 0, 0)));
     nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
@@ -298,7 +308,6 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
                        .w = card_w, .gap = ROW_GAP) {
             struct nk_rect laid;
 
-            /* The card is as tall as a sheet's margins make its rows. */
             if (reaktor_box_rect(&laid) && laid.h != g_card_h) {
                 g_card_h = laid.h;
                 reaktor_wake(app);
@@ -462,8 +471,6 @@ nav(App *app, float w, float inner_w, float h)
                    .gap = 2.0f) {
         struct nk_rect laid;
 
-        /* The scheme sits at the foot when the window has room for both
-         * lists; when it has none, the sidebar scrolls. */
         if (reaktor_box_rect(&laid)) {
             float room = h - 16.0f - (laid.h - g_nav_room);
             int   over = room < 0.0f;

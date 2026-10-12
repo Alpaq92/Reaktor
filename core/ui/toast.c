@@ -115,7 +115,7 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
 
     reaktor_style_get(".toast", &s);
     surf = reaktor_rule_surface(&s, ctx->style.button.rounding);
-    fg = s.matched && s.fg[3] ? col_of(s.fg)
+    fg = s.matched && s.fg[3] ? nk_rgba_bv(s.fg)
        : reaktor_token("--text-main", nk_rgb(247, 247, 247));
     pad_l  = s.matched ? s.pad[REAKTOR_SIDE_LEFT] : 16.0f;
     pad_r  = s.matched ? s.pad[REAKTOR_SIDE_RIGHT] : 16.0f;

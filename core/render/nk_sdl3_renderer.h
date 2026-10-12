@@ -348,10 +348,12 @@ nk_sdl_quad(const void *vertices, const nk_draw_index *ix, SDL_Texture *tex,
         float tw, th;
 
         if (!SDL_GetTextureSize(tex, &tw, &th)) return 0;
-        q->src.x = u[0] * tw;
-        q->src.y = w[0] * th;
-        q->src.w = (u[1] - u[0]) * tw;
-        q->src.h = (w[1] - w[0]) * th;
+        /* REAKTOR: a sub-image ends on whole texels, but u * size comes back a
+         * hair under one, and SDL's software copy truncates it a texel short. */
+        q->src.x = SDL_roundf(u[0] * tw);
+        q->src.y = SDL_roundf(w[0] * th);
+        q->src.w = SDL_roundf(u[1] * tw) - q->src.x;
+        q->src.h = SDL_roundf(w[1] * th) - q->src.y;
     }
     q->d      = d;
     q->col    = v[0]->col;

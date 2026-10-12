@@ -26,22 +26,17 @@ struct nk_color            reaktor_token(const char *name,
 struct nk_color            reaktor_visible(struct nk_color want,
                                            struct nk_color behind,
                                            struct nk_color fallback);
-/* The body rule's background, or --background-body when no sheet sets one. */
 struct nk_color            reaktor_page_color(App *app);
-/* The link rule's color, or --links when no sheet sets one. */
 struct nk_color            reaktor_accent_color(App *app);
 const struct nk_user_font *reaktor_font(App *app, int px, int bold);
 
 struct nk_image reaktor_ionicon(App *app, const char *name, int px);
-/* In stroke's color; sw is the stroke width, 0 for the default at px. */
 struct nk_image reaktor_ionicon_exact(App *app, const char *name, int px,
                                       struct nk_color stroke, float sw);
-/* That Ionicon drawn centered in slot on the current window's canvas. */
 void reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
                       const char *name, struct nk_color col, int px, float sw);
 
 #define REAKTOR_MARK "assets/icons/reaktor-icon.svg"
-/* An SVG by asset name; ?stroke=#rrggbb, &fill=, &sw= recolor it. */
 struct nk_image reaktor_svg(App *app, const char *src, int px);
 
 void reaktor_fill_round(App *app, struct nk_command_buffer *cv,
@@ -58,8 +53,6 @@ void reaktor_hot_follow(App *app, struct nk_rect r, int cursor);
 int reaktor_button_label(App *app, struct nk_context *ctx, const char *label);
 int reaktor_button_icon(App *app, struct nk_context *ctx,
                         const char *ionicon, const char *label);
-/* A styled single-line field over buf, which holds *len bytes of cap; hint
- * shows while it is empty, and pad_x, pad_y above 0 replace the padding. */
 nk_flags reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
                             char *buf, int *len, int cap, const char *hint,
                             nk_plugin_filter filter, float pad_x, float pad_y);
@@ -96,7 +89,6 @@ typedef struct reaktor_toast_spec {
     int         no_close;
 } reaktor_toast_spec;
 
-/* Main thread; hooks get the main window's App. */
 void  reaktor_toast(App *app, const reaktor_toast_spec *spec);
 
 int   reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,

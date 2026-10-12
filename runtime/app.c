@@ -103,7 +103,6 @@ reaktor_rss_mark(int step)
     reaktor_process_memory(&reaktor_rss[step], &reaktor_priv[step]);
 }
 
-/* SDL_free the result. */
 static char *
 from_here(const char *path)
 {
@@ -184,6 +183,38 @@ take_flags(App *app, int argc, char **argv)
     return n;
 }
 
+static void
+read_roles(App *app)
+{
+    reaktor_style body, link;
+
+    reaktor_style_get("body", &body);
+    reaktor_style_get("a:link", &link);
+    app->page = body.matched && body.bg[3] ? nk_rgba_bv(body.bg)
+              : reaktor_token("--background-body", nk_rgb(247, 247, 247));
+    app->text = body.matched && body.fg[3] ? nk_rgba_bv(body.fg)
+              : reaktor_token("--text-main", nk_rgb(51, 51, 51));
+    app->accent = link.matched && link.fg[3] ? nk_rgba_bv(link.fg)
+                : reaktor_token("--links", app->text);
+}
+
+static const char *
+role_sheet(const App *app)
+{
+    static char css[256];
+    const struct nk_color *c[3] = { &app->accent, &app->page, &app->text };
+    static const char *const name[3] = { "--links", "--background-body", "--text-main" };
+    int i, k = SDL_snprintf(css, sizeof(css), ":root {");
+
+    for (i = 0; i < 3 && k > 0 && k < (int)sizeof(css); i++)
+        k += SDL_snprintf(css + k, sizeof(css) - (size_t)k, " %s: rgba(%d, %d, %d, %.3f);",
+                          name[i], c[i]->r, c[i]->g, c[i]->b, c[i]->a / 255.0);
+    if (k > 0 && k < (int)sizeof(css))
+        SDL_snprintf(css + k, sizeof(css) - (size_t)k, " }");
+    reaktor_asset_register(".reaktor-roles.css", css, SDL_strlen(css));
+    return ".reaktor-roles.css";
+}
+
 static const char *
 theme_sheet(int dark)
 {
@@ -195,7 +226,7 @@ void
 load_theme(App *app)
 {
     const char *sheets[SHEET_MAX];
-    int n = 0, i;
+    int n = 0, i, base;
     unsigned char c[4];
     Uint64 t0, t1;
 
@@ -204,6 +235,7 @@ load_theme(App *app)
     sheets[n++] = theme_sheet(app->dark);
     sheets[n++] = CORE_SHEET;
     if (!g_launch.no_reaktor_css) sheets[n++] = APP_SHEET;
+    base = n;
     for (i = 0; i < g_css_n && n < SHEET_MAX; i++) sheets[n++] = g_css[i];
     for (i = 0; i < g_cli_css_n && n < SHEET_MAX; i++) sheets[n++] = g_cli_css[i];
     app->sheets = n;
@@ -211,32 +243,15 @@ load_theme(App *app)
     t0 = SDL_GetPerformanceCounter();
     if (!reaktor_style_init(sheets, n, app->dark ? "dark" : "light"))
         SDL_Log("stylesheets failed to load; Nuklear defaults apply");
+    read_roles(app);
+    if (n > base && n < SHEET_MAX) {
+        sheets[n] = role_sheet(app);
+        if (reaktor_style_init(sheets, n + 1, app->dark ? "dark" : "light"))
+            read_roles(app);
+    }
     t1 = SDL_GetPerformanceCounter();
     app->style_ms_x100 = (int)(100000.0 * (double)(t1 - t0) /
                                (double)SDL_GetPerformanceFrequency());
-
-    {
-        reaktor_style body;
-
-        reaktor_style_get("body", &body);
-        app->page = body.matched && body.bg[3]
-                  ? nk_rgba(body.bg[0], body.bg[1], body.bg[2], body.bg[3])
-                  : reaktor_style_token("--background-body", c)
-                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(247, 247, 247);
-        app->text = body.matched && body.fg[3]
-                  ? nk_rgba(body.fg[0], body.fg[1], body.fg[2], body.fg[3])
-                  : reaktor_style_token("--text-main", c)
-                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(51, 51, 51);
-    }
-    {
-        reaktor_style link;
-
-        reaktor_style_get("a:link", &link);
-        app->accent = link.matched && link.fg[3]
-                    ? nk_rgba(link.fg[0], link.fg[1], link.fg[2], link.fg[3])
-                    : reaktor_style_token("--links", c)
-                    ? nk_rgba(c[0], c[1], c[2], c[3]) : app->text;
-    }
     app->card_bg = reaktor_style_token("--background", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(226, 226, 226);
     if (reaktor_style_token("--text-muted", c))
@@ -244,9 +259,6 @@ load_theme(App *app)
                      "#%02x%02x%02x", c[0], c[1], c[2]);
     else
         SDL_strlcpy(app->icon_hex, "#6a6a6a", sizeof(app->icon_hex));
-
-    SDL_snprintf(app->accent_hex, sizeof(app->accent_hex), "#%02x%02x%02x",
-                 app->accent.r, app->accent.g, app->accent.b);
 
     reaktor_window_set_dark(app->win, app->dark);
 
@@ -258,7 +270,6 @@ load_theme(App *app)
     reaktor_windows_restyle();
 }
 
-/* A window's own wake carries its id; the main window's carries none. */
 static bool
 wake_app(const App *app)
 {
@@ -1056,7 +1067,6 @@ take_event(App *app, SDL_Event *event)
         break;
 
     default:
-        /* A wake: the runtime's own, or a type the a11y bridge registered. */
         if (event->type >= SDL_EVENT_USER) {
             SDL_SetAtomicInt(&app->wake, 0);
             app->dirty = 1;

@@ -137,7 +137,6 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
-# Compiled in byte for byte; a file at the same path under the root wins.
 set(REAKTOR_BUILTINS
     assets/fonts/Aileron-Regular.otf
     assets/fonts/Aileron-Bold.otf
@@ -189,7 +188,7 @@ add_library(reaktor_core STATIC
     core/render/appicon.c
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
-target_link_libraries(reaktor_core PUBLIC plutosvg reaktor_headers)
+target_link_libraries(reaktor_core PUBLIC plutosvg reaktor_headers SDL3::SDL3-static)
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")
@@ -227,7 +226,7 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(localetest tools/localetest.c
                    core/locale/locale.c core/locale/plural.c
                    core/locale/format.c)
-    target_link_libraries(localetest PRIVATE reaktor_headers)
+    target_link_libraries(localetest PRIVATE reaktor_headers SDL3::SDL3-static)
     target_include_directories(localetest PRIVATE core/locale)
     target_compile_definitions(localetest PRIVATE REAKTOR_LOCALE_EMBEDDED)
     set_target_properties(localetest PROPERTIES
@@ -299,8 +298,7 @@ elseif(WIN32)
         "${_a11y}/a11y_snapshot.c" "${_a11y}/a11y_win32.c")
     target_link_libraries(reaktor_a11y INTERFACE uiautomationcore ole32 oleaut32)
 elseif(APPLE)
-    # Compiled here: an interface library's sources compile in the directory
-    # of whoever links it, where Objective-C may not be enabled.
+    # Here: an interface library compiles where it is linked, maybe without OBJC.
     enable_language(OBJC)
     add_library(reaktor_a11y_macos OBJECT "${_a11y}/a11y_macos.m")
     target_compile_options(reaktor_a11y_macos PRIVATE -fobjc-arc)
@@ -478,7 +476,6 @@ endif()
 
 set(REAKTOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
 
-# MIT wants each notice in every copy: they go beside the programs, unchanged.
 foreach(_lic SDL/LICENSE.txt lcui/LICENSE.TXT plutosvg/LICENSE nuklear/LICENSE
              nukanim/LICENSE onlay/LICENSE tinycss/LICENSE ionicons/LICENSE mojibake/LICENSE
              kb/LICENSE)
@@ -492,8 +489,6 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
 
-# reaktor_add_app(<name> [CONSOLE] [MODULES a11y locale text | none]
-#                 SOURCES ... [ASSETS <file>@<path> ...])
 function(reaktor_add_app name)
     cmake_parse_arguments(RA "CONSOLE" "" "SOURCES;MODULES;ASSETS" ${ARGN})
     if(RA_CONSOLE)
@@ -713,7 +708,6 @@ foreach(_t IN LISTS _parts)
     list(APPEND _files "$<TARGET_FILE:${_t}>")
 endforeach()
 
-# What a program links beside libreaktor: whatever its parts link that is not merged in.
 function(reaktor_outside_links)
     set(_libs "")
     set(_dirs "")
