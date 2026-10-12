@@ -518,14 +518,15 @@ rather than restarts. `channel`, the second argument, tells several numbers on
 one box apart, and each window keeps its own. There are 31 curves, and `reaktor_ease_at(curve, t)` draws
 them; `reaktor_anim_progress` says how far a run has got.
 
-The rest of `nukanim.h` works on the window's context, `reaktor_anim(app)`:
+The rest of NukAnim works on the window's context, `reaktor_anim(app)`, under
+`reaktor_anim_` and `REAKTOR_ANIM_` names that alias `nka_` and `NKA_`:
 springs, steps and béziers, colors blended in OKLAB, clips and timelines,
 motion paths, oscillators and noise, and ImAnimate's way of animating a value
 that keeps its own state:
 
 ```c
-if (hovered) nka_animate(reaktor_anim(app), 1.0f, 1.1f, 150.0f, &size, NKA_EASE_OUT_CUBIC);
-else         nka_animate(reaktor_anim(app), 1.1f, 1.0f, 250.0f, &size, NKA_EASE_OUT_CUBIC);
+if (hovered) reaktor_anim_animate(reaktor_anim(app), 1, 1.1f, 150, &size, REAKTOR_ANIM_EASE_OUT_CUBIC);
+else         reaktor_anim_animate(reaktor_anim(app), 1.1f, 1, 250, &size, REAKTOR_ANIM_EASE_OUT_CUBIC);
 ```
 
 The runtime moves the context's time before each page and draws another frame
@@ -533,7 +534,7 @@ while anything the page sampled is still moving, so a page with nothing moving
 asks for no frames. What is not sampled for 600 frames is forgotten. Something
 that changes under the pointer needs a hot rectangle, `reaktor_hot`, for the
 pointer's motion to run a frame. NukAnim's debug timeline,
-`nka_show_debug_timeline`, lays out a row of its own, so it goes between
+`reaktor_anim_show_debug_timeline`, lays out a row of its own, so it goes between
 declared blocks rather than inside one, and its tooltips follow the pointer
 only across a `reaktor_hot_follow` rectangle.
 
