@@ -68,11 +68,90 @@ sample_tab(void)
     return g_tab;
 }
 
+#define SPLASH_W  480
+#define SPLASH_H  300
+#define SPLASH_MS 2000
+
+static int    g_splash;
+static Uint64 g_splash_t0;
+
+static float
+reveal(unsigned channel, Uint64 after)
+{
+    int due = SDL_GetTicks() - g_splash_t0 >= after;
+
+    return reaktor_animate(1, channel, due ? 1.0f : 0.0f, 600.0f, REAKTOR_EASE_CUBIC_OUT);
+}
+
+static void
+credit(struct reaktor_command_buffer *cv, const struct reaktor_user_font *f,
+       const char *text, float y, int w, struct reaktor_color c, float a)
+{
+    float tw = f->width(f->userdata, f->height, text, (int)SDL_strlen(text));
+
+    c.a = (reaktor_byte)(c.a * a);
+    reaktor_draw_text(cv, reaktor_rect(((float)w - tw) * 0.5f, y + (1.0f - a) * 8.0f,
+                                       tw, f->height),
+                      text, (int)SDL_strlen(text), f, reaktor_rgba(0, 0, 0, 0), c);
+}
+
+static void
+splash_tick(App *app, void *user)
+{
+    (void)app; (void)user;
+}
+
+static void
+splash_page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
+{
+    struct reaktor_command_buffer *cv = reaktor_window_get_canvas(ctx);
+    struct reaktor_color ink = text_main(), muted = reaktor_token("--text-muted", ink);
+    float mark = reveal(0, 0), name = reveal(1, 350), tag = reveal(2, 650);
+    float px = 96.0f * (0.92f + 0.08f * mark);
+    struct reaktor_image im = reaktor_image_file(app, REAKTOR_MARK, 96);
+    char line[96];
+    int  v = SDL_GetVersion();
+
+    static int ticks;
+
+    (void)user;
+    if (!ticks++) {
+        reaktor_timer(app, 350, 0, splash_tick, NULL);
+        reaktor_timer(app, 650, 0, splash_tick, NULL);
+    }
+    reaktor_fill_rect(cv, reaktor_rect(0, 0, (float)w, (float)h), 0, reaktor_page_color(app));
+    reaktor_draw_image(cv, reaktor_rect(((float)w - px) * 0.5f, 52.0f + (96.0f - px) * 0.5f, px, px),
+                       &im, reaktor_rgba(255, 255, 255, (reaktor_byte)(255.0f * mark)));
+    credit(cv, reaktor_font(app, 30, 1), "Reaktor", 164.0f, w, ink, name);
+    SDL_snprintf(line, sizeof line, "version %s", reaktor_version());
+    credit(cv, reaktor_font(app, 15, 0), line, 204.0f, w, muted, name);
+    SDL_snprintf(line, sizeof line, "SDL %d.%d.%d  \xC2\xB7  Nuklear  \xC2\xB7  NukAnim  \xC2\xB7  LCUI  \xC2\xB7  plutosvg",
+                 SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v));
+    credit(cv, reaktor_font(app, 12, 0), line, 250.0f, w, muted, tag);
+    credit(cv, reaktor_font(app, 12, 0), "Onlay  \xC2\xB7  mojibake  \xC2\xB7  kb_text_shape  \xC2\xB7  tiny.css",
+           268.0f, w, muted, tag);
+}
+
+static void
+splash_done(App *app, void *user)
+{
+    (void)user;
+    reaktor_window_close(app, g_splash);
+    reaktor_set_visible(app, 1);
+}
+
 static int
 sample_start(App *app, int argc, char **argv)
 {
     int i;
 
+    g_splash_t0 = SDL_GetTicks();
+    g_splash = reaktor_window_open(app, &(reaktor_window){
+        .window = { .w = SPLASH_W, .h = SPLASH_H, .borderless = 1, .centered = 1,
+                    .skip_taskbar = 1 },
+        .page   = splash_page });
+    if (g_splash) reaktor_timer(app, SPLASH_MS, 0, splash_done, NULL);
+    else          reaktor_set_visible(app, 1);
     showcase_tray_show(app, 1);
     for (i = 1; i < argc; i++) {
         int n = i + 1 < argc ? SDL_atoi(argv[i + 1]) : -1;
@@ -719,7 +798,7 @@ main(int argc, char **argv)
 {
     return launchApp(argc, argv, &(reaktor_launch){
         .name           = "Showcase",
-        .window         = { .w = WINDOW_WIDTH, .h = WINDOW_HEIGHT,
+        .window         = { .w = WINDOW_WIDTH, .h = WINDOW_HEIGHT, .hidden = 1,
                             .borderless = 1, .hit_test = window_hit_test },
         .font_fallbacks = { { .path = "assets/fonts/MPLUS1p-Regular.ttf" } },
         .page           = page_shell,

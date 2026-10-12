@@ -306,7 +306,7 @@ levels(const char *s, int len, int n)
         mjb_bidi_resolve(s, (size_t)len, MJB_ENC_UTF_8, MJB_DIRECTION_AUTO, &p)
             != MJB_STATUS_OK)
         return;
-    /* mojibake 0.3.6 puts byte_offset at a character's last byte. */
+    /* mojibake 0.4.1 puts byte_offset at a character's last byte. */
     for (i = 0; i < n; i++) {
         if (k < (int)p.count && (int)p.chars[k].codepoint == g_ch[i].cp)
             g_ch[i].level = p.chars[k++].level;

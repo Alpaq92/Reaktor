@@ -21,6 +21,10 @@ itself, and a screen reader finds nothing in them.
 
 ## Showcase
 
+It opens with a two-second splash: the mark, the name, Reaktor's and SDL's
+versions and what it is built on, each fading in after the one before. The
+web build shows its loading screen instead.
+
 <p align="center">
   <img src="../assets/screenshots/showcase.png" alt="The Reaktor showcase under the system's titlebar in the dark scheme: the sidebar of pages with System chosen at its foot, and the Login page's card in a rounded panel">
 </p>
