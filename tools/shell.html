@@ -29,33 +29,107 @@
     image-rendering: -webkit-optimize-contrast;
   }
   #status {
+    --ink: #333333;
+    --muted: #6a6a6a;
+    --track: #e2e2e2;
+    --fill: #0070e0;
     position: fixed;
     inset: 0;
     display: grid;
-    place-items: center;
-    color: #c0c0c0;
-    font: 14px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    place-content: center;
+    justify-items: center;
+    gap: 14px;
+    color: var(--ink);
+    font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI",
           Roboto, sans-serif;
+    transition: opacity 240ms ease-out;
 
     pointer-events: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    #status {
+      --ink: #f7f7f7;
+      --muted: #c0c0c0;
+      --track: #3a3a3a;
+      --fill: #56c7ff;
+    }
+  }
+  #status.done { opacity: 0; }
+  #status img {
+    width: 64px;
+    height: 64px;
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+  #status .name {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  #status .bar {
+    width: 220px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--track);
+    overflow: hidden;
+  }
+  #status .bar div {
+    width: 30%;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--fill);
+    animation: sweep 1.2s ease-in-out infinite;
+  }
+  #status .bar.known div {
+    animation: none;
+    transition: width 160ms linear;
+  }
+  #status .text {
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  @keyframes breathe { 50% { transform: scale(0.94); opacity: 0.85; } }
+  @keyframes sweep {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(340%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #status img, #status .bar div { animation: none; }
   }
 </style>
 </head>
 <body>
-  <div id="status">loading&hellip;</div>
+  <div id="status" role="status" aria-live="polite">
+    <img src="reaktor-icon.svg" alt="">
+    <div class="name">Reaktor</div>
+    <div class="bar"><div></div></div>
+    <div class="text">Loading&hellip;</div>
+  </div>
   <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()">
   </canvas>
   <script>
     var statusEl = document.getElementById('status');
+    var barEl = statusEl.querySelector('.bar');
+    var textEl = statusEl.querySelector('.text');
     var Module = {
       canvas: document.getElementById('canvas'),
       print: function (text) { console.log(text); },
       printErr: function (text) { console.error(text); },
       setStatus: function (text) {
         if (!statusEl) return;
-        if (text) { statusEl.textContent = text; return; }
-        statusEl.remove();
+        if (text) {
+          var m = /\((\d+)\/(\d+)\)/.exec(text);
+          if (m && +m[2] > 0) {
+            barEl.classList.add('known');
+            barEl.firstChild.style.width = Math.min(100, 100 * m[1] / m[2]) + '%';
+          }
+          textEl.textContent = text.replace('...', '\u2026');
+          return;
+        }
+        var el = statusEl;
         statusEl = null;
+        el.classList.add('done');
+        setTimeout(function () { el.remove(); }, 260);
       }
     };
 
