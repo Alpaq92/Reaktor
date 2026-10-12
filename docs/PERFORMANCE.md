@@ -23,7 +23,7 @@ the one all four programs share.
 Memory: Reaktor 10.0 MB, the same binary on D3D11 60.7 MB and on OpenGL
 90.2 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB.
 CPU as a percent of one core: Reaktor 16.4%, D3D11 14.4%, OpenGL 14.1%,
-Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%](../assets/rest/benchmark.svg)
+Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
 rotating at 60 fps in an 800×600 window, run on one machine by one procedure;

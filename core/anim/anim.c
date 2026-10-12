@@ -35,8 +35,7 @@ reaktor_anim_create(void)
     al.alloc = anim_alloc;
     al.free = anim_free;
     a = nka_create(&al);
-    /* A value starts where it is first asked to be, so it must be kept. */
-    if (a) nka_set_lazy_init(a, 0);
+    if (a) nka_set_keep_at_rest(a, 1);
     return a;
 }
 

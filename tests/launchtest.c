@@ -31,6 +31,8 @@ static struct nk_rect g_field, g_button, g_link, g_combo;
 
 static void push_key(App *app, SDL_EventType type, SDL_Keycode key);
 static void push_text(App *app, const char *text);
+static void picked(App *app, const char *const *paths, int count, void *user);
+static void dialog_page(App *app);
 
 static void
 push_mouse(App *app, SDL_EventType type, float x, float y)
@@ -483,7 +485,9 @@ win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
     } else if (is("win-drag")) {
         more = 0;
     } else if (is("win-picker") || is("win-picker-close")) {
-        if (f == 2) note(reaktor_file_open(app) ? "picker open" : "picker refused");
+        if (f == 2)
+            note(reaktor_file_dialog_open(app, &(reaktor_file_dialog){
+                     .chosen = picked }) ? "picker open" : "picker refused");
         if (is("win-picker-close") && f == 4) {
             reaktor_window_close(app, g_win_open);
             note("window closing");
@@ -558,6 +562,150 @@ press_named(App *app, const char *name)
 }
 
 static void
+answered(App *app, int button, void *user)
+{
+    char line[32];
+
+    (void)app; (void)user;
+    SDL_snprintf(line, sizeof line, "answer %d", button);
+    note(line);
+}
+
+static void
+ticked(App *app, void *user)
+{
+    static int n;
+    char line[32];
+
+    SDL_snprintf(line, sizeof line, "tick %d %s", ++n,
+                 app == reaktor_main_app() ? "main" : "other");
+    note(line);
+    if (n == 3) reaktor_timer_stop(*(unsigned *)user);
+}
+
+static void
+posted(App *app, void *user)
+{
+    (void)app;
+    note(SDL_IsMainThread() ? (const char *)user : "posted off the main thread");
+}
+
+static int SDLCALL
+post_from_thread(void *app)
+{
+    reaktor_post((App *)app, posted, "posted on the main thread");
+    return 0;
+}
+
+static const char *
+cell(int row, int column, void *user)
+{
+    static char text[20][8];
+
+    (void)column; (void)user;
+    SDL_snprintf(text[row], sizeof text[row], "row %d", row);
+    return text[row];
+}
+
+static int
+row_shown(App *app, int row)
+{
+    const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
+    int  n = app->a11y.count[1 - app->a11y.front], i;
+    char name[8];
+
+    SDL_snprintf(name, sizeof name, "row %d", row);
+    for (i = 0; i < n; i++)
+        if (t[i].role == REAKTOR_A11Y_LISTITEM && t[i].name &&
+            SDL_strcmp(t[i].name, name) == 0)
+            return !(t[i].state & REAKTOR_A11Y_OFFSCREEN);
+    return 0;
+}
+
+static void
+service_page(App *app, struct nk_context *ctx, int w, int h)
+{
+    static const char *const buttons[2] = { "Keep", "Save" };
+    static unsigned repeat;
+    static int chosen = -1, said = -1;
+    static float split = 0.5f;
+    char line[48];
+
+    (void)ctx;
+    if (is("ask") && g_frames == 2)
+        reaktor_ask(app, &(reaktor_question){ .text = "Save it?", .buttons = buttons,
+                                              .count = 2, .answered = answered });
+    if (is("ask") && g_frames == 6) note(press_named(app, "Save") ? "pressed" : "no button");
+    if (is("timer") && g_frames == 2) {
+        repeat = reaktor_timer(app, 50, 1, ticked, &repeat);
+        note(repeat ? "timer on" : "timer refused");
+    }
+    if (is("post") && g_frames == 2)
+        SDL_DetachThread(SDL_CreateThread(post_from_thread, "post", app));
+    if (is("settings") && g_frames == 2) {
+        reaktor_setting_set("launchtest.key", "a=b");
+        reaktor_setting_set("launchtest.gone", "x");
+        reaktor_setting_set("launchtest.gone", NULL);
+        SDL_snprintf(line, sizeof line, "setting %s %s",
+                     reaktor_setting("launchtest.key"),
+                     reaktor_setting("launchtest.gone") ? "kept" : "removed");
+        note(line);
+    }
+    if (is("list") && g_frames == 4) {
+        const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
+        int n = app->a11y.count[1 - app->a11y.front], i;
+
+        for (i = 0; i < n; i++)
+            if (t[i].role == REAKTOR_A11Y_LISTITEM && t[i].name &&
+                SDL_strcmp(t[i].name, "row 1") == 0)
+                push_click(app, t[i].bounds.x + 10.0f, t[i].bounds.y + t[i].bounds.h * 0.5f);
+    }
+    if (is("list-keys") && (g_frames == 3 || g_frames == 4)) push_tap(app, SDLK_TAB);
+    if (is("list-keys") && g_frames >= 6 && g_frames < 30 && g_frames % 2 == 0)
+        push_tap(app, SDLK_DOWN);
+    if (is("list-keys") && g_frames == 50) {
+        SDL_snprintf(line, sizeof line, "chosen %d, %s", chosen,
+                     row_shown(app, chosen) ? "in view" : "out of view");
+        note(line);
+    }
+    if (is("split-keys") && g_frames == 3) push_tap(app, SDLK_TAB);
+    if (is("split-keys") && g_frames == 5) push_tap(app, SDLK_TAB);
+    if (is("split-keys") && (g_frames == 8 || g_frames == 10)) push_tap(app, SDLK_RIGHT);
+    if (is("split-keys") && g_frames == 12) push_tap(app, SDLK_LEFT);
+    if (is("split-keys") && g_frames == 30) {
+        SDL_snprintf(line, sizeof line, "split %.2f", split);
+        note(line);
+    }
+    if (is("list") && chosen != said) {
+        said = chosen;
+        SDL_snprintf(line, sizeof line, "chosen %d", chosen);
+        note(line);
+    }
+    if (g_frames > 60) reaktor_quit(app, 0);
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_COLUMN(.w = (float)w) {
+            reaktor_button(&(reaktor_button_spec){ .label = "Hover me",
+                                                   .tooltip = "A tip" });
+            if (is("list"))
+                reaktor_list(&(reaktor_list_spec){ .name = "List", .count = 3,
+                                                   .cell = cell, .selected = &chosen });
+            if (is("list-keys"))
+                reaktor_list(&(reaktor_list_spec){ .name = "List", .count = 20,
+                                                   .cell = cell, .selected = &chosen,
+                                                   .box = { .h = 100.0f } });
+            if (is("split-keys"))
+                REAKTOR_ROW(.h = 40.0f, .w = (float)w) {
+                    REAKTOR_COLUMN(.weight = split, .flags = REAKTOR_LAY_FILL_Y) {}
+                    reaktor_splitter(&(reaktor_splitter_spec){ .value = &split });
+                    REAKTOR_COLUMN(.weight = 1.0f - split, .flags = REAKTOR_LAY_FILL_Y) {}
+                }
+        }
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static void
 confirm_page(App *app)
 {
     SDL_Event e;
@@ -616,8 +764,14 @@ page(App *app, struct nk_context *ctx, int w, int h)
         return;
     }
     if (is("confirm") || is("confirm-cancel")) confirm_page(app);
+    if (SDL_strncmp(g_mode, "dialog-", 7) == 0) dialog_page(app);
     if (SDL_strncmp(g_mode, "hold-", 5) == 0) {
         hold_page(app, ctx, w, h);
+        return;
+    }
+    if (is("ask") || is("timer") || is("post") || is("settings") || is("list") ||
+        is("tip") || is("list-keys") || is("split-keys")) {
+        service_page(app, ctx, w, h);
         return;
     }
     if (ctx->input.keyboard.text_len > 0) {
@@ -693,6 +847,7 @@ start(App *app, int argc, char **argv)
     if (argc > 2) g_log = argv[2];
     note("start");
     if (is("start-fail")) return 5;
+    if (is("tip")) push_mouse(app, SDL_EVENT_MOUSE_MOTION, 60.0f, 30.0f);
     if (is("quit") || is("twice"))
         SDL_DetachThread(SDL_CreateThread(quit_later, "quit", app));
     if (is("request")) SDL_DetachThread(SDL_CreateThread(request_twice, "request", app));
@@ -750,6 +905,39 @@ key(App *app, const SDL_Event *e)
         note("key hook in window");
     }
     return is("keyeat") && e->key.key == SDLK_X;
+}
+
+static void
+picked(App *app, const char *const *paths, int count, void *user)
+{
+    char line[600];
+    int  i;
+
+    (void)user;
+    SDL_snprintf(line, sizeof line, "file in %s: %s",
+                 app->secondary ? "window" : "main", count ? paths[0] : "(none)");
+    note(line);
+    for (i = 1; i < count; i++) {
+        SDL_snprintf(line, sizeof line, "and %s", paths[i]);
+        note(line);
+    }
+    if (SDL_strncmp(g_mode, "dialog-", 7) == 0) reaktor_quit(app, 0);
+}
+
+static void
+dialog_page(App *app)
+{
+    static const reaktor_file_filter text[] = { { "Text", "txt" }, { "All files", "*" } };
+
+    if (g_frames != 2) return;
+    note(reaktor_file_dialog_open(app, &(reaktor_file_dialog){
+             .kind = is("dialog-save") ? REAKTOR_FILE_SAVE
+                   : is("dialog-folder") ? REAKTOR_FOLDER_OPEN : REAKTOR_FILE_OPEN,
+             .filters = text, .filter_count = 2, .many = is("dialog-many"),
+             .location = SDL_GetBasePath(), .chosen = picked })
+         ? "dialog open" : "dialog refused");
+    note(reaktor_file_dialog_open(app, &(reaktor_file_dialog){ .chosen = picked })
+         ? "second dialog open" : "second dialog refused");
 }
 
 static void

@@ -1,6 +1,8 @@
 #ifndef REAKTOR_UI_PUBLIC_H
 #define REAKTOR_UI_PUBLIC_H
 
+#include <SDL3/SDL.h>
+
 #include "reaktor/nuklear.h"
 #include "reaktor/a11y.h"
 
@@ -20,69 +22,86 @@ enum {
     REAKTOR_RSS_STEPS
 };
 
-struct nk_color            reaktor_col(const unsigned char rgba[4]);
-struct nk_color            reaktor_token(const char *name,
-                                         struct nk_color def);
-struct nk_color            reaktor_visible(struct nk_color want,
-                                           struct nk_color behind,
-                                           struct nk_color fallback);
-struct nk_color            reaktor_page_color(App *app);
-struct nk_color            reaktor_accent_color(App *app);
-const struct nk_user_font *reaktor_font(App *app, int px, int bold);
+struct reaktor_color       reaktor_col(const unsigned char rgba[4]);
+struct reaktor_color       reaktor_token(const char *name,
+                                         struct reaktor_color def);
+struct reaktor_color       reaktor_visible(struct reaktor_color want,
+                                           struct reaktor_color behind,
+                                           struct reaktor_color fallback);
+struct reaktor_color       reaktor_page_color(App *app);
+struct reaktor_color       reaktor_accent_color(App *app);
+const struct reaktor_user_font *reaktor_font(App *app, int px, int bold);
 
-struct nk_image reaktor_ionicon(App *app, const char *name, int px);
-struct nk_image reaktor_ionicon_exact(App *app, const char *name, int px,
-                                      struct nk_color stroke, float sw);
-void reaktor_glyph_at(App *app, struct nk_context *ctx, struct nk_rect slot,
-                      const char *name, struct nk_color col, int px, float sw);
+struct reaktor_image reaktor_ionicon(App *app, const char *name, int px);
+struct reaktor_image reaktor_ionicon_exact(App *app, const char *name, int px,
+                                           struct reaktor_color stroke,
+                                           float sw);
+void reaktor_glyph_at(App *app, struct reaktor_context *ctx,
+                      struct reaktor_rect slot,
+                      const char *name, struct reaktor_color col, int px,
+                      float sw);
 
 #define REAKTOR_MARK "assets/icons/reaktor-icon.svg"
-struct nk_image reaktor_svg(App *app, const char *src, int px);
+struct reaktor_image reaktor_image_file(App *app, const char *src, int px);
+void reaktor_image_centered(struct reaktor_context *ctx, struct reaktor_image im,
+                            int px);
 
-void reaktor_fill_round(App *app, struct nk_command_buffer *cv,
-                        struct nk_rect b, float rounding, struct nk_color col);
-void reaktor_edge_round(App *app, struct nk_command_buffer *cv,
-                        struct nk_rect b, float rounding, float width,
-                        struct nk_color col);
-struct nk_color reaktor_on(struct nk_color bg);
+typedef struct reaktor_style_frame {
+    int items, colors, floats, vec2s, fonts;
+} reaktor_style_frame;
+void reaktor_style_frame_pop(struct reaktor_context *ctx, reaktor_style_frame f);
 
-void reaktor_hot(App *app, struct nk_rect r, int cursor, int repaint);
-void reaktor_hot_top(App *app, struct nk_rect r, int cursor, int repaint);
-void reaktor_hot_follow(App *app, struct nk_rect r, int cursor);
+void reaktor_fill_round(App *app, struct reaktor_command_buffer *cv,
+                        struct reaktor_rect b, float rounding,
+                        struct reaktor_color col);
+void reaktor_edge_round(App *app, struct reaktor_command_buffer *cv,
+                        struct reaktor_rect b, float rounding, float width,
+                        struct reaktor_color col);
+struct reaktor_color reaktor_on(struct reaktor_color bg);
 
-int reaktor_button_label(App *app, struct nk_context *ctx, const char *label);
-int reaktor_button_icon(App *app, struct nk_context *ctx,
+void reaktor_hot(App *app, struct reaktor_rect r, int cursor, int repaint);
+void reaktor_hot_top(App *app, struct reaktor_rect r, int cursor, int repaint);
+void reaktor_hot_follow(App *app, struct reaktor_rect r, int cursor);
+
+int reaktor_button_label(App *app, struct reaktor_context *ctx,
+                         const char *label);
+int reaktor_button_icon(App *app, struct reaktor_context *ctx,
                         const char *ionicon, const char *label);
-nk_flags reaktor_field_text(App *app, struct nk_context *ctx, nk_flags flags,
-                            char *buf, int *len, int cap, const char *hint,
-                            nk_plugin_filter filter, float pad_x, float pad_y);
-void reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id,
+reaktor_flags reaktor_field_text(App *app, struct reaktor_context *ctx,
+                                 reaktor_flags flags,
+                                 char *buf, int *len, int cap, const char *hint,
+                                 reaktor_plugin_filter filter, float pad_x,
+                                 float pad_y);
+void reaktor_slider_bar(App *app, struct reaktor_context *ctx, unsigned id,
                         float *val, float lo, float hi, float step);
 
-void reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur,
-                          nk_size max, int modifiable);
+void reaktor_progress_bar(App *app, struct reaktor_context *ctx,
+                          reaktor_size *cur,
+                          reaktor_size max, int modifiable);
 
-void reaktor_chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
-                        const char *name, struct nk_color col);
+void reaktor_chevron_at(App *app, struct reaktor_context *ctx,
+                        struct reaktor_rect slot,
+                        const char *name, struct reaktor_color col);
 
-int reaktor_button_accent(App *app, struct nk_context *ctx, const char *label);
-const struct nk_user_font *reaktor_style_font(App *app,
-                                              const char *selector,
-                                              int px, int bold);
+int reaktor_button_accent(App *app, struct reaktor_context *ctx,
+                          const char *label);
+const struct reaktor_user_font *reaktor_style_font(App *app,
+                                                   const char *selector,
+                                                   int px, int bold);
 float reaktor_popup_rounding(void);
 
 #define REAKTOR_MENU_ROW 22.0f
 #define REAKTOR_MENU_GAP  2.0f
-void  reaktor_menu_style_push(struct nk_context *ctx);
-void  reaktor_menu_style_pop(struct nk_context *ctx);
+void  reaktor_menu_style_push(struct reaktor_context *ctx);
+void  reaktor_menu_style_pop(struct reaktor_context *ctx);
 float reaktor_menu_height(int rows);
-void  reaktor_menu_edge(App *app, struct nk_context *ctx);
+void  reaktor_menu_edge(App *app, struct reaktor_context *ctx);
 typedef struct reaktor_toast_spec {
     const char *text;
     const char *icon;
     const char *action;
     void      (*on_action)(App *app, void *user);
-    void      (*content)(App *app, struct nk_context *ctx, void *user);
+    void      (*content)(App *app, struct reaktor_context *ctx, void *user);
     float       content_w;
     void       *user;
     int         timeout_ms;
@@ -91,29 +110,73 @@ typedef struct reaktor_toast_spec {
 
 void  reaktor_toast(App *app, const reaktor_toast_spec *spec);
 
-int   reaktor_menu_item(App *app, struct nk_context *ctx, const char *label,
+int   reaktor_menu_item(App *app, struct reaktor_context *ctx,
+                        const char *label,
                         const char *accel, int contextual);
 
 unsigned reaktor_note(App *app, unsigned char role, const char *name,
                       const char *value, unsigned state,
-                      struct nk_rect bounds);
+                      struct reaktor_rect bounds);
 unsigned reaktor_note_push(App *app, unsigned char role, const char *name,
                            const char *value, unsigned state,
-                           struct nk_rect bounds);
+                           struct reaktor_rect bounds);
 void reaktor_note_pop(App *app);
 
 int reaktor_focus_activated(App *app, unsigned id);
-void reaktor_focus_area(App *app, struct nk_rect area, unsigned node);
-int  reaktor_focus_scroll(App *app, struct nk_rect *reveal);
+void reaktor_focus_area(App *app, struct reaktor_rect area, unsigned node);
+int  reaktor_focus_scroll(App *app, struct reaktor_rect *reveal);
 
 void reaktor_note_keys(App *app, unsigned id, const char *keys);
 void reaktor_note_value(App *app, unsigned id, const char *value);
-void reaktor_note_bounds(App *app, unsigned id, struct nk_rect r);
-unsigned reaktor_note_here(App *app, struct nk_context *ctx,
+void reaktor_note_bounds(App *app, unsigned id, struct reaktor_rect r);
+unsigned reaktor_note_here(App *app, struct reaktor_context *ctx,
                            unsigned char role, const char *name,
                            unsigned state);
 
-int reaktor_file_open(App *app);
+enum {
+    REAKTOR_CURSOR_DEFAULT = 0,
+    REAKTOR_CURSOR_POINTER,
+    REAKTOR_CURSOR_TEXT,
+    REAKTOR_CURSOR_RESIZE_X,
+    REAKTOR_CURSOR_RESIZE_Y,
+    REAKTOR_CURSORS
+};
+
+enum { REAKTOR_FILE_OPEN = 0, REAKTOR_FILE_SAVE, REAKTOR_FOLDER_OPEN };
+
+typedef SDL_DialogFileFilter reaktor_file_filter;
+
+typedef struct reaktor_file_dialog {
+    int                        kind;
+    const reaktor_file_filter *filters;
+    int                        filter_count;
+    const char                *location;
+    int                        many;
+    void (*chosen)(App *app, const char *const *paths, int count, void *user);
+    void                      *user;
+} reaktor_file_dialog;
+
+int reaktor_file_dialog_open(App *app, const reaktor_file_dialog *dialog);
+
+typedef struct reaktor_question {
+    const char        *text;
+    const char *const *buttons;
+    int                count;
+    void (*answered)(App *app, int button, void *user);
+    void              *user;
+} reaktor_question;
+
+int reaktor_ask(App *app, const reaktor_question *question);
+
+typedef void (*reaktor_task)(App *app, void *user);
+
+unsigned reaktor_timer(App *app, int ms, int repeat, reaktor_task fn,
+                       void *user);
+void     reaktor_timer_stop(unsigned id);
+void     reaktor_post(App *app, reaktor_task fn, void *user);
+
+const char *reaktor_setting(const char *key);
+void        reaktor_setting_set(const char *key, const char *value);
 
 typedef struct reaktor_diag {
     const char *renderer;

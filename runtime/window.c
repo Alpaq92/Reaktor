@@ -60,14 +60,24 @@ unpark(int all)
 
     for (i = g_parked_n - 1; i >= 0; i--)
         if (all || SDL_GetAtomicInt(&g_parked[i]->file_done)) {
-            if (!all) SDL_free(g_parked[i]);
+            if (!all) {
+                SDL_free(g_parked[i]->file_list);
+                SDL_free(g_parked[i]);
+            }
             g_parked[i] = g_parked[--g_parked_n];
         }
+}
+
+int
+reaktor_app_alive(const App *a)
+{
+    return a && (a == reaktor_main_app() || by_app(a));
 }
 
 static void
 teardown(App *a)
 {
+    reaktor_timers_drop(a);
     reaktor_a11y_platform_window_gone(a->win);
     if (a->win) SDL_SetWindowModal(a->win, false);
     reaktor_app_input_free(a);
@@ -102,7 +112,7 @@ shut(int i, int tell)
         int k;
 
         /* Its cursor would outlive it; each window sets its own again. */
-        SDL_SetCursor(m->cur_default);
+        SDL_SetCursor(reaktor_cursor(REAKTOR_CURSOR_DEFAULT));
         m->cur_shown = 0;
         m->dirty = 1;
         for (k = 0; k < g_win_n; k++) g_win[k].app->cur_shown = 0;
@@ -158,16 +168,12 @@ reaktor_window_open(App *app, const reaktor_window *spec)
     a->font_face_bold = m->font_face_bold;
     for (i = 0; i < m->icon_dir_count; i++) a->icon_dirs[i] = m->icon_dirs[i];
     a->icon_dir_count = m->icon_dir_count;
-    a->cur_default    = m->cur_default;
-    a->cur_pointer    = m->cur_pointer;
-    a->cur_text       = m->cur_text;
     SDL_memcpy(a->frame_rate, m->frame_rate, sizeof a->frame_rate);
     SDL_memcpy(a->drag_rate, m->drag_rate, sizeof a->drag_rate);
     take_look(a, m);
     apply_render_scale(a);
     rebuild_font(a);
     apply_widget_style(a);
-    nk_textedit_init_fixed(&a->edit, a->edit_buf, sizeof(a->edit_buf));
     {
         const char *icon = reaktor_asset_name(&spec->window.icon,
                                               "app/window-icon.svg");
@@ -238,7 +244,7 @@ reaktor_windows_take(App *app, const SDL_Event *event)
         break;
     case SDL_EVENT_WINDOW_MOUSE_ENTER:
         if (m) {
-            SDL_SetCursor(m->cur_default);
+            SDL_SetCursor(reaktor_cursor(REAKTOR_CURSOR_DEFAULT));
             m->cur_shown = 0;
         }
         app->cur_shown = 0;

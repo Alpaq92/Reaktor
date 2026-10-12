@@ -187,3 +187,86 @@ reaktor_floaters_draw(App *app, struct nk_context *ctx, int win_w, int win_h)
         nk_style_pop_vec2(ctx);
     }
 }
+
+typedef struct question {
+    reaktor_question q;
+    int              id, answer;
+    float            text_h;
+} question;
+
+static void
+ask_body(App *app, struct nk_context *ctx, int w, int h, void *user)
+{
+    question *q = (question *)user;
+    int       i;
+
+    (void)w; (void)h;
+    nk_layout_row_dynamic(ctx, q->text_h, 1);
+    nk_style_push_font(ctx, reaktor_style_font(app, ".popup-title", 16, 1));
+    nk_label_colored_wrap(ctx, q->q.text,
+                          reaktor_token("--text-bright", ctx->style.text.color));
+    nk_style_pop_font(ctx);
+    nk_layout_row_dynamic(ctx, 12.0f, 1);
+    nk_spacer(ctx);
+    nk_layout_row_template_begin(ctx, 36.0f);
+    nk_layout_row_template_push_dynamic(ctx);
+    for (i = 0; i < q->q.count; i++) nk_layout_row_template_push_static(ctx, 96.0f);
+    nk_layout_row_template_end(ctx);
+    nk_spacer(ctx);
+    for (i = 0; i < q->q.count; i++)
+        if (i == q->q.count - 1 ? reaktor_button_accent(app, ctx, q->q.buttons[i])
+                                : reaktor_button_label(app, ctx, q->q.buttons[i])) {
+            q->answer = i;
+            reaktor_floater_close(app, q->id);
+        }
+}
+
+static void
+ask_closed(App *app, void *user)
+{
+    question *q = (question *)user;
+
+    if (q->q.answered) q->q.answered(app, q->answer, q->q.user);
+    SDL_free(q);
+}
+
+int
+reaktor_ask(App *app, const reaktor_question *spec)
+{
+    const struct nk_user_font *f;
+    question *q;
+    size_t    bytes;
+    char     *at;
+    float     w;
+    int       i;
+
+    if (!spec || !spec->text || !spec->buttons || spec->count <= 0) return 0;
+    bytes = sizeof *q + (size_t)spec->count * sizeof(char *) +
+            SDL_strlen(spec->text) + 1;
+    for (i = 0; i < spec->count; i++) bytes += SDL_strlen(spec->buttons[i]) + 1;
+    q = (question *)SDL_malloc(bytes);
+    if (!q) return 0;
+    q->q       = *spec;
+    q->answer  = -1;
+    q->q.buttons = (const char *const *)(q + 1);
+    at = (char *)((const char **)(q + 1) + spec->count);
+    for (i = 0; i < spec->count; i++) {
+        size_t n = SDL_strlen(spec->buttons[i]) + 1;
+
+        ((const char **)(q + 1))[i] = SDL_memcpy(at, spec->buttons[i], n);
+        at += n;
+    }
+    q->q.text = SDL_memcpy(at, spec->text, SDL_strlen(spec->text) + 1);
+
+    f = reaktor_style_font(app, ".popup-title", 16, 1);
+    w = 104.0f * (float)spec->count + 120.0f;
+    if (w < 328.0f) w = 328.0f;
+    q->text_h = 22.0f * (float)(1 + (int)(f->width(f->userdata, f->height, q->q.text,
+                                                   (int)SDL_strlen(q->q.text)) / w));
+    q->id = reaktor_floater_open(app, &(reaktor_floater){
+        .title = q->q.text, .w = w, .modal = 1,
+        .h = q->text_h + 12.0f + 36.0f + 2.0f * REAKTOR_MENU_GAP,
+        .body = ask_body, .closed = ask_closed, .user = q });
+    if (!q->id) SDL_free(q);
+    return q->id;
+}

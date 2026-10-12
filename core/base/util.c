@@ -26,7 +26,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "reaktor.h"
+#include "util.h"
 
 #define REAKTOR_PATH_CAP 1024
 

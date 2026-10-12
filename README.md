@@ -23,18 +23,20 @@ yourself.
 > ⚠️ **Reaktor is in active development**, and breaking changes might occur.
 
 <p align="center">
-  <a href="docs/PERFORMANCE.md"><img src="assets/rest/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 10.0 MB, the same binary on D3D11 60.7 MB and on OpenGL 90.2 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB. CPU as a percent of one core: Reaktor 16.4%, D3D11 14.4%, OpenGL 14.1%, Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%"></a>
+  <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 10.0 MB, the same binary on D3D11 60.7 MB and on OpenGL 90.2 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB. CPU as a percent of one core: Reaktor 16.4%, D3D11 14.4%, OpenGL 14.1%, Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%"></a>
 </p>
 
 How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Features
 
-- **17 declared widgets** — buttons, fields, checks, radios, sliders, knobs,
-  combos, a color picker, a sidebar and tabs among them — with all of Nuklear
-  underneath.
-- **Layers** — dialogs inside the window, toasts, more windows, and an icon
-  in the system tray with a menu.
+- **19 declared widgets** — buttons, fields, checks, radios, sliders, knobs,
+  combos, a color picker, sidebar, tabs, tables and a splitter, with tooltips;
+  all of Nuklear underneath, under Reaktor's names.
+- **Layers** — in-window dialogs, questions, toasts, more windows, and a tray
+  icon with a menu.
+- **Services** — system open, save and folder pickers, timers, main-thread
+  posting, and settings that persist, window position included.
 - **Styled by CSS** read at run time: color, type, borders, radii, spacing,
   `:hover` and `:active`, light and dark. Swap the sheet and the app changes.
 - **Accessible with no code** — UI Automation, NSAccessibility, AT-SPI and a

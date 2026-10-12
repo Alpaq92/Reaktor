@@ -54,12 +54,12 @@ void showcase_tray_show(App *app, int on);
 
 typedef struct showcase_state {
     int          repeats, presses;
-    nk_bool      check_wrap, check_spell;
+    reaktor_bool check_wrap, check_spell;
     unsigned int flags;
     int          radio;
-    nk_bool      sel_tile[4];
-    nk_bool      sel_row;
-    nk_bool      toggle;
+    reaktor_bool sel_tile[4];
+    reaktor_bool sel_row;
+    reaktor_bool toggle;
 
     char   name[SC_TEXT_CAP];   int name_len;
     char   digits[SC_TEXT_CAP]; int digits_len;
@@ -72,22 +72,22 @@ typedef struct showcase_state {
     float  prop_f;
     double prop_d;
     int    combo_size, combo_symbol;
-    struct nk_colorf tint;
-    nk_size          progress;
+    struct reaktor_colorf tint;
+    reaktor_size     progress;
 
     float series[SC_SERIES_N];
     int   list_sel;
-    nk_bool tree_leaf[3];
+    reaktor_bool tree_leaf[3];
 
     int   anim_slot;
     int   anim_curve;
     int   anim_ms;
     float anim_head;
-    nk_bool anim_play;
+    reaktor_bool anim_play;
     float grow[4];
     int   path_runs, text_plays;
-    nk_bool fx_play, color_swap;
-    struct nk_vec2 trail[16];
+    reaktor_bool fx_play, color_swap;
+    struct reaktor_vec2 trail[16];
     int   trail_n;
     double trail_at;
 
@@ -105,10 +105,10 @@ void sample_tablist_keys(char *out, int cap);
 int  sample_tab(void);
 void set_tab(App *app, int tab);
 
-int  sample_option(App *app, struct nk_context *ctx, const char *label,
+int  sample_option(App *app, struct reaktor_context *ctx, const char *label,
                    float w, int on);
 
-void reaktor_showcase_page(App *app, struct nk_context *ctx, int tab,
+void reaktor_showcase_page(App *app, struct reaktor_context *ctx, int tab,
                            float w, float h);
 
 #endif

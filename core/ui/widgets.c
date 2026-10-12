@@ -76,13 +76,6 @@ reaktor_on(struct nk_color bg)
 }
 
 void
-reaktor_image(App *app, struct nk_context *ctx, struct nk_image im, int px)
-{
-    (void)app;
-    image_centred(ctx, im, px);
-}
-
-void
 reaktor_hot(App *app, struct nk_rect r, int cursor, int repaint)
 {
     hot_push(app, r, cursor, repaint);
@@ -539,7 +532,7 @@ reaktor_unfit_label(struct nk_context *ctx, int fitted)
 }
 
 int
-reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
+reaktor_css_button_color(App *app, struct nk_context *ctx, const char *name,
                      struct nk_color fill)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
@@ -731,7 +724,7 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
 {
     struct nk_rect bounds = nk_widget_bounds(ctx);
     reaktor_style s;
-    style_frame f;
+    reaktor_style_frame f;
     nk_flags state;
 
     note_field_rect(app, ctx, bounds);
@@ -745,7 +738,7 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
     state = field_edit(app, ctx, flags, buf, len, cap > 0 ? cap - 1 : 0,
                        filter);
     if (cap > 0) buf[*len] = '\0';
-    pop_style(ctx, f);
+    reaktor_style_frame_pop(ctx, f);
     note_edit_active(app, ctx, state);
     note_ime_caret(app, ctx, bounds, state, &ctx->text_edit);
     reaktor_note(app, REAKTOR_A11Y_TEXTBOX,
@@ -756,23 +749,26 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
     return state;
 }
 
-static const SDL_DialogFileFilter g_file_filters[] = {
-    { "Stylesheets", "css" },
-    { "All files",   "*"   }
-};
-
 static void SDLCALL
 file_chosen(void *userdata, const char * const *filelist, int filter)
 {
-    App *app = (App *)userdata;
+    App   *app = (App *)userdata;
+    size_t bytes = 0;
+    int    n = 0, i;
 
     (void)filter;
-    app->file_ok = 0;
-    if (!filelist)
-        SDL_Log("file dialog unavailable: %s", SDL_GetError());
-    else if (filelist[0]) {
-        SDL_strlcpy(app->file_answer, filelist[0], sizeof(app->file_answer));
-        app->file_ok = 1;
+    if (!filelist) SDL_Log("file dialog unavailable: %s", SDL_GetError());
+    for (; filelist && filelist[n]; n++) bytes += SDL_strlen(filelist[n]) + 1;
+    app->file_list = n ? (char **)SDL_malloc((size_t)n * sizeof(char *) + bytes)
+                       : NULL;
+    app->file_count = app->file_list ? n : 0;
+    for (i = 0, bytes = 0; i < app->file_count; i++) {
+        char  *at  = (char *)(app->file_list + n) + bytes;
+        size_t len = SDL_strlen(filelist[i]) + 1;
+
+        SDL_memcpy(at, filelist[i], len);
+        app->file_list[i] = at;
+        bytes += len;
     }
 
     SDL_SetAtomicInt(&app->file_ready, 1);
@@ -782,13 +778,21 @@ file_chosen(void *userdata, const char * const *filelist, int filter)
 }
 
 int
-reaktor_file_open(App *app)
+reaktor_file_dialog_open(App *app, const reaktor_file_dialog *d)
 {
-    if (app->file_pending) return 0;
+    if (!d || app->file_pending) return 0;
     app->file_pending = 1;
+    app->file_dialog  = *d;
     SDL_SetAtomicInt(&app->file_done, 0);
-    SDL_ShowOpenFileDialog(file_chosen, app, app->win, g_file_filters,
-                           (int)NK_LEN(g_file_filters), NULL, false);
+    if (d->kind == REAKTOR_FILE_SAVE)
+        SDL_ShowSaveFileDialog(file_chosen, app, app->win, d->filters,
+                               d->filter_count, d->location);
+    else if (d->kind == REAKTOR_FOLDER_OPEN)
+        SDL_ShowOpenFolderDialog(file_chosen, app, app->win, d->location,
+                                 d->many != 0);
+    else
+        SDL_ShowOpenFileDialog(file_chosen, app, app->win, d->filters,
+                               d->filter_count, d->location, d->many != 0);
     return 1;
 }
 

@@ -9,13 +9,14 @@
 
 #include "nk_common.h"
 #include "nk_sdl3_renderer.h"
-#include "appicon.h"
+#include "svg.h"
 #include "theme.h"
 #include "metrics.h"
-#include "reaktor.h"
+#include "util.h"
 #include "style.h"
 #include "layout.h"
-#include "ui.h"
+#include "a11y.h"
+#include "reaktor/ui.h"
 #include "text.h"
 #include "reaktor/launch.h"
 
@@ -49,7 +50,7 @@ void reaktor_rss_mark(int step);
 
 #define SHEET_MAX 12
 #define CORE_SHEET "external/tinycss/src/core.css"
-#define APP_SHEET  "assets/rest/reaktor.css"
+#define APP_SHEET  "assets/css/reaktor.css"
 #define FONT_FILE      "assets/fonts/Aileron-Regular.otf"
 #define FONT_BOLD_FILE "assets/fonts/Aileron-Bold.otf"
 
@@ -102,18 +103,14 @@ struct App {
 
     struct nk_font *faces[FONT_STEPS];
     struct nk_font *bolds[FONT_STEPS];
-    struct nk_font *face_bold;
     char            font_status[160];
     struct nk_font_atlas *atlas;
     int             atlas_w, atlas_h, atlas_bpp;
     /* Nuklear reads these until the next bake. */
     unsigned       *glyphs;
 
-    struct nk_text_edit edit;
-    char                edit_buf[128];
-
-    SDL_Cursor *cur_default, *cur_pointer, *cur_text;
     int         want_cursor, cur_shown;
+    const char *tip;
 
     char render_mode[32];
     int  vsync_on, aa, redraw_always;
@@ -156,7 +153,9 @@ struct App {
     int      ime_valid;
 
     SDL_AtomicInt file_ready, file_done;
-    char          file_answer[520];
+    char        **file_list;
+    int           file_count;
+    reaktor_file_dialog file_dialog;
     int           file_pending;
 
     int   theme_mode;
@@ -220,9 +219,6 @@ struct App {
     struct nk_input held_input;
 
     int   laid_w, laid_h;
-    float fps;
-    int   fps_frames;
-    Uint64 fps_t0;
     Uint64 last_frame_ms;
     float  frame_gap_ms;
     struct nka_context *anim;
@@ -231,7 +227,6 @@ struct App {
     const char *font_face, *font_face_bold;
     const char *icon_dirs[8];
     int         icon_dir_count;
-    int         file_ok;
     int         shot_failed, dump_failed;
     int         secondary;
     int         settled_run, settle_tries;
@@ -243,7 +238,6 @@ void img_cache_clear(App *app);
 void img_cache_free(App *app);
 struct nk_image icon_over(App *app, const char *src, int px, float over);
 struct nk_image icon(App *app, const char *src, int px);
-void image_centred(struct nk_context *ctx, struct nk_image im, int px);
 const struct nk_user_font *pick_font(App *app, int px, int bold);
 const struct nk_user_font *base_font(App *app);
 void rebuild_font(App *app);
@@ -260,7 +254,9 @@ enum { HOLD_NONE, HOLD_ALL, HOLD_FRESH };
 
 int  focus_key(App *app, const SDL_Event *event);
 void focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv);
-void reaktor_focus_ring_overlay(App *app, struct nk_context *ctx);
+void reaktor_overlay(App *app, struct nk_context *ctx, int ring);
+void reaktor_tip_draw(App *app, struct nk_context *ctx,
+                      struct nk_command_buffer *cv);
 void focus_resolve(App *app);
 void reaktor_key_click_ask(App *app);
 int  reaktor_focus_covered(App *app);
@@ -271,12 +267,8 @@ int  renderer_is_software(SDL_Renderer *ren);
 void load_theme(App *app);
 void a11y_dump_once(App *app);
 
-typedef struct style_frame { int items, colors, floats, vec2s, fonts; } style_frame;
 
 void hot_push(App *app, struct nk_rect r, int cursor, int repaint);
-void pop_style(struct nk_context *ctx, style_frame f);
-void css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
-               const char *hint);
 int  css_button_accent(App *app, struct nk_context *ctx, const char *selector,
                        const char *label);
 int  reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
@@ -310,8 +302,28 @@ void reaktor_fade_since(struct nk_context *ctx, const struct nk_command_buffer *
                         nk_size mark, float opacity);
 
 App *reaktor_main_app(void);
+bool reaktor_app_wake(const App *app);
+void reaktor_hint(const char *name, const char *value);
+void reaktor_hover_redraw(App *app);
+int  reaktor_key_hook(App *app, const SDL_Event *event);
+void reaktor_take_event(App *app, SDL_Event *event);
+void reaktor_input_event(App *app, SDL_Event *event);
+void reaktor_replay_held(App *app);
+void reaktor_fling_step(App *app);
+#ifdef __EMSCRIPTEN__
+void reaktor_input_start(void);
+int  reaktor_input_page_key(App *app, SDL_Event *event);
+#endif
+int  reaktor_app_alive(const App *a);
+const char *reaktor_app_ident(void);
+void reaktor_timers_drop(App *app);
+void reaktor_settings_save(void);
+void reaktor_settings_free(void);
+void reaktor_window_restore(App *app);
+void reaktor_window_remember(App *app);
 const char *reaktor_asset_name(const reaktor_asset *a, const char *fallback);
 int  reaktor_hot_motion(App *app, float mx, float my);
+SDL_Cursor *reaktor_cursor(int kind);
 void reaktor_show_cursor(App *app);
 void reaktor_place_ime(App *app);
 void reaktor_render(App *app);
@@ -337,7 +349,7 @@ int  css_button_icon(App *app, struct nk_context *ctx, const char *selector,
 
 struct nk_color readable_on(const unsigned char bg[4], const char *preferred,
                             const char *fallback);
-style_frame push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
+reaktor_style_frame push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
                             const char *sel);
 nk_flags reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
                                nk_flags flags, char *buf, int *len, int cap,
@@ -378,9 +390,6 @@ void draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
 struct nk_image reaktor_ionicon_col(App *app, const char *name, int px,
                                     struct nk_color stroke);
 
-void reaktor_image(App *app, struct nk_context *ctx, struct nk_image im,
-                   int px);
-
 int  reaktor_fit_label(App *app, struct nk_context *ctx, struct nk_rect b);
 void reaktor_unfit_label(struct nk_context *ctx, int fitted);
 
@@ -407,7 +416,7 @@ void reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h,
 
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);
-int reaktor_button_color(App *app, struct nk_context *ctx, const char *name,
+int reaktor_css_button_color(App *app, struct nk_context *ctx, const char *name,
                          struct nk_color fill);
 
 void field_undo_clear(App *app);

@@ -40,9 +40,9 @@ keys mean. Only `.page` is required. `launchApp` is an inline alias of
 [`samples/simple/simple.c`](../samples/simple/simple.c) is a whole application.
 
 `reaktor/reaktor.h` is the whole public API: it includes the rest of
-[`include/reaktor/`](../include/reaktor/) — Nuklear as Reaktor configures it,
+[`include/reaktor/`](../include/reaktor/) — Nuklear as Reaktor configures and names it,
 `launch.h`, `widgets.h`, `keys.h`, `a11y.h`, `ui.h`, `anim.h`, `locale.h`,
-`style.h` and `text.h` — and nothing from `src/` or `core/`. `App` is opaque:
+`style.h` and `text.h` — and nothing from `core/`. `App` is opaque:
 the calls below ask it what an application may know. Every sample includes
 only these headers, and MSVC builds an app with implicit declarations as
 errors, so an internal function cannot slip back in.
@@ -54,7 +54,7 @@ errors, so an internal function cannot slip back in.
 | `key(app, event)` | A key press in any window, with that window's App, before focus navigation; non-zero keeps the key and its text from everything else |
 | `closing(app, reason)` | Before quitting; non-zero refuses a close button (`REAKTOR_QUIT_WINDOW`), `reaktor_request_quit` or macOS's Quit (`_APP`) and a first Ctrl+C (`_CONSOLE`). SIGTERM (`_SIGNAL`) and logoff (`_SESSION`) ask but cannot be refused |
 | `stop(app)` | Once before teardown when `start` succeeded, at logoff and page unload too — the only place for cleanup |
-| `file_opened(app, path)` | A picked or dropped file, with the App of the window it came to, or `NULL` when the picker was canceled or failed |
+| `file_opened(app, path)` | A file dropped on a window, with that window's App |
 
 | Call | Effect |
 | --- | --- |
@@ -65,7 +65,6 @@ errors, so an internal function cannot slip back in.
 | `reaktor_set_css(app, sheets, n)` | Replace the application's sheets; `--css` stays on top |
 | `reaktor_set_title(app, title)` | Retitle that App's window |
 | `reaktor_set_confirm_close(app, question)` | Ask `question` before quitting, or with `NULL` stop asking |
-| `reaktor_file_open(app)` | Show the platform's file picker; the answer goes to `file_opened` |
 | `reaktor_user(app)` | The launch's `.user` |
 | `reaktor_sdl_window(app)`, `reaktor_sdl_renderer(app)` | That App's SDL window and renderer |
 | `reaktor_icon_surface(name, px)` | An SVG asset as an `SDL_Surface`, for a tray or icon of the app's own |
@@ -83,6 +82,30 @@ minimized or hidden window back to ask it. Quit quits with code 0 and asks
 nothing more; a second Ctrl+C still quits at once.
 `reaktor_set_confirm_close` copies a new question, and `NULL` stops asking and
 closes the floater if it is open.
+
+### Services
+
+Main-thread calls unless marked; every callback runs on the main thread and is
+followed by a frame.
+
+| Call | Effect |
+| --- | --- |
+| `reaktor_file_dialog_open(app, &(reaktor_file_dialog){ ... })` | The system picker. `.kind`: `REAKTOR_FILE_OPEN`, `_SAVE` or `REAKTOR_FOLDER_OPEN`. `.filters` (`"png;jpg"` patterns, kept alive until the answer), `.location`, `.many`. `.chosen(app, paths, count, user)` gets `count` 0 on cancel. One per window; answers 0 while one is open |
+| `reaktor_ask(app, &(reaktor_question){ ... })` | A modal floater: `.text` and one button per `.buttons` entry, the last accented. `.answered(app, button, user)` runs once; -1 if closed another way. The spec is copied |
+| `reaktor_timer(app, ms, repeat, fn, user)` | `fn(app, user)` after `ms`, every `ms` with `repeat`; answers an id. Stops when the window closes |
+| `reaktor_timer_stop(id)` | Stop one |
+| `reaktor_post(app, fn, user)` | `fn(app, user)` on the main thread. Any thread; immediate on the main one |
+| `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. No newlines; no `=` in a key |
+
+Settings live in `settings.txt` in SDL's preference folder for `.id` (or
+`.name`). The desktop writes them once, on a normal quit, so a crash or kill
+loses every change since launch; keep what must survive one in a file of your
+own. The web writes `localStorage` on every change. `.remember_window` stores
+the main window's position, size and maximized state the same way and restores
+them at start, except under `--shot` and `--a11y-dump`.
+
+Clipboard, URLs and logging are SDL's: `SDL_SetClipboardText`,
+`SDL_GetClipboardText`, `SDL_OpenURL` (behind a link's `.url`), `SDL_Log`.
 
 **Console.** `.console` is `REAKTOR_CONSOLE_NONE` (the window alone),
 `_PARENT` (on Windows, the terminal it was started from) or `_DEBUG` (that
@@ -119,10 +142,10 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 
 | Widget | Call | Answers 1 | Its own fields |
 | --- | --- | --- | --- |
-| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press`, `.fit_content` (exactly as large as its label and icon, whatever `.box` asks) |
-| Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press` |
-| Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTRE`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
-| Icon | `reaktor_icon` | — | `.name` (an Ionicon), `.accent` |
+| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press`, `.tooltip`, `.fit_content` (exactly as large as its label and icon, whatever `.box` asks) |
+| Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press`, or `.url` to open in the browser |
+| Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTER`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
+| Icon | `reaktor_icon` | — | `.name` (an Ionicon) and `.accent`, or `.src` (any image asset: SVG, PNG, JPEG), stretched to its box; `.tooltip` |
 | Swatch | `reaktor_swatch` | when pressed | `.fill`, `.on_press` |
 | Field | `reaktor_field` | — | `.buf`, `.len`, `.cap`, `.hint`, `.multiline`, `.filter`, `.pad_x`, `.pad_y` |
 | Check | `reaktor_check` | when toggled | `.label`, `.on`, or `.flags` and `.bit`; `.box_right` |
@@ -133,9 +156,11 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Knob | `reaktor_knob` | — | `.value`, `.lo`, `.hi` |
 | Property | `reaktor_property` | — | `.label`, `.ivalue`, `.fvalue` or `.dvalue`, `.lo`, `.hi`, `.step`, `.grain` (per pixel dragged) |
 | Combo | `REAKTOR_COMBO(...) { }` | — | `.label`, `.body_h`, `.disc`, `.swatch`; rows by `reaktor_combo_item(label, chosen)` |
-| Color | `reaktor_colour_pick` | — | `.value`, a `struct nk_colorf` |
+| Color | `reaktor_color_pick` | — | `.value`, a `struct reaktor_colorf` |
 | Sidebar | `reaktor_sidebar` | when an entry is chosen | [below](#sidebar-and-tabs) |
 | Tabs | `reaktor_tabs` | when an entry is chosen | [below](#sidebar-and-tabs) |
+| List | `reaktor_list` | when another row is chosen | `.count`, `.cell(row, column, user)`, `.column_count`, `.columns` (headers), `.widths` (shares), `.selected`, `.row_h` |
+| Splitter | `reaktor_splitter` | while dragged | `.value` (the first child's share, 0 to 1), `.lo`, `.hi` (0.1 and 0.9 unset), `.vertical` |
 
 **An icon gives way to its label**: a button too narrow for both draws the
 label alone. `.fit_content` makes it as large as both need.
@@ -146,8 +171,30 @@ anywhere else reseeds the buffer. Ctrl+Z and Ctrl+R undo and redo from a
 history each field keeps; editing another field, or changing the value in
 code, starts it over.
 
+**A tooltip** follows the pointer while its widget is hovered, above
+everything, styled by `.tooltip`.
+
+**A list draws only the rows on screen.** `.cell` is asked for each, and the
+first column names the row. With `.selected`, a click picks a row and the
+selection follows keyboard focus; the arrow keys move it, scrolling the row
+into view. Without it the rows are plain text. Unsized, a list shows up to
+eight rows and fills its row. Colors come from `thead`, `th`, `td`,
+`--table-bg` and `--table-bg-alt`, as in tiny.css.
+
+**A splitter** writes the first child's share; pass it to both children's
+`.weight`. It drags, and with focus the arrow keys step it by 5%. Screen
+readers hear a slider:
+
+```c
+REAKTOR_ROW(.h = 300) {
+    REAKTOR_COLUMN(.weight = split, .flags = REAKTOR_LAY_FILL_Y) { sidebar(); }
+    reaktor_splitter(&(reaktor_splitter_spec){ .value = &split });
+    REAKTOR_COLUMN(.weight = 1 - split, .flags = REAKTOR_LAY_FILL_Y) { body(); }
+}
+```
+
 **A combo opens a scope.** Its body is a Nuklear popup, laid out with
-`nk_layout_row_*`. Never `return` or `break` out of a scope.
+`reaktor_layout_row_*`. Never `return` or `break` out of a scope.
 
 ```c
 REAKTOR_COMBO(.label = sizes[pick], .name = "Size", .body_h = 130) {
@@ -223,8 +270,9 @@ A container's fields, and a widget's `.box`:
 | `.name` | How a container is found again; a widget uses its spec's `.name` |
 
 So `.w` alone is fixed, `.w` with `FILL_X` a minimum that grows, and `FILL_X`
-with `.weight` a fraction. The outermost container ignores its own margins:
-wrap it in `REAKTOR_FREE` to inset it.
+with `.weight` a fraction. The outermost container is as wide as the panel it
+is declared in, filling or not, and ignores its own margins: wrap it in
+`REAKTOR_FREE` to inset it.
 
 **A box is placed one frame late.** A frame draws into the rectangles the one
 before computed, found by accessibility id, and a box seen for the first time
@@ -254,9 +302,9 @@ and runs `.closed`. `.body` and `.closed` get the main window's App.
 
 ```c
 static void
-confirm(App *app, struct nk_context *ctx, int w, int h, void *user)
+confirm(App *app, struct reaktor_context *ctx, int w, int h, void *user)
 {
-    /* nk_layout rows and widgets, as in any panel */
+    /* reaktor_layout rows and widgets, as in any panel */
     if (reaktor_button_label(app, ctx, "OK"))
         reaktor_floater_close(app, *(int *)user);
 }
@@ -366,6 +414,8 @@ if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
 | Select, combo | `select` |
 | Floater | `dialog` |
 | Toast | `.toast`, `.toast-button`, `.toast-close` |
+| Tooltip | `.tooltip` |
+| List | `thead`, `th`, `td`; `--table-bg`, `--table-bg-alt` |
 | Sidebar, tabs | `.sidebar-item`, `.sidebar-current`, `.sidebar-edge`; `.tab`, `.tab-current`, `.tab-edge` |
 
 With `:hover` and `:active` where a widget has those states, a button's
@@ -489,21 +539,31 @@ only across a `reaktor_hot_follow` rectangle.
 
 ## Beyond the specs
 
-Nuklear is still there. Groups, trees, list views, charts, menus and popup
-bodies have no spec, and the samples call `nk_*` for them. A declared tree and
-`nk_layout_row_*` cannot share a panel, so convert a whole container at a
-time; a group or popup is its own panel and may be laid out by hand inside a
-declared page. [`include/reaktor/ui.h`](../include/reaktor/ui.h) has the pieces the specs are made of:
+Nuklear is still there, under Reaktor's names. Groups, trees, charts, menus
+and popup bodies have no spec and are laid out by hand.
+[`include/reaktor/nuklear.h`](../include/reaktor/nuklear.h) aliases every
+Nuklear type, constant and call the samples use: `struct reaktor_rect`,
+`reaktor_rect(x, y, w, h)`, `REAKTOR_TEXT_LEFT`, `reaktor_group_begin`. An
+alias is the same type, so values mix freely with `nk_*`, which stays
+available for the rest. Two names differ, as the declared widgets own theirs:
+`nk_label` is `reaktor_text_label`, `nk_button_label` is
+`reaktor_button_plain`.
+
+A declared tree and `reaktor_layout_row_*` cannot share a panel, so convert a
+whole container at a time; a group or popup is its own panel and may be laid
+out by hand inside a declared page. [`include/reaktor/ui.h`](../include/reaktor/ui.h) has the pieces the specs are made of:
 
 | Helper | For |
 | --- | --- |
 | `reaktor_token`, `reaktor_col`, `reaktor_on`, `reaktor_visible`, `reaktor_page_color`, `reaktor_accent_color` | Colors from the sheet; readable text on a background; the page and the accent |
 | `reaktor_font`, `reaktor_style_font` | A baked face, by size or by selector |
-| `reaktor_ionicon`, `reaktor_ionicon_exact`, `reaktor_glyph_at` | An Ionicon as an `nk_image`, in any color, or drawn into a rectangle |
-| `reaktor_svg`, `REAKTOR_MARK` | Any SVG asset, recolored by `?stroke=#rrggbb&fill=&sw=`; the mark's name |
+| `reaktor_ionicon`, `reaktor_ionicon_exact`, `reaktor_glyph_at` | An Ionicon as a `reaktor_image`, in any color, or drawn into a rectangle |
+| `reaktor_image_file`, `REAKTOR_MARK` | Any image asset: an SVG, recolored by `?stroke=#rrggbb&fill=&sw=`, or a PNG or JPEG; the mark's name |
+| `reaktor_image_centered` | An image at its own size, centered in the next widget slot |
+| `reaktor_style_frame`, `reaktor_style_frame_pop` | Counts of style pushes, popped together |
 | `reaktor_fill_round`, `reaktor_edge_round` | Rounded fills and borders, smooth on the software renderer |
-| `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)) |
-| `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside `nk_` layouts |
+| `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)), with a `REAKTOR_CURSOR_*` over it: default, pointer, text, or a horizontal or vertical resize |
+| `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside hand-laid rows |
 | `reaktor_menu_item`, `reaktor_menu_style_push`, `_pop`, `reaktor_menu_height`, `reaktor_menu_edge`, `reaktor_popup_rounding` | Menus and popups |
 | `reaktor_note`, `_push`, `_pop`, `_here`, `_keys`, `_value`, `_bounds`, `reaktor_focus_activated` | The accessibility tree, and keyboard presses |
 | `reaktor_focus_area`, `reaktor_focus_scroll` | A scrolling page body: the area and node focus moves within, and the rectangle it asks to see |
@@ -538,19 +598,23 @@ flowchart TB
 ```
 
 ```
-include/reaktor  launch.h, main.h: what an application includes first
+include/reaktor  the public API; launch.h and main.h come first
+core/internal.h  the App struct, and what the layers share
 core/base        paths, metrics, assets
 core/css         cssflat and the libcss front end
-core/render      Nuklear, the SDL3 backend, drawing, SVG icons
-core/ui          specs, layout, widgets, the style map, keys, focus, floaters, toasts
+core/render      Nuklear, the SDL3 backend, drawing, SVG and raster images
+core/ui          the declared tree (declare.c), its controls and views, layout,
+                 the style map, keys, focus, floaters, toasts
 core/a11y        the shadow tree and its diff
 core/anim        NukAnim, a context a window
 core/locale      the Locale module
 core/text        the Text module
 platform/        theme, process lifecycle, the accessibility bridges, the web keyboard
-runtime/         the main window and its loop, other windows, the tray
+runtime/         the main window's lifecycle and frame (app.c), input, services,
+                 other windows, the tray
 samples/         showcase, notepad, simple, bench
-tools/           the tests, the icon compiler, vmwalk
+tests/           the console tests and launchtest
+tools/           packaging, the icon compiler, vmwalk
 benchmarks/      bench in four other frameworks, and the sampler
 external/        eleven submodules, read as they ship
 ```
@@ -709,7 +773,7 @@ Passed to CMake, through either script:
 | `REAKTOR_LOCALE_EMBED` | `OFF` | Compile the catalogs in rather than read them at startup |
 | `REAKTOR_TEXT` | `ON` | Direction, shaping, fallback glyphs and Unicode line breaks — [Text](#text) |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Linux and the BSDs |
-| `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tools/` |
+| `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
 **CMake keeps an option**, so a build without the flag keeps the last value;
@@ -804,7 +868,7 @@ Built by default and run from `build/`:
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `list`, `list-keys`, `split-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.
@@ -1001,20 +1065,20 @@ None is a bug, and each cost an afternoon.
   picks the glyph's side.
 - **`nk_do_selectable_image` reads inverted**: `NK_TEXT_ALIGN_LEFT` pins the
   image right.
-- **A tree header's border is square**: `NK_TREE_TAB` fills it at rounding 0,
+- **A tree header's border is square**: `REAKTOR_TREE_TAB` fills it at rounding 0,
   as does `nk_combo_begin_color`.
 - **There is one `window.rounding`**, popups included.
-- **`nk_menubar_begin` must come first** in its panel, and pins its row out of
+- **`reaktor_menubar_begin` must come first** in its panel, and pins its row out of
   the scroll.
 - **A menu's height needs the real row spacing**, 4 rather than 2, or the last
   item lands on the clipped edge.
-- **`nk_group_begin` answers 0 when scrolled out of view**; returning early on
+- **`reaktor_group_begin` answers 0 when scrolled out of view**; returning early on
   it blanks everything below.
-- **`NK_POPUP_DYNAMIC` strokes its border at the bounds before shrinking**, so
-  `nk_tooltip` leaves a ghost frame.
-- **`nk_layout_space` does not nest.**
-- **`nk_image` stretches to its slot**, whatever its raster size.
-- **`nk_rule_horizontal` fills its widget rect**: the row height is the line.
+- **`REAKTOR_POPUP_DYNAMIC` strokes its border at the bounds before shrinking**,
+  so `reaktor_tooltip` leaves a ghost frame.
+- **`reaktor_layout_space_begin` does not nest.**
+- **`reaktor_image` stretches to its slot**, whatever its raster size.
+- **`reaktor_rule_horizontal` fills its widget rect**: the row height is the line.
 - **`nk_sdl_font_stash_begin` leaks the atlas it replaces.**
 - **`nk_label_wrap` breaks at spaces only**, losing the glyph that overflowed a
   line without one; `reaktor_label` breaks its own lines.

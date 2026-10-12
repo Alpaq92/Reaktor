@@ -40,7 +40,7 @@ void reaktor_box_close(void);
          reaktor_box_scope_;                                                 \
          reaktor_box_scope_ = (reaktor_box_close(), 0))
 
-int reaktor_box_rect(struct nk_rect *out);
+int reaktor_box_rect(struct reaktor_rect *out);
 
 unsigned reaktor_box_id(void);
 
@@ -59,7 +59,7 @@ typedef struct reaktor_handler {
     void          *user;
 } reaktor_handler;
 
-enum { REAKTOR_LEFT = 0, REAKTOR_CENTRE, REAKTOR_RIGHT };
+enum { REAKTOR_LEFT = 0, REAKTOR_CENTER, REAKTOR_RIGHT };
 
 typedef struct reaktor_button_spec {
     const char     *label;
@@ -68,6 +68,7 @@ typedef struct reaktor_button_spec {
     const char     *style;
     const char     *keys;
     reaktor_box     box;
+    const char     *tooltip;
     reaktor_handler on_press;
     unsigned char   accent;
     unsigned char   disabled;
@@ -93,7 +94,7 @@ void reaktor_label(const reaktor_label_spec *s);
 
 typedef struct reaktor_swatch_spec {
     const char     *name;
-    struct nk_color fill;
+    struct reaktor_color fill;
     const char *style;
     reaktor_box     box;
     reaktor_handler on_press;
@@ -103,6 +104,8 @@ int reaktor_swatch(const reaktor_swatch_spec *s);
 
 typedef struct reaktor_icon_spec {
     const char   *name;
+    const char   *src;
+    const char   *tooltip;
     const char *style;
     reaktor_box   box;
     unsigned char accent;
@@ -118,7 +121,7 @@ typedef struct reaktor_field_spec {
     const char *name;
     const char *style;
     float pad_x, pad_y;
-    nk_plugin_filter filter;
+    reaktor_plugin_filter filter;
     reaktor_box box;
     unsigned char multiline;
 } reaktor_field_spec;
@@ -128,7 +131,7 @@ void reaktor_field(const reaktor_field_spec *s);
 typedef struct reaktor_check_spec {
     const char   *label;
     const char   *name;
-    nk_bool      *on;
+    reaktor_bool *on;
     unsigned     *flags;
     unsigned      bit;
     const char *style;
@@ -152,7 +155,7 @@ int reaktor_radio(const reaktor_radio_spec *s);
 typedef struct reaktor_select_spec {
     const char   *label;
     const char   *name;
-    nk_bool      *on;
+    reaktor_bool *on;
     const char   *icon;
     unsigned char disc;
     const char *style;
@@ -176,8 +179,8 @@ void reaktor_slider(const reaktor_slider_spec *s);
 
 typedef struct reaktor_progress_spec {
     const char *name;
-    nk_size    *value;
-    nk_size     max;
+    reaktor_size *value;
+    reaktor_size max;
     const char *style;
     reaktor_box box;
     unsigned char modifiable;
@@ -216,7 +219,7 @@ typedef struct reaktor_combo_spec {
     const char *style;
     reaktor_box     box;
     unsigned char   disc;
-    const struct nk_color *swatch;
+    const struct reaktor_color *swatch;
 } reaktor_combo_spec;
 
 int  reaktor_combo_open(const reaktor_combo_spec *s);
@@ -230,17 +233,18 @@ void reaktor_combo_close(void);
 
 int reaktor_combo_item(const char *label, int chosen);
 
-typedef struct reaktor_colour_spec {
+typedef struct reaktor_color_spec {
     const char       *name;
-    struct nk_colorf *value;
+    struct reaktor_colorf *value;
     const char *style;
     reaktor_box       box;
-} reaktor_colour_spec;
+} reaktor_color_spec;
 
-void reaktor_colour_pick(const reaktor_colour_spec *s);
+void reaktor_color_pick(const reaktor_color_spec *s);
 
 typedef struct reaktor_link_spec {
     const char     *text;
+    const char     *url;
     const char     *name;
     const char     *style;
     reaktor_box     box;
@@ -249,6 +253,32 @@ typedef struct reaktor_link_spec {
 } reaktor_link_spec;
 
 int reaktor_link(const reaktor_link_spec *s);
+
+#define REAKTOR_LIST_COLUMNS 16
+
+typedef struct reaktor_list_spec {
+    const char        *name;
+    int                count;
+    const char *const *columns;
+    const float       *widths;
+    int                column_count;
+    const char      *(*cell)(int row, int column, void *user);
+    void              *user;
+    int               *selected;
+    float              row_h;
+    reaktor_box        box;
+} reaktor_list_spec;
+
+int reaktor_list(const reaktor_list_spec *s);
+
+typedef struct reaktor_splitter_spec {
+    float        *value;
+    float         lo, hi;
+    const char   *name;
+    unsigned char vertical;
+} reaktor_splitter_spec;
+
+int reaktor_splitter(const reaktor_splitter_spec *s);
 
 enum { REAKTOR_NAV_PAGES, REAKTOR_NAV_CHOICE, REAKTOR_NAV_ACTIONS };
 

@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "a11y.h"
+#include "a11y_snapshot.h"
 
 static int failures;
 
@@ -160,6 +161,63 @@ bench(void)
            n, runs, frames, best * 1000.0 / (double)frames);
 }
 
+static unsigned
+scan_child(const reaktor_a11y_node *t, int n, unsigned parent, int last)
+{
+    unsigned found = 0;
+    int i;
+
+    for (i = 0; i < n; i++)
+        if (t[i].parent == parent) {
+            found = t[i].id;
+            if (!last) break;
+        }
+    return found;
+}
+
+static unsigned
+scan_sibling(const reaktor_a11y_node *t, int n, int at, int back)
+{
+    int i;
+
+    if (back) {
+        for (i = at - 1; i >= 0; i--)
+            if (t[i].parent == t[at].parent) return t[i].id;
+    } else {
+        for (i = at + 1; i < n; i++)
+            if (t[i].parent == t[at].parent) return t[i].id;
+    }
+    return 0;
+}
+
+static void
+check_snapshot(reaktor_a11y *a)
+{
+    reaktor_snap *s = reaktor_snap_new(NULL, NULL, NULL, 0);
+    const reaktor_a11y_node *t;
+    int n, i;
+
+    if (!s) { printf("FAIL no snapshot\n"); failures++; return; }
+    build(a, 1, 1, 0);
+    reaktor_snap_update_in(s, a, 1);
+    t = reaktor_a11y_tree(a, &n);
+    check("snapshot: first root", (int)reaktor_snap_child_in(s, 0, 0),
+          (int)scan_child(t, n, 0, 0));
+    for (i = 0; i < n; i++) {
+        check("snapshot: first child", (int)reaktor_snap_child_in(s, t[i].id, 0),
+              (int)scan_child(t, n, t[i].id, 0));
+        check("snapshot: last child", (int)reaktor_snap_child_in(s, t[i].id, 1),
+              (int)scan_child(t, n, t[i].id, 1));
+        check("snapshot: next", (int)reaktor_snap_sibling_in(s, t[i].id, 0),
+              (int)scan_sibling(t, n, i, 0));
+        check("snapshot: previous", (int)reaktor_snap_sibling_in(s, t[i].id, 1),
+              (int)scan_sibling(t, n, i, 1));
+        check("snapshot: parent", (int)reaktor_snap_parent_in(s, t[i].id),
+              (int)t[i].parent);
+    }
+    check("snapshot: unknown id", (int)reaktor_snap_parent_in(s, 0xdeadu), 0);
+}
+
 int main(int argc, char **argv)
 {
     static reaktor_a11y a;
@@ -305,6 +363,8 @@ int main(int argc, char **argv)
                 if (t[i].id == t[j].id) dup++;
         check("unlabelled siblings get distinct ids", dup, 0);
     }
+
+    check_snapshot(&a);
 
     a.overflow_nodes = 0;
     reaktor_a11y_begin(&a, "w", r(0, 0, 10, 10));

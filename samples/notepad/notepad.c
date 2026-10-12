@@ -87,16 +87,47 @@ load(const char *path)
     SDL_snprintf(g.status, sizeof(g.status), "Opened %s", shown_name());
 }
 
+static const reaktor_file_filter g_filters[] = {
+    { "Text", "txt;md;c;h;css;json" },
+    { "All files", "*" }
+};
+
+static void save(App *app);
+
 static void
-save(void)
+opened(App *app, const char *const *paths, int count, void *user)
+{
+    (void)app; (void)user;
+    if (count) load(paths[0]);
+}
+
+static void
+saved_as(App *app, const char *const *paths, int count, void *user)
+{
+    (void)user;
+    if (!count) return;
+    SDL_strlcpy(g.path, paths[0], sizeof(g.path));
+    save(app);
+}
+
+static void
+ask_file(App *app, int kind)
+{
+    if (!reaktor_file_dialog_open(app, &(reaktor_file_dialog){
+            .kind = kind, .filters = g_filters,
+            .filter_count = (int)SDL_arraysize(g_filters),
+            .chosen = kind == REAKTOR_FILE_SAVE ? saved_as : opened }))
+        SDL_strlcpy(g.status, "A dialog is already open", sizeof(g.status));
+}
+
+static void
+save(App *app)
 {
     SDL_IOStream *io;
     int ok;
 
     if (!g.path[0]) {
-        SDL_strlcpy(g.status,
-                    "Nowhere to save to yet - open a file first",
-                    sizeof(g.status));
+        ask_file(app, REAKTOR_FILE_SAVE);
         return;
     }
     io = SDL_IOFromFile(g.path, "wb");
@@ -115,14 +146,14 @@ save(void)
 }
 
 static void
-menu_cursor(App *app, struct nk_context *ctx)
+menu_cursor(App *app, struct reaktor_context *ctx)
 {
-    reaktor_hot_top(app, nk_window_get_bounds(ctx), 1, 0);
+    reaktor_hot_top(app, reaktor_window_get_bounds(ctx), 1, 0);
 }
 
 
 static void
-page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
+page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
 {
     char line[220];
 
@@ -135,43 +166,45 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
     }
 
     reaktor_menu_style_push(ctx);
-    nk_menubar_begin(ctx);
+    reaktor_menubar_begin(ctx);
 
     {
-        struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
-        nk_style_push_style_item(ctx, &ctx->style.menu_button.normal, clear);
-        nk_style_push_style_item(ctx, &ctx->style.menu_button.hover, clear);
-        nk_style_push_style_item(ctx, &ctx->style.menu_button.active, clear);
+        struct reaktor_style_item clear = reaktor_style_item_color(reaktor_rgba(0, 0, 0, 0));
+        reaktor_style_push_style_item(ctx, &ctx->style.menu_button.normal,
+                                      clear);
+        reaktor_style_push_style_item(ctx, &ctx->style.menu_button.hover,
+                                      clear);
+        reaktor_style_push_style_item(ctx, &ctx->style.menu_button.active,
+                                      clear);
     }
 
-    nk_layout_row_begin(ctx, NK_STATIC, MENUBAR_H, 2);
+    reaktor_layout_row_begin(ctx, REAKTOR_STATIC, MENUBAR_H, 2);
 
-    nk_layout_row_push(ctx, 60.0f);
-    if (nk_menu_begin_label(ctx, "File", NK_TEXT_CENTERED,
-                            nk_vec2(200.0f, reaktor_menu_height(4)))) {
+    reaktor_layout_row_push(ctx, 60.0f);
+    if (reaktor_menu_begin_label(ctx, "File", REAKTOR_TEXT_CENTERED,
+                                 reaktor_vec2(200.0f,
+                                              reaktor_menu_height(4)))) {
         reaktor_menu_edge(app, ctx);
         menu_cursor(app, ctx);
-        nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
+        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         if (reaktor_menu_item(app, ctx, "New", "Ctrl+N", 0))
             new_file();
-        if (reaktor_menu_item(app, ctx, "Open...", "Ctrl+O", 0)) {
-            if (!reaktor_file_open(app))
-                SDL_strlcpy(g.status, "A dialog is already open",
-                            sizeof(g.status));
-        }
+        if (reaktor_menu_item(app, ctx, "Open...", "Ctrl+O", 0))
+            ask_file(app, REAKTOR_FILE_OPEN);
         if (reaktor_menu_item(app, ctx, "Save", "Ctrl+S", 0))
-            save();
+            save(app);
         if (reaktor_menu_item(app, ctx, "Quit", "Ctrl+Q", 0))
             reaktor_request_quit(app);
-        nk_menu_end(ctx);
+        reaktor_menu_end(ctx);
     }
 
-    nk_layout_row_push(ctx, 60.0f);
-    if (nk_menu_begin_label(ctx, "Help", NK_TEXT_CENTERED,
-                            nk_vec2(200.0f, reaktor_menu_height(2)))) {
+    reaktor_layout_row_push(ctx, 60.0f);
+    if (reaktor_menu_begin_label(ctx, "Help", REAKTOR_TEXT_CENTERED,
+                                 reaktor_vec2(200.0f,
+                                              reaktor_menu_height(2)))) {
         reaktor_menu_edge(app, ctx);
         menu_cursor(app, ctx);
-        nk_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
+        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
         if (reaktor_menu_item(app, ctx, "Shortcuts", "Ctrl+K", 0))
             SDL_strlcpy(g.status,
                         "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+Q quit",
@@ -180,17 +213,17 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
             SDL_strlcpy(g.status,
                         "A text editor in one file, on Reaktor",
                         sizeof(g.status));
-        nk_menu_end(ctx);
+        reaktor_menu_end(ctx);
     }
 
-    nk_layout_row_end(ctx);
-    nk_menubar_end(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
+    reaktor_layout_row_end(ctx);
+    reaktor_menubar_end(ctx);
+    reaktor_style_pop_style_item(ctx);
+    reaktor_style_pop_style_item(ctx);
+    reaktor_style_pop_style_item(ctx);
     reaktor_menu_style_pop(ctx);
 
-    REAKTOR_COLUMN(.h = nk_window_get_content_region_size(ctx).y,
+    REAKTOR_COLUMN(.h = reaktor_window_get_content_region_size(ctx).y,
                    .gap = 1.0f) {
 
         reaktor_field(&(reaktor_field_spec){
@@ -204,14 +237,14 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
                          shown_name(), dirty() ? " (modified)" : "",
                          g.len, g.status);
 
-            nk_style_push_font(ctx, reaktor_style_font(app, ".status",
-                                                       13, 0));
+            reaktor_style_push_font(ctx, reaktor_style_font(app, ".status",
+                                                            13, 0));
             reaktor_label(&(reaktor_label_spec){
                 .text = line, .name = "Status", .value = line,
                 .color = "--text-muted",
                 .box = { .ml = 8.0f, .flags = REAKTOR_LAY_FILL_X |
                                               REAKTOR_LAY_CENTER_Y } });
-            nk_style_pop_font(ctx);
+            reaktor_style_pop_font(ctx);
         }
     }
 }
@@ -221,12 +254,10 @@ sample_key(App *app, const SDL_Event *e)
 {
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_N)) { new_file(); return 1; }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_O)) {
-        if (!reaktor_file_open(app))
-            SDL_strlcpy(g.status, "A dialog is already open",
-                        sizeof(g.status));
+        ask_file(app, REAKTOR_FILE_OPEN);
         return 1;
     }
-    if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_S)) { save(); return 1; }
+    if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_S)) { save(app); return 1; }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_Q)) {
         reaktor_request_quit(app);
         return 1;
@@ -271,5 +302,6 @@ main(int argc, char **argv)
         .page        = page_shell,
         .key         = sample_key,
         .start       = sample_start,
-        .file_opened = sample_file_opened });
+        .file_opened = sample_file_opened,
+        .remember_window = 1 });
 }

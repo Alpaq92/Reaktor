@@ -10,16 +10,24 @@ typedef struct snap_node {
     int           name, value, keys;
     float         x, y, w, h;
     float         num, lo, hi, step;
+    int           first, last, next, prev;
 } snap_node;
 
-#define SNAP_POOL (REAKTOR_A11Y_POOL * 2)
+typedef struct snap_slot {
+    unsigned id;
+    int      at;
+} snap_slot;
+
+#define SNAP_POOL  (REAKTOR_A11Y_POOL * 2)
+#define SNAP_SLOTS (REAKTOR_A11Y_MAX_NODES * 2)
 
 struct reaktor_snap {
     SDL_Mutex *lock;
     int        ready;
 
     snap_node  node[REAKTOR_A11Y_MAX_NODES];
-    int        count;
+    int        count, first, last;
+    snap_slot  slot[SNAP_SLOTS];
     char       str[SNAP_POOL];
     int        str_used;
     unsigned   focus;
@@ -48,14 +56,47 @@ intern(reaktor_snap *s, const char *t)
     return at;
 }
 
+static snap_slot *
+slot_of(reaktor_snap *s, unsigned id)
+{
+    unsigned i = (id * 2654435761u) & (SNAP_SLOTS - 1);
+
+    while (s->slot[i].id && s->slot[i].id != id) i = (i + 1) & (SNAP_SLOTS - 1);
+    return &s->slot[i];
+}
+
 static int
-find(const reaktor_snap *s, unsigned id)
+find(reaktor_snap *s, unsigned id)
+{
+    const snap_slot *at = id ? slot_of(s, id) : NULL;
+
+    return at && at->id && at->at < s->count ? at->at : -1;
+}
+
+static void
+link_tree(reaktor_snap *s)
 {
     int i;
 
-    for (i = 0; i < s->count; i++)
-        if (s->node[i].id == id) return i;
-    return -1;
+    memset(s->slot, 0, sizeof s->slot);
+    s->first = s->last = -1;
+    for (i = 0; i < s->count; i++) {
+        snap_slot *at = slot_of(s, s->node[i].id);
+
+        if (!at->id) { at->id = s->node[i].id; at->at = i; }
+        s->node[i].first = s->node[i].last = s->node[i].next = -1;
+    }
+    for (i = 0; i < s->count; i++) {
+        int  p    = s->node[i].parent ? find(s, s->node[i].parent) : -1;
+        int *head = p >= 0 ? &s->node[p].first : &s->first;
+        int *tail = p >= 0 ? &s->node[p].last  : &s->last;
+
+        if (s->node[i].parent && p < 0) continue;
+        s->node[i].prev = *tail;
+        if (*tail >= 0) s->node[*tail].next = i;
+        else            *head = i;
+        *tail = i;
+    }
 }
 
 static int
@@ -112,6 +153,7 @@ reaktor_snap_bind(reaktor_snap *s, reaktor_a11y_action activate,
     s->user         = user;
     s->window       = window;
     s->count        = 0;
+    s->first        = s->last = -1;
     s->str_used     = 0;
     s->focus        = s->want_focus = s->want_activate = 0;
     SDL_UnlockMutex(s->lock);
@@ -147,6 +189,7 @@ reaktor_snap_update_in(reaktor_snap *s, const reaktor_a11y *a, unsigned focus_id
         d->num = t[i].num; d->lo = t[i].lo;
         d->hi  = t[i].hi;  d->step = t[i].step;
     }
+    link_tree(s);
     s->focus = focus_id;
     SDL_UnlockMutex(s->lock);
     return 1;
@@ -202,15 +245,14 @@ unsigned
 reaktor_snap_child_in(reaktor_snap *s, unsigned parent, int last)
 {
     unsigned found = 0;
-    int i;
+    int p, k;
 
     if (!s || !s->ready) return 0;
     SDL_LockMutex(s->lock);
-    for (i = 0; i < s->count; i++)
-        if (s->node[i].parent == parent) {
-            found = s->node[i].id;
-            if (!last) break;
-        }
+    p = parent ? find(s, parent) : -1;
+    k = p >= 0 ? (last ? s->node[p].last : s->node[p].first)
+      : parent ? -1 : (last ? s->last : s->first);
+    if (k >= 0) found = s->node[k].id;
     SDL_UnlockMutex(s->lock);
     return found;
 }
@@ -218,25 +260,14 @@ reaktor_snap_child_in(reaktor_snap *s, unsigned parent, int last)
 unsigned
 reaktor_snap_sibling_in(reaktor_snap *s, unsigned id, int back)
 {
-    unsigned parent, prev = 0, found = 0;
-    int i, k, seen = 0;
+    unsigned found = 0;
+    int i, k;
 
     if (!s || !s->ready) return 0;
     SDL_LockMutex(s->lock);
     i = find(s, id);
-    if (i >= 0) {
-        parent = s->node[i].parent;
-        for (k = 0; k < s->count; k++) {
-            if (s->node[k].parent != parent) continue;
-            if (s->node[k].id == id) {
-                if (back) { found = prev; break; }
-                seen = 1;
-                continue;
-            }
-            if (seen) { found = s->node[k].id; break; }
-            prev = s->node[k].id;
-        }
-    }
+    k = i < 0 ? -1 : back ? s->node[i].prev : s->node[i].next;
+    if (k >= 0) found = s->node[k].id;
     SDL_UnlockMutex(s->lock);
     return found;
 }
