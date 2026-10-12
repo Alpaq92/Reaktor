@@ -57,6 +57,7 @@ case $prefix in /*) ;; *) echo "libreaktor-pkg.sh: -p needs an absolute path" >&
 
 version=$(sed -n 's/^project(reaktor VERSION \([0-9.]*\).*/\1/p' "$root/CMakeLists.txt")
 summary="Reaktor, a C99 GUI library on Nuklear styled by CSS (static library and headers)"
+comment="C99 GUI library on Nuklear, styled by CSS"
 www="https://github.com/Alpaq92/Reaktor"
 work="$root/build-pkg"
 [ -f "$root/external/SDL/CMakeLists.txt" ] || {
@@ -143,7 +144,7 @@ freebsd)
 name: libreaktor
 version: "$version"
 origin: devel/libreaktor
-comment: "$summary"
+comment: "$comment"
 desc: "$summary"
 maintainer: "$maintainer"
 www: "$www"
@@ -158,7 +159,7 @@ openbsd)
     listing >"$work/plist"
     pkg="$out/libreaktor-$version.tgz"
     pkg_create -A "$(arch -s)" -B "$stage" -p "$prefix" -f "$work/plist" \
-               -D COMMENT="$summary" -D FULLPKGPATH=devel/libreaktor \
+               -D COMMENT="$comment" -D FULLPKGPATH=devel/libreaktor \
                -D HOMEPAGE="$www" -D MAINTAINER="$maintainer" \
                -d "-$summary." "$pkg"
     [ $install -eq 0 ] || as_root pkg_add -D unsigned "$pkg"
@@ -172,7 +173,7 @@ OS_VERSION=$(uname -r)
 PKGTOOLS_VERSION=$(pkg_info -V)
 EOF
     pkg="$out/libreaktor-$version.tgz"
-    pkg_create -B "$work/build-info" -c "-$summary" -d "-$summary." \
+    pkg_create -B "$work/build-info" -c "-$comment" -d "-$summary." \
                -f "$work/plist" -I "$prefix" -p "$stage$prefix" "$pkg"
     [ $install -eq 0 ] || as_root pkg_add -U "$pkg"
     ;;
