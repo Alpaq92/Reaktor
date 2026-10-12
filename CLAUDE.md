@@ -73,7 +73,7 @@ regression oracle for every layout or style change.
   `core/text/text.c` and drawn from the custom command it swaps in for
   Nuklear's text command, so a change to how Nuklear or the renderer places
   glyphs does not reach it. Its bidi levels are matched to mojibake's by order:
-  mojibake 0.3.6 records `byte_offset` at a character's last byte.
+  mojibake 0.4.1 records `byte_offset` at a character's last byte.
 - **Only Nuklear's active window gets input.** Every other window carries a
   sticky `NK_WINDOW_ROM` until a click or hover activates it inside
   `nk_begin`. A layer that must not take input is begun

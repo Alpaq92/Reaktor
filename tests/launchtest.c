@@ -407,6 +407,21 @@ win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
     int f = ++g_win_frames, more = f < 30;
 
     (void)user;
+    if (is("win-hints") && f == 3) {
+        SDL_WindowFlags fl = SDL_GetWindowFlags(app->win);
+        SDL_Rect d;
+        int x, y, ww, wh;
+
+        SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(app->win), &d);
+        SDL_GetWindowPosition(app->win, &x, &y);
+        SDL_GetWindowSize(app->win, &ww, &wh);
+        SDL_snprintf(line, sizeof line, "borderless %d, utility %d, centered %d",
+                     !!(fl & SDL_WINDOW_BORDERLESS), !!(fl & SDL_WINDOW_UTILITY),
+                     SDL_abs(x + ww / 2 - (d.x + d.w / 2)) <= 1 &&
+                     SDL_abs(y + wh / 2 - (d.y + d.h / 2)) <= 1);
+        note(line);
+        reaktor_quit(app, 0);
+    }
     if (is("win-keys")) {
         REAKTOR_COLUMN(.w = (float)w, .h = (float)h, .gap = 4.0f) {
             if (reaktor_button(&(reaktor_button_spec){
@@ -503,8 +518,11 @@ win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
 static int
 open_probe_window(App *app)
 {
+    int hints = is("win-hints");
+
     return reaktor_window_open(app, &(reaktor_window){
-        .window = { .title = "probe", .w = 240, .h = 120 },
+        .window = { .title = "probe", .w = 240, .h = 120, .borderless = hints,
+                    .centered = hints, .skip_taskbar = hints },
         .page = win_page });
 }
 

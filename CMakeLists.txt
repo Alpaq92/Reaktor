@@ -448,6 +448,8 @@ add_library(reaktor_runtime STATIC
     runtime/services.c
     runtime/tray.c
     runtime/window.c)
+target_compile_definitions(reaktor_runtime PRIVATE
+    REAKTOR_VERSION_STRING="${PROJECT_VERSION}")
 
 if(EMSCRIPTEN)
     target_sources(reaktor_runtime PRIVATE platform/web/keyboard_web.c)

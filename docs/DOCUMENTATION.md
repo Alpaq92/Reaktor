@@ -71,6 +71,8 @@ errors, so an internal function cannot slip back in.
 | `reaktor_dark(app)`, `reaktor_get_theme(app)` | Whether it draws dark; the scheme chosen |
 | `reaktor_lang_pref(app)` | The language `--lang` asked for, or `NULL` |
 | `reaktor_set_borderless(app, on)`, `reaktor_borderless(app)` | Switch the main window's frame off for a titlebar of your own, drawn with `.window.hit_test` |
+| `reaktor_set_visible(app, on)` | Show or hide that App's window; with `.window.hidden`, the main window waits for it |
+| `reaktor_version()` | Reaktor's version, such as `"0.5.0"` |
 
 The `set` calls are for the main thread, take effect at the next frame, and do
 nothing when nothing changes.
@@ -359,6 +361,23 @@ reaktor_window_open(app, &(reaktor_window){
     .window = { .title = "Details", .w = 420, .h = 230 },
     .page   = details, .user = doc });
 ```
+
+Any window, the main one included, takes three hints: `.borderless` (no
+frame), `.centered` (on its display's usable area) and `.skip_taskbar` (out
+of the taskbar and the window switcher, where the system allows). A splash
+screen is those three on an ordinary window, with the main window started
+`.hidden`:
+
+```c
+splash = reaktor_window_open(app, &(reaktor_window){
+    .window = { .w = 480, .h = 300, .borderless = 1, .centered = 1, .skip_taskbar = 1 },
+    .page   = splash_page });
+if (splash) reaktor_timer(app, 2000, 0, splash_done, NULL);  /* close it, show the main one */
+else        reaktor_set_visible(app, 1);                       /* the web: the page's loader is the splash */
+```
+
+`.hidden` is ignored under `--shot` and `--a11y-dump`. On Wayland the
+compositor decides whether a window stays out of the taskbar.
 
 ### Tray
 
@@ -887,7 +906,7 @@ Built by default and run from `build/`:
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `list`, `list-keys`, `split-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `list`, `list-keys`, `split-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.
@@ -1044,7 +1063,7 @@ so Nuklear measures as it will draw. Before the frame becomes vertices,
 custom command in the same place, whose callback adds the glyph quads.
 Shaping is cached by string and font, glyphs by font, glyph and size; each
 cache starts over when full. Its bidi levels match mojibake's by order, since
-mojibake 0.3.6 records `byte_offset` at a character's last byte.
+mojibake 0.4.1 records `byte_offset` at a character's last byte.
 
 **Fonts are the application's.** The showcase ships M PLUS 1p for Japanese, as
 a `.font_fallbacks` entry; Arabic, Hebrew or an Indic script needs a font that
