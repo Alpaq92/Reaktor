@@ -50,7 +50,8 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
   oscillators, noise and shakes; colors blended in five spaces; and text
   that arrives a glyph at a time, idle once everything settles.
 - **Modular** — accessibility, localization and text shaping each swap for a
-  stub at build time, and only what they drew stops being drawn.
+  stub at build time, and only what they drew stops being drawn; every other
+  pixel stays.
 - **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources,
   on one software rasterizer, at any display scale: x86 and ARM everywhere,
   and RISC-V on Linux ([Platforms](docs/DOCUMENTATION.md#platforms)).
