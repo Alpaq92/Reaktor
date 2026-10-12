@@ -1,4 +1,4 @@
-#include "showcase.h"
+﻿#include "showcase.h"
 
 static int g_plain_floater, g_modal_floater;
 
@@ -357,6 +357,52 @@ ask_demo(App *app, struct reaktor_context *ctx)
     }
 }
 
+static void
+settings_demo(App *app, struct reaktor_context *ctx)
+{
+    static char note[64], said[96] = "Nothing saved this run.";
+    static int  note_len = -1;
+    const char *kept;
+
+    if (note_len < 0) {
+        kept = reaktor_setting("showcase.note");
+        note_len = (int)SDL_strlcpy(note, kept ? kept : "", sizeof note);
+        if (note_len >= (int)sizeof note) note_len = (int)sizeof note - 1;
+    }
+    section(app, ctx, "Settings",
+            "A setting is a string kept between runs in settings.conf, an INI "
+            "file in the user's preference folder; on the web the same file "
+            "lives in the browser's IndexedDB. The application picks when it is written - never, on quit, "
+            "on every change or after a delay - and can save or clear it at "
+            "any moment.");
+    api(app, ctx, "reaktor_setting_set  /  reaktor_settings_save  /  reaktor_settings_clear");
+
+    REAKTOR_COLUMN(.name = "Settings", .flags = REAKTOR_LAY_FILL_X,
+                   .gap = ctx->style.window.spacing.y) {
+        REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X, .gap = ctx->style.window.spacing.x) {
+            reaktor_field(&(reaktor_field_spec){
+                .buf = note, .len = &note_len, .cap = (int)sizeof note,
+                .hint = "A note to keep", .name = "Note",
+                .box = { .flags = REAKTOR_LAY_FILL_X } });
+            if (reaktor_button(&(reaktor_button_spec){ .label = "Save",
+                                                        .box = { .w = 96 } })) {
+                note[note_len] = '\0';
+                reaktor_setting_set("showcase.note", note_len ? note : NULL);
+                reaktor_settings_save();
+                SDL_strlcpy(said, "Saved: it is there on the next start.", sizeof said);
+            }
+            if (reaktor_button(&(reaktor_button_spec){ .label = "Clear",
+                                                        .box = { .w = 96 } })) {
+                reaktor_settings_clear();
+                note_len = 0;
+                SDL_strlcpy(said, "Cleared: settings.conf is gone.", sizeof said);
+            }
+        }
+        reaktor_label(&(reaktor_label_spec){ .text = said, .name = "Settings status",
+                                             .color = "--text-muted" });
+    }
+}
+
 static const reaktor_file_filter g_sheet_filters[] = {
     { "Stylesheets", "css" },
     { "All files",   "*"   }
@@ -582,6 +628,7 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
     tray_demo(app, ctx);
     toast_demos(app, ctx);
     ask_demo(app, ctx);
+    settings_demo(app, ctx);
 
     reaktor_layout_row_dynamic(ctx, 8.0f, 1);
     reaktor_spacer(ctx);

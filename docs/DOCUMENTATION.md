@@ -97,14 +97,30 @@ followed by a frame.
 | `reaktor_timer(app, ms, repeat, fn, user)` | `fn(app, user)` after `ms`, every `ms` with `repeat`; answers an id. Stops when the window closes |
 | `reaktor_timer_stop(id)` | Stop one |
 | `reaktor_post(app, fn, user)` | `fn(app, user)` on the main thread. Any thread; immediate on the main one |
-| `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. No newlines; no `=` in a key |
+| `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. `window.maximized` is key `maximized` in section `[window]`. No newlines; no `=`, `[` or `]` in a key |
+| `reaktor_settings_save()`, `reaktor_settings_clear()` | Write the settings now, whatever the mode; empty them and delete the file |
 
-Settings live in `settings.txt` in SDL's preference folder for `.id` (or
-`.name`). The desktop writes them once, on a normal quit, so a crash or kill
-loses every change since launch; keep what must survive one in a file of your
-own. The web writes `localStorage` on every change. `.remember_window` stores
-the main window's position, size and maximized state the same way and restores
-them at start, except under `--shot` and `--a11y-dump`.
+Settings are an INI file, `settings.conf` in SDL's preference folder for `.id`
+(or `.name`), read and written by [`ini.h`](https://github.com/mattiasgustavsson/libs);
+names match case-insensitively. `.save_settings` says when it is written:
+
+| `.save_settings` | Written |
+| --- | --- |
+| `REAKTOR_SAVE_NEVER` (default) | Never: settings last the run |
+| `REAKTOR_SAVE_ON_QUIT` | On a normal quit; a crash loses the run's changes |
+| `REAKTOR_SAVE_ON_CHANGE` | At every change |
+| `REAKTOR_SAVE_ON_TIMER` | `.save_ms` (1000) after a change, and on quit |
+
+Each write goes to a new file renamed over the old, so a crash mid-write
+leaves the last one whole. On the web the same `settings.conf` lives in the
+browser's IndexedDB: `tools/web-pre.js` mounts it with Emscripten's IDBFS and
+loads it before `main` runs, every write is synced back, and saving on quit
+means saving on change. Clearing site data, or a private window closing,
+loses it. `.remember_window` stores the
+main window's position, size and maximized state as settings, so it needs a
+save mode to last, and restores them at start. Under `--shot` and
+`--a11y-dump` settings are neither read nor written, so a user's file cannot
+change a test.
 
 Clipboard, URLs and logging are SDL's: `SDL_SetClipboardText`,
 `SDL_GetClipboardText`, `SDL_OpenURL` (behind a link's `.url`), `SDL_Log`.
@@ -637,7 +653,7 @@ samples/         showcase, notepad, simple, bench
 tests/           the console tests and launchtest
 tools/           packaging, the icon compiler, vmwalk
 benchmarks/      bench in four other frameworks, and the sampler
-external/        eleven submodules, read as they ship
+external/        twelve submodules, read as they ship
 ```
 
 `runtime/` and `core/` build `reaktor_runtime`, a static library every
@@ -907,7 +923,7 @@ Built by default and run from `build/`:
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `list`, `list-keys`, `split-keys`, `split-vkeys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `split-keys`, `split-vkeys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.

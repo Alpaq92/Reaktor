@@ -450,6 +450,7 @@ add_library(reaktor_runtime STATIC
     runtime/window.c)
 target_compile_definitions(reaktor_runtime PRIVATE
     REAKTOR_VERSION_STRING="${PROJECT_VERSION}")
+target_include_directories(reaktor_runtime PRIVATE "${TP}/mglibs")
 
 if(EMSCRIPTEN)
     target_sources(reaktor_runtime PRIVATE platform/web/keyboard_web.c)
@@ -493,6 +494,8 @@ foreach(_lic SDL/LICENSE.txt lcui/LICENSE.TXT plutosvg/LICENSE nuklear/LICENSE
 endforeach()
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/plutosvg/plutovg/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/plutovg.txt" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/mglibs/ini.h"
+               "${CMAKE_BINARY_DIR}/licenses/ini.h.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
@@ -548,9 +551,12 @@ function(reaktor_add_app name)
             -sEXIT_RUNTIME=0
             -Oz
             --closure 1
+            -lidbfs.js
+            "SHELL:--pre-js ${REAKTOR_SOURCE_DIR}/tools/web-pre.js"
             "SHELL:--shell-file ${REAKTOR_SOURCE_DIR}/tools/shell.html")
         set_property(TARGET ${name} APPEND PROPERTY LINK_DEPENDS
-                     "${REAKTOR_SOURCE_DIR}/tools/shell.html")
+                     "${REAKTOR_SOURCE_DIR}/tools/shell.html"
+                     "${REAKTOR_SOURCE_DIR}/tools/web-pre.js")
     endif()
 endfunction()
 
@@ -883,9 +889,11 @@ set(REAKTOR_LINK_OPTIONS ${REAKTOR_OUTSIDE_OPTIONS})
 if(EMSCRIPTEN)
     set(_wasm -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sSTACK_SIZE=4MB
               -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sEXIT_RUNTIME=0)
-    list(APPEND REAKTOR_LINK_OPTIONS ${_wasm})
+    list(APPEND REAKTOR_LINK_OPTIONS ${_wasm} -lidbfs.js
+         "SHELL:--pre-js \${_reaktor_prefix}/share/reaktor/web-pre.js")
     string(JOIN " " _wasm ${_wasm})
-    string(APPEND REAKTOR_PC_LIBS " ${_wasm}")
+    string(APPEND REAKTOR_PC_LIBS
+           " ${_wasm} -lidbfs.js --pre-js \${pcfiledir}/../../share/reaktor/web-pre.js")
 endif()
 string(JOIN " " _beside ${REAKTOR_LINK_LIBS} ${REAKTOR_LINK_DIRS} ${REAKTOR_LINK_OPTIONS})
 message(STATUS "libreaktor: a program links beside it ${_beside}")
@@ -944,6 +952,9 @@ if(REAKTOR_INSTALL)
     install(FILES assets/fonts/Aileron-Notice.txt DESTINATION share/reaktor/licenses
             COMPONENT libreaktor)
     install(FILES docs/NOTICE.md DESTINATION share/reaktor COMPONENT libreaktor)
+    if(EMSCRIPTEN)
+        install(FILES tools/web-pre.js DESTINATION share/reaktor COMPONENT libreaktor)
+    endif()
     if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
         foreach(_fmt deb rpm)
             add_custom_target(${_fmt}

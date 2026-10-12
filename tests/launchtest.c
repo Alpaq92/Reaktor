@@ -640,6 +640,26 @@ row_shown(App *app, int row)
     return 0;
 }
 
+static Uint64 g_saved_at;
+
+static int
+saved_file(int remove)
+{
+    char  *dir = SDL_GetPrefPath(NULL, "launchtest"), *path = NULL, *text = NULL;
+    int    has = 0;
+
+    if (dir) SDL_asprintf(&path, "%ssettings.conf", dir);
+    if (path && remove) SDL_RemovePath(path);
+    else if (path) {
+        text = (char *)SDL_LoadFile(path, NULL);
+        has  = text && SDL_strstr(text, "[launchtest]\nkey=on disk") != NULL;
+    }
+    SDL_free(text);
+    SDL_free(path);
+    SDL_free(dir);
+    return has;
+}
+
 static void
 service_page(App *app, struct nk_context *ctx, int w, int h)
 {
@@ -661,6 +681,30 @@ service_page(App *app, struct nk_context *ctx, int w, int h)
     }
     if (is("post") && g_frames == 2)
         SDL_DetachThread(SDL_CreateThread(post_from_thread, "post", app));
+    if ((is("save-change") || is("save-timer")) && g_frames == 2) {
+        saved_file(1);
+        reaktor_setting_set("launchtest.key", "on disk");
+        note(saved_file(0) ? "written at once" : "not written yet");
+        g_saved_at = SDL_GetTicks();
+    }
+    if (is("save-timer") && g_saved_at && SDL_GetTicks() - g_saved_at > 600) {
+        note(saved_file(0) ? "written after the delay" : "still not written");
+        g_saved_at = 0;
+        saved_file(1);
+        reaktor_quit(app, 0);
+    }
+    if (is("settings-clear") && g_frames == 2) {
+        reaktor_setting_set("launchtest.key", "on disk");
+        reaktor_settings_save();
+        note(saved_file(0) ? "saved by hand" : "not saved");
+        reaktor_settings_clear();
+        note(!saved_file(0) && !reaktor_setting("launchtest.key") ? "cleared" : "still there");
+        reaktor_quit(app, 0);
+    }
+    if (is("save-change") && g_frames == 4) {
+        saved_file(1);
+        reaktor_quit(app, 0);
+    }
     if (is("settings") && g_frames == 2) {
         reaktor_setting_set("launchtest.key", "a=b");
         reaktor_setting_set("launchtest.gone", "x");
@@ -796,7 +840,8 @@ page(App *app, struct nk_context *ctx, int w, int h)
         return;
     }
     if (is("ask") || is("timer") || is("post") || is("settings") || is("list") ||
-        is("tip") || is("list-keys") || is("split-keys") || is("split-vkeys")) {
+        is("tip") || is("list-keys") || is("split-keys") || is("split-vkeys") ||
+        is("save-change") || is("save-timer") || is("settings-clear")) {
         service_page(app, ctx, w, h);
         return;
     }
@@ -1010,6 +1055,13 @@ main(int argc, char **argv)
         .closing = closing,
         .stop    = stop,
         .file_opened = file_opened };
+
+    if (argc > 1 && SDL_strcmp(argv[1], "save-change") == 0)
+        l.save_settings = REAKTOR_SAVE_ON_CHANGE;
+    if (argc > 1 && SDL_strcmp(argv[1], "save-timer") == 0) {
+        l.save_settings = REAKTOR_SAVE_ON_TIMER;
+        l.save_ms       = 300;
+    }
     int rc = launchApp(argc, argv, &l);
 
     if (is("twice")) {

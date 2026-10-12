@@ -177,6 +177,8 @@ void     reaktor_post(App *app, reaktor_task fn, void *user);
 
 const char *reaktor_setting(const char *key);
 void        reaktor_setting_set(const char *key, const char *value);
+void        reaktor_settings_save(void);
+void        reaktor_settings_clear(void);
 
 typedef struct reaktor_diag {
     const char *renderer;

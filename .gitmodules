@@ -31,3 +31,6 @@
 [submodule "external/nukanim"]
 	path = external/nukanim
 	url = https://github.com/Alpaq92/NukAnim.git
+[submodule "external/mglibs"]
+	path = external/mglibs
+	url = https://github.com/mattiasgustavsson/libs.git
