@@ -760,10 +760,13 @@ in-tree build does.
 **As a system package.** `tools/libreaktor-pkg.sh` builds libreaktor and packs
 it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
 where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
-`-i` installs it, `-p` sets the prefix, `-o` the output folder.
+`-i` installs it, `-p` sets the prefix, `-o` the output folder, `-b` packs
+from an existing build. On Linux the `deb` and `rpm` targets do the same from
+the current build, into `build/dist`; each release carries both, built by CI.
 
 ```bash
 sh tools/libreaktor-pkg.sh -i
+./build.sh --target deb
 ```
 
 The prefix is `/opt/reaktor` on Linux and `/usr/local/reaktor` on the BSDs,

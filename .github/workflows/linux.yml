@@ -191,11 +191,28 @@ jobs:
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           EOF
 
-      - name: Check the libreaktor .deb
-        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' && matrix.arch == 'x86-64' }}
+      - name: Pack libreaktor as a .deb
+        id: deb
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         run: |
           docker exec -i debian sh -eu <<'EOF'
-          sh tools/libreaktor-pkg.sh -i -o dist-pkg </dev/null
+          sh tools/libreaktor-pkg.sh -f deb -b build -o dist-pkg </dev/null
+          EOF
+
+      - name: Upload the .deb
+        if: ${{ !cancelled() && steps.deb.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-deb-linux-${{ matrix.arch }}
+          path: dist-pkg/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check the libreaktor .deb
+        if: ${{ !cancelled() && steps.deb.outcome == 'success' && matrix.arch == 'x86-64' }}
+        run: |
+          docker exec -i debian sh -eu <<'EOF'
+          dpkg -i dist-pkg/*.deb </dev/null
           dpkg -s libreaktor-dev | grep -q '^Status: install ok installed'
           cmake -S examples/consumer -B build-pkg-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_PREFIX_PATH=/opt/reaktor </dev/null
@@ -251,9 +268,15 @@ jobs:
           retention-days: 14
 
   rpm:
-    name: linux rpm
-    runs-on: ubuntu-24.04
+    name: linux rpm ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86-64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -273,3 +296,11 @@ jobs:
                 -DCMAKE_PREFIX_PATH=/opt/reaktor </dev/null
           cmake --build build-pkg-consumer </dev/null
           EOF
+
+      - name: Upload the .rpm
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-rpm-linux-${{ matrix.arch }}
+          path: dist-pkg/*.rpm
+          if-no-files-found: error
+          retention-days: 14

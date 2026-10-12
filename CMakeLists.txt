@@ -933,4 +933,14 @@ if(REAKTOR_INSTALL)
     install(FILES assets/fonts/Aileron-Notice.txt DESTINATION share/reaktor/licenses
             COMPONENT libreaktor)
     install(FILES docs/NOTICE.md DESTINATION share/reaktor COMPONENT libreaktor)
+    if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+        foreach(_fmt deb rpm)
+            add_custom_target(${_fmt}
+                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/libreaktor-pkg.sh"
+                        -f ${_fmt} -b "${CMAKE_BINARY_DIR}" -o "${CMAKE_BINARY_DIR}/dist"
+                DEPENDS libreaktor
+                COMMENT "Packing libreaktor as a .${_fmt}"
+                USES_TERMINAL VERBATIM)
+        endforeach()
+    endif()
 endif()

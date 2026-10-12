@@ -137,6 +137,11 @@ jobs:
           or \`cc main.c \$(pkg-config --cflags --libs reaktor)\` with
           \`PKG_CONFIG_PATH\` at its \`lib/pkgconfig\`.
 
+          On Linux it also comes as a system package that installs into
+          \`/opt/reaktor\`: \`libreaktor-dev_${v}_<arch>.deb\` for Debian and Ubuntu
+          (amd64, i386, arm64, armhf, riscv64) and \`libreaktor-devel-${v}-1.<arch>.rpm\`
+          for Fedora and RHEL (x86_64, aarch64).
+
           \`SHA256SUMS\` lists every download's checksum. GitHub's own source
           archives below leave the submodules out; the \`-source.tar.gz\` above has
           them.
