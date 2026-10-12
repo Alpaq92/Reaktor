@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "reaktor.h"
-#include "appicon.h"
+#include "util.h"
+#include "svg.h"
 #include "plutosvg.h"
 
 static int str_append(char *dst, size_t cap, size_t *len, const char *src,
@@ -84,8 +84,8 @@ void reaktor_unpremultiply(unsigned char *px, int w, int h, int stride)
 }
 
 plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
-                                            const char *outline_colour,
-                                            const char *inside_colour,
+                                            const char *outline_color,
+                                            const char *inside_color,
                                             float stroke_scale)
 {
     char outline_hex[16] = "#000000", inside_hex[16] = "none";
@@ -100,11 +100,11 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
     svg = reaktor_asset_load(rel_path, NULL);
     if (!svg) { fprintf(stderr, "svg: cannot read %s\n", rel_path); return NULL; }
 
-    if (outline_colour) {
-        snprintf(outline_hex, sizeof(outline_hex), "%s", outline_colour);
+    if (outline_color) {
+        snprintf(outline_hex, sizeof(outline_hex), "%s", outline_color);
     }
-    if (inside_colour) {
-        snprintf(inside_hex, sizeof(inside_hex), "%s", inside_colour);
+    if (inside_color) {
+        snprintf(inside_hex, sizeof(inside_hex), "%s", inside_color);
     }
 
     snprintf(fill_decl,   sizeof(fill_decl),   "fill:%s", inside_hex);
@@ -125,12 +125,12 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
         if (!str_scale_stroke(src, stage0, cap, stroke_scale)) goto done;
         src = stage0;
     }
-    if (inside_colour) {
+    if (inside_color) {
         if (!str_replace_all(src, stage1, cap, "fill:none", fill_decl))
             goto done;
         src = stage1;
     }
-    if (outline_colour) {
+    if (outline_color) {
         if (!str_replace_all(src, stage2, cap, "stroke:#000", stroke_decl))
             goto done;
         if (!str_replace_all(stage2, stage3, cap, "stroke=\"#000\"",

@@ -21,9 +21,9 @@ static double g_work_ms;
 static double g_build_ms, g_render_ms, g_present_ms;
 
 static void
-page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
+page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
 {
-    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    struct reaktor_command_buffer *cv = reaktor_window_get_canvas(ctx);
     double now_ms;
     double build, render, present;
     float  t;
@@ -49,7 +49,7 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
         float cx = (float)((i % 8) * (win_w / 8) + win_w / 16);
         float cy = (float)((i / 8) * (win_h / 8) + win_h / 16);
         float r  = (float)(win_h / 24);
-        struct nk_vec2 p[4];
+        struct reaktor_vec2 p[4];
         int k;
 
         for (k = 0; k < 4; k++) {
@@ -58,8 +58,8 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
             p[k].x = cx + r * (float)cos((double)ang);
             p[k].y = cy + r * (float)sin((double)ang);
         }
-        nk_fill_polygon(cv, (float *)p, 4,
-                        nk_rgb(60 + (i * 3) % 190, 140, 220));
+        reaktor_fill_polygon(cv, (float *)p, 4,
+                             reaktor_rgb(60 + (i * 3) % 190, 140, 220));
     }
 
     {

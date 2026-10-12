@@ -320,7 +320,7 @@ focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv)
 
 /* Popups draw after every window; the ring goes in the overlay, drawn last. */
 void
-reaktor_focus_ring_overlay(App *app, struct nk_context *ctx)
+reaktor_overlay(App *app, struct nk_context *ctx, int ring)
 {
     struct nk_command_buffer *o = &ctx->overlay;
 
@@ -328,6 +328,7 @@ reaktor_focus_ring_overlay(App *app, struct nk_context *ctx)
     o->use_clipping = NK_CLIPPING_ON;
     o->clip         = REAKTOR_NO_CLIP;
     o->begin = o->end = o->last = ctx->memory.allocated;
-    focus_ring(app, ctx, o);
+    if (ring) focus_ring(app, ctx, o);
+    if (app->tip) reaktor_tip_draw(app, ctx, o);
     o->end = ctx->memory.allocated;
 }

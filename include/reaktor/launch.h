@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-struct nk_context;
+struct reaktor_context;
 #ifndef REAKTOR_APP_FWD
 #define REAKTOR_APP_FWD
 typedef struct App App;
@@ -68,19 +68,21 @@ typedef struct reaktor_launch {
     const reaktor_asset *assets;
     int                  asset_count;
 
-    void (*page)(App *app, struct nk_context *ctx, int w, int h);
+    void (*page)(App *app, struct reaktor_context *ctx, int w, int h);
     int  (*start)(App *app, int argc, char **argv);
     int  (*key)(App *app, const SDL_Event *e);
     int  (*closing)(App *app, reaktor_quit_reason why);
     void (*stop)(App *app);
     void (*file_opened)(App *app, const char *path);
     void  *user;
+    int    remember_window;
 } reaktor_launch;
 
 typedef struct reaktor_window {
     reaktor_window_spec window;
     int                 modal;
-    void (*page)(App *app, struct nk_context *ctx, int w, int h, void *user);
+    void (*page)(App *app, struct reaktor_context *ctx, int w, int h,
+                 void *user);
     void (*closed)(App *app, void *user);
     void  *user;
 } reaktor_window;
@@ -89,7 +91,8 @@ typedef struct reaktor_floater {
     const char *title;
     float       w, h;
     int         modal;
-    void (*body)(App *app, struct nk_context *ctx, int w, int h, void *user);
+    void (*body)(App *app, struct reaktor_context *ctx, int w, int h,
+                 void *user);
     void (*closed)(App *app, void *user);
     void  *user;
 } reaktor_floater;

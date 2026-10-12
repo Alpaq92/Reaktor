@@ -1,5 +1,5 @@
-#ifndef REAKTOR_H
-#define REAKTOR_H
+#ifndef REAKTOR_UTIL_H
+#define REAKTOR_UTIL_H
 
 #include <stddef.h>
 #include <stdio.h>

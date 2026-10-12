@@ -83,6 +83,30 @@ reaktor_asset_name(const reaktor_asset *a, const char *fallback)
     return name;
 }
 
+static int
+remembers(const App *app)
+{
+#ifdef __EMSCRIPTEN__
+    (void)app;
+    return 0;
+#else
+    return g_launch.remember_window && !app->shot_path && !app->dump_path;
+#endif
+}
+
+int
+reaktor_key_hook(App *app, const SDL_Event *event)
+{
+    return g_launch.key && g_launch.key(app, event);
+}
+
+const char *
+reaktor_app_ident(void)
+{
+    if (g_launch.id && *g_launch.id) return g_launch.id;
+    return g_launch.name && *g_launch.name ? g_launch.name : "Reaktor";
+}
+
 static const char *
 launch_title(void)
 {
@@ -91,8 +115,8 @@ launch_title(void)
     return g_launch.name ? g_launch.name : "Reaktor";
 }
 
-static void
-hint(const char *name, const char *value)
+void
+reaktor_hint(const char *name, const char *value)
 {
     SDL_SetHintWithPriority(name, value, SDL_HINT_OVERRIDE);
 }
@@ -270,8 +294,8 @@ load_theme(App *app)
     reaktor_windows_restyle();
 }
 
-static bool
-wake_app(const App *app)
+bool
+reaktor_app_wake(const App *app)
 {
     SDL_Event e;
 
@@ -284,10 +308,8 @@ wake_app(const App *app)
 static bool
 wake_loop(void)
 {
-    return wake_app(NULL);
+    return reaktor_app_wake(NULL);
 }
-
-#define TEXT_ROOM (NK_INPUT_MAX - 1)
 
 #ifdef __EMSCRIPTEN__
 static void
@@ -297,31 +319,6 @@ web_page_size(int *w, int *h)
     int ch = EM_ASM_INT({ return window.innerHeight | 0; });
     if (cw > 64 && ch > 64) { *w = cw; *h = ch; }
 }
-static Uint32       g_page_key;
-static enum nk_keys g_web_key;
-
-/* A phone's named keys, REAKTOR_WEB_KEY_BACKSPACE (-1) first. */
-static const struct { SDL_Keycode sdl; enum nk_keys nk; } g_soft[] = {
-    { SDLK_BACKSPACE, NK_KEY_BACKSPACE }, { SDLK_RETURN, NK_KEY_ENTER },
-    { SDLK_LEFT, NK_KEY_LEFT },           { SDLK_RIGHT, NK_KEY_RIGHT },
-    { SDLK_UP, NK_KEY_UP },               { SDLK_DOWN, NK_KEY_DOWN },
-    { SDLK_HOME, NK_KEY_TEXT_START },     { SDLK_END, NK_KEY_TEXT_END },
-    { SDLK_DELETE, NK_KEY_DEL }
-};
-#define SOFT_KEYS ((int)(sizeof(g_soft) / sizeof(g_soft[0])))
-
-/* Let go next frame, or Nuklear never sees it pressed. */
-static void
-page_key_take(struct nk_context *ctx, int code)
-{
-    if (code > 0) {
-        nk_input_unicode(ctx, (nk_rune)code);
-        return;
-    }
-    g_web_key = code < 0 && -code - 1 < SOFT_KEYS ? g_soft[-code - 1].nk : NK_KEY_NONE;
-    if (g_web_key) nk_input_key(ctx, g_web_key, nk_true);
-}
-
 static EM_BOOL
 web_on_resize(int type, const EmscriptenUiEvent *ev, void *user)
 {
@@ -425,15 +422,29 @@ reaktor_hot_motion(App *app, float mx, float my)
     return has && app->hot[over].track;
 }
 
+static SDL_Cursor *g_cursor[REAKTOR_CURSORS];
+
+SDL_Cursor *
+reaktor_cursor(int kind)
+{
+    static const SDL_SystemCursor sys[REAKTOR_CURSORS] = {
+        SDL_SYSTEM_CURSOR_DEFAULT, SDL_SYSTEM_CURSOR_POINTER,
+        SDL_SYSTEM_CURSOR_TEXT, SDL_SYSTEM_CURSOR_EW_RESIZE,
+        SDL_SYSTEM_CURSOR_NS_RESIZE
+    };
+
+    if (kind < 0 || kind >= REAKTOR_CURSORS) kind = REAKTOR_CURSOR_DEFAULT;
+    if (!g_cursor[kind]) g_cursor[kind] = SDL_CreateSystemCursor(sys[kind]);
+    return g_cursor[kind];
+}
+
 void
 reaktor_show_cursor(App *app)
 {
     SDL_Cursor *c;
 
     if (app->want_cursor == app->cur_shown) return;
-    c = app->want_cursor == 1 ? app->cur_pointer
-      : app->want_cursor == 2 ? app->cur_text
-      : app->cur_default;
+    c = reaktor_cursor(app->want_cursor);
     if (c) SDL_SetCursor(c);
     app->cur_shown = app->want_cursor;
 }
@@ -448,14 +459,14 @@ reaktor_place_ime(App *app)
     app->ime_valid = 0;
 }
 
-static void
-hover_redraw(App *app)
+void
+reaktor_hover_redraw(App *app)
 {
     if (app->dragging || SDL_GetTicks() - app->last_draw_ms >= g_hover_gap_ms) {
         app->dirty = 1;
     } else if (!app->hover_pending) {
         app->hover_pending = 1;
-        hint(SDL_HINT_MAIN_CALLBACK_RATE, "20");
+        reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, "20");
     }
 }
 
@@ -556,13 +567,13 @@ app_init(void **appstate, int argc, char *argv[])
 
     if (g_launch.name || g_launch.version || g_launch.id)
         SDL_SetAppMetadata(g_launch.name, g_launch.version, g_launch.id);
-    hint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
-    hint(SDL_HINT_TIMER_RESOLUTION, "0");
-    hint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
-    if (app->video_pref) hint(SDL_HINT_VIDEO_DRIVER, app->video_pref);
+    reaktor_hint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
+    reaktor_hint(SDL_HINT_TIMER_RESOLUTION, "0");
+    reaktor_hint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
+    if (app->video_pref) reaktor_hint(SDL_HINT_VIDEO_DRIVER, app->video_pref);
 #ifndef __APPLE__
     /* SDL drops the click that activates a window; only macOS expects that. */
-    hint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+    reaktor_hint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 #endif
 
     if (!SDL_Init(SDL_INIT_VIDEO)) return fail(app, "SDL could not start");
@@ -579,11 +590,11 @@ app_init(void **appstate, int argc, char *argv[])
         SDL_strlcpy(app->render_mode, app->renderer_pref,
                     sizeof(app->render_mode));
         if (SDL_strcmp(app->renderer_pref, "auto") != 0)
-            hint(SDL_HINT_RENDER_DRIVER, app->renderer_pref);
+            reaktor_hint(SDL_HINT_RENDER_DRIVER, app->renderer_pref);
     } else {
         SDL_strlcpy(app->render_mode, "auto: software",
                     sizeof(app->render_mode));
-        hint(SDL_HINT_RENDER_DRIVER, "software");
+        reaktor_hint(SDL_HINT_RENDER_DRIVER, "software");
     }
 
 #ifdef __EMSCRIPTEN__
@@ -604,14 +615,15 @@ app_init(void **appstate, int argc, char *argv[])
 #endif
         SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE |
                                 SDL_WINDOW_HIGH_PIXEL_DENSITY |
-                                (app->borderless ? SDL_WINDOW_BORDERLESS : 0);
+                                (app->borderless ? SDL_WINDOW_BORDERLESS : 0) |
+                                (remembers(app) ? SDL_WINDOW_HIDDEN : 0);
 
         if (!SDL_CreateWindowAndRenderer(launch_title(), win_w, win_h, flags,
                                          &app->win, &app->ren)) {
             SDL_Log("renderer '%s' would not start (%s); falling back",
                     app->render_mode, SDL_GetError());
             if (app->win) { SDL_DestroyWindow(app->win); app->win = NULL; }
-            hint(SDL_HINT_RENDER_DRIVER, NULL);
+            reaktor_hint(SDL_HINT_RENDER_DRIVER, NULL);
             SDL_strlcpy(app->render_mode, "auto", sizeof(app->render_mode));
             if (!SDL_CreateWindowAndRenderer(launch_title(), win_w, win_h, flags,
                                              &app->win, &app->ren))
@@ -646,6 +658,10 @@ app_init(void **appstate, int argc, char *argv[])
                                      (int)(g_launch.window.min_w * pre + 0.5f),
                                      (int)(g_launch.window.min_h * pre + 0.5f));
 #endif
+        if (remembers(app)) {
+            reaktor_window_restore(app);
+            SDL_ShowWindow(app->win);
+        }
         reaktor_session_watch(app->win);
     }
 
@@ -687,10 +703,6 @@ app_init(void **appstate, int argc, char *argv[])
     rebuild_font(app);
     reaktor_rss_mark(REAKTOR_RSS_FONT);
 
-    app->cur_default = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    app->cur_pointer = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
-    app->cur_text    = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT);
-
     if (g_launch.start) {
         int rc = g_launch.start(app, argc, argv);
 
@@ -700,8 +712,6 @@ app_init(void **appstate, int argc, char *argv[])
         }
     }
 
-    nk_textedit_init_fixed(&app->edit, app->edit_buf, sizeof(app->edit_buf));
-
     take_pending(app);
     load_theme(app);
     reaktor_rss_mark(REAKTOR_RSS_STYLE);
@@ -709,8 +719,7 @@ app_init(void **appstate, int argc, char *argv[])
     app->dirty = 1;
 
 #ifdef __EMSCRIPTEN__
-    g_page_key = SDL_RegisterEvents(1);
-    reaktor_web_keys_init(g_page_key);
+    reaktor_input_start();
 #endif
     nk_input_begin(app->ctx);
     g_started = 1;
@@ -718,239 +727,11 @@ app_init(void **appstate, int argc, char *argv[])
     return SDL_APP_CONTINUE;
 }
 
-enum {
-    HELD_MOTION = 1, HELD_BUTTON, HELD_KEY, HELD_TEXT, HELD_PAGE, HELD_WHEEL
-};
-
-static int
-held_kind(Uint32 type)
-{
-#ifdef __EMSCRIPTEN__
-    if (g_page_key && type == g_page_key) return HELD_PAGE;
-#endif
-    switch (type) {
-    case SDL_EVENT_MOUSE_MOTION:      return HELD_MOTION;
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-    case SDL_EVENT_MOUSE_BUTTON_UP:   return HELD_BUTTON;
-    case SDL_EVENT_KEY_DOWN:
-    case SDL_EVENT_KEY_UP:            return HELD_KEY;
-    case SDL_EVENT_TEXT_INPUT:        return HELD_TEXT;
-    case SDL_EVENT_MOUSE_WHEEL:       return HELD_WHEEL;
-    default:                          return 0;
-    }
-}
-
-enum { KEY_TYPES, KEY_MODIFIES, KEY_CHANGES };
-
-static int
-key_role(const App *app, const SDL_KeyboardEvent *k)
-{
-    if (k->scancode >= SDL_SCANCODE_LCTRL && k->scancode <= SDL_SCANCODE_RGUI)
-        return KEY_MODIFIES;
-    if (k->mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) return KEY_CHANGES;
-    if (k->key == SDLK_SPACE) return app->editing ? KEY_TYPES : KEY_CHANGES;
-    if (k->key > SDLK_SPACE && k->key != SDLK_DELETE &&
-        !(k->key & SDLK_SCANCODE_MASK))
-        return KEY_TYPES;
-    return KEY_CHANGES;
-}
-
-static int
-takes_change(struct input_queue *q, SDL_Keycode key)
-{
-    if (q->changed || q->text) return 0;
-    q->changed = 1;
-    q->key = key;
-    return 1;
-}
-
-static int
-takes_text(struct input_queue *q, size_t len)
-{
-    if (q->changed || q->text + len > TEXT_ROOM) return 0;
-    q->text += len;
-    return 1;
-}
-
-static int
-frame_takes(App *app, const SDL_Event *e)
-{
-    struct input_queue *q = &app->queue;
-    int c;
-
-    if (app->key_click == KEY_CLICK_ASKED || app->key_click == KEY_CLICK_PRESS)
-        return 0;
-    switch (held_kind(e->type)) {
-    case HELD_MOTION:
-        if (q->moved_ok) q->moved = 1;
-        return q->moved_ok;
-    case HELD_BUTTON:
-        if (q->moved && !e->button.down) return 0;
-        if (!takes_change(q, SDLK_UNKNOWN)) return 0;
-        q->moved_ok = 0;
-        return 1;
-    case HELD_KEY:
-        switch (key_role(app, &e->key)) {
-        case KEY_TYPES:    return 1;
-        case KEY_MODIFIES: return !q->changed;
-        default:
-            if (!e->key.down && e->key.key == q->key) return 1;
-            return takes_change(q, e->key.down ? e->key.key : SDLK_UNKNOWN);
-        }
-    case HELD_TEXT:
-        return takes_text(q, SDL_strlen(e->text.text));
-    case HELD_PAGE:
-        c = e->user.code;
-        if (c <= 0) return takes_change(q, SDLK_UNKNOWN);
-        return takes_text(q, c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4);
-    default:
-        return 1;
-    }
-}
-
-static int
-hold(struct input_queue *q, const SDL_Event *event, const char *text, size_t len)
-{
-    SDL_Event *more;
-    char *copy = NULL;
-    int cap;
-
-    if (q->n == q->cap) {
-        cap = q->cap ? q->cap * 2 : 32;
-        more = (SDL_Event *)SDL_realloc(q->ev, (size_t)cap * sizeof(*more));
-        if (!more) return 0;
-        q->ev = more;
-        q->cap = cap;
-    }
-    /* SDL frees an event's text on its next pump. */
-    if (text) {
-        if (!(copy = (char *)SDL_malloc(len + 1))) return 0;
-        SDL_memcpy(copy, text, len);
-        copy[len] = '\0';
-    }
-    q->ev[q->n] = *event;
-    if (copy) q->ev[q->n].text.text = copy;
-    q->n++;
-    return 1;
-}
-
-static int
-hold_for_next_frame(App *app, const SDL_Event *event)
-{
-    struct input_queue *q = &app->queue;
-    const char *t;
-    size_t n;
-
-    if (!held_kind(event->type)) {
-        /* Window events stay behind held input. */
-        if (!q->n || event->type < SDL_EVENT_WINDOW_FIRST ||
-            event->type > SDL_EVENT_WINDOW_LAST)
-            return 0;
-        return hold(q, event, NULL, 0);
-    }
-    if (event->type == SDL_EVENT_TEXT_INPUT &&
-        SDL_strlen(event->text.text) > TEXT_ROOM) {
-        for (t = event->text.text; *t; t += n) {
-            n = SDL_strlen(t);
-            if (n > TEXT_ROOM) {
-                n = TEXT_ROOM;
-                while (n > 1 && (t[n] & 0xC0) == 0x80) n--;
-            }
-            if (!hold(q, event, t, n)) return t != event->text.text;
-        }
-        return 1;
-    }
-    if (!q->n && frame_takes(app, event)) return 0;
-    if (event->type == SDL_EVENT_MOUSE_MOTION && q->n &&
-        q->ev[q->n - 1].type == SDL_EVENT_MOUSE_MOTION) {
-        q->ev[q->n - 1] = *event;
-        return 1;
-    }
-    if (event->type == SDL_EVENT_KEY_DOWN && event->key.repeat && q->n &&
-        q->ev[q->n - 1].type == SDL_EVENT_KEY_DOWN &&
-        q->ev[q->n - 1].key.key == event->key.key)
-        return 1;
-    if (event->type != SDL_EVENT_TEXT_INPUT) return hold(q, event, NULL, 0);
-    return hold(q, event, event->text.text, SDL_strlen(event->text.text));
-}
-
 void
-reaktor_app_input_free(App *app)
-{
-    struct input_queue *q = &app->queue;
-
-    while (q->n--)
-        if (q->ev[q->n].type == SDL_EVENT_TEXT_INPUT)
-            SDL_free((void *)q->ev[q->n].text.text);
-    SDL_free(q->ev);
-    q->ev = NULL;
-    q->n = q->cap = 0;
-}
-
-static void take_event(App *app, SDL_Event *event);
-
-static void
-replay_held(App *app)
-{
-    struct input_queue *q = &app->queue;
-    SDL_Event e;
-    int taken = 0;
-
-    q->changed  = 0;
-    q->key      = SDLK_UNKNOWN;
-    q->moved    = 0;
-    q->moved_ok = 1;
-    q->text     = 0;
-#ifdef __EMSCRIPTEN__
-    if (g_web_key) {
-        nk_input_key(app->ctx, g_web_key, nk_false);
-        g_web_key = NK_KEY_NONE;
-    }
-#endif
-    if (q->pointer_back) {
-        nk_input_motion(app->ctx, (int)q->pointer.x, (int)q->pointer.y);
-        q->pointer_back = 0;
-    }
-    if (app->key_click >= KEY_CLICK_RELEASE) {
-        q->changed  = 1;
-        q->moved_ok = 0;
-    }
-    while (q->n && frame_takes(app, &q->ev[0])) {
-        e = q->ev[0];
-        q->n--;
-        SDL_memmove(q->ev, q->ev + 1, (size_t)q->n * sizeof(*q->ev));
-        take_event(app, &e);
-        if (e.type == SDL_EVENT_TEXT_INPUT) SDL_free((void *)e.text.text);
-        taken = 1;
-    }
-    if (taken) wake_app(app);
-}
-
-static void
-take_event(App *app, SDL_Event *event)
+reaktor_take_event(App *app, SDL_Event *event)
 {
 #ifdef __EMSCRIPTEN__
-    if (event->type == g_page_key) {
-        int c = event->user.code;
-
-        app->dirty = 1;
-        /* Not Backspace, which also replays edits. */
-        if (c <= REAKTOR_WEB_KEY_ENTER && c >= REAKTOR_WEB_KEY_DELETE) {
-            SDL_Event k;
-
-            SDL_zero(k);
-            k.type         = SDL_EVENT_KEY_DOWN;
-            k.key.down     = true;
-            k.key.key      = g_soft[-c - 1].sdl;
-            k.key.scancode = SDL_GetScancodeFromKey(k.key.key, NULL);
-            k.key.mod      = SDL_GetModState();
-            k.key.windowID = SDL_GetWindowID(app->win);
-            if (g_launch.key && g_launch.key(app, &k)) return;
-            if (!app->editing && focus_key(app, &k)) return;
-        }
-        page_key_take(app->ctx, c);
-        return;
-    }
+    if (reaktor_input_page_key(app, event)) return;
 #endif
     if (app->secondary) reaktor_windows_take(app, event);
 
@@ -982,7 +763,7 @@ take_event(App *app, SDL_Event *event)
     case SDL_EVENT_MOUSE_MOTION:
         if (app->dragging) { app->drag_moved = 1; app->dirty = 1; }
         if (reaktor_hot_motion(app, event->motion.x, event->motion.y))
-            hover_redraw(app);
+            reaktor_hover_redraw(app);
         break;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -997,7 +778,7 @@ take_event(App *app, SDL_Event *event)
             app->drag_in_field = bx >= r.x && bx <= r.x + r.w &&
                                  by >= r.y && by <= r.y + r.h;
         }
-        hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
+        reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
         break;
 
     case SDL_EVENT_WINDOW_FOCUS_LOST:
@@ -1090,37 +871,19 @@ take_event(App *app, SDL_Event *event)
 
 static char *g_confirm;
 static int   g_confirm_id;
-static float g_confirm_h;
 
 static void
-confirm_body(App *app, struct nk_context *ctx, int w, int h, void *user)
+confirm_answered(App *app, int button, void *user)
 {
-    (void)w; (void)h; (void)user;
-    nk_layout_row_dynamic(ctx, g_confirm_h, 1);
-    nk_style_push_font(ctx, reaktor_style_font(app, ".popup-title", 16, 1));
-    nk_label_colored_wrap(ctx, g_confirm ? g_confirm : "",
-                          reaktor_token("--text-bright",
-                                        ctx->style.text.color));
-    nk_style_pop_font(ctx);
-    nk_layout_row_dynamic(ctx, 12.0f, 1);
-    nk_spacer(ctx);
-    nk_layout_row_template_begin(ctx, 36.0f);
-    nk_layout_row_template_push_dynamic(ctx);
-    nk_layout_row_template_push_static(ctx, 96.0f);
-    nk_layout_row_template_push_static(ctx, 96.0f);
-    nk_layout_row_template_end(ctx);
-    nk_spacer(ctx);
-    if (reaktor_button_label(app, ctx, "Cancel"))
-        reaktor_floater_close(app, g_confirm_id);
-    if (reaktor_button_accent(app, ctx, "Quit")) reaktor_quit(app, 0);
+    (void)user;
+    if (button == 1) reaktor_quit(app, 0);
 }
 
 static int
 confirm_open(App *app)
 {
-    const struct nk_user_font *f;
+    static const char *const buttons[2] = { "Cancel", "Quit" };
     SDL_WindowFlags flags;
-    int n;
 
     if (!g_confirm) return 0;
     flags = SDL_GetWindowFlags(app->win);
@@ -1128,14 +891,9 @@ confirm_open(App *app)
     if (flags & SDL_WINDOW_MINIMIZED) SDL_RestoreWindow(app->win);
     SDL_RaiseWindow(app->win);
     if (reaktor_floater_is_open(app, g_confirm_id)) return 1;
-    f = reaktor_style_font(app, ".popup-title", 16, 1);
-    n = (int)SDL_strlen(g_confirm);
-    g_confirm_h = f->width(f->userdata, f->height, g_confirm, n) > 328.0f
-                  ? 44.0f : 22.0f;
-    g_confirm_id = reaktor_floater_open(app, &(reaktor_floater){
-        .title = g_confirm, .w = 328.0f, .modal = 1,
-        .h = g_confirm_h + 12.0f + 36.0f + 2.0f * REAKTOR_MENU_GAP,
-        .body = confirm_body });
+    g_confirm_id = reaktor_ask(app, &(reaktor_question){
+        .text = g_confirm, .buttons = buttons, .count = 2,
+        .answered = confirm_answered });
     return g_confirm_id != 0;
 }
 
@@ -1170,198 +928,6 @@ bare_quit(App *app)
 #endif
 }
 
-static void
-feed(App *app, SDL_Event *event)
-{
-    if (hold_for_next_frame(app, event)) app->dirty = 1;
-    else take_event(app, event);
-}
-
-enum { TOUCH_NONE, TOUCH_PRESSED, TOUCH_CAUGHT, TOUCH_DRAGGING, TOUCH_SCROLLING };
-
-#define TOUCH_SLOP   8.0f
-#define FLING_TAU_MS 325.0f
-#define FLING_MIN    60.0f
-#define FLING_STOP   20.0f
-
-static void
-touch_pointer(App *app, float x, float y, int release)
-{
-    SDL_Event e;
-
-    SDL_zero(e);
-    e.type            = SDL_EVENT_MOUSE_MOTION;
-    e.motion.windowID = SDL_GetWindowID(app->win);
-    e.motion.which    = SDL_TOUCH_MOUSEID;
-    e.motion.x        = x;
-    e.motion.y        = y;
-    feed(app, &e);
-    if (!release) return;
-    SDL_zero(e);
-    e.type            = SDL_EVENT_MOUSE_BUTTON_UP;
-    e.button.windowID = SDL_GetWindowID(app->win);
-    e.button.which    = SDL_TOUCH_MOUSEID;
-    e.button.button   = SDL_BUTTON_LEFT;
-    e.button.clicks   = 1;
-    e.button.x        = x;
-    e.button.y        = y;
-    feed(app, &e);
-}
-
-static void
-touch_wheel(App *app, float dy)
-{
-    SDL_Event e;
-
-    if (dy == 0.0f || app->touch_unit <= 0.0f) return;
-    SDL_zero(e);
-    e.type           = SDL_EVENT_MOUSE_WHEEL;
-    e.wheel.windowID = SDL_GetWindowID(app->win);
-    e.wheel.which    = SDL_TOUCH_MOUSEID;
-    e.wheel.y        = dy / app->touch_unit;
-    e.wheel.mouse_x  = app->touch_x0;
-    e.wheel.mouse_y  = app->touch_y0;
-    feed(app, &e);
-}
-
-static void
-touch_sample(App *app, float y, Uint64 ns)
-{
-    app->touch_ys[app->touch_n % 4] = y;
-    app->touch_ns[app->touch_n % 4] = ns;
-    app->touch_n++;
-}
-
-/* Nuklear moves a panel a tenth of its height per wheel step. */
-static float
-touch_unit(const App *app)
-{
-    struct nk_rect b = app->body_rect;
-    float h = (float)app->laid_h;
-
-    if (b.h > 0.0f && app->touch_x0 >= b.x && app->touch_x0 < b.x + b.w &&
-        app->touch_y0 >= b.y && app->touch_y0 < b.y + b.h)
-        h = b.h;
-    return 0.1f * h;
-}
-
-static void
-fling_start(App *app, Uint64 now)
-{
-    int    last = app->touch_n - 1, first = last, i;
-    Uint64 t;
-    float  v;
-
-    if (last < 1 || now - app->touch_ns[last % 4] > 100000000u) return;
-    for (i = last - 1; i >= 0 && i > last - 4; i--) {
-        if (app->touch_ns[last % 4] - app->touch_ns[i % 4] > 100000000u) break;
-        first = i;
-    }
-    t = app->touch_ns[last % 4] - app->touch_ns[first % 4];
-    if (first == last || !t) return;
-    v = (app->touch_ys[last % 4] - app->touch_ys[first % 4]) / ((float)t / 1e9f);
-    if (SDL_fabsf(v) < FLING_MIN) return;
-    app->fling_v      = v;
-    app->fling_ns     = now;
-    app->restore_rate = 0;
-    hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
-    app->dirty = 1;
-}
-
-static void
-fling_step(App *app)
-{
-    Uint64 now = SDL_GetTicksNS();
-    float  dt;
-
-    if (app->fling_v == 0.0f) return;
-    dt = (float)(now - app->fling_ns) / 1e9f;
-    app->fling_ns = now;
-    if (app->touch_unit > 0.0f)
-        nk_input_scroll(app->ctx, nk_vec2(0.0f, app->fling_v * dt / app->touch_unit));
-    app->fling_v *= SDL_expf(-dt * 1000.0f / FLING_TAU_MS);
-    if (SDL_fabsf(app->fling_v) < FLING_STOP) {
-        app->fling_v      = 0.0f;
-        app->restore_rate = 2;
-    }
-}
-
-/* A finger that moves mostly up or down scrolls, and presses nothing. */
-static int
-touch_takes(App *app, const SDL_Event *e)
-{
-    struct nk_rect r = app->field_rect;
-    float dx, dy;
-    int   was = app->touch;
-
-    switch (e->type) {
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if (e->button.which != SDL_TOUCH_MOUSEID || e->button.button != SDL_BUTTON_LEFT)
-            return 0;
-        app->touch_x0 = e->button.x;
-        app->touch_y0 = e->button.y;
-        app->touch_n  = 0;
-        touch_sample(app, e->button.y, e->button.timestamp);
-        app->touch_in_field = app->field_rect_valid &&
-                              e->button.x >= r.x && e->button.x <= r.x + r.w &&
-                              e->button.y >= r.y && e->button.y <= r.y + r.h;
-        if (app->fling_v != 0.0f) {
-            app->fling_v      = 0.0f;
-            app->restore_rate = 2;
-            app->touch        = TOUCH_CAUGHT;
-            return 1;
-        }
-        app->touch = TOUCH_PRESSED;
-        return 0;
-
-    case SDL_EVENT_MOUSE_MOTION:
-        if (e->motion.which != SDL_TOUCH_MOUSEID) return 0;
-        switch (app->touch) {
-        case TOUCH_SCROLLING:
-            touch_wheel(app, e->motion.y - app->touch_last);
-            app->touch_last = e->motion.y;
-            touch_sample(app, e->motion.y, e->motion.timestamp);
-            return 1;
-        case TOUCH_PRESSED:
-        case TOUCH_CAUGHT:
-            dx = e->motion.x - app->touch_x0;
-            dy = e->motion.y - app->touch_y0;
-            if (SDL_fabsf(dx) <= TOUCH_SLOP && SDL_fabsf(dy) <= TOUCH_SLOP)
-                return app->touch == TOUCH_CAUGHT;
-            if (app->touch_in_field || SDL_fabsf(dy) <= SDL_fabsf(dx)) {
-                if (app->touch == TOUCH_CAUGHT) return 1;
-                app->touch = TOUCH_DRAGGING;
-                return 0;
-            }
-            /* Released away from every widget, the press clicks nothing. */
-            if (app->touch == TOUCH_PRESSED) touch_pointer(app, -1e4f, -1e4f, 1);
-            touch_pointer(app, app->touch_x0, app->touch_y0, 0);
-            app->touch      = TOUCH_SCROLLING;
-            app->touch_unit = touch_unit(app);
-            app->touch_last = app->touch_y0 + (dy > 0.0f ? TOUCH_SLOP : -TOUCH_SLOP);
-            touch_wheel(app, e->motion.y - app->touch_last);
-            app->touch_last = e->motion.y;
-            touch_sample(app, e->motion.y, e->motion.timestamp);
-            return 1;
-        default:
-            return 0;
-        }
-
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-        if (e->button.which != SDL_TOUCH_MOUSEID || e->button.button != SDL_BUTTON_LEFT)
-            return 0;
-        app->touch = TOUCH_NONE;
-        if (was == TOUCH_SCROLLING) {
-            fling_start(app, e->button.timestamp);
-            return 1;
-        }
-        return was == TOUCH_CAUGHT;
-
-    default:
-        return 0;
-    }
-}
-
 static SDL_AppResult
 app_event(void *appstate, SDL_Event *event)
 {
@@ -1386,7 +952,7 @@ app_event(void *appstate, SDL_Event *event)
         }
         if (!(to = app)) return SDL_APP_CONTINUE;
     }
-    if (!touch_takes(to, event)) feed(to, event);
+    reaktor_input_event(to, event);
     return SDL_APP_CONTINUE;
 }
 
@@ -1470,8 +1036,12 @@ file_answer(App *app)
     if (!SDL_GetAtomicInt(&app->file_ready)) return;
     SDL_SetAtomicInt(&app->file_ready, 0);
     app->file_pending = 0;
-    if (g_launch.file_opened)
-        g_launch.file_opened(app, app->file_ok ? app->file_answer : NULL);
+    if (app->file_dialog.chosen)
+        app->file_dialog.chosen(app, (const char *const *)app->file_list,
+                                app->file_count, app->file_dialog.user);
+    SDL_free(app->file_list);
+    app->file_list  = NULL;
+    app->file_count = 0;
 }
 
 static int
@@ -1483,7 +1053,7 @@ take_shot(App *app)
     if (!app->shot_path || !*app->shot_path || done) return 0;
     if (!reaktor_frame_settled(app)) {
         app->dirty = 1;
-        wake_app(app);
+        reaktor_app_wake(app);
         return 0;
     }
     done = 1;
@@ -1516,7 +1086,7 @@ key_click(App *app)
         nk_input_motion(ctx, x, y);
         nk_input_button(ctx, NK_BUTTON_LEFT, x, y, nk_true);
         app->key_click = KEY_CLICK_RELEASE;
-        wake_app(app);
+        reaktor_app_wake(app);
     } else {
         nk_input_button(ctx, NK_BUTTON_LEFT, x, y, nk_false);
         app->key_click = app->key_click == KEY_CLICK_AGAIN
@@ -1542,12 +1112,6 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     app->editing = 0;
     if (app->last_frame_ms) app->frame_gap_ms = (float)(now - app->last_frame_ms);
     app->last_frame_ms = now;
-    app->fps_frames++;
-    if (now - app->fps_t0 >= 1000) {
-        app->fps = app->fps_frames * 1000.0f / (float)(now - app->fps_t0);
-        app->fps_frames = 0;
-        app->fps_t0 = now;
-    }
 
     nk_style_push_vec2(ctx, &ctx->style.window.padding, nk_vec2(0, 0));
     nk_style_push_float(ctx, &ctx->style.window.border, 0.0f);
@@ -1558,7 +1122,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     if (is_main) reaktor_a11y_platform_drain();
     else reaktor_a11y_platform_window_drain(app->win);
     key_click(app);
-    fling_step(app);
+    reaktor_fling_step(app);
     nk_input_end(ctx);
     ctx->style.text.color = app->text;
     file_answer(app);
@@ -1595,8 +1159,12 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
                             (reaktor_popup_open(pw) && pw->popup.type == NK_PANEL_POPUP));
     }
     app->focus_step = 0;
-    if (app->focus_visible && app->focus_seen && app->focus_layer == FOCUS_POPUP)
-        reaktor_focus_ring_overlay(app, ctx);
+    {
+        int ring = app->focus_visible && app->focus_seen &&
+                   app->focus_layer == FOCUS_POPUP;
+
+        if (ring || app->tip) reaktor_overlay(app, ctx, ring);
+    }
     app->stop_editing = 0;
 
     /* A click for a held widget would land on whatever holds it. */
@@ -1610,7 +1178,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
         } else {
             app->key_click = KEY_CLICK_PRESS;
             app->dirty = 1;
-            wake_app(app);
+            reaktor_app_wake(app);
         }
     }
 
@@ -1627,7 +1195,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
 
     if (app->anim && reaktor_anim_settle()) {
         app->dirty = 1;
-        wake_app(app);
+        reaktor_app_wake(app);
     }
 
     nk_sdl_update_TextInput(ctx);
@@ -1663,12 +1231,12 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     if (app->restore_rate > 0) {
         if (--app->restore_rate > 0) {
             app->dirty = 1;
-            wake_app(app);
+            reaktor_app_wake(app);
         } else {
-            hint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
+            reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
         }
     }
-    replay_held(app);
+    reaktor_replay_held(app);
     return shot;
 }
 
@@ -1719,7 +1287,7 @@ app_iterate(void *appstate)
 
     if (!app->first_frame_done) {
         app->first_frame_done = 1;
-        hint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
+        reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
         reaktor_release_free_memory();
     }
     return SDL_APP_CONTINUE;
@@ -1737,6 +1305,10 @@ app_quit(void *appstate, SDL_AppResult result)
         return;
     }
     run_stop(app);
+    if (remembers(app)) reaktor_window_remember(app);
+    reaktor_timers_drop(NULL);
+    reaktor_settings_save();
+    reaktor_settings_free();
     if (!SDL_GetAtomicInt(&g_exit_code) && (app->shot_failed || app->dump_failed))
         SDL_SetAtomicInt(&g_exit_code, app->shot_failed && app->dump_failed ? 4
                                        : app->shot_failed ? 2 : 3);
@@ -1750,9 +1322,14 @@ app_quit(void *appstate, SDL_AppResult result)
     reaktor_windows_close_all();
     reaktor_tray_close(app);
     reaktor_style_shutdown();
-    if (app->cur_default) SDL_DestroyCursor(app->cur_default);
-    if (app->cur_pointer) SDL_DestroyCursor(app->cur_pointer);
-    if (app->cur_text)    SDL_DestroyCursor(app->cur_text);
+    {
+        int k;
+
+        for (k = 0; k < REAKTOR_CURSORS; k++) {
+            if (g_cursor[k]) SDL_DestroyCursor(g_cursor[k]);
+            g_cursor[k] = NULL;
+        }
+    }
     if (app->ren) img_cache_free(app);
     if (app->ctx) nk_sdl_shutdown(app->ctx);
     if (app->ren) SDL_DestroyRenderer(app->ren);
@@ -1858,7 +1435,7 @@ reaktor_wake(App *app)
 
     if (!to || !SDL_GetAtomicInt(&g_running)) return;
     /* A lost wake would hold back every later one. */
-    if (SDL_CompareAndSwapAtomicInt(&to->wake, 0, 1) && !wake_app(to))
+    if (SDL_CompareAndSwapAtomicInt(&to->wake, 0, 1) && !reaktor_app_wake(to))
         SDL_SetAtomicInt(&to->wake, 0);
 }
 

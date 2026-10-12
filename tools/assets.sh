@@ -18,7 +18,7 @@ for f in "$root"/assets/locale/*.txt; do
 done
 
 # Same set as the WASM scan in CMakeLists.txt.
-srcs=$(ls "$root/src/"*.h "$root/core/"*/*.c "$root/core/"*/*.h \
+srcs=$(ls "$root/core/"*.h "$root/core/"*/*.c "$root/core/"*/*.h \
           "$root/platform/"*.c "$root/platform/"*/*.c \
           "$root/runtime/"*.c \
           "$root/samples/"*/*.c "$root/samples/"*/*.h 2>/dev/null || :)

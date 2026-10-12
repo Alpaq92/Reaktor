@@ -144,13 +144,13 @@ chrome_end(struct nk_command_buffer *out, nk_handle user)
     g_chrome.border = NULL;
 }
 
-static style_frame
+static reaktor_style_frame
 push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
 {
     reaktor_style s = k->s;
     const reaktor_style *hov = &k->hov, *act = &k->act;
     unsigned char hover[4], active[4];
-    style_frame f = { 0, 0, 0, 0, 0 };
+    reaktor_style_frame f = { 0, 0, 0, 0, 0 };
 
     if (!s.matched) return f;
 
@@ -221,7 +221,7 @@ reaktor_button_look_of(const char *selector, reaktor_button_look *k)
     reaktor_style_get(state, &k->act);
 }
 
-static style_frame
+static reaktor_style_frame
 push_button_style(App *app, struct nk_context *ctx, const char *selector)
 {
     reaktor_button_look k;
@@ -231,7 +231,7 @@ push_button_style(App *app, struct nk_context *ctx, const char *selector)
 }
 
 void
-pop_style(struct nk_context *ctx, style_frame f)
+reaktor_style_frame_pop(struct nk_context *ctx, reaktor_style_frame f)
 {
     int i;
     for (i = 0; i < f.fonts;  i++) nk_style_pop_font(ctx);
@@ -255,7 +255,7 @@ int
 reaktor_css_button_look(App *app, struct nk_context *ctx,
                         const reaktor_button_look *k, const char *label)
 {
-    style_frame f;
+    reaktor_style_frame f;
     unsigned id;
     int clicked;
 
@@ -265,7 +265,7 @@ reaktor_css_button_look(App *app, struct nk_context *ctx,
     reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, label);
     reaktor_chrome_disarm();
-    pop_style(ctx, f);
+    reaktor_style_frame_pop(ctx, f);
     if (reaktor_focus_activated(app, id)) clicked = 1;
     return clicked;
 }
@@ -327,7 +327,7 @@ int
 css_button_accent(App *app, struct nk_context *ctx, const char *selector,
                   const char *label)
 {
-    style_frame f, a = { 0, 0, 0, 0, 0 };
+    reaktor_style_frame f, a = { 0, 0, 0, 0, 0 };
     unsigned char c[4], hov[4];
     struct nk_color label_col;
     int clicked;
@@ -359,8 +359,8 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     reaktor_button_arm(ctx);
     clicked = nk_button_label(ctx, label);
     reaktor_chrome_disarm();
-    pop_style(ctx, a);
-    pop_style(ctx, f);
+    reaktor_style_frame_pop(ctx, a);
+    reaktor_style_frame_pop(ctx, f);
     return clicked;
 }
 
@@ -384,7 +384,7 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
                 const char *icon_src, const char *label)
 {
     reaktor_button_look k;
-    style_frame f;
+    reaktor_style_frame f;
     struct nk_rect b = nk_widget_bounds(ctx), at;
     int clicked, drawn;
 
@@ -408,7 +408,7 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
         nk_draw_image(nk_window_get_canvas(ctx), at, &im,
                       nk_rgb_factor(ink, bs->color_factor_text));
     }
-    pop_style(ctx, f);
+    reaktor_style_frame_pop(ctx, f);
     return clicked;
 }
 
@@ -418,7 +418,7 @@ reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
                  struct nk_image im, float px, const char *name)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
-    style_frame f;
+    reaktor_style_frame f;
     int clicked;
 
     hot_push(app, b, 1, 1);
@@ -427,7 +427,7 @@ reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
     reaktor_button_arm(ctx);
     clicked = nk_button_text(ctx, "", 0);
     reaktor_chrome_disarm();
-    pop_style(ctx, f);
+    reaktor_style_frame_pop(ctx, f);
     nk_draw_image(nk_window_get_canvas(ctx),
                   nk_rect((float)(int)(b.x + (b.w - px) * 0.5f),
                           (float)(int)(b.y + (b.h - px) * 0.5f), px, px),
@@ -435,38 +435,12 @@ reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
     return clicked;
 }
 
-static void
-edit_copy_selection(struct nk_context *ctx, struct nk_text_edit *edit)
-{
-    int b = edit->select_start, e = edit->select_end;
-    int begin = NK_MIN(b, e), end = NK_MAX(b, e);
-    int glyph_len;
-    nk_rune unicode;
-    const char *text;
-
-    if (begin == end || !ctx->clip.copy) return;
-    text = nk_str_at_const(&edit->string, begin, &unicode, &glyph_len);
-    if (text) ctx->clip.copy(ctx->clip.userdata, text, end - begin);
-}
-
-static void
-edit_paste_clipboard(struct nk_text_edit *edit)
-{
-    char *text = SDL_GetClipboardText();
-
-    if (!text) return;
-    if (*text) {
-        nk_textedit_paste(edit, text, (int)SDL_utf8strlen(text));
-    }
-    SDL_free(text);
-}
-
-style_frame
+reaktor_style_frame
 push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
                 const char *sel)
 {
     reaktor_style s, foc, btn;
-    style_frame f = { 0, 0, 0, 0, 0 };
+    reaktor_style_frame f = { 0, 0, 0, 0, 0 };
     unsigned char body[4];
     char focus[96];
 
@@ -613,54 +587,6 @@ note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
     app->ime_rect.h = (int)bounds.h;
     app->ime_cursor = (int)caret;
     app->ime_valid  = 1;
-}
-
-void
-css_field(App *app, struct nk_context *ctx, char *buf, int *len, int cap,
-          const char *hint)
-{
-    struct nk_rect bounds = nk_widget_bounds(ctx);
-    reaktor_style s;
-    style_frame f;
-
-    (void)buf; (void)cap;
-    note_field_rect(app, ctx, bounds);
-
-    hot_push(app, bounds, 2, 0);
-
-    f = push_edit_style(ctx, &s, 1, NULL);
-    reaktor_edit_edge(app, ctx, bounds, &s);
-    {
-        nk_flags st = nk_edit_buffer(ctx, NK_EDIT_FIELD, &app->edit,
-                                     nk_filter_default);
-        note_ime_caret(app, ctx, bounds, st, &app->edit);
-        reaktor_note(app, REAKTOR_A11Y_TEXTBOX, hint,
-                     nk_str_get_const(&app->edit.string),
-                     st & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
-    }
-    pop_style(ctx, f);
-
-    nk_style_push_float(ctx, &ctx->style.window.rounding,
-                        reaktor_popup_rounding());
-    if (nk_contextual_begin(ctx, NK_WINDOW_BORDER, nk_vec2(160, 172), bounds)) {
-        int has_sel = app->edit.select_start != app->edit.select_end;
-
-        nk_layout_row_dynamic(ctx, 26, 1);
-        if (has_sel && nk_contextual_item_label(ctx, "Cut", NK_TEXT_LEFT)) {
-            edit_copy_selection(ctx, &app->edit);
-            nk_textedit_cut(&app->edit);
-        }
-        if (has_sel && nk_contextual_item_label(ctx, "Copy", NK_TEXT_LEFT))
-            edit_copy_selection(ctx, &app->edit);
-        if (nk_contextual_item_label(ctx, "Paste", NK_TEXT_LEFT))
-            edit_paste_clipboard(&app->edit);
-        if (nk_contextual_item_label(ctx, "Select all", NK_TEXT_LEFT))
-            nk_textedit_select_all(&app->edit);
-        nk_contextual_end(ctx);
-    }
-    nk_style_pop_float(ctx);
-
-    if (hint && *len == 0) draw_hint(ctx, bounds, hint, &s);
 }
 
 static void

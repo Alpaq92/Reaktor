@@ -5,7 +5,7 @@
 #include <SDL3/SDL.h>
 
 #ifndef REAKTOR_LOCALE_EMBEDDED
-#include "reaktor.h"
+#include "util.h"
 #endif
 
 #define LOCALE_MAX  32

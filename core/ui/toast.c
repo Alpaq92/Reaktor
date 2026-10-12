@@ -191,7 +191,7 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
                 nk_layout_row_template_end(ctx);
 
                 if (t->icon)
-                    image_centred(ctx, reaktor_ionicon_col(app, t->icon, 20, fg),
+                    reaktor_image_centered(ctx, reaktor_ionicon_col(app, t->icon, 20, fg),
                                   20);
                 nk_label_colored(ctx, t->text ? t->text : "", NK_TEXT_LEFT, fg);
                 if (t->spec.content) {

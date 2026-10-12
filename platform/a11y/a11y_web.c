@@ -104,11 +104,18 @@ EM_JS(void, web_a11y_node, (unsigned id, unsigned parent, const char *role,
 
     var p = parent ? a.nodes[parent] : a.root;
     if (!p) p = a.root;
-    if (el.parentNode !== p || p.lastChild !== el) p.appendChild(el);
+    var prev = p.placed === a.gen ? p.last : null;
+    if (el.parentNode !== p || el.previousSibling !== prev)
+        p.insertBefore(el, prev ? prev.nextSibling : p.firstChild);
+    p.placed = a.gen; p.last = el;
 
     el.ax = x; el.ay = y;
-    el.style.left = (x - (p.ax || 0)) + 'px'; el.style.top = (y - (p.ay || 0)) + 'px';
-    el.style.width = w + 'px'; el.style.height = h + 'px';
+    var box = (x - (p.ax || 0)) + ',' + (y - (p.ay || 0)) + ',' + w + ',' + h;
+    if (el.box !== box) {
+        el.box = box;
+        el.style.left = (x - (p.ax || 0)) + 'px'; el.style.top = (y - (p.ay || 0)) + 'px';
+        el.style.width = w + 'px'; el.style.height = h + 'px';
+    }
 });
 
 EM_JS(void, web_a11y_end, (unsigned focus), {

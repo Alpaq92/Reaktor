@@ -29,6 +29,11 @@ h4 {
 
 .tooltip {
     font-size: 13px;
+    color: var(--text-main);
+    background-color: var(--background-hover);
+    border: 1px solid var(--text-muted);
+    border-radius: 6px;
+    padding: 4px 8px;
 }
 
 .popup-title {

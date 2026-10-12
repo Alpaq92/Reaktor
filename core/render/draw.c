@@ -5,7 +5,7 @@ static const int g_font_px[FONT_STEPS] =
     { 12, 14, 16, 19, 23, 28, 34, 41 };
 
 static int
-parse_colour(const char *spec, char *out, size_t cap)
+parse_color(const char *spec, char *out, size_t cap)
 {
     if (spec[0] != '#' || strlen(spec) >= cap) return 0;
     strcpy(out, spec);
@@ -101,6 +101,19 @@ icon_source(App *app, const char *rel, char *out, size_t cap)
     return reaktor_asset_exists(out) ? out : rel;
 }
 
+static plutovg_surface_t *
+raster_surface(const char *path)
+{
+    size_t             len   = 0;
+    char              *bytes = reaktor_asset_load(path, &len);
+    plutovg_surface_t *surf  = bytes ? plutovg_surface_load_from_image_data(
+                                           bytes, (int)len)
+                                     : NULL;
+
+    reaktor_free(bytes);
+    return surf;
+}
+
 static struct img_slot *
 img_lookup(App *app, const char *src, int px)
 {
@@ -137,15 +150,18 @@ img_lookup(App *app, const char *src, int px)
         for (tok = SDL_strtok_r(opts, "&", &opts); tok;
              tok = SDL_strtok_r(NULL, "&", &opts)) {
             if (SDL_strncmp(tok, "stroke=", 7) == 0)
-                parse_colour(tok + 7, ocol, sizeof(ocol));
+                parse_color(tok + 7, ocol, sizeof(ocol));
             else if (SDL_strncmp(tok, "fill=", 5) == 0)
-                parse_colour(tok + 5, icol, sizeof(icol));
+                parse_color(tok + 5, icol, sizeof(icol));
             else if (SDL_strncmp(tok, "sw=", 3) == 0)
                 swk = (float)SDL_atof(tok + 3);
         }
     }
 
-    surf = reaktor_svg_surface_path(icon_source(app, rel, found, sizeof(found)),
+    q = SDL_strrchr(rel, '.');
+    surf = q && SDL_strcasecmp(q, ".svg") != 0
+         ? raster_surface(rel)
+         : reaktor_svg_surface_path(icon_source(app, rel, found, sizeof(found)),
                                     px, ocol[0] ? ocol : NULL,
                                     icol[0] ? icol : NULL, swk);
 
@@ -196,13 +212,13 @@ icon(App *app, const char *src, int px)
 }
 
 struct nk_image
-reaktor_svg(App *app, const char *src, int px)
+reaktor_image_file(App *app, const char *src, int px)
 {
     return icon(app, src, px);
 }
 
 void
-image_centred(struct nk_context *ctx, struct nk_image im, int px)
+reaktor_image_centered(struct nk_context *ctx, struct nk_image im, int px)
 {
     struct nk_rect b = nk_widget_bounds(ctx);
     float s = (float)px;
@@ -494,7 +510,7 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
 
 
 static void
-centre_glyphs_optically(struct nk_font *f)
+center_glyphs_optically(struct nk_font *f)
 {
     const struct nk_font_glyph *ex;
     float shift;
@@ -532,7 +548,7 @@ finish_face(struct nk_font *f, float height, const char *path)
 {
     if (!f) return;
     f->handle.height = height;
-    centre_glyphs_optically(f);
+    center_glyphs_optically(f);
     nbsp_as_space(f);
     /* After centering: the Text module reads the baseline. */
     reaktor_text_attach_font(f, path);
@@ -615,7 +631,6 @@ rebuild_font(App *app)
         nk_font_atlas_clear(app->atlas);
         SDL_memset(app->faces, 0, sizeof(app->faces));
         SDL_memset(app->bolds, 0, sizeof(app->bolds));
-        app->face_bold = NULL;
     }
     SDL_free(app->glyphs);
     app->glyphs = NULL;
@@ -641,7 +656,6 @@ rebuild_font(App *app)
         for (i = 0; bttf && i < FONT_STEPS; i++)
             app->bolds[i] = nk_font_atlas_add_from_memory(
                 atlas, bttf, bsize, (float)reaktor_px(g_font_px[i]), &cfg);
-        app->face_bold = app->bolds[0];
         if (!font)
             SDL_snprintf(app->font_status, sizeof(app->font_status),
                          "FALLBACK (ProggyClean) - could not load %s",

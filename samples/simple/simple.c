@@ -2,7 +2,7 @@
 #include "reaktor/main.h"
 
 static void
-page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
+page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
 {
     (void)ctx;
 

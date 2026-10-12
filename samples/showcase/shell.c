@@ -5,42 +5,17 @@
 #define GLYPH_STROKE 2.0f
 #define BODY_PAD_X   20.0f
 
-typedef struct shell_style { int items, colors, floats, vec2s, fonts; } shell_style;
+static struct reaktor_rect g_ctl[3];
+static int                 g_ctl_n;
+static int                 g_show_contact;
+static float               g_card_h;
+static float               g_nav_room;
+static int                 g_nav_over;
 
-static struct nk_rect g_ctl[3];
-static int            g_ctl_n;
-static int            g_show_contact;
-static float          g_card_h;
-static float          g_nav_room;
-static int            g_nav_over;
-
-static void
-pop_style(struct nk_context *ctx, shell_style f)
-{
-    int i;
-    for (i = 0; i < f.fonts;  i++) nk_style_pop_font(ctx);
-    for (i = 0; i < f.vec2s;  i++) nk_style_pop_vec2(ctx);
-    for (i = 0; i < f.floats; i++) nk_style_pop_float(ctx);
-    for (i = 0; i < f.colors; i++) nk_style_pop_color(ctx);
-    for (i = 0; i < f.items;  i++) nk_style_pop_style_item(ctx);
-}
-
-static void
-image_centered(struct nk_context *ctx, struct nk_image im, int px)
-{
-    struct nk_rect b = nk_widget_bounds(ctx);
-    float s = (float)px;
-    struct nk_rect r = nk_rect(b.x + (b.w - s) * 0.5f,
-                               b.y + (b.h - s) * 0.5f, s, s);
-
-    nk_draw_image(nk_window_get_canvas(ctx), r, &im, nk_rgb(255, 255, 255));
-    nk_spacing(ctx, 1);
-}
-
-static struct nk_color
+static struct reaktor_color
 text_main(void)
 {
-    return reaktor_token("--text-main", nk_rgb(51, 51, 51));
+    return reaktor_token("--text-main", reaktor_rgb(51, 51, 51));
 }
 
 static SDL_HitTestResult SDLCALL
@@ -70,7 +45,7 @@ window_hit_test(SDL_Window *win, const SDL_Point *pt, void *data)
     (void)data;
     if (pt->y < TITLEBAR_H) {
         for (i = 0; i < g_ctl_n; i++) {
-            struct nk_rect r = g_ctl[i];
+            struct reaktor_rect r = g_ctl[i];
             const int m = 4;
             if (pt->x >= r.x - m && pt->x <= r.x + r.w + m &&
                 pt->y >= r.y - m && pt->y <= r.y + r.h + m)
@@ -127,15 +102,15 @@ set_tab(App *app, int tab)
 }
 
 static int
-titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
+titlebar_button(App *app, struct reaktor_context *ctx, const char *glyph,
                 const char *name, int px)
 {
-    struct nk_rect b = nk_widget_bounds(ctx);
-    shell_style f = { 0, 0, 0, 0, 0 };
+    struct reaktor_rect b = reaktor_widget_bounds(ctx);
+    reaktor_style_frame f = { 0, 0, 0, 0, 0 };
     unsigned char c[4];
-    struct nk_color clear = nk_rgba(0, 0, 0, 0);
-    struct nk_color wash = reaktor_style_token("--background-hover", c)
-                         ? reaktor_col(c) : nk_rgba(255, 255, 255, 26);
+    struct reaktor_color clear = reaktor_rgba(0, 0, 0, 0);
+    struct reaktor_color wash = reaktor_style_token("--background-hover", c)
+                         ? reaktor_col(c) : reaktor_rgba(255, 255, 255, 26);
     char src[176];
     float pad_x, pad_y;
     int clicked;
@@ -145,26 +120,28 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
     if (g_ctl_n < (int)(sizeof(g_ctl) / sizeof(g_ctl[0])))
         g_ctl[g_ctl_n++] = b;
 
-    nk_style_push_style_item(ctx, &ctx->style.button.normal,
-                             nk_style_item_color(clear));
-    nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                             nk_style_item_color(wash));
-    nk_style_push_style_item(ctx, &ctx->style.button.active,
-                             nk_style_item_color(wash));
+    reaktor_style_push_style_item(ctx, &ctx->style.button.normal,
+                                  reaktor_style_item_color(clear));
+    reaktor_style_push_style_item(ctx, &ctx->style.button.hover,
+                                  reaktor_style_item_color(wash));
+    reaktor_style_push_style_item(ctx, &ctx->style.button.active,
+                                  reaktor_style_item_color(wash));
     f.items = 3;
 
-    nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
-    nk_style_push_float(ctx, &ctx->style.button.rounding,
-                        (b.h > 0.0f ? b.h : (float)CTL_SIZE) * 0.5f);
-    nk_style_push_float(ctx, &ctx->style.button.color_factor_background, 1.0f);
+    reaktor_style_push_float(ctx, &ctx->style.button.border, 0.0f);
+    reaktor_style_push_float(ctx, &ctx->style.button.rounding,
+                             (b.h > 0.0f ? b.h : (float)CTL_SIZE) * 0.5f);
+    reaktor_style_push_float(ctx, &ctx->style.button.color_factor_background,
+                             1.0f);
     f.floats = 3;
 
-    nk_style_push_vec2(ctx, &ctx->style.button.padding, nk_vec2(0.0f, 0.0f));
+    reaktor_style_push_vec2(ctx, &ctx->style.button.padding,
+                            reaktor_vec2(0.0f, 0.0f));
 
     pad_x = pad_y = (b.h - (float)px) * 0.5f;
     if (pad_x < 0.0f) pad_x = pad_y = 0.0f;
-    nk_style_push_vec2(ctx, &ctx->style.button.image_padding,
-                       nk_vec2(pad_x, pad_y));
+    reaktor_style_push_vec2(ctx, &ctx->style.button.image_padding,
+                            reaktor_vec2(pad_x, pad_y));
     f.vec2s = 2;
 
     if (reaktor_dark(app)) {
@@ -172,7 +149,7 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
             c[0] = 0x6a; c[1] = 0x6a; c[2] = 0x6a;
         }
     } else {
-        struct nk_color t = text_main();
+        struct reaktor_color t = text_main();
 
         c[0] = t.r; c[1] = t.g; c[2] = t.b;
     }
@@ -181,54 +158,57 @@ titlebar_button(App *app, struct nk_context *ctx, const char *glyph,
                  "?stroke=#%02x%02x%02x&sw=%.2f",
                  glyph, c[0], c[1], c[2], (double)GLYPH_STROKE);
 
-    clicked = nk_button_image_label(ctx, reaktor_svg(app, src, px), "",
-                                    NK_TEXT_CENTERED);
-    pop_style(ctx, f);
+    clicked = reaktor_button_image_label(ctx, reaktor_image_file(app, src, px), "",
+                                         REAKTOR_TEXT_CENTERED);
+    reaktor_style_frame_pop(ctx, f);
     return clicked;
 }
 
 static void
-titlebar(App *app, struct nk_context *ctx, int win_w)
+titlebar(App *app, struct reaktor_context *ctx, int win_w)
 {
     unsigned char c[4];
     SDL_Window *win = reaktor_sdl_window(app);
     int maximised = (SDL_GetWindowFlags(win) & SDL_WINDOW_MAXIMIZED) != 0;
-    struct nk_rect bar;
+    struct reaktor_rect bar;
 
     g_ctl_n = 0;
-    bar = nk_widget_bounds(ctx);
-    if (!nk_group_begin(ctx, "titlebar", NK_WINDOW_NO_SCROLLBAR)) return;
+    bar = reaktor_widget_bounds(ctx);
+    if (!reaktor_group_begin(ctx, "titlebar",
+                             REAKTOR_WINDOW_NO_SCROLLBAR)) return;
     reaktor_note_push(app, REAKTOR_A11Y_GROUP, "Title bar", NULL, 0, bar);
 
-    nk_layout_row_begin(ctx, NK_STATIC, (float)CTL_SIZE, 6);
+    reaktor_layout_row_begin(ctx, REAKTOR_STATIC, (float)CTL_SIZE, 6);
 
-    nk_layout_row_push(ctx, (float)TITLE_PAD);
-    nk_spacing(ctx, 1);
+    reaktor_layout_row_push(ctx, (float)TITLE_PAD);
+    reaktor_spacing(ctx, 1);
 
-    nk_layout_row_push(ctx, (float)MARK_SIZE);
-    image_centered(ctx, reaktor_svg(app, REAKTOR_MARK, MARK_SIZE), MARK_SIZE);
+    reaktor_layout_row_push(ctx, (float)MARK_SIZE);
+    reaktor_image_centered(ctx, reaktor_image_file(app, REAKTOR_MARK, MARK_SIZE), MARK_SIZE);
 
-    nk_layout_row_push(ctx, (float)(win_w - TITLE_PAD - MARK_SIZE -
-                                    3 * CTL_SIZE - 2 * 4 - 5 * 4));
+    reaktor_layout_row_push(ctx, (float)(win_w - TITLE_PAD - MARK_SIZE -
+                                         3 * CTL_SIZE - 2 * 4 - 5 * 4));
     {
-        nk_style_push_font(ctx, reaktor_font(app, TITLE_PX, 1));
+        reaktor_style_push_font(ctx, reaktor_font(app, TITLE_PX, 1));
         if (reaktor_dark(app) && reaktor_style_token("--text-muted", c))
-            nk_style_push_color(ctx, &ctx->style.text.color, reaktor_col(c));
+            reaktor_style_push_color(ctx, &ctx->style.text.color,
+                                     reaktor_col(c));
         else
-            nk_style_push_color(ctx, &ctx->style.text.color, text_main());
-        nk_style_push_vec2(ctx, &ctx->style.text.padding, nk_vec2(3.0f, 0.0f));
+            reaktor_style_push_color(ctx, &ctx->style.text.color, text_main());
+        reaktor_style_push_vec2(ctx, &ctx->style.text.padding,
+                                reaktor_vec2(3.0f, 0.0f));
         reaktor_note_here(app, ctx, REAKTOR_A11Y_LABEL, "Reaktor", 0);
-        nk_label(ctx, "Reaktor", NK_TEXT_LEFT);
-        nk_style_pop_vec2(ctx);
-        nk_style_pop_color(ctx);
-        nk_style_pop_font(ctx);
+        reaktor_text_label(ctx, "Reaktor", REAKTOR_TEXT_LEFT);
+        reaktor_style_pop_vec2(ctx);
+        reaktor_style_pop_color(ctx);
+        reaktor_style_pop_font(ctx);
     }
 
-    nk_layout_row_push(ctx, (float)CTL_SIZE);
+    reaktor_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx, "remove-outline", "Minimize", GLYPH_MINIMISE))
         SDL_MinimizeWindow(win);
 
-    nk_layout_row_push(ctx, (float)CTL_SIZE);
+    reaktor_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx,
                         maximised ? "copy-outline" : "square-outline",
                         maximised ? "Restore" : "Maximize",
@@ -237,13 +217,13 @@ titlebar(App *app, struct nk_context *ctx, int win_w)
         else           SDL_MaximizeWindow(win);
     }
 
-    nk_layout_row_push(ctx, (float)CTL_SIZE);
+    reaktor_layout_row_push(ctx, (float)CTL_SIZE);
     if (titlebar_button(app, ctx, "close-outline", "Close", GLYPH_CLOSE))
         reaktor_request_quit(app);
 
-    nk_layout_row_end(ctx);
+    reaktor_layout_row_end(ctx);
     reaktor_note_pop(app);
-    nk_group_end(ctx);
+    reaktor_group_end(ctx);
 }
 
 #define ROW_BRAND   28
@@ -270,10 +250,10 @@ card_height(int with_diag)
 }
 
 static void
-login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
+login_card(App *app, struct reaktor_context *ctx, float body_x, float body_w,
            float body_y, float body_h)
 {
-    struct nk_rect at;
+    struct reaktor_rect at;
     float card_h = g_card_h > 0.0f ? g_card_h : card_height(g_show_contact);
     float card_w = body_w - 16.0f < (float)CARD_W ? body_w - 16.0f : (float)CARD_W;
     float side = body_x + (body_w - card_w) * 0.5f;
@@ -283,9 +263,9 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
         top = body_y + body_h - card_h - 8.0f;
     if (top  < body_y + 8.0f) top = body_y + 8.0f;
 
-    nk_layout_space_push(ctx, nk_rect(side, top, card_w, card_h));
+    reaktor_layout_space_push(ctx, reaktor_rect(side, top, card_w, card_h));
 
-    at = nk_widget_bounds(ctx);
+    at = reaktor_widget_bounds(ctx);
 
     {
         reaktor_style box;
@@ -293,20 +273,21 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
 
         reaktor_style_get("details", &box);
         round = box.matched ? box.rounding : ctx->style.button.rounding;
-        reaktor_fill_round(app, nk_window_get_canvas(ctx), at, round,
+        reaktor_fill_round(app, reaktor_window_get_canvas(ctx), at, round,
                            box.matched && box.bg[3] ? reaktor_col(box.bg)
-                           : reaktor_token("--background", nk_rgb(226, 226, 226)));
+                           : reaktor_token("--background", reaktor_rgb(226, 226, 226)));
         if (box.matched && box.border > 0.0f)
-            reaktor_edge_round(app, nk_window_get_canvas(ctx), at, round,
+            reaktor_edge_round(app, reaktor_window_get_canvas(ctx), at, round,
                                box.border, reaktor_col(box.border_col));
     }
-    nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
-                             nk_style_item_color(nk_rgba(0, 0, 0, 0)));
-    nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
-    if (nk_group_begin(ctx, "card", NK_WINDOW_NO_SCROLLBAR)) {
+    reaktor_style_push_style_item(ctx, &ctx->style.window.fixed_background,
+                                  reaktor_style_item_color(reaktor_rgba(0, 0, 0, 0)));
+    reaktor_style_push_vec2(ctx, &ctx->style.window.group_padding,
+                            reaktor_vec2(0, 0));
+    if (reaktor_group_begin(ctx, "card", REAKTOR_WINDOW_NO_SCROLLBAR)) {
         REAKTOR_COLUMN(.name = "Proceed with login",
                        .w = card_w, .gap = ROW_GAP) {
-            struct nk_rect laid;
+            struct reaktor_rect laid;
 
             if (reaktor_box_rect(&laid) && laid.h != g_card_h) {
                 g_card_h = laid.h;
@@ -337,7 +318,7 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
                          .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
             reaktor_label(&(reaktor_label_spec){
-                .text = "or", .style = ".card-note", .align = REAKTOR_CENTRE,
+                .text = "or", .style = ".card-note", .align = REAKTOR_CENTER,
                 .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
                          .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
@@ -368,67 +349,67 @@ login_card(App *app, struct nk_context *ctx, float body_x, float body_w,
 
                 for (i = 0; i < CONTACT_ROWS; i++)
                     reaktor_label(&(reaktor_label_spec){
-                        .text = lines[i], .style = ".card-link", .align = REAKTOR_CENTRE,
+                        .text = lines[i], .style = ".card-link", .align = REAKTOR_CENTER,
                         .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
                                  .ml = CARD_PAD_X, .mr = CARD_PAD_X,
                                  .mb = i == CONTACT_ROWS - 1 ? CARD_PAD_Y : 0.0f } });
             }
         }
-        nk_group_end(ctx);
+        reaktor_group_end(ctx);
     }
-    nk_style_pop_vec2(ctx);
-    nk_style_pop_style_item(ctx);
+    reaktor_style_pop_vec2(ctx);
+    reaktor_style_pop_style_item(ctx);
 }
 
-static shell_style
-push_strip_look(struct nk_context *ctx, struct nk_color fg, struct nk_color wash)
+static reaktor_style_frame
+push_strip_look(struct reaktor_context *ctx, struct reaktor_color fg, struct reaktor_color wash)
 {
-    nk_style_push_style_item(ctx, &ctx->style.button.normal,
-                             nk_style_item_color(nk_rgba(0, 0, 0, 0)));
-    nk_style_push_style_item(ctx, &ctx->style.button.hover,
-                             nk_style_item_color(wash));
-    nk_style_push_style_item(ctx, &ctx->style.button.active,
-                             nk_style_item_color(wash));
-    nk_style_push_color(ctx, &ctx->style.button.text_normal, fg);
-    nk_style_push_color(ctx, &ctx->style.button.text_hover,  fg);
-    nk_style_push_color(ctx, &ctx->style.button.text_active, fg);
-    nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
-    nk_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
-    return (shell_style){ 3, 3, 2, 0, 0 };
+    reaktor_style_push_style_item(ctx, &ctx->style.button.normal,
+                                  reaktor_style_item_color(reaktor_rgba(0, 0, 0, 0)));
+    reaktor_style_push_style_item(ctx, &ctx->style.button.hover,
+                                  reaktor_style_item_color(wash));
+    reaktor_style_push_style_item(ctx, &ctx->style.button.active,
+                                  reaktor_style_item_color(wash));
+    reaktor_style_push_color(ctx, &ctx->style.button.text_normal, fg);
+    reaktor_style_push_color(ctx, &ctx->style.button.text_hover,  fg);
+    reaktor_style_push_color(ctx, &ctx->style.button.text_active, fg);
+    reaktor_style_push_float(ctx, &ctx->style.button.border, 0.0f);
+    reaktor_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
+    return (reaktor_style_frame){ 3, 3, 2, 0, 0 };
 }
 
-static struct nk_color
+static struct reaktor_color
 strip_wash(void)
 {
-    return reaktor_token("--background-hover", nk_rgba(128, 128, 128, 40));
+    return reaktor_token("--background-hover", reaktor_rgba(128, 128, 128, 40));
 }
 
 int
-sample_option(App *app, struct nk_context *ctx, const char *label, float w,
+sample_option(App *app, struct reaktor_context *ctx, const char *label, float w,
               int on)
 {
-    struct nk_color fg = on ? reaktor_accent_color(app)
+    struct reaktor_color fg = on ? reaktor_accent_color(app)
                             : reaktor_token("--text-muted", text_main());
-    struct nk_rect  b;
-    shell_style     look;
+    struct reaktor_rect b;
+    reaktor_style_frame     look;
     unsigned        id;
     int             hit;
 
     if (w <= 0.0f) {
-        const struct nk_user_font *f = ctx->style.font;
+        const struct reaktor_user_font *f = ctx->style.font;
         w = f->width(f->userdata, f->height, label, (int)strlen(label))
           + 2.0f * (float)TAB_PAD_X;
     }
-    nk_layout_row_push(ctx, w);
-    b = nk_widget_bounds(ctx);
+    reaktor_layout_row_push(ctx, w);
+    b = reaktor_widget_bounds(ctx);
     reaktor_hot(app, b, 1, 1);
 
     look = push_strip_look(ctx, fg, strip_wash());
     id   = reaktor_note(app, REAKTOR_A11Y_RADIO, label, NULL,
                         on ? REAKTOR_A11Y_CHECKED : 0u, b);
-    hit  = nk_button_label(ctx, label);
+    hit  = reaktor_button_plain(ctx, label);
     if (reaktor_focus_activated(app, id)) hit = 1;
-    pop_style(ctx, look);
+    reaktor_style_frame_pop(ctx, look);
     return hit && !on;
 }
 
@@ -469,7 +450,7 @@ nav(App *app, float w, float inner_w, float h)
     REAKTOR_FREE(.w = inner_w)
     REAKTOR_COLUMN(.w = inner_w - 16.0f, .ml = 8.0f, .mt = 8.0f, .mb = 8.0f,
                    .gap = 2.0f) {
-        struct nk_rect laid;
+        struct reaktor_rect laid;
 
         if (reaktor_box_rect(&laid)) {
             float room = h - 16.0f - (laid.h - g_nav_room);
@@ -584,124 +565,134 @@ showcase_tray_show(App *app, int on)
 }
 
 static void
-body_metrics_push(struct nk_context *ctx, float pad_x)
+body_metrics_push(struct reaktor_context *ctx, float pad_x)
 {
-    nk_style_push_vec2(ctx, &ctx->style.window.group_padding,
-                       nk_vec2(pad_x, 12.0f));
-    nk_style_push_vec2(ctx, &ctx->style.window.scrollbar_size,
-                       nk_vec2(ctx->style.window.scrollbar_size.x, 0.0f));
+    reaktor_style_push_vec2(ctx, &ctx->style.window.group_padding,
+                            reaktor_vec2(pad_x, 12.0f));
+    reaktor_style_push_vec2(ctx, &ctx->style.window.scrollbar_size,
+                            reaktor_vec2(ctx->style.window.scrollbar_size.x,
+                                         0.0f));
 }
 
 static void
-body_metrics_pop(struct nk_context *ctx)
+body_metrics_pop(struct reaktor_context *ctx)
 {
-    nk_style_pop_vec2(ctx);
-    nk_style_pop_vec2(ctx);
+    reaktor_style_pop_vec2(ctx);
+    reaktor_style_pop_vec2(ctx);
 }
 
 static void
-page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
+page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
 {
     int   framed = reaktor_borderless(app);
     float top    = framed ? (float)TITLEBAR_H : 0.0f;
     float nav_w  = win_w < NAV_WIDE_MIN ? (float)NAV_W_NARROW : (float)NAV_W;
     float body_h = (float)win_h - top;
-    struct nk_rect panel = nk_rect(nav_w, top + (framed ? 0.0f : PANEL_GAP),
-                                   (float)win_w - nav_w - PANEL_GAP, 0.0f);
-    struct nk_rect body, reveal;
-    struct nk_color card = reaktor_token("--background", nk_rgb(226, 226, 226));
+    struct reaktor_rect panel = reaktor_rect(nav_w,
+                                             top + (framed ? 0.0f : PANEL_GAP),
+                                             (float)win_w - nav_w - PANEL_GAP,
+                                             0.0f);
+    struct reaktor_rect body, reveal;
+    struct reaktor_color card = reaktor_token("--background",
+                                              reaktor_rgb(226, 226, 226));
     reaktor_theme scheme = reaktor_get_theme(app);
 
     panel.h = (float)win_h - panel.y - PANEL_GAP;
     if (panel.w < 1.0f) panel.w = 1.0f;
     if (panel.h < 1.0f) panel.h = 1.0f;
     if (body_h < 1.0f) body_h = 1.0f;
-    body = nk_rect(panel.x, panel.y + PANEL_R * 0.5f, panel.w, panel.h - PANEL_R);
+    body = reaktor_rect(panel.x, panel.y + PANEL_R * 0.5f, panel.w, panel.h - PANEL_R);
     reaktor_tray_check(app, TRAY_SYSTEM, scheme == REAKTOR_THEME_SYSTEM);
     reaktor_tray_check(app, TRAY_LIGHT, scheme == REAKTOR_THEME_LIGHT);
     reaktor_tray_check(app, TRAY_DARK, scheme == REAKTOR_THEME_DARK);
     {
-        struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+        struct reaktor_command_buffer *cv = reaktor_window_get_canvas(ctx);
 
-        nk_fill_rect(cv, nk_rect(0.0f, 0.0f, (float)win_w, (float)win_h), 0.0f,
-                     card);
+        reaktor_fill_rect(cv, reaktor_rect(0.0f, 0.0f, (float)win_w,
+                                           (float)win_h), 0.0f,
+                          card);
         reaktor_fill_round(app, cv, panel, PANEL_R, reaktor_page_color(app));
     }
 
-    nk_layout_space_begin(ctx, NK_STATIC, (float)win_h, 3);
+    reaktor_layout_space_begin(ctx, REAKTOR_STATIC, (float)win_h, 3);
 
     if (framed) {
-        nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
-                                 nk_style_item_color(card));
-        nk_layout_space_push(ctx, nk_rect(0, 0, (float)win_w,
-                                          (float)TITLEBAR_H));
+        reaktor_style_push_style_item(ctx, &ctx->style.window.fixed_background,
+                                      reaktor_style_item_color(card));
+        reaktor_layout_space_push(ctx, reaktor_rect(0, 0, (float)win_w,
+                                                    (float)TITLEBAR_H));
         titlebar(app, ctx, win_w);
-        nk_style_pop_style_item(ctx);
+        reaktor_style_pop_style_item(ctx);
     }
 
-    nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
-                             nk_style_item_color(card));
-    nk_style_push_vec2(ctx, &ctx->style.window.group_padding, nk_vec2(0, 0));
-    nk_layout_space_push(ctx, nk_rect(0, top, nav_w, body_h));
-    if (nk_group_begin(ctx, "nav", g_nav_over ? 0 : NK_WINDOW_NO_SCROLLBAR)) {
-        nav(app, nav_w, nk_window_get_content_region_size(ctx).x, body_h);
-        nk_group_end(ctx);
+    reaktor_style_push_style_item(ctx, &ctx->style.window.fixed_background,
+                                  reaktor_style_item_color(card));
+    reaktor_style_push_vec2(ctx, &ctx->style.window.group_padding,
+                            reaktor_vec2(0, 0));
+    reaktor_layout_space_push(ctx, reaktor_rect(0, top, nav_w, body_h));
+    if (reaktor_group_begin(ctx, "nav",
+                            g_nav_over ? 0 : REAKTOR_WINDOW_NO_SCROLLBAR)) {
+        nav(app, nav_w, reaktor_window_get_content_region_size(ctx).x, body_h);
+        reaktor_group_end(ctx);
     }
-    nk_style_pop_vec2(ctx);
-    nk_style_pop_style_item(ctx);
+    reaktor_style_pop_vec2(ctx);
+    reaktor_style_pop_style_item(ctx);
 
     if (sample_tab() == TAB_LOGIN) {
         login_card(app, ctx, panel.x, panel.w, panel.y, panel.h);
-        nk_layout_space_end(ctx);
+        reaktor_layout_space_end(ctx);
         return;
     }
 
-    nk_layout_space_push(ctx, body);
+    reaktor_layout_space_push(ctx, body);
     if (g_scroll0 < 0) g_scroll0 = 0;
     if (g_scroll0 > 0) {
         static int tries;
-        nk_uint sx, sy;
+        reaktor_uint sx, sy;
 
         /* Nuklear clamps to the content, which is placed a frame late. */
-        nk_group_get_scroll(ctx, "body", &sx, &sy);
-        if (sy == (nk_uint)g_scroll0 || ++tries > 8) {
+        reaktor_group_get_scroll(ctx, "body", &sx, &sy);
+        if (sy == (reaktor_uint)g_scroll0 || ++tries > 8) {
             g_scroll0 = 0;
         } else {
-            nk_group_set_scroll(ctx, "body", 0, (nk_uint)g_scroll0);
+            reaktor_group_set_scroll(ctx, "body", 0, (reaktor_uint)g_scroll0);
             reaktor_wake(app);
         }
     }
     if (reaktor_focus_scroll(app, &reveal)) {
         const float air = 12.0f;
-        struct nk_rect r = reveal;
-        nk_uint sx, sy;
+        struct reaktor_rect r = reveal;
+        reaktor_uint sx, sy;
         float dy = 0.0f;
 
-        nk_group_get_scroll(ctx, "body", &sx, &sy);
+        reaktor_group_get_scroll(ctx, "body", &sx, &sy);
         if (r.y < body.y + air)
             dy = r.y - (body.y + air);
         else if (r.y + r.h > body.y + body.h - air)
             dy = r.y + r.h - (body.y + body.h - air);
         if ((float)sy + dy < 0.0f) dy = -(float)sy;
-        nk_group_set_scroll(ctx, "body", sx, (nk_uint)((float)sy + dy));
+        reaktor_group_set_scroll(ctx, "body", sx,
+                                 (reaktor_uint)((float)sy + dy));
         reaktor_wake(app);
     }
 
-    nk_style_push_style_item(ctx, &ctx->style.window.fixed_background,
-                             nk_style_item_hide());
+    reaktor_style_push_style_item(ctx, &ctx->style.window.fixed_background,
+                                  reaktor_style_item_hide());
     body_metrics_push(ctx, BODY_PAD_X);
-    if (nk_group_begin(ctx, "body", 0)) {
-        struct nk_vec2 sz = nk_window_get_content_region_size(ctx);
+    if (reaktor_group_begin(ctx, "body", 0)) {
+        struct reaktor_vec2 sz = reaktor_window_get_content_region_size(ctx);
 
         {
-            struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
-            struct nk_rect c = cv->clip;
+            struct reaktor_command_buffer *cv = reaktor_window_get_canvas(ctx);
+            struct reaktor_rect c = cv->clip;
 
-            nk_push_scissor(cv, nk_rect(c.x - 2.0f, c.y, c.w + 4.0f, c.h));
+            reaktor_push_scissor(cv,
+                                 reaktor_rect(c.x - 2.0f, c.y, c.w + 4.0f,
+                                              c.h));
         }
 
         body_metrics_pop(ctx);
-        nk_style_pop_style_item(ctx);
+        reaktor_style_pop_style_item(ctx);
 
         reaktor_hot(app, body, 0, 0);
 
@@ -711,16 +702,16 @@ page_shell(App *app, struct nk_context *ctx, int win_w, int win_h)
                                              NULL, 0, body));
         reaktor_showcase_page(app, ctx, sample_tab(), sz.x, sz.y);
         reaktor_note_pop(app);
-        /* nk_group_end sets the bar this far past the content: mid-gutter. */
+        /* reaktor_group_end sets the bar this far past the content: mid-gutter. */
         body_metrics_push(ctx, BODY_PAD_X * 0.5f);
-        nk_group_end(ctx);
+        reaktor_group_end(ctx);
         body_metrics_pop(ctx);
     } else {
         body_metrics_pop(ctx);
-        nk_style_pop_style_item(ctx);
+        reaktor_style_pop_style_item(ctx);
     }
 
-    nk_layout_space_end(ctx);
+    reaktor_layout_space_end(ctx);
 }
 
 int

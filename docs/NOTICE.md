@@ -133,7 +133,7 @@ byte: tiny.css's `core.css`, `variables-light.css` and `variables-dark.css`
 (MIT); the seven Ionicons `chevron-down-outline`, `chevron-back-outline`,
 `chevron-forward-outline`, `ellipse`, `ellipse-outline`, `radio-button-off`
 and `close-outline` (MIT); Aileron Regular and Bold (CC0); and the mark and
-`assets/rest/reaktor.css` (MIT). Their licenses are in `licenses/` too.
+`assets/css/reaktor.css` (MIT). Their licenses are in `licenses/` too.
 
 The rest of Ionicons, simple.css, the Japanese font and the catalogs are not
 embedded (the catalogs are with `-DREAKTOR_LOCALE_EMBED=ON`); a build that uses

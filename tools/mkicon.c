@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "reaktor.h"
-#include "appicon.h"
+#include "util.h"
+#include "svg.h"
 
 #define ICON_SVG "assets/icons/reaktor-icon.svg"
 #define ICON_ICO "assets/icons/reaktor-icon.ico"

@@ -6,7 +6,7 @@ C99. Widgets are declared; the look comes from CSS read at runtime.
 
 `./build.ps1` on Windows, `./build.sh` elsewhere — `cmake` is not on PATH, the
 script finds MSVC's. `./build.ps1 <target>` builds one. Targets: `showcase`,
-`notepad`, `simple`, `bench`, plus the tests in `tools/`. `-Arch x86` (or
+`notepad`, `simple`, `bench`, plus the tests in `tests/`. `-Arch x86` (or
 `arm64`) builds that architecture into `build-<arch>`; ARM64 needs Visual
 Studio's ARM64 tools, which this machine lacks, so CI is its only check.
 `tools/package.sh <build> <folder> [.exe]` packs what a release ships; a
@@ -115,7 +115,7 @@ regression oracle for every layout or style change.
   fonts, the mark and reaktor.css. Nothing else from a submodule is — not the
   rest of Ionicons, not simple.css.
 - Applications see only `include/reaktor/`. The samples include
-  `reaktor/reaktor.h` and `reaktor/main.h`, nothing from `src/` or `core/`, and
+  `reaktor/reaktor.h` and `reaktor/main.h`, nothing from `core/`, and
   `App` is opaque to them; what a sample needs becomes a public call there.
   MSVC builds apps with implicit declarations as errors, which catches a miss.
 - American English, in code and prose.

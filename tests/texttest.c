@@ -4,7 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "nk_common.h"
-#include "reaktor.h"
+#include "util.h"
 #include "text.h"
 
 #define FONT_FILE     "assets/fonts/Aileron-Regular.otf"

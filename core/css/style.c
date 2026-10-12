@@ -12,19 +12,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "reaktor.h"
-
-#define CACHE_MAX 64
+#include "util.h"
 
 typedef struct cache_entry {
-    char        selector[64];
+    char         *selector;
+    unsigned      hash;
     reaktor_style style;
 } cache_entry;
 
 static struct {
     int            ready;
-    cache_entry    cache[CACHE_MAX];
-    int            cache_n;
+    cache_entry   *cache;
+    unsigned       cache_cap, cache_n;
     css_metrics_t  metrics;
     reaktor_cssvars *vars;
     css_computed_style_t root;
@@ -38,6 +37,54 @@ static void rgba_of(css_color_value_t c, unsigned char out[4])
     out[1] = (unsigned char)((c >> 8) & 0xff);
     out[2] = (unsigned char)(c & 0xff);
     out[3] = (unsigned char)((c >> 24) & 0xff);
+}
+
+static void cache_clear(int release)
+{
+    unsigned i;
+
+    for (i = 0; i < g.cache_cap; i++) {
+        free(g.cache[i].selector);
+        g.cache[i].selector = NULL;
+    }
+    g.cache_n = 0;
+    if (release) {
+        free(g.cache);
+        g.cache     = NULL;
+        g.cache_cap = 0;
+    }
+}
+
+static unsigned hash_of(const char *s)
+{
+    unsigned h = 2166136261u;
+
+    while (*s) h = (h ^ (unsigned char)*s++) * 16777619u;
+    return h;
+}
+
+static cache_entry *cache_slot(const char *selector, unsigned h)
+{
+    unsigned i = h & (g.cache_cap - 1);
+
+    while (g.cache[i].selector && (g.cache[i].hash != h ||
+                                   strcmp(g.cache[i].selector, selector)))
+        i = (i + 1) & (g.cache_cap - 1);
+    return &g.cache[i];
+}
+
+static void cache_grow(void)
+{
+    cache_entry *old = g.cache;
+    unsigned     n = g.cache_cap, i;
+    cache_entry *grown = calloc(n ? n * 2 : 128, sizeof *grown);
+
+    if (!grown) return;
+    g.cache     = grown;
+    g.cache_cap = n ? n * 2 : 128;
+    for (i = 0; i < n; i++)
+        if (old[i].selector) *cache_slot(old[i].selector, old[i].hash) = old[i];
+    free(old);
 }
 
 static void base_reset(void)
@@ -64,7 +111,7 @@ static int style_load(const char *const *css_paths, int count,
         css_destroy_library();
         css_init_library();
     }
-    g.cache_n = 0;
+    cache_clear(0);
     g.generation++;
     base_reset();
 
@@ -131,7 +178,7 @@ void reaktor_style_shutdown(void)
     }
     css_destroy();
     g.ready = 0;
-    g.cache_n = 0;
+    cache_clear(1);
 }
 
 unsigned reaktor_style_loads(void)
@@ -284,20 +331,28 @@ static void resolve(const char *selector, reaktor_style *out)
 
 void reaktor_style_get(const char *selector, reaktor_style *out)
 {
-    int i;
+    unsigned     h;
+    size_t       len;
+    cache_entry *e;
 
     if (!out) return;
-    for (i = 0; i < g.cache_n; i++) {
-        if (strcmp(g.cache[i].selector, selector) == 0) {
-            *out = g.cache[i].style;
+    h = hash_of(selector);
+    if (g.cache_cap) {
+        e = cache_slot(selector, h);
+        if (e->selector) {
+            *out = e->style;
             return;
         }
     }
     resolve(selector, out);
-    if (g.cache_n < CACHE_MAX && strlen(selector) < sizeof(g.cache[0].selector)) {
-        snprintf(g.cache[g.cache_n].selector,
-                 sizeof(g.cache[0].selector), "%s", selector);
-        g.cache[g.cache_n].style = *out;
-        g.cache_n++;
-    }
+    if (2 * (g.cache_n + 1) > g.cache_cap) cache_grow();
+    if (g.cache_n + 1 >= g.cache_cap) return;
+    len = strlen(selector) + 1;
+    e   = cache_slot(selector, h);
+    e->selector = malloc(len);
+    if (!e->selector) return;
+    memcpy(e->selector, selector, len);
+    e->hash  = h;
+    e->style = *out;
+    g.cache_n++;
 }
