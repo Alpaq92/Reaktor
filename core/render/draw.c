@@ -176,10 +176,21 @@ img_lookup(App *app, const char *src, int px)
     w = plutovg_surface_get_width(surf);
     h = plutovg_surface_get_height(surf);
     stride = plutovg_surface_get_stride(surf);
-    reaktor_unpremultiply(plutovg_surface_get_data(surf), w, h, stride);
 
     sdlsurf = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_ARGB8888,
                                     plutovg_surface_get_data(surf), stride);
+    while (sdlsurf && (w >= 2 * px || h >= 2 * px) && w > 1 && h > 1) {
+        SDL_Surface *half = SDL_ScaleSurface(sdlsurf, w / 2, h / 2,
+                                             SDL_SCALEMODE_LINEAR);
+
+        SDL_DestroySurface(sdlsurf);
+        sdlsurf = half;
+        w /= 2;
+        h /= 2;
+    }
+    if (sdlsurf)
+        reaktor_unpremultiply((unsigned char *)sdlsurf->pixels, w, h,
+                              sdlsurf->pitch);
     tex = sdlsurf ? SDL_CreateTextureFromSurface(app->ren, sdlsurf) : NULL;
     if (sdlsurf) SDL_DestroySurface(sdlsurf);
     plutovg_surface_destroy(surf);
