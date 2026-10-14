@@ -129,6 +129,7 @@ Every dependency is a submodule, used as it ships; the full list is in
 
 - [DOCUMENTATION.md](docs/DOCUMENTATION.md) — the whole of it: every widget,
   layout and layer, styling, then how it works inside.
+- [FAQ.md](docs/FAQ.md) — short answers to common questions.
 - [DEMO.md](docs/DEMO.md) — the four programs in this repository.
 - [PERFORMANCE.md](docs/PERFORMANCE.md) — what it costs, measured.
 - [BENCHMARKS.md](benchmarks/BENCHMARKS.md) — the comparison, as runnable
