@@ -321,12 +321,92 @@ reaktor_icon(const reaktor_icon_spec *s)
 }
 
 void
+reaktor_field_select(App *app, const char *buf, int from, int to)
+{
+    app->field_pick.buf   = buf;
+    app->field_pick.from  = from;
+    app->field_pick.to    = to;
+    app->field_pick.asked = 0;
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+/* Room for what is typed or pasted this frame: Nuklear never writes past cap. */
+static char *
+field_room(const reaktor_field_spec *s, int *cap)
+{
+    int need = *s->len + 256;
+
+    if (nk_input_is_key_pressed(&g_frame_ctx->input, NK_KEY_PASTE)) {
+        char *clip = SDL_GetClipboardText();
+
+        if (clip) need += (int)SDL_strlen(clip);
+        SDL_free(clip);
+    }
+    if (!*s->heap || need > *s->heap_cap) {
+        int   room = NK_MAX(need, *s->heap_cap * 2);
+        char *more = (char *)SDL_realloc(*s->heap, (size_t)room);
+
+        if (!more) return *s->heap;
+        if (!*s->heap) more[0] = '\0';
+        *s->heap     = more;
+        *s->heap_cap = room;
+    }
+    *cap = *s->heap_cap;
+    return *s->heap;
+}
+
+static float
+field_gutter(const char *buf, int len, int *lines)
+{
+    const struct nk_user_font *f = g_frame_ctx->style.font;
+    int i, n = 1, digits = 1, k;
+
+    for (i = 0; i < len; i++) n += buf[i] == '\n';
+    for (k = n; k >= 10; k /= 10) digits++;
+    *lines = n;
+    return (float)(int)(f->width(f->userdata, f->height, "0000000000", NK_MAX(digits, 3)) +
+                        16.0f);
+}
+
+static void
+field_numbers(struct nk_rect b, float gutter, int lines, int active)
+{
+    struct nk_context *ctx = g_frame_ctx;
+    const struct nk_user_font *f = ctx->style.font;
+    const struct nk_style_edit *st = &ctx->style.edit;
+    struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
+    struct nk_color fg = reaktor_token("--text-muted", nk_rgb(150, 150, 150));
+    float row = f->height + st->row_padding;
+    float top = b.y + st->border + st->padding.y;
+    float scroll = active ? ctx->current->edit.scrollbar.y : 0.0f;
+    struct nk_rect keep = cv->clip;
+    char num[16];
+    int i;
+
+    nk_push_scissor(cv, nk_rect(b.x, top, gutter, b.h - 2.0f * (st->border + st->padding.y)));
+    for (i = (int)(scroll / row); i < lines && top + (float)i * row - scroll < b.y + b.h; i++) {
+        int n = SDL_snprintf(num, sizeof num, "%d", i + 1);
+        float w = f->width(f->userdata, f->height, num, n);
+
+        nk_draw_text(cv, nk_rect(b.x + gutter - 8.0f - w, top + (float)i * row - scroll, w, f->height),
+                     num, n, f, nk_rgba(0, 0, 0, 0), fg);
+    }
+    nk_push_scissor(cv, keep);
+}
+
+void
 reaktor_field(const reaktor_field_spec *s)
 {
     reaktor_box box;
     unsigned    id = 0;
+    char       *buf;
+    int         cap, lines = 0;
+    float       gutter = 0.0f, pad_x;
+    struct nk_rect r;
+    nk_flags    state;
 
-    if (!g_frame_app || !s || !s->buf || !s->len) return;
+    if (!g_frame_app || !s || (!s->buf && !(s->heap && s->heap_cap)) || !s->len) return;
     box = s->box;
     decl_box_from_style(&box, NULL, s->style ? s->style : "input.type-text", "input",
                         0.0f, 10.0f);
@@ -334,13 +414,28 @@ reaktor_field(const reaktor_field_spec *s)
     if (!decl_place(REAKTOR_A11Y_TEXTBOX, s->name ? s->name : s->hint,
                     NULL, 0u, NULL, &box, &id))
         return;
+    cap = s->cap;
+    buf = s->heap ? field_room(s, &cap) : s->buf;
+    if (!buf) return;
+    r = nk_widget_bounds(g_frame_ctx);
+    if (g_frame_app->field_pick.buf == buf && !g_frame_app->field_pick.asked) {
+        g_frame_app->field_pick.asked = 1;
+        reaktor_focus_take(g_frame_app, id, r);
+        reaktor_key_click_ask(g_frame_app);
+    }
+    pad_x = s->pad_x;
+    if (s->multiline && s->line_numbers) {
+        gutter = field_gutter(buf, *s->len, &lines);
+        pad_x  = (s->pad_x > 0.0f ? s->pad_x : g_frame_ctx->style.edit.padding.x) + gutter;
+    }
     reaktor_note_mute(g_frame_app, 1);
-    (void)reaktor_field_text_as(g_frame_app, g_frame_ctx, s->style,
-                                s->multiline ? NK_EDIT_BOX : NK_EDIT_FIELD,
-                                s->buf, s->len, s->cap, s->hint, s->filter,
-                                s->pad_x, s->pad_y);
+    state = reaktor_field_text_as(g_frame_app, g_frame_ctx, s->style,
+                                  s->multiline ? NK_EDIT_BOX : NK_EDIT_FIELD,
+                                  buf, s->len, cap, s->hint, s->filter,
+                                  pad_x, s->pad_y);
     reaktor_note_mute(g_frame_app, 0);
-    reaktor_note_value(g_frame_app, id, s->buf[0] ? s->buf : NULL);
+    if (gutter > 0.0f) field_numbers(r, gutter, lines, (state & NK_EDIT_ACTIVE) != 0);
+    reaktor_note_value(g_frame_app, id, buf[0] ? buf : NULL);
 }
 
 int
@@ -653,8 +748,64 @@ reaktor_property(const reaktor_property_spec *s)
         nk_property_double(g_frame_ctx, s->label, s->lo, s->dvalue, s->hi,
                            s->step, s->grain);
     reaktor_property_pop(g_frame_ctx);
-    reaktor_property_chrome(g_frame_app, g_frame_ctx, r);
+    reaktor_property_chrome(g_frame_app, g_frame_ctx, r, NULL);
     reaktor_note_mute(g_frame_app, 0);
+}
+
+int
+reaktor_spinner(const reaktor_spinner_spec *s)
+{
+    struct nk_context *ctx = g_frame_ctx;
+    const struct nk_style_property *st;
+    const struct nk_user_font *f;
+    struct nk_command_buffer *cv;
+    struct nk_rect r, step[2];
+    struct nk_style_item bg;
+    const char *value;
+    reaktor_box box;
+    unsigned id = 0;
+    float y, w;
+    int d = 0, at;
+
+    if (!g_frame_app || !s || !s->items || s->count <= 0 || !s->chosen) return 0;
+    at    = *s->chosen < 0 ? 0 : *s->chosen >= s->count ? s->count - 1 : *s->chosen;
+    value = s->items[at] ? s->items[at] : "";
+    box   = s->box;
+    decl_box_from_style(&box, NULL, s->style ? s->style : "input.type-text", "input",
+                        0.0f, 7.0f);
+    if (!decl_place(REAKTOR_A11Y_SPINBUTTON, s->name ? s->name : s->label, value, 0u, NULL,
+                    &box, &id))
+        return 0;
+    st = &ctx->style.property;
+    f  = ctx->style.font;
+    cv = nk_window_get_canvas(ctx);
+    nk_widget(&r, ctx);
+    bg = nk_input_is_mouse_hovering_rect(&ctx->input, r) ? st->hover : st->normal;
+    if (bg.type == NK_STYLE_ITEM_COLOR)
+        reaktor_fill_round(g_frame_app, cv, r, st->rounding, bg.data.color);
+    if (st->border > 0.0f)
+        reaktor_edge_round(g_frame_app, cv, r, st->rounding, st->border, st->border_color);
+    reaktor_property_chrome(g_frame_app, ctx, r, step);
+    y = (float)(int)(r.y + (r.h - f->height) * 0.5f);
+    if (s->label)
+        nk_draw_text(cv, nk_rect(step[0].x + step[0].w + 8.0f, y, r.w * 0.5f, f->height),
+                     s->label, (int)strlen(s->label), f, nk_rgba(0, 0, 0, 0), st->label_normal);
+    w = f->width(f->userdata, f->height, value, (int)strlen(value));
+    nk_draw_text(cv, nk_rect(step[1].x - 8.0f - w, y, w, f->height), value,
+                 (int)strlen(value), f, nk_rgba(0, 0, 0, 0), st->label_normal);
+    if (nk_input_mouse_clicked(&ctx->input, NK_BUTTON_LEFT, step[0])) d = -1;
+    if (nk_input_mouse_clicked(&ctx->input, NK_BUTTON_LEFT, step[1])) d = 1;
+    if (!d) {
+        int k = reaktor_focus_step(g_frame_app, id);
+
+        d = k > 0 ? 1 : k < 0 ? -1 : 0;
+    }
+    if (!d) return 0;
+    at += d;
+    if (s->wrap) at = (at + s->count) % s->count;
+    else if (at < 0 || at >= s->count) return 0;
+    *s->chosen = at;
+    return 1;
 }
 
 int

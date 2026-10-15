@@ -38,6 +38,79 @@ section_grid(App *app, struct reaktor_context *ctx)
         .column_count = 3, .cell = grid_cell, .selected = &chosen });
 }
 
+typedef struct file_node {
+    const char *label, *icon;
+    int         parent;
+} file_node;
+
+static const file_node g_files[] = {
+    { "Documents",   "folder-outline",         -1 },
+    { "Reports",     "folder-outline",          0 },
+    { "2025.pdf",    "document-text-outline",   1 },
+    { "2026.pdf",    "document-text-outline",   1 },
+    { "Notes.txt",   "document-outline",        0 },
+    { "Pictures",    "folder-outline",         -1 },
+    { "Holiday",     "folder-outline",          5 },
+    { "Beach.jpg",   "image-outline",           6 },
+    { "Harbor.jpg",  "image-outline",           6 },
+    { "Music",       "folder-outline",         -1 },
+    { "Overture.ogg", "musical-notes-outline",  9 }
+};
+
+static int         file_parent(int n, void *u) { (void)u; return g_files[n].parent; }
+static const char *file_label(int n, void *u)  { (void)u; return g_files[n].label; }
+static const char *file_icon(int n, void *u)   { (void)u; return g_files[n].icon; }
+
+/* Two lists of task numbers; a drop moves one from a list to a place in another. */
+static const char *const g_tasks[] = {
+    "Write the release notes", "Check the BSD builds", "Answer the issue on fonts",
+    "Draw the new icon", "Measure the web build", "Update the screenshots"
+};
+static int g_lane[2][6] = { { 0, 1, 2, 3 }, { 4, 5 } };
+static int g_lane_n[2]  = { 4, 2 };
+
+static const char *
+lane_cell(int row, int column, void *user)
+{
+    (void)column;
+    return g_tasks[g_lane[(intptr_t)user][row]];
+}
+
+static App *g_lane_app;
+
+typedef struct lane_move { int src, from, dst, to; } lane_move;
+
+static void
+lane_shift(int src, int from, int dst, int to)
+{
+    int task = g_lane[src][from], i;
+
+    for (i = from; i < g_lane_n[src] - 1; i++) g_lane[src][i] = g_lane[src][i + 1];
+    g_lane_n[src]--;
+    for (i = g_lane_n[dst]; i > to; i--) g_lane[dst][i] = g_lane[dst][i - 1];
+    g_lane[dst][to] = task;
+    g_lane_n[dst]++;
+}
+
+static void lane_undo(void *d) { lane_move *m = d; lane_shift(m->dst, m->to, m->src, m->from); }
+static void lane_redo(void *d) { lane_move *m = d; lane_shift(m->src, m->from, m->dst, m->to); }
+
+static void
+lane_dropped(const char *from, int item, int at, void *user)
+{
+    lane_move *m = (lane_move *)SDL_malloc(sizeof *m);
+
+    if (!m) return;
+    m->src  = SDL_strcmp(from, "To do") == 0 ? 0 : 1;
+    m->from = item;
+    m->dst  = (int)(intptr_t)user;
+    m->to   = m->src == m->dst && at > item ? at - 1 : at;
+    lane_redo(m);
+    reaktor_undo_push(g_lane_app, &(reaktor_undo_step){
+        .label = "Move a task", .undo = lane_undo, .redo = lane_redo, .free = SDL_free,
+        .data = m });
+}
+
 void
 page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
 {
@@ -172,71 +245,54 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
     section_grid(app, ctx);
 
     section(app, ctx, "Trees and lists",
-            "A tree remembers whether it is open between frames without the "
-            "caller holding a bool, by hashing the source line it was written "
-            "on. reaktor_tree_element makes the header itself selectable, drawn "
-            "through reaktor_style_selectable - so an unselected one shows "
-            "nothing but its label, and a selected one fills with the accent. A "
-            "list view emits only the rows actually on screen, so its cost does "
-            "not grow with the data.");
-    api(app, ctx, "reaktor_tree_push  /  reaktor_tree_element_push  /  "
-                  "reaktor_list_view_begin");
+            "A tree is its nodes in depth-first order, each naming its parent; "
+            "the open flags and the selection are the caller's. Only the rows "
+            "on screen are drawn. Up and Down move between rows, Right opens a "
+            "branch or steps into it, Left closes it or steps out to the parent. "
+            "Below it, a list view by hand emits only the rows on screen too, so "
+            "its cost does not grow with the data.");
+    api(app, ctx, "reaktor_tree  /  reaktor_list_view_begin");
 
-    {
-        struct reaktor_rect hb = tree_header_bounds(ctx);
-        int open;
+    REAKTOR_COLUMN(.name = "Files", .flags = REAKTOR_LAY_FILL_X) {
+        reaktor_tree(&(reaktor_tree_spec){
+            .name = "Files", .count = (int)SDL_arraysize(g_files),
+            .parent = file_parent, .label = file_label, .icon = file_icon,
+            .open = s->tree_open, .selected = &s->tree_sel,
+            .box = { .h = 200.0f, .flags = REAKTOR_LAY_FILL_X } });
+    }
 
-        hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
-        open = reaktor_tree_push(ctx, REAKTOR_TREE_TAB, "A tab-style tree",
-                                 REAKTOR_MAXIMIZED);
-        tree_chevron(app, ctx, hb, open);
-        reaktor_note_push(app, REAKTOR_A11Y_TREEITEM, "A tab-style tree", NULL,
-                          open ? REAKTOR_A11Y_EXPANDED : 0u, hb);
-        if (open) {
-            reaktor_layout_row_dynamic(ctx, ROW_SMALL, 1);
-            reaktor_text_label(ctx, "Its children are indented under it.",
-                               REAKTOR_TEXT_LEFT);
+    section(app, ctx, "Drag and drop",
+            "A list with a .drag kind lets its rows be dragged; a list of the same "
+            "kind shows where one would land and hands the drop to .dropped, with "
+            "the list it came from. Reordering is a drop on the same list. Each "
+            "move here is a step on the window's undo stack: Ctrl+Z and Ctrl+Y, or "
+            "the buttons, which name the step they would undo.");
+    api(app, ctx, "reaktor_list .drag  /  .dropped  /  reaktor_undo_push");
+    g_lane_app = app;
 
-            hb = tree_header_bounds(ctx);
-            hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
-            open = reaktor_tree_push(ctx, REAKTOR_TREE_NODE, "A node inside it",
-                                     REAKTOR_MINIMIZED);
-            tree_chevron(app, ctx, hb, open);
-            reaktor_note_push(app, REAKTOR_A11Y_TREEITEM, "A node inside it",
-                              NULL, open ? REAKTOR_A11Y_EXPANDED : 0u, hb);
-            if (open) {
-                reaktor_layout_row_dynamic(ctx, ROW_SMALL, 1);
-                reaktor_text_label(ctx, "Nesting is unlimited.",
-                                   REAKTOR_TEXT_LEFT);
-                reaktor_tree_pop(ctx);
-            }
-            reaktor_note_pop(app);
+    REAKTOR_ROW(.h = 200.0f, .gap = ctx->style.window.spacing.x, .flags = REAKTOR_LAY_FILL_X) {
+        reaktor_list(&(reaktor_list_spec){
+            .name = "To do", .count = g_lane_n[0], .cell = lane_cell, .user = (void *)0,
+            .drag = "task", .dropped = lane_dropped, .columns = (const char *const[]){ "To do" },
+            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+        reaktor_list(&(reaktor_list_spec){
+            .name = "Done", .count = g_lane_n[1], .cell = lane_cell, .user = (void *)1,
+            .drag = "task", .dropped = lane_dropped, .columns = (const char *const[]){ "Done" },
+            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+    }
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        char undo[48], redo[48];
 
-            for (i = 0; i < 3; i++) {
-                char lab[32];
-                SDL_snprintf(lab, sizeof(lab), "Selectable branch %d", i + 1);
-                hb = tree_header_bounds(ctx);
-                hot(app, ctx, REAKTOR_A11Y_NONE, NULL, 0);
-                open = reaktor_tree_element_push(ctx, REAKTOR_TREE_NODE, lab,
-                                                 REAKTOR_MINIMIZED,
-                                                 &s->tree_leaf[i]);
-                tree_chevron(app, ctx, hb, open);
-                reaktor_note_push(app, REAKTOR_A11Y_TREEITEM, lab, NULL,
-                                  (open ? REAKTOR_A11Y_EXPANDED : 0u) |
-                                  (s->tree_leaf[i] ? REAKTOR_A11Y_CHECKED
-                                                   : 0u),
-                                  hb);
-                if (open) {
-                    reaktor_layout_row_dynamic(ctx, ROW_SMALL, 1);
-                    reaktor_text_label(ctx, "with a checkbox in the header",
-                                       REAKTOR_TEXT_LEFT);
-                    reaktor_tree_pop(ctx);
-                }
-                reaktor_note_pop(app);
-            }
-            reaktor_tree_pop(ctx);
-        }
-        reaktor_note_pop(app);
+        SDL_snprintf(undo, sizeof undo, "Undo %s", reaktor_undo_label(app) ? reaktor_undo_label(app) : "");
+        SDL_snprintf(redo, sizeof redo, "Redo %s", reaktor_redo_label(app) ? reaktor_redo_label(app) : "");
+        if (reaktor_button(&(reaktor_button_spec){ .label = undo, .name = "Undo",
+                                                   .disabled = !reaktor_undo_label(app),
+                                                   .box = { .w = 180.0f } }))
+            reaktor_undo(app);
+        if (reaktor_button(&(reaktor_button_spec){ .label = redo, .name = "Redo",
+                                                   .disabled = !reaktor_redo_label(app),
+                                                   .box = { .w = 180.0f } }))
+            reaktor_redo(app);
     }
 
     reaktor_layout_row_dynamic(ctx, 10.0f, 1);

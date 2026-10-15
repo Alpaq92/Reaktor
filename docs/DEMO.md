@@ -9,7 +9,7 @@ notepad, bench or simple.
 | | Lines | For |
 | --- | --- | --- |
 | `showcase` | ~3,300 | Every widget and layer, both schemes, three languages, and how far the CSS reaches |
-| `notepad` | ~280 | A text editor that opens, edits and saves a file |
+| `notepad` | ~330 | A text editor that opens, edits, searches and saves a file of any size |
 | `bench` | ~150 | The workload the published figures measure, here and in four other frameworks |
 | `simple` | ~40 | One button that closes the window |
 
@@ -57,8 +57,9 @@ what the library draws, and where its claims are tested rather than asserted:
   <img src="../assets/screenshots/notepad.png" alt="Notepad in the dark scheme under its native titlebar: a File and Help menu bar, the editor open on its own source, notepad.c, and a status line with the file name and its character count">
 </p>
 
-A real editor in one file: a menu bar, a multiline field, a status line, the
-platform's own open and save dialogs, and five shortcuts. A page of widgets
+A real editor in one file: a menu bar, a multiline field with line numbers
+that grows to fit any file, a find bar, a status line, the platform's own open
+and save dialogs, and seven shortcuts. A page of widgets
 never has to answer what happens to a modified document, or where a menu's last
 item lands when its popup is a pixel short; this does.
 

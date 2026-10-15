@@ -411,7 +411,8 @@ reaktor_cap_offset(const struct nk_user_font *f)
 }
 
 void
-reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
+reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
+                        struct nk_rect *steps)
 {
     const struct nk_style_property *st = &ctx->style.property;
     float h = ctx->style.font->height;
@@ -429,6 +430,7 @@ reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
     stepper_wash(app, ctx, r);
     reaktor_chevron_at(app, ctx, l, "chevron-back-outline",    st->dec_button.text_normal);
     reaktor_chevron_at(app, ctx, r, "chevron-forward-outline", st->inc_button.text_normal);
+    if (steps) { steps[0] = l; steps[1] = r; }
 }
 
 void
@@ -686,6 +688,16 @@ field_edit(App *app, struct nk_context *ctx, nk_flags flags, char *buf,
     if (held && undo_differs(u, buf, *len)) {
         undo_drop(u, 0);
         held = undo_keep(u, buf, *len);
+    }
+    /* After the click that focused the field, which would move the caret. */
+    if (win->edit.active && win->edit.seq == win->edit.name &&
+        app->field_pick.buf == buf && app->field_pick.asked &&
+        app->key_click == KEY_CLICK_NONE) {
+        int to = NK_MIN(app->field_pick.to, *len), from = NK_MIN(app->field_pick.from, to);
+
+        win->edit.sel_start = nk_utf_len(buf, from);
+        win->edit.sel_end   = win->edit.cursor = nk_utf_len(buf, to);
+        app->field_pick.buf = NULL;
     }
     if (held && win->edit.active && win->edit.seq == win->edit.name &&
         !(win->layout->flags & NK_WINDOW_ROM)) {

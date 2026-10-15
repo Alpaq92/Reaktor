@@ -1202,6 +1202,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
                             (reaktor_popup_open(pw) && pw->popup.type == NK_PANEL_POPUP));
     }
     app->focus_step = 0;
+    if (!ctx->input.mouse.buttons[NK_BUTTON_LEFT].down) app->drag.armed = app->drag.active = 0;
     {
         int ring = app->focus_visible && app->focus_seen &&
                    app->focus_layer == FOCUS_POPUP;
@@ -1352,6 +1353,7 @@ app_quit(void *appstate, SDL_AppResult result)
     reaktor_timers_drop(NULL);
     if (g_launch.save_settings != REAKTOR_SAVE_NEVER) reaktor_settings_save();
     reaktor_settings_free();
+    reaktor_undo_clear(app);
     if (!SDL_GetAtomicInt(&g_exit_code) && (app->shot_failed || app->dump_failed))
         SDL_SetAtomicInt(&g_exit_code, app->shot_failed && app->dump_failed ? 4
                                        : app->shot_failed ? 2 : 3);

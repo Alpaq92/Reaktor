@@ -122,6 +122,29 @@ save mode to last, and restores them at start. Under `--shot` and
 `--a11y-dump` settings are neither read nor written, so a user's file cannot
 change a test.
 
+**Undo.** Each window keeps a stack of steps. `reaktor_undo_push(app,
+&(reaktor_undo_step){ .label, .undo, .redo, .free, .data, .merge })` records
+one the application has already done: `.undo(data)` and `.redo(data)` take it
+back and do it again, and `.free(data)` runs when the step is dropped. Steps
+pushed between `reaktor_undo_group(app, 1)` and `reaktor_undo_group(app, 0)`
+undo as one, and so do consecutive steps with the same nonzero `.merge`, as
+typing does. `reaktor_undo` and `reaktor_redo` take one step back or forward,
+`reaktor_undo_label` and `reaktor_redo_label` name it for a menu entry,
+`reaktor_undo_saved` marks where the document was saved and
+`reaktor_undo_dirty` says whether it has changed since. A new step drops the
+ones that could be redone. Ctrl+Z, and Ctrl+Y or Ctrl+Shift+Z, reach the stack
+when no field is being edited, as a field keeps its own history; the `key`
+hook sees them first.
+
+| Call | Effect |
+| --- | --- |
+| `reaktor_undo_push(app, step)` | Record a step already done |
+| `reaktor_undo(app)`, `reaktor_redo(app)` | Take one back, or do it again; 0 when there is none |
+| `reaktor_undo_label(app)`, `reaktor_redo_label(app)` | What they would undo or redo, or `NULL` |
+| `reaktor_undo_group(app, begin)` | Steps between `1` and `0` undo as one |
+| `reaktor_undo_saved(app)`, `reaktor_undo_dirty(app)` | Mark the saved state; whether it has changed since |
+| `reaktor_undo_clear(app)` | Drop every step |
+
 Clipboard, URLs and logging are SDL's: `SDL_SetClipboardText`,
 `SDL_GetClipboardText`, `SDL_OpenURL` (behind a link's `.url`), `SDL_Log`.
 
@@ -165,7 +188,7 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTER`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
 | Icon | `reaktor_icon` | — | `.name` (an Ionicon) and `.accent`, or `.src` (any image asset: SVG, PNG, JPEG), stretched to its box; `.tooltip` |
 | Swatch | `reaktor_swatch` | when pressed | `.fill`, `.on_press` |
-| Field | `reaktor_field` | — | `.buf`, `.len`, `.cap`, `.hint`, `.multiline`, `.filter`, `.pad_x`, `.pad_y` |
+| Field | `reaktor_field` | — | `.buf`, `.len`, `.cap`, or `.heap` and `.heap_cap`; `.hint`, `.multiline`, `.line_numbers`, `.filter`, `.pad_x`, `.pad_y` |
 | Check | `reaktor_check` | when toggled | `.label`, `.on`, or `.flags` and `.bit`; `.box_right` |
 | Radio | `reaktor_radio` | when pressed | `.label`, `.choice`, `.value` |
 | Select | `reaktor_select` | when toggled | `.label`, `.on`, `.icon`, `.disc`, `.centered` |
@@ -173,12 +196,16 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Progress | `reaktor_progress` | — | `.value`, `.max`, `.modifiable` (draggable) |
 | Knob | `reaktor_knob` | — | `.value`, `.lo`, `.hi` |
 | Property | `reaktor_property` | — | `.label`, `.ivalue`, `.fvalue` or `.dvalue`, `.lo`, `.hi`, `.step`, `.grain` (per pixel dragged) |
+| Spinner | `reaktor_spinner` | when it steps | `.label`, `.items` and `.count`, `.chosen`, `.wrap`; drawn as a property, stepped by its chevrons or the arrow keys |
+| Date | `reaktor_date_pick` | when a date is set | `.year`, `.month`, `.day` (0 until set), `.min_year`, `.max_year` |
+| Time | `reaktor_time_pick` | when a time is set | `.hour` (-1 until set), `.minute`, `.clock12` |
 | Combo | `REAKTOR_COMBO(...) { }` | — | `.label`, `.body_h`, `.disc`, `.swatch`; rows by `reaktor_combo_item(label, chosen)` |
 | Color | `reaktor_color_pick` | — | `.value`, a `struct reaktor_colorf` |
 | Sidebar | `reaktor_sidebar` | when an entry is chosen | [below](#sidebar-and-tabs) |
 | Tabs | `reaktor_tabs` | when an entry is chosen | [below](#sidebar-and-tabs) |
 | Menu bar | `reaktor_menubar` | when an item is chosen | [below](#menu-bar) |
-| List | `reaktor_list` | when another row is chosen | `.count`, `.cell(row, column, user)`, `.column_count`, `.columns` (headers), `.widths` (shares), `.selected`, `.row_h` |
+| List | `reaktor_list` | when another row is chosen, or one is dropped on it | `.count`, `.cell(row, column, user)`, `.column_count`, `.columns` (headers), `.widths` (shares), `.selected`, `.row_h`, `.drag` and `.dropped` |
+| Tree | `reaktor_tree` | when another node is chosen | `.count`, `.parent(node, user)`, `.label(node, user)`, `.icon(node, user)`, `.open` (a flag per node), `.selected` (a node), `.row_h` |
 | Splitter | `reaktor_splitter` | while dragged | `.value` (the first child's share, 0 to 1), `.lo`, `.hi` (0.1 and 0.9 unset), `.vertical` |
 
 **An icon gives way to its label**: a button too narrow for both draws the
@@ -190,6 +217,27 @@ anywhere else reseeds the buffer. Ctrl+Z and Ctrl+R undo and redo from a
 history each field keeps; editing another field, or changing the value in
 code, starts it over.
 
+**A field can grow.** Given `.heap` and `.heap_cap` instead of `.buf` and
+`.cap`, it keeps the buffer, from `SDL_malloc` or `NULL`, large enough for what
+is typed or pasted, and the caller frees it with `SDL_free`. `.line_numbers`
+draws a gutter of line numbers beside a multiline field.
+`reaktor_field_select(app, buf, from, to)` focuses the field whose buffer is
+`buf` and selects bytes `from` to `to`, scrolling them into view: a find bar
+is a search over the buffer and this call, as in the notepad sample. Lines do
+not wrap: Nuklear's editor lays text out in hard lines only.
+
+**A date or time is picked on wheels.** The field shows a segment per part,
+in the order the language writes a short date, each a hint (`date.day`,
+`date.month`, `date.year`, `time.hour`, `time.minute`) until a value is set. A
+click or Enter opens a column of wheels over it: days, months and hours loop,
+years stop at `.min_year` and `.max_year` (1900 and 2100 unset). Scroll a
+wheel, click a row, or use the arrows: Up and Down turn the focused wheel,
+Left and Right move between wheels. Enter or the check sets the value and
+answers 1; Escape, the cross or a click outside leaves it. Days follow the
+month and year on the wheels. Month names are the stand-alone form,
+`date.months.standalone`, as Polish names a month alone differently from one
+in a date.
+
 **A tooltip** follows the pointer while its widget is hovered, above
 everything, styled by `.tooltip`.
 
@@ -199,6 +247,23 @@ selection follows keyboard focus; the arrow keys move it, scrolling the row
 into view. Without it the rows are plain text. Unsized, a list shows up to
 eight rows and fills its row. Colors come from `thead`, `th`, `td`,
 `--table-bg` and `--table-bg-alt`, as in tiny.css.
+
+**A row can be dragged** out of a list that names a `.drag` kind, a string.
+Its first column follows the pointer as a tooltip would, and any list of the
+same kind under the pointer, the same one included, draws a line where it
+would land. On release that list calls `.dropped(from, item, at, user)`:
+`from` is the name of the list it left, `item` its row there, and `at` the
+place between this list's rows it lands, counted before the row is taken out.
+Moving it is the caller's, so a list can copy instead.
+
+**A tree is a list of its nodes in depth-first order**, each naming its
+parent, or -1 for a root; a node with children is followed by them. `.open`
+holds a flag per node, written when a branch opens or closes, and `.selected`
+a node. It is drawn as a list is, only the rows on screen, styled the same,
+each indented under its parent with a chevron on every branch. Up and Down
+move between rows; Right opens a branch or steps into it, Left closes it or
+steps out to its parent; a click on a chevron opens or closes it. Screen
+readers see tree items with their expanded and selected states.
 
 **A splitter** writes the first child's share; pass it to both children's
 `.weight`. It drags, and with focus the arrow keys step it by 5%, moving the
@@ -983,7 +1048,7 @@ Built by default and run from `build/`:
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.
@@ -1090,8 +1155,10 @@ Formatting reads these keys, and a key a catalog leaves out is English's:
 | `date.days`, `date.days.short` | `Sunday \| …` | Seven, Sunday first |
 | `time.ampm` | `AM \| PM` | |
 
-A pattern is made of `d dd M MM MMM MMMM y yy EEE EEEE H HH h hh m mm a`, with
-`'quoted'` text kept. The weekday is computed from the date. A catalog says
+A pattern is made of `d dd M MM MMM MMMM LLLL y yy EEE EEEE H HH h hh m mm a`,
+with `'quoted'` text kept; `LLLL` is a month's stand-alone name, from
+`date.months.standalone` where a catalog has it. `reaktor_format_pattern(buf,
+cap, tm, pattern)` formats any pattern. The weekday is computed from the date. A catalog says
 how its language writes numbers the way it says "Save" — Polish puts
 no-break spaces between digit groups and before its symbol — and a symbol of
 letters is always kept a space off the amount: `PLN 12.00`.

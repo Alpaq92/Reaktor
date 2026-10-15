@@ -129,9 +129,13 @@ typedef struct reaktor_field_spec {
     reaktor_plugin_filter filter;
     reaktor_box box;
     unsigned char multiline;
+    unsigned char line_numbers;
+    char        **heap;
+    int          *heap_cap;
 } reaktor_field_spec;
 
 void reaktor_field(const reaktor_field_spec *s);
+void reaktor_field_select(App *app, const char *buf, int from, int to);
 
 typedef struct reaktor_check_spec {
     const char   *label;
@@ -217,6 +221,37 @@ typedef struct reaktor_property_spec {
 
 void reaktor_property(const reaktor_property_spec *s);
 
+typedef struct reaktor_spinner_spec {
+    const char        *label;
+    const char        *name;
+    const char *const *items;
+    int                count;
+    int               *chosen;
+    unsigned char      wrap;
+    const char        *style;
+    reaktor_box        box;
+} reaktor_spinner_spec;
+
+int reaktor_spinner(const reaktor_spinner_spec *s);
+
+typedef struct reaktor_date_spec {
+    const char *name;
+    int        *year, *month, *day;
+    int         min_year, max_year;
+    reaktor_box box;
+} reaktor_date_spec;
+
+int reaktor_date_pick(const reaktor_date_spec *s);
+
+typedef struct reaktor_time_spec {
+    const char   *name;
+    int          *hour, *minute;
+    unsigned char clock12;
+    reaktor_box   box;
+} reaktor_time_spec;
+
+int reaktor_time_pick(const reaktor_time_spec *s);
+
 typedef struct reaktor_combo_spec {
     const char     *label;
     const char     *name;
@@ -272,9 +307,26 @@ typedef struct reaktor_list_spec {
     int               *selected;
     float              row_h;
     reaktor_box        box;
+    const char        *drag;
+    void             (*dropped)(const char *from, int item, int at, void *user);
 } reaktor_list_spec;
 
 int reaktor_list(const reaktor_list_spec *s);
+
+typedef struct reaktor_tree_spec {
+    const char    *name;
+    int            count;
+    int          (*parent)(int node, void *user);
+    const char  *(*label)(int node, void *user);
+    const char  *(*icon)(int node, void *user);
+    void          *user;
+    unsigned char *open;
+    int           *selected;
+    float          row_h;
+    reaktor_box    box;
+} reaktor_tree_spec;
+
+int reaktor_tree(const reaktor_tree_spec *s);
 
 typedef struct reaktor_menu_entry {
     const char     *label;

@@ -82,6 +82,7 @@ teardown(App *a)
     if (a->win) SDL_SetWindowModal(a->win, false);
     reaktor_app_input_free(a);
     field_undo_clear(a);
+    reaktor_undo_clear(a);
     reaktor_layout_free(&a->lay);
     if (a->ren) img_cache_free(a);
     if (a->ctx) nk_sdl_shutdown(a->ctx);

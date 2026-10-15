@@ -29,5 +29,7 @@ enum {
 struct tm;
 const char *reaktor_format_date(char *buf, size_t cap, const struct tm *t,
                                 int style);
+const char *reaktor_format_pattern(char *buf, size_t cap, const struct tm *t,
+                                   const char *pattern);
 
 #endif

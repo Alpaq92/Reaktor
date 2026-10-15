@@ -243,14 +243,22 @@ reaktor_format_date(char *buf, size_t cap, const struct tm *t, int style)
     static const char *const english[] = {
         "M/d/yy", "MMMM d, y", "EEEE, MMMM d, y", "h:mm a"
     };
+
+    if (buf && cap) buf[0] = '\0';
+    if (style < REAKTOR_DATE_SHORT || style > REAKTOR_TIME_SHORT) return buf;
+    return reaktor_format_pattern(buf, cap, t, conv(keys[style], english[style]));
+}
+
+const char *
+reaktor_format_pattern(char *buf, size_t cap, const struct tm *t, const char *pattern)
+{
     const char *p;
     int         year, month, day, hour, minute, wd;
     out         o;
 
     if (!buf || cap == 0) return buf;
     o = start(buf, cap);
-    if (!t || style < REAKTOR_DATE_SHORT || style > REAKTOR_TIME_SHORT)
-        return buf;
+    if (!t || !pattern) return buf;
 
     year   = t->tm_year + 1900;
     month  = t->tm_mon + 1;
@@ -260,7 +268,7 @@ reaktor_format_date(char *buf, size_t cap, const struct tm *t, int style)
     wd = SDL_GetDayOfWeek(year, month, day);
     if (wd < 0) return buf;
 
-    for (p = conv(keys[style], english[style]); *p; ) {
+    for (p = pattern; *p; ) {
         char c = *p;
         int  run = 1;
 
@@ -284,6 +292,12 @@ reaktor_format_date(char *buf, size_t cap, const struct tm *t, int style)
         while (p[run] == c) run++;
         switch (c) {
         case 'd': putf(&o, run > 1 ? "%02d" : "%d", day); break;
+        case 'L':
+            if (run >= 4)
+                name(&o, "date.months.standalone", conv("date.months", MONTHS), month - 1);
+            else
+                putf(&o, run > 1 ? "%02d" : "%d", month);
+            break;
         case 'M':
             if (run >= 4)      name(&o, "date.months", MONTHS, month - 1);
             else if (run == 3) name(&o, "date.months.short", MONTHS_SHORT,
