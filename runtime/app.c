@@ -1259,6 +1259,10 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     reaktor_render(app);
     t_present0 = SDL_GetPerformanceCounter();
     if (is_main) shot = take_shot(app);
+    if (app->want_capture) {
+        app->capture      = SDL_RenderReadPixels(app->ren, NULL);
+        app->want_capture = 0;
+    }
     SDL_RenderPresent(app->ren);
     t_end = SDL_GetPerformanceCounter();
 

@@ -122,6 +122,30 @@ save mode to last, and restores them at start. Under `--shot` and
 `--a11y-dump` settings are neither read nor written, so a user's file cannot
 change a test.
 
+**Notifications.** `reaktor_notify(app, &(reaktor_notification){ .title,
+.text })` tells the user something outside the window and answers 1 when it
+was sent. On Windows it is a balloon from an icon of the app's own, which
+Windows 10 and 11 show as a toast headed by the program's name, and the icon
+goes ten seconds later; on Linux and the BSDs, a `Notify` call to
+`org.freedesktop.Notifications` over `dbus-1`; on macOS,
+`UNUserNotificationCenter`, which answers 0 outside an app bundle; on the web,
+the browser's `Notification`, after it asks for permission once. A click on
+one is not reported.
+
+**Printing.** `reaktor_print(app, &(reaktor_print_spec){ ... })` prints pages
+the application lays out, and `reaktor_print_pdf(app, path, &spec)` writes
+them to a PDF. `.page(app, ctx, index, w, h, user)` draws page `index` of
+`.pages` (up to 64) as a page hook would, `w` by `h` points: `.w` and `.h`, A4
+when unset. Each page is laid out and drawn as on screen, in a hidden window
+at `.dpi` (200 unset), so it carries the window's look: a page that should be
+white paints itself white. Both calls answer 1 when the job is queued; it runs
+between frames, and `.done(app, ok, user)` says how it went. A page is an
+image in the PDF, through [libHaru](https://github.com/libharu/libharu) and
+plutovg's JPEG writer, so its text is not selectable. To print, Windows shows
+its print dialog and draws the pages to the printer; macOS opens its print
+dialog on the PDF; Linux and the BSDs open the PDF in the user's viewer, which
+prints it. The web build does not print.
+
 **Undo.** Each window keeps a stack of steps. `reaktor_undo_push(app,
 &(reaktor_undo_step){ .label, .undo, .redo, .free, .data, .merge })` records
 one the application has already done: `.undo(data)` and `.redo(data)` take it
@@ -767,7 +791,7 @@ samples/         showcase, notepad, simple, bench
 tests/           the console tests and launchtest
 tools/           packaging, the icon compiler, vmwalk
 benchmarks/      bench in four other frameworks, and the sampler
-external/        twelve submodules, read as they ship
+external/        thirteen submodules, read as they ship
 ```
 
 `runtime/` and `core/` build `reaktor_runtime`, a static library every
@@ -944,6 +968,8 @@ Passed to CMake, through either script:
 | `REAKTOR_SETTINGS` | `ON` | Settings kept between runs, in `settings.conf` |
 | `REAKTOR_TRAY` | `ON` | The tray icon |
 | `REAKTOR_POPUP_WINDOWS` | `ON` | Menus in windows of their own |
+| `REAKTOR_NOTIFY` | `ON` | System notifications |
+| `REAKTOR_PRINT` | `ON` | Printing and PDF export, through libHaru |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Linux and the BSDs |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
@@ -953,8 +979,8 @@ pass `=ON` to switch one back.
 
 **A module is two interface libraries**, and a program links one:
 `reaktor_a11y` or `reaktor_a11y_none`, and likewise `_locale`, `_text`,
-`_settings`, `_tray` and `_popups`. Both define the same functions. The
-showcase takes every module; `notepad` takes settings and popups; `simple` and
+`_settings`, `_tray`, `_popups`, `_notify` and `_print`. Both define the same functions. The
+showcase takes every module; `notepad` takes settings, popups and print; `simple` and
 `bench` take none, and show what the runtime costs alone. An option switched off swaps in the `_none` half everywhere, and leaves
 pixels and `--a11y-dump` byte-identical apart from what the module itself
 produces.
@@ -984,6 +1010,10 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
   `.remember_window` is ignored.
 - **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, so AppIndicator
   and GTK 3 are never loaded on Linux and the BSDs.
+- **`REAKTOR_PRINT=OFF`** leaves libHaru out; `reaktor_print` and
+  `reaktor_print_pdf` answer 0.
+- **`REAKTOR_NOTIFY=OFF`** answers 0 from `reaktor_notify` and links nothing
+  for it: not `shell32`, `dbus-1` or the UserNotifications framework.
 - **`REAKTOR_POPUP_WINDOWS=OFF`** draws menus inside the window, fitted to it,
   as the web does; `--popups inline` does the same without a rebuild.
 
@@ -1048,7 +1078,7 @@ Built by default and run from `build/`:
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `print-pdf`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.

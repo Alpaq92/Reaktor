@@ -34,3 +34,6 @@
 [submodule "external/mglibs"]
 	path = external/mglibs
 	url = https://github.com/mattiasgustavsson/libs.git
+[submodule "external/libharu"]
+	path = external/libharu
+	url = https://github.com/libharu/libharu.git

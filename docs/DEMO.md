@@ -1,8 +1,8 @@
 # The four programs
 
 All four share `runtime/` and `core/`; what differs is `samples/`, and which
-modules each links. The showcase takes every module. Notepad takes settings and
-popup menus; bench and simple take none, so they show what the runtime costs by
+modules each links. The showcase takes every module. Notepad takes settings, popup
+menus and printing; bench and simple take none, so they show what the runtime costs by
 itself. Without the accessibility module, a screen reader finds nothing in
 notepad, bench or simple.
 
@@ -58,8 +58,8 @@ what the library draws, and where its claims are tested rather than asserted:
 </p>
 
 A real editor in one file: a menu bar, a multiline field with line numbers
-that grows to fit any file, a find bar, a status line, the platform's own open
-and save dialogs, and seven shortcuts. A page of widgets
+that grows to fit any file, a find bar, printing and PDF export, a status line, the platform's own open
+and save dialogs, and eight shortcuts. A page of widgets
 never has to answer what happens to a modified document, or where a menu's last
 item lands when its popup is a pixel short; this does.
 
