@@ -227,6 +227,10 @@ take_flags(App *app, int argc, char **argv)
         else if (v && SDL_strcmp(a, "--a11y-dump") == 0) { app->dump_path = v; i++; }
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--video") == 0)    { app->video_pref = v; i++; }
+        else if (v && SDL_strcmp(a, "--popups") == 0) {
+            app->popups_inline = SDL_strcmp(v, "inline") == 0;
+            i++;
+        }
         else if (v && SDL_strcmp(a, "--lang") == 0)     { app->lang_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--font-fallback") == 0) { add_fallback(v); i++; }
         else if (v && SDL_strcmp(a, "--theme") == 0) {
@@ -1166,6 +1170,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     file_answer(app);
 
     app->focus_seen = 0;
+    app->menu_open  = 0;
     app->popup_lo = app->popup_hi = app->trap_lo = app->trap_hi = -1;
     if (!app->anim) app->anim = reaktor_anim_create();
     if (app->anim) reaktor_anim_frame(app->anim, app->frame_gap_ms);

@@ -399,6 +399,17 @@ stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
     reaktor_fill_round(app, nk_window_get_canvas(ctx), sq, sq.w * 0.5f, wash);
 }
 
+/* How far below a centered line's middle its capitals' middle lies. */
+float
+reaktor_cap_offset(const struct nk_user_font *f)
+{
+    const struct nk_font *nf = f ? (const struct nk_font *)f->userdata.ptr : NULL;
+    const struct nk_font_glyph *g = nf ? nk_font_find_glyph((struct nk_font *)nf, 'H') : NULL;
+
+    if (!g || nf->info.height <= 0.0f) return 0.0f;
+    return ((g->y0 + g->y1) * 0.5f - nf->info.height * 0.5f) * f->height / nf->info.height;
+}
+
 void
 reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
 {
@@ -408,7 +419,8 @@ reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b)
 
     l.w = l.h = r.w = r.h = h;
     l.x = b.x + st->border + st->padding.x;
-    l.y = b.y + st->border + b.h * 0.5f - h * 0.5f;
+    l.y = (float)(int)(b.y + b.h * 0.5f - h * 0.5f +
+                       reaktor_cap_offset(ctx->style.font) + 0.5f);
     r.x = b.x + b.w - (h + st->padding.x);
     r.y = l.y;
     hot_push(app, l, 0, 1);
@@ -870,6 +882,17 @@ reaktor_note(App *app, unsigned char role, const char *name, const char *value,
     return id;
 }
 
+void
+reaktor_focus_take(App *app, unsigned id, struct nk_rect b)
+{
+    if (!id) return;
+    app->focus_id      = id;
+    app->focus_visible = 1;
+    app->dirty         = 1;
+    reaktor_a11y_set_focus(&app->a11y, id);
+    focus_saw(app, id, b);
+}
+
 unsigned
 reaktor_note_push(App *app, unsigned char role, const char *name,
                   const char *value, unsigned state, struct nk_rect bounds)
@@ -947,6 +970,33 @@ reaktor_style_font(App *app, const char *selector, int px, int bold)
             return reaktor_font(app, st.font_px, st.bold ? 1 : bold);
     }
     return reaktor_font(app, px, bold);
+}
+
+/* A borderless popup of the current window at r, in screen coordinates. */
+int
+reaktor_flyout_begin(struct nk_context *ctx, const char *name, struct nk_rect r)
+{
+    struct nk_rect clip = ctx->current->layout->clip;
+
+    nk_style_push_style_item(ctx, &ctx->style.window.fixed_background, nk_style_item_hide());
+    nk_style_push_vec2(ctx, &ctx->style.window.popup_padding, nk_vec2(0.0f, 0.0f));
+    nk_style_push_float(ctx, &ctx->style.window.popup_border, 0.0f);
+    if (nk_popup_begin(ctx, NK_POPUP_STATIC, name, NK_WINDOW_NO_SCROLLBAR,
+                       nk_rect(r.x - clip.x, r.y - clip.y, r.w, r.h)))
+        return 1;
+    nk_style_pop_float(ctx);
+    nk_style_pop_vec2(ctx);
+    nk_style_pop_style_item(ctx);
+    return 0;
+}
+
+void
+reaktor_flyout_end(struct nk_context *ctx)
+{
+    nk_popup_end(ctx);
+    nk_style_pop_float(ctx);
+    nk_style_pop_vec2(ctx);
+    nk_style_pop_style_item(ctx);
 }
 
 float

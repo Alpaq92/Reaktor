@@ -300,14 +300,13 @@ toast_demos(App *app, struct reaktor_context *ctx)
     }
 }
 
-static float
-menu_w(struct reaktor_context *ctx, const char *label)
-{
-    const struct reaktor_user_font *f = ctx->style.font;
-    const struct reaktor_style_button *b = &ctx->style.menu_button;
+static reaktor_size *g_menu_progress;
 
-    return (float)(int)(f->width(f->userdata, f->height, label, (int)strlen(label)) +
-                        2.0f * (b->padding.x + b->border + b->rounding) + 2.5f);
+static void
+menu_progress(App *app, struct reaktor_context *ctx, void *user)
+{
+    (void)user;
+    reaktor_progress_bar(app, ctx, g_menu_progress, 100, REAKTOR_MODIFIABLE);
 }
 
 static void
@@ -420,106 +419,79 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
 {
     char line[SC_PATH_CAP + 32];
     struct reaktor_rect bar;
-    int ok, tip = 0;
+    int tip = 0;
 
     popup_style_push(ctx);
-    reaktor_layout_row_dynamic(ctx, 40.0f, 1);
-    bar = reaktor_widget_bounds(ctx);
-    reaktor_style_push_vec2(ctx, &ctx->style.window.group_padding,
-                            reaktor_vec2(12.0f, 7.0f));
-    ok = reaktor_group_begin(ctx, "menubar", REAKTOR_WINDOW_NO_SCROLLBAR);
-    reaktor_style_pop_vec2(ctx);
-    if (ok) {
-    reaktor_note_push(app, REAKTOR_A11Y_MENUBAR, "Menu bar", NULL, 0, bar);
-    reaktor_menubar_begin(ctx);
-    reaktor_layout_row_begin(ctx, REAKTOR_STATIC, 26.0f, 3);
-    reaktor_layout_row_push(ctx, menu_w(ctx, "File"));
-    hot(app, ctx, REAKTOR_A11Y_MENU, "File", 0);
-    if (reaktor_menu_begin_label(ctx, "File", REAKTOR_TEXT_CENTERED,
-                                 reaktor_vec2(150.0f,
-                                              reaktor_menu_height(3)))) {
-        reaktor_menu_style_push(ctx);
-        reaktor_menu_edge(app, ctx);
-        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
-        if (item_with_icon(app, ctx, "New", "add-outline", 0))
-            SDL_strlcpy(s->menu_pick, "File > New", sizeof(s->menu_pick));
-        if (item_with_icon(app, ctx, "Open...", "folder-open-outline", 0)) {
-            SDL_strlcpy(s->menu_pick, "File > Open", sizeof(s->menu_pick));
-            if (reaktor_file_dialog_open(app, &(reaktor_file_dialog){
+    REAKTOR_ROW(.name = "Menus", .h = 40.0f, .flags = REAKTOR_LAY_FILL_X) {
+        static const reaktor_menu_entry file[] = {
+            { .label = "New",     .icon = "add-outline",         .keys = "Ctrl+N" },
+            { .label = "Open...", .icon = "folder-open-outline", .keys = "Ctrl+O" },
+            { NULL },
+            { .label = "Close",   .icon = "close-outline",       .keys = "Ctrl+W" }
+        };
+        static const reaktor_menu_entry zoom[] = {
+            { .label = "Zoom in",  .keys = "Ctrl++" },
+            { .label = "Zoom out", .keys = "Ctrl+-" },
+            { NULL },
+            { .label = "Actual size", .keys = "Ctrl+0" }
+        };
+        reaktor_menu_entry edit[] = {
+            { .label = "Cut",   .keys = "Ctrl+X" },
+            { .label = "Copy",  .keys = "Ctrl+C" },
+            { .label = "Paste", .keys = "Ctrl+V", .disabled = 1 },
+            { NULL },
+            { .label = "Overwrite", .checked = &s->check_spell }
+        };
+        reaktor_menu_entry view[] = {
+            { .custom = menu_progress },
+            { .label = "Reset progress" },
+            { NULL },
+            { .label = "Zoom", .items = zoom, .count = (int)SDL_arraysize(zoom) },
+            { .label = "Full screen", .disabled = 1 }
+        };
+        const reaktor_menu_entry *pe = NULL;
+        reaktor_menu menus[3] = {
+            { "File", file, (int)SDL_arraysize(file) },
+            { "Edit", edit, (int)SDL_arraysize(edit) },
+            { "View", view, (int)SDL_arraysize(view) }
+        };
+        int pm = -1, pi = -1;
+
+        g_menu_progress = &s->progress;
+
+        if (reaktor_box_rect(&bar))
+            reaktor_edge_round(app, reaktor_window_get_canvas(ctx), bar,
+                               ctx->style.window.rounding, 1.0f,
+                               ctx->style.window.border_color);
+        if (reaktor_menubar(&(reaktor_menubar_spec){
+                .menus = menus, .count = 3, .name = "Menu bar",
+                .box = { .ml = 12.0f, .mt = 7.0f },
+                .picked_menu = &pm, .picked_item = &pi, .picked = &pe }) && pe) {
+            SDL_snprintf(s->menu_pick, sizeof(s->menu_pick), "%s > %s",
+                         menus[pm].label, pe->label);
+            if (pm == 0 && pi == 1 &&
+                reaktor_file_dialog_open(app, &(reaktor_file_dialog){
                     .filters = g_sheet_filters,
                     .filter_count = (int)SDL_arraysize(g_sheet_filters),
                     .chosen = file_chosen }))
                 SDL_strlcpy(s->file_pick, "waiting for the picker...",
                             sizeof(s->file_pick));
+            if (pe == &view[1]) s->progress = 50;
         }
-        if (item_with_icon(app, ctx, "Close", "close-outline", 0))
-            SDL_strlcpy(s->menu_pick, "File > Close", sizeof(s->menu_pick));
-        reaktor_menu_end(ctx);
-        reaktor_menu_style_pop(ctx);
     }
-    reaktor_layout_row_push(ctx, menu_w(ctx, "Edit"));
-    hot(app, ctx, REAKTOR_A11Y_MENU, "Edit", 0);
-    if (reaktor_menu_begin_label(ctx, "Edit", REAKTOR_TEXT_CENTERED,
-                                 reaktor_vec2(190.0f,
-                                              reaktor_menu_height(4)))) {
-        reaktor_menu_style_push(ctx);
-        reaktor_menu_edge(app, ctx);
-        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
-        if (reaktor_menu_item(app, ctx, "Cut", NULL, 0))
-            SDL_strlcpy(s->menu_pick, "Edit > Cut", sizeof(s->menu_pick));
-        if (reaktor_menu_item(app, ctx, "Copy", NULL, 0))
-            SDL_strlcpy(s->menu_pick, "Edit > Copy", sizeof(s->menu_pick));
-        reaktor_layout_row_template_begin(ctx, REAKTOR_MENU_ROW);
-        reaktor_layout_row_template_push_static(ctx, 5.0f);
-        reaktor_layout_row_template_push_dynamic(ctx);
-        reaktor_layout_row_template_push_static(ctx, 6.0f);
-        reaktor_layout_row_template_end(ctx);
-        reaktor_spacer(ctx);
-        reaktor_hot_top(app, reaktor_widget_bounds(ctx), 0, 1);
-        reaktor_checkbox_label_align(ctx, "Overwrite", &s->check_spell,
-                                     REAKTOR_WIDGET_RIGHT, REAKTOR_TEXT_LEFT);
-        reaktor_spacer(ctx);
-        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
-        reaktor_slider_bar(app, ctx, 0, &s->slider_f, 0.0f, 1.0f, 0.01f);
-        reaktor_menu_end(ctx);
-        reaktor_menu_style_pop(ctx);
-    }
-    reaktor_layout_row_push(ctx, menu_w(ctx, "View"));
-    hot(app, ctx, REAKTOR_A11Y_MENU, "View", 0);
-    if (reaktor_menu_begin_label(ctx, "View", REAKTOR_TEXT_CENTERED,
-                                 reaktor_vec2(170.0f,
-                                              reaktor_menu_height(2)))) {
-        reaktor_menu_style_push(ctx);
-        reaktor_menu_edge(app, ctx);
-        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
-        reaktor_progress_bar(app, ctx, &s->progress, 100, REAKTOR_MODIFIABLE);
-        if (reaktor_menu_item(app, ctx, "Reset", NULL, 0))
-            s->progress = 50;
-        reaktor_menu_end(ctx);
-        reaktor_menu_style_pop(ctx);
-    }
-    reaktor_layout_row_end(ctx);
-    reaktor_menubar_end(ctx);
-    reaktor_note_pop(app);
-    reaktor_group_end(ctx);
-    }
-    reaktor_edge_round(app, reaktor_window_get_canvas(ctx), bar,
-                       ctx->style.window.rounding, 1.0f,
-                       ctx->style.window.border_color);
     popup_style_pop(ctx);
 
     reaktor_layout_row_dynamic(ctx, 8.0f, 1);
     reaktor_spacer(ctx);
     head_and_note(app, ctx, "Menus",
-            "The bar above. A menu is a popup anchored to the item that "
-            "opened it, and its items are ordinary widgets - the View menu "
-            "has a draggable progress bar in it. An item's glyph and the "
-            "Edit menu's checkbox both sit at the right edge: the checkbox "
-            "through reaktor_checkbox_label_align, the glyph painted there, "
-            "because reaktor_menu_item_symbol_label centers its label whatever "
-            "alignment it is given.");
-    api(app, ctx, "reaktor_menubar_begin  /  reaktor_menu_begin_label  /  "
-                  "reaktor_menu_item_label  /  reaktor_checkbox_label_align");
+            "The bar above is declared: menus of items, each with an optional "
+            "icon, a shortcut shown at the right, a check and a disabled state, "
+            "separators, submenus, and rows that hold a widget of their own - "
+            "the View menu's progress bar. Tab reaches the titles, Enter opens "
+            "one and moves into it, Up and Down walk its items, Right opens a "
+            "submenu or the next menu, Left goes back, and Escape closes; "
+            "screen readers see a menu bar, menus and items.");
+    api(app, ctx, "reaktor_menubar  /  reaktor_menu  /  reaktor_menu_entry");
 
     {
         reaktor_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));

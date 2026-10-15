@@ -15,7 +15,6 @@ static struct {
     int      seeded;
 } g;
 
-#define MENUBAR_H 30.0f
 #define STATUS_H  26.0f
 
 static unsigned
@@ -146,13 +145,6 @@ save(App *app)
 }
 
 static void
-menu_cursor(App *app, struct reaktor_context *ctx)
-{
-    reaktor_hot_top(app, reaktor_window_get_bounds(ctx), 1, 0);
-}
-
-
-static void
 page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
 {
     char line[220];
@@ -165,66 +157,42 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
         g.seeded = 1;
     }
 
-    reaktor_menu_style_push(ctx);
-    reaktor_menubar_begin(ctx);
-
-    {
-        struct reaktor_style_item clear = reaktor_style_item_color(reaktor_rgba(0, 0, 0, 0));
-        reaktor_style_push_style_item(ctx, &ctx->style.menu_button.normal,
-                                      clear);
-        reaktor_style_push_style_item(ctx, &ctx->style.menu_button.hover,
-                                      clear);
-        reaktor_style_push_style_item(ctx, &ctx->style.menu_button.active,
-                                      clear);
-    }
-
-    reaktor_layout_row_begin(ctx, REAKTOR_STATIC, MENUBAR_H, 2);
-
-    reaktor_layout_row_push(ctx, 60.0f);
-    if (reaktor_menu_begin_label(ctx, "File", REAKTOR_TEXT_CENTERED,
-                                 reaktor_vec2(200.0f,
-                                              reaktor_menu_height(4)))) {
-        reaktor_menu_edge(app, ctx);
-        menu_cursor(app, ctx);
-        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
-        if (reaktor_menu_item(app, ctx, "New", "Ctrl+N", 0))
-            new_file();
-        if (reaktor_menu_item(app, ctx, "Open...", "Ctrl+O", 0))
-            ask_file(app, REAKTOR_FILE_OPEN);
-        if (reaktor_menu_item(app, ctx, "Save", "Ctrl+S", 0))
-            save(app);
-        if (reaktor_menu_item(app, ctx, "Quit", "Ctrl+Q", 0))
-            reaktor_request_quit(app);
-        reaktor_menu_end(ctx);
-    }
-
-    reaktor_layout_row_push(ctx, 60.0f);
-    if (reaktor_menu_begin_label(ctx, "Help", REAKTOR_TEXT_CENTERED,
-                                 reaktor_vec2(200.0f,
-                                              reaktor_menu_height(2)))) {
-        reaktor_menu_edge(app, ctx);
-        menu_cursor(app, ctx);
-        reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
-        if (reaktor_menu_item(app, ctx, "Shortcuts", "Ctrl+K", 0))
-            SDL_strlcpy(g.status,
-                        "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+Q quit",
-                        sizeof(g.status));
-        if (reaktor_menu_item(app, ctx, "About", NULL, 0))
-            SDL_strlcpy(g.status,
-                        "A text editor in one file, on Reaktor",
-                        sizeof(g.status));
-        reaktor_menu_end(ctx);
-    }
-
-    reaktor_layout_row_end(ctx);
-    reaktor_menubar_end(ctx);
-    reaktor_style_pop_style_item(ctx);
-    reaktor_style_pop_style_item(ctx);
-    reaktor_style_pop_style_item(ctx);
-    reaktor_menu_style_pop(ctx);
-
     REAKTOR_COLUMN(.h = reaktor_window_get_content_region_size(ctx).y,
                    .gap = 1.0f) {
+        {
+            static const reaktor_menu_entry file[] = {
+                { .label = "New",     .keys = "Ctrl+N" },
+                { .label = "Open...", .keys = "Ctrl+O" },
+                { .label = "Save",    .keys = "Ctrl+S" },
+                { NULL },
+                { .label = "Quit",    .keys = "Ctrl+Q" }
+            };
+            static const reaktor_menu_entry help[] = {
+                { .label = "Shortcuts", .keys = "Ctrl+K" },
+                { .label = "About" }
+            };
+            static const reaktor_menu menus[2] = {
+                { "File", file, 5 }, { "Help", help, 2 }
+            };
+            int m = -1, i = -1;
+
+            if (reaktor_menubar(&(reaktor_menubar_spec){
+                    .menus = menus, .count = 2,
+                    .box = { .ml = 4.0f, .mt = 2.0f, .mb = 2.0f },
+                    .picked_menu = &m, .picked_item = &i })) {
+                if (m == 0 && i == 0) new_file();
+                if (m == 0 && i == 1) ask_file(app, REAKTOR_FILE_OPEN);
+                if (m == 0 && i == 2) save(app);
+                if (m == 0 && i == 4) reaktor_request_quit(app);
+                if (m == 1 && i == 0)
+                    SDL_strlcpy(g.status,
+                                "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+Q quit",
+                                sizeof(g.status));
+                if (m == 1 && i == 1)
+                    SDL_strlcpy(g.status, "A text editor in one file, on Reaktor",
+                                sizeof(g.status));
+            }
+        }
 
         reaktor_field(&(reaktor_field_spec){
             .buf = g.text, .len = &g.len, .cap = TEXT_CAP,

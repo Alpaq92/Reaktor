@@ -3,6 +3,11 @@
 
 #include "reaktor/nuklear.h"
 
+#ifndef REAKTOR_APP_FWD
+#define REAKTOR_APP_FWD
+typedef struct App App;
+#endif
+
 enum {
     REAKTOR_LAY_ROW = 0,
     REAKTOR_LAY_COLUMN,
@@ -270,6 +275,37 @@ typedef struct reaktor_list_spec {
 } reaktor_list_spec;
 
 int reaktor_list(const reaktor_list_spec *s);
+
+typedef struct reaktor_menu_entry {
+    const char     *label;
+    const char     *icon;
+    const char     *keys;
+    reaktor_handler on_press;
+    reaktor_bool   *checked;
+    unsigned char   disabled;
+    const struct reaktor_menu_entry *items;
+    int             count;
+    void          (*custom)(App *app, struct reaktor_context *ctx, void *user);
+    float           height, width;
+} reaktor_menu_entry;
+
+typedef struct reaktor_menu {
+    const char               *label;
+    const reaktor_menu_entry *items;
+    int                       count;
+} reaktor_menu;
+
+typedef struct reaktor_menubar_spec {
+    const reaktor_menu        *menus;
+    int                        count;
+    const char                *name;
+    reaktor_box                box;
+    int                       *picked_menu;
+    int                       *picked_item;
+    const reaktor_menu_entry **picked;
+} reaktor_menubar_spec;
+
+int reaktor_menubar(const reaktor_menubar_spec *s);
 
 typedef struct reaktor_splitter_spec {
     float        *value;

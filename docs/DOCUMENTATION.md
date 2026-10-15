@@ -177,6 +177,7 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Color | `reaktor_color_pick` | — | `.value`, a `struct reaktor_colorf` |
 | Sidebar | `reaktor_sidebar` | when an entry is chosen | [below](#sidebar-and-tabs) |
 | Tabs | `reaktor_tabs` | when an entry is chosen | [below](#sidebar-and-tabs) |
+| Menu bar | `reaktor_menubar` | when an item is chosen | [below](#menu-bar) |
 | List | `reaktor_list` | when another row is chosen | `.count`, `.cell(row, column, user)`, `.column_count`, `.columns` (headers), `.widths` (shares), `.selected`, `.row_h` |
 | Splitter | `reaktor_splitter` | while dragged | `.value` (the first child's share, 0 to 1), `.lo`, `.hi` (0.1 and 0.9 unset), `.vertical` |
 
@@ -250,6 +251,54 @@ if (reaktor_sidebar(&(reaktor_sidebar_spec){
         .box = { .w = 200.0f } }))
     show(page);
 ```
+
+### Menu bar
+
+`reaktor_menubar` takes `.menus` and `.count`; each `reaktor_menu` is a
+`.label` and its `.items`. An entry has a `.label`, and optionally an `.icon`
+(an Ionicon), `.keys` (the shortcut, drawn at the right and announced; the
+`key` hook still handles it), `.checked` (toggled on choice, drawn as a dot),
+`.disabled` and `.on_press`. `.items` and `.count` make it a submenu.
+`.custom(app, ctx, user)` makes it a row of its own: the callback draws one
+widget into the row with the App and context of the window it is in,
+`.height` and `.width` size it, and `.on_press.user` is its `user`. An entry with neither a label nor `.custom` is a separator. The call
+answers 1 when an entry is chosen, writing the entry to `.picked`, its menu
+to `.picked_menu` and its place among its siblings to `.picked_item`.
+
+```c
+static const reaktor_menu_entry zoom[] = {
+    { .label = "Zoom in", .keys = "Ctrl++" }, { .label = "Zoom out", .keys = "Ctrl+-" }
+};
+static const reaktor_menu_entry view[] = {
+    { .label = "Zoom", .items = zoom, .count = 2 },
+    { NULL },
+    { .label = "Full screen", .keys = "F11" }
+};
+static const reaktor_menu menus[] = { { "View", view, 3 } };
+const reaktor_menu_entry *e;
+
+if (reaktor_menubar(&(reaktor_menubar_spec){ .menus = menus, .count = 1, .picked = &e }))
+    run(e);
+```
+
+Tab reaches each title. Enter opens its menu and moves focus to the first
+entry; Up and Down walk the entries, skipping disabled ones; Right opens a
+submenu, or the next menu; Left closes a submenu, or opens the previous menu;
+Escape closes one level and hands focus back. The pointer opens a submenu by
+hovering its entry. Screen readers see a menu bar, menus and menu items with
+their checked, expanded and disabled states.
+
+**A menu is a window of its own.** On the desktop each open menu and submenu
+is an SDL popup-menu window, so it can reach past the main window's edge; it
+never takes keyboard focus, so the keys still reach the main window and the
+menu. A submenu opens to the right of its entry, or to the left when the
+display has no room, and a menu that would run off the bottom opens above its
+title. The web has no such windows, so there the menu is a popup in the page,
+fitted the same way inside the canvas, as it is if a window cannot be made.
+The windows are drawn after the frame, from a copy of each open menu's
+entries taken by the call, so the arrays need not outlive it; up to 32
+entries a menu are shown. Titles are Nuklear's menu button, which
+`style_map.c` styles.
 
 ## Layout
 
@@ -827,6 +876,9 @@ Passed to CMake, through either script:
 | `REAKTOR_LOCALE` | `ON` | Translations and formatting — [Localization](#localization) |
 | `REAKTOR_LOCALE_EMBED` | `OFF` | Compile the catalogs in rather than read them at startup |
 | `REAKTOR_TEXT` | `ON` | Direction, shaping, fallback glyphs and Unicode line breaks — [Text](#text) |
+| `REAKTOR_SETTINGS` | `ON` | Settings kept between runs, in `settings.conf` |
+| `REAKTOR_TRAY` | `ON` | The tray icon |
+| `REAKTOR_POPUP_WINDOWS` | `ON` | Menus in windows of their own |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Linux and the BSDs |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
@@ -835,10 +887,10 @@ Passed to CMake, through either script:
 pass `=ON` to switch one back.
 
 **A module is two interface libraries**, and a program links one:
-`reaktor_a11y` or `reaktor_a11y_none`, and likewise `_locale` and `_text`.
-Both define the same functions. The showcase takes all three modules;
-`simple`, `notepad` and `bench` take none, and show what the runtime costs
-alone. An option switched off swaps in the `_none` half everywhere, and leaves
+`reaktor_a11y` or `reaktor_a11y_none`, and likewise `_locale`, `_text`,
+`_settings`, `_tray` and `_popups`. Both define the same functions. The
+showcase takes every module; `notepad` takes settings and popups; `simple` and
+`bench` take none, and show what the runtime costs alone. An option switched off swaps in the `_none` half everywhere, and leaves
 pixels and `--a11y-dump` byte-identical apart from what the module itself
 produces.
 
@@ -847,7 +899,7 @@ reaktor_add_app(myapp MODULES a11y locale SOURCES main.c)
 ```
 
 `reaktor_add_app` links the modules named and the `_none` half of the rest
-(all three when `MODULES` is left out, none with `MODULES none`), builds a
+(all of them when `MODULES` is left out, none with `MODULES none`), builds a
 windowed program unless `CONSOLE` is given, and on the web adds the link
 options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 
@@ -862,6 +914,13 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 - **`REAKTOR_TEXT=OFF`** leaves mojibake and kb_text_shape out. Nothing is
   reordered, shaped or taken from another font, and a line breaks after a
   space: Polish is untouched, Japanese comes out as boxes.
+- **`REAKTOR_SETTINGS=OFF`** leaves `ini.h` and the web's IndexedDB out:
+  `reaktor_setting` answers `NULL`, saving and clearing do nothing, and
+  `.remember_window` is ignored.
+- **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, so AppIndicator
+  and GTK 3 are never loaded on Linux and the BSDs.
+- **`REAKTOR_POPUP_WINDOWS=OFF`** draws menus inside the window, fitted to it,
+  as the web does; `--popups inline` does the same without a rebuild.
 
 ## Command-line flags
 
@@ -877,6 +936,7 @@ removes them from `argv` before the application sees it:
 | `--font-fallback <path>` | A font for the Text module, before the application's; repeatable |
 | `--renderer <name>` | `software` (default), `auto`, or a driver name |
 | `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
+| `--popups inline` | Menus inside the window, not in windows of their own |
 | `--console <none\|parent\|debug>` | Override `.console` |
 | `--css <path>` | A sheet after the application's; up to four |
 | `--font <path>`, `--font-bold <path>` | Replace the UI face and its bold |
@@ -923,7 +983,7 @@ Built by default and run from `build/`:
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
-| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `split-keys`, `split-vkeys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
+| `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.

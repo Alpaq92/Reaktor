@@ -211,6 +211,8 @@ struct App {
     struct nk_rect body_rect;
     unsigned       page_node;
     int            focus_scroll;
+    int            menu_open, popups_inline;
+    SDL_Keycode    menu_key;
     struct nk_rect focus_scroll_rect;
     int            focus_layer;
     const struct nk_window *focus_win;
@@ -260,6 +262,19 @@ void reaktor_tip_draw(App *app, struct nk_context *ctx,
 void focus_resolve(App *app);
 void reaktor_key_click_ask(App *app);
 int  reaktor_focus_covered(App *app);
+void reaktor_focus_take(App *app, unsigned id, struct nk_rect b);
+float reaktor_cap_offset(const struct nk_user_font *f);
+int  reaktor_flyout_begin(struct nk_context *ctx, const char *name, struct nk_rect r);
+void reaktor_flyout_end(struct nk_context *ctx);
+int  reaktor_window_popup(struct nk_rect r,
+                          void (*page)(App *, struct nk_context *, int, int, void *),
+                          void *user);
+int  reaktor_window_bounds(struct nk_rect *out);
+struct reaktor_window;
+int  reaktor_window_spawn(const struct reaktor_window *spec, const struct nk_rect *popup);
+void reaktor_window_move(int id, struct nk_rect r);
+float reaktor_window_points(void);
+App  *reaktor_window_app(int id);
 
 extern Uint64 g_hover_gap_ms;
 

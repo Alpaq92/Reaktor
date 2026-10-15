@@ -423,6 +423,36 @@ else()
     endif()
 endif()
 
+option(REAKTOR_SETTINGS "Settings kept between runs, in settings.conf" ON)
+option(REAKTOR_TRAY "A tray icon with a menu" ON)
+option(REAKTOR_POPUP_WINDOWS "Menus in windows of their own, past the main window's edge" ON)
+
+foreach(_m settings:REAKTOR_SETTINGS:settings tray:REAKTOR_TRAY:tray
+           popups:REAKTOR_POPUP_WINDOWS:popup)
+    string(REPLACE ":" ";" _m "${_m}")
+    list(GET _m 0 _name)
+    list(GET _m 1 _opt)
+    list(GET _m 2 _file)
+    add_library(reaktor_${_name}_none INTERFACE)
+    target_sources(reaktor_${_name}_none INTERFACE
+        "${CMAKE_CURRENT_SOURCE_DIR}/runtime/${_file}_none.c")
+    add_library(reaktor_${_name} INTERFACE)
+    if(${_opt})
+        target_sources(reaktor_${_name} INTERFACE
+            "${CMAKE_CURRENT_SOURCE_DIR}/runtime/${_file}.c")
+    else()
+        target_link_libraries(reaktor_${_name} INTERFACE reaktor_${_name}_none)
+        message(STATUS "${_name}: off")
+    endif()
+endforeach()
+if(REAKTOR_SETTINGS)
+    target_include_directories(reaktor_settings INTERFACE "${TP}/mglibs")
+    if(EMSCRIPTEN)
+        target_link_options(reaktor_settings INTERFACE -lidbfs.js
+            "SHELL:--pre-js ${CMAKE_CURRENT_SOURCE_DIR}/tools/web-pre.js")
+    endif()
+endif()
+
 add_library(reaktor_runtime STATIC
     core/a11y/a11y.c
     core/anim/anim.c
@@ -446,11 +476,9 @@ add_library(reaktor_runtime STATIC
     runtime/app.c
     runtime/input.c
     runtime/services.c
-    runtime/tray.c
     runtime/window.c)
 target_compile_definitions(reaktor_runtime PRIVATE
     REAKTOR_VERSION_STRING="${PROJECT_VERSION}")
-target_include_directories(reaktor_runtime PRIVATE "${TP}/mglibs")
 
 if(EMSCRIPTEN)
     target_sources(reaktor_runtime PRIVATE platform/web/keyboard_web.c)
@@ -508,10 +536,10 @@ function(reaktor_add_app name)
         add_executable(${name} WIN32 ${RA_SOURCES} ${REAKTOR_APP_RESOURCES})
     endif()
     if(NOT RA_MODULES AND NOT "MODULES" IN_LIST RA_KEYWORDS_MISSING_VALUES)
-        set(RA_MODULES a11y locale text)
+        set(RA_MODULES a11y locale text settings tray popups)
     endif()
     set(_mods "")
-    foreach(_m a11y locale text)
+    foreach(_m a11y locale text settings tray popups)
         if(_m IN_LIST RA_MODULES)
             list(APPEND _mods reaktor_${_m})
         else()
@@ -551,8 +579,6 @@ function(reaktor_add_app name)
             -sEXIT_RUNTIME=0
             -Oz
             --closure 1
-            -lidbfs.js
-            "SHELL:--pre-js ${REAKTOR_SOURCE_DIR}/tools/web-pre.js"
             "SHELL:--shell-file ${REAKTOR_SOURCE_DIR}/tools/shell.html")
         set_property(TARGET ${name} APPEND PROPERTY LINK_DEPENDS
                      "${REAKTOR_SOURCE_DIR}/tools/shell.html"
@@ -577,10 +603,10 @@ reaktor_add_app(showcase SOURCES
 target_include_directories(showcase PRIVATE samples/showcase)
 
 reaktor_add_app(simple MODULES none SOURCES samples/simple/simple.c)
-reaktor_add_app(notepad MODULES none SOURCES samples/notepad/notepad.c)
+reaktor_add_app(notepad MODULES settings popups SOURCES samples/notepad/notepad.c)
 if(NOT EMSCRIPTEN)
     reaktor_add_app(bench MODULES none SOURCES samples/bench/bench.c)
-    reaktor_add_app(launchtest MODULES none SOURCES tests/launchtest.c)
+    reaktor_add_app(launchtest MODULES settings popups SOURCES tests/launchtest.c)
     set_target_properties(launchtest PROPERTIES EXCLUDE_FROM_ALL ON)
 endif()
 
@@ -717,7 +743,8 @@ if(MSVC)
 endif()
 
 add_library(reaktor_modules STATIC)
-target_link_libraries(reaktor_modules PRIVATE reaktor_runtime reaktor_a11y reaktor_locale reaktor_text)
+target_link_libraries(reaktor_modules PRIVATE reaktor_runtime reaktor_a11y reaktor_locale reaktor_text
+                      reaktor_settings reaktor_tray reaktor_popups)
 set_target_properties(reaktor_modules PROPERTIES EXCLUDE_FROM_ALL ON)
 
 set(_parts reaktor_runtime reaktor_core reaktor_modules plutosvg plutovg lcui onlay SDL3-static)
