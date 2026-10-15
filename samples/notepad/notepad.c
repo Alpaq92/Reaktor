@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "reaktor/reaktor.h"
 #include "reaktor/main.h"
@@ -156,6 +157,70 @@ save(App *app)
     SDL_snprintf(g.status, sizeof(g.status), "Saved %s", shown_name());
 }
 
+#define PAGE_LINES 60
+
+static int
+line_count(void)
+{
+    int i, n = 1;
+
+    for (i = 0; i < g.len; i++) n += g.text[i] == '\n';
+    return n;
+}
+
+/* One printed page: its sixty lines on white, as plain labels. */
+static void
+print_page(App *app, struct reaktor_context *ctx, int index, int w, int h, void *user)
+{
+    const char *p = g.text, *end = g.text + g.len;
+    char line[256];
+    int skip = index * PAGE_LINES, k;
+
+    (void)app; (void)user;
+    reaktor_fill_rect(reaktor_window_get_canvas(ctx), reaktor_rect(0, 0, (float)w, (float)h),
+                      0.0f, reaktor_rgb(255, 255, 255));
+    while (skip > 0 && p < end) if (*p++ == '\n') skip--;
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_COLUMN(.w = (float)w - 96.0f, .ml = 48.0f, .mt = 40.0f) {
+            for (k = 0; k < PAGE_LINES && p < end; k++) {
+                const char *nl = memchr(p, '\n', (size_t)(end - p));
+                int n = (int)((nl ? nl : end) - p);
+
+                SDL_snprintf(line, sizeof line, "%.*s", n < 255 ? n : 255, p);
+                reaktor_label(&(reaktor_label_spec){ .text = line, .silent = 1,
+                                                     .color = "#000000",
+                                                     .box = { .h = 12.5f } });
+                p += n + (nl != NULL);
+            }
+        }
+    }
+}
+
+static void
+printed(App *app, int ok, void *user)
+{
+    (void)app; (void)user;
+    SDL_strlcpy(g.status, ok ? "Printed" : "Not printed", sizeof(g.status));
+}
+
+static reaktor_print_spec
+print_spec(void)
+{
+    return (reaktor_print_spec){ .title = shown_name(),
+                                 .pages = (line_count() + PAGE_LINES - 1) / PAGE_LINES,
+                                 .page = print_page, .done = printed };
+}
+
+static void
+exported(App *app, const char *const *paths, int count, void *user)
+{
+    reaktor_print_spec s = print_spec();
+
+    (void)user;
+    if (count && reaktor_print_pdf(app, paths[0], &s))
+        SDL_strlcpy(g.status, "Writing the PDF...", sizeof(g.status));
+}
+
 static void
 find_next(App *app)
 {
@@ -196,6 +261,9 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
                 { .label = "Open...", .keys = "Ctrl+O" },
                 { .label = "Save",    .keys = "Ctrl+S" },
                 { NULL },
+                { .label = "Print...",          .keys = "Ctrl+P" },
+                { .label = "Export as PDF..." },
+                { NULL },
                 { .label = "Quit",    .keys = "Ctrl+Q" }
             };
             static const reaktor_menu_entry edit[] = {
@@ -207,7 +275,7 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
                 { .label = "About" }
             };
             static const reaktor_menu menus[3] = {
-                { "File", file, 5 }, { "Edit", edit, 2 }, { "Help", help, 2 }
+                { "File", file, 8 }, { "Edit", edit, 2 }, { "Help", help, 2 }
             };
             int m = -1, i = -1;
 
@@ -218,7 +286,18 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
                 if (m == 0 && i == 0) new_file();
                 if (m == 0 && i == 1) ask_file(app, REAKTOR_FILE_OPEN);
                 if (m == 0 && i == 2) save(app);
-                if (m == 0 && i == 4) reaktor_request_quit(app);
+                if (m == 0 && i == 4) {
+                    reaktor_print_spec ps = print_spec();
+
+                    reaktor_print(app, &ps);
+                }
+                if (m == 0 && i == 5 &&
+                    !reaktor_file_dialog_open(app, &(reaktor_file_dialog){
+                        .kind = REAKTOR_FILE_SAVE, .chosen = exported,
+                        .filters = (const reaktor_file_filter[]){ { "PDF", "pdf" } },
+                        .filter_count = 1 }))
+                    SDL_strlcpy(g.status, "A dialog is already open", sizeof(g.status));
+                if (m == 0 && i == 7) reaktor_request_quit(app);
                 if (m == 1 && i == 0) g.find_open = 1;
                 if (m == 1 && i == 1) find_next(app);
                 if (m == 2 && i == 0)
@@ -279,6 +358,12 @@ sample_key(App *app, const SDL_Event *e)
     }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_S)) { save(app); return 1; }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_F)) { g.find_open = 1; return 1; }
+    if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_P)) {
+        reaktor_print_spec ps = print_spec();
+
+        reaktor_print(app, &ps);
+        return 1;
+    }
     if (reaktor_chord(e, 0, SDLK_F3)) { find_next(app); return 1; }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_Q)) {
         reaktor_request_quit(app);

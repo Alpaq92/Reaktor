@@ -180,6 +180,27 @@ void        reaktor_setting_set(const char *key, const char *value);
 void        reaktor_settings_save(void);
 void        reaktor_settings_clear(void);
 
+typedef struct reaktor_notification {
+    const char *title;
+    const char *text;
+} reaktor_notification;
+
+int reaktor_notify(App *app, const reaktor_notification *n);
+
+typedef struct reaktor_print_spec {
+    const char *title;
+    int         pages;
+    float       w, h;
+    int         dpi;
+    void      (*page)(App *app, struct reaktor_context *ctx, int index, int w, int h,
+                      void *user);
+    void      (*done)(App *app, int ok, void *user);
+    void       *user;
+} reaktor_print_spec;
+
+int reaktor_print(App *app, const reaktor_print_spec *s);
+int reaktor_print_pdf(App *app, const char *path, const reaktor_print_spec *s);
+
 typedef struct reaktor_undo_step {
     const char *label;
     void      (*undo)(void *data);

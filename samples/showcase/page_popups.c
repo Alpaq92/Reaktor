@@ -263,8 +263,10 @@ toast_demos(App *app, struct reaktor_context *ctx)
             "Messages at the bottom of the window, stacked newest last. Each "
             "holds text, an optional icon, an action, custom controls and a "
             "close button. One stays until it is closed, or goes by itself "
-            "when it is given a timeout - five seconds here.");
-    api(app, ctx, "reaktor_toast");
+            "when it is given a timeout - five seconds here. A system "
+            "notification leaves the window: a toast on Windows, the desktop's "
+            "own on Linux, macOS and the BSDs, the browser's on the web.");
+    api(app, ctx, "reaktor_toast  /  reaktor_notify");
 
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         if (reaktor_button(&(reaktor_button_spec){
@@ -297,6 +299,15 @@ toast_demos(App *app, struct reaktor_context *ctx)
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }))
             reaktor_toast(app, &(reaktor_toast_spec){
                 .text = "This one stays until it is closed" });
+    }
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "System notification",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }) &&
+            !reaktor_notify(app, &(reaktor_notification){
+                .title = "Reaktor", .text = "A notification from outside the window" }))
+            reaktor_toast(app, &(reaktor_toast_spec){
+                .text = "This system has no notifications", .timeout_ms = 5000 });
     }
 }
 

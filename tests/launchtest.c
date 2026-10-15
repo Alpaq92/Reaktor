@@ -1075,6 +1075,45 @@ undo_page(App *app)
 }
 
 static void
+print_body(App *app, struct nk_context *ctx, int index, int w, int h, void *user)
+{
+    char line[48];
+
+    (void)app; (void)ctx; (void)user;
+    SDL_snprintf(line, sizeof line, "Page %d of 2", index + 1);
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_COLUMN(.w = (float)w, .gap = 12.0f, .ml = 48.0f, .mt = 48.0f) {
+            reaktor_label(&(reaktor_label_spec){ .text = line, .style = "h4" });
+            reaktor_label(&(reaktor_label_spec){
+                .text = "Printed by Reaktor: the same layout and pixels as on screen." });
+            reaktor_button(&(reaktor_button_spec){ .label = "A button on paper",
+                                                   .box = { .w = 180.0f } });
+        }
+    }
+}
+
+static void
+printed(App *app, int ok, void *user)
+{
+    (void)app;
+    note(ok ? "printed" : "print failed");
+    (void)user;
+}
+
+static void
+print_page_test(App *app)
+{
+    if (g_frames == 3 &&
+        !reaktor_print_pdf(app, g_log ? "launchtest-print.pdf" : "x.pdf",
+                           &(reaktor_print_spec){ .title = "Test", .pages = 2,
+                                                  .page = print_body, .done = printed }))
+        note("not queued");
+    if (g_frames > 40) reaktor_quit(app, 0);
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static void
 confirm_page(App *app)
 {
     SDL_Event e;
@@ -1134,6 +1173,10 @@ page(App *app, struct nk_context *ctx, int w, int h)
     }
     if (is("confirm") || is("confirm-cancel")) confirm_page(app);
     if (SDL_strncmp(g_mode, "dialog-", 7) == 0) dialog_page(app);
+    if (is("print-pdf")) {
+        print_page_test(app);
+        return;
+    }
     if (is("undo")) {
         undo_page(app);
         return;
