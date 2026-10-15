@@ -29,6 +29,7 @@
 - [How do settings work on the web?](#how-do-settings-work-on-the-web)
 - [How do I make a splash screen, a frameless window or a tray icon?](#how-do-i-make-a-splash-screen-a-frameless-window-or-a-tray-icon)
 - [How do I open files, ask a question or post work from another thread?](#how-do-i-open-files-ask-a-question-or-post-work-from-another-thread)
+- [How do I add undo, notifications or printing?](#how-do-i-add-undo-notifications-or-printing)
 
 **Build and ship**
 
@@ -66,8 +67,8 @@ you. Reaktor fills in the rest:
   works from the keyboard.
 - **Any language.** Translations, number and date formats, and scripts such
   as Japanese and Arabic.
-- **What real apps need.** File pickers, dialogs, notifications, saved
-  settings, extra windows and a tray icon.
+- **What real apps need.** Menus, file pickers, dialogs, notifications,
+  undo, printing, saved settings, extra windows and a tray icon.
 - **One codebase everywhere.** Windows, macOS, Linux, the BSDs and the
   browser.
 
@@ -175,6 +176,14 @@ screen is those three on a window opened beside a `.hidden` main window.
 `reaktor_ask` for a modal question, `reaktor_timer` for later, and
 `reaktor_post` from any thread. Every callback runs on the main thread and is
 followed by a frame. See [Services](DOCUMENTATION.md#services).
+
+### How do I add undo, notifications or printing?
+
+Push a step with an undo and a redo callback after each change, and Ctrl+Z
+and Ctrl+Y take it back and forth, merging typing into one step if asked.
+`reaktor_notify` shows a message outside the window. `reaktor_print` and
+`reaktor_print_pdf` lay pages out as the window does and print them or write
+a PDF. See [Services](DOCUMENTATION.md#services).
 
 ---
 

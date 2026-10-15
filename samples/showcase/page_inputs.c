@@ -42,13 +42,13 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
         }
     }
 
-    api(app, ctx, "reaktor_field with .multiline "
+    api(app, ctx, "reaktor_field with .multiline and .line_numbers "
                   "(Nuklear breaks lines on newlines only - there is no wrap)");
     {
         REAKTOR_ROW(.h = 92.0f) {
             reaktor_field(&(reaktor_field_spec){
                 .buf = s->note, .len = &s->note_len, .cap = SC_BOX_CAP,
-                .name = "Notes", .multiline = 1,
+                .name = "Notes", .multiline = 1, .line_numbers = 1,
                 .filter = reaktor_filter_default,
                 .box = { .flags = REAKTOR_LAY_FILL_X |
                                   REAKTOR_LAY_FILL_Y } });
