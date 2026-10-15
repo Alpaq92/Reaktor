@@ -775,6 +775,95 @@ service_page(App *app, struct nk_context *ctx, int w, int h)
     reaktor_wake(app);
 }
 
+static const char *
+focused_name(App *app)
+{
+    const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
+    int n = app->a11y.count[1 - app->a11y.front], i;
+
+    for (i = 0; i < n; i++)
+        if (t[i].id == app->focus_id) return t[i].name ? t[i].name : "?";
+    return "nothing";
+}
+
+static int
+press_role(App *app, unsigned char role, const char *name)
+{
+    const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
+    int n = app->a11y.count[1 - app->a11y.front], i;
+
+    for (i = 0; i < n; i++)
+        if (t[i].role == role && t[i].name && SDL_strcmp(t[i].name, name) == 0) {
+            push_click(app, t[i].bounds.x + t[i].bounds.w * 0.5f,
+                       t[i].bounds.y + t[i].bounds.h * 0.5f);
+            return 1;
+        }
+    return 0;
+}
+
+static const char *
+expanded(App *app)
+{
+    const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
+    int n = app->a11y.count[1 - app->a11y.front], i;
+
+    for (i = 0; i < n; i++)
+        if (t[i].role == REAKTOR_A11Y_MENU && (t[i].state & REAKTOR_A11Y_EXPANDED) &&
+            t[i].name)
+            return t[i].name;
+    return "none";
+}
+
+static void
+menu_page(App *app, struct nk_context *ctx, int w, int h)
+{
+    static reaktor_bool wrap;
+    static const reaktor_menu_entry items[] = {
+        { .label = "New", .keys = "Ctrl+N" },
+        { .label = "Open", .disabled = 1 },
+        { NULL },
+        { .label = "Wrap", .checked = &wrap }
+    };
+    static const reaktor_menu_entry zoom[] = { { .label = "In" }, { .label = "Out" } };
+    static const reaktor_menu_entry view[] = {
+        { .label = "Zoom", .items = zoom, .count = 2 }, { .label = "Reset" }
+    };
+    static const reaktor_menu menus[] = { { "File", items, 4 }, { "View", view, 2 } };
+    static const reaktor_menu_entry *pe;
+    static int pm = -1;
+    char line[96];
+
+    (void)ctx;
+    if (g_frames >= 3 && g_frames <= 9 && g_frames % 2 &&
+        SDL_strcmp(focused_name(app), "File") != 0)
+        push_tap(app, SDLK_TAB);
+    if (g_frames == 12 || g_frames == 22 || g_frames == 40 || g_frames == 54 ||
+        g_frames == 82)
+        push_tap(app, SDLK_RETURN);
+    if (g_frames == 18) push_tap(app, SDLK_DOWN);
+    if (g_frames == 46) push_tap(app, SDLK_ESCAPE);
+    if (g_frames == 60 || g_frames == 66 || g_frames == 76) push_tap(app, SDLK_RIGHT);
+    if (g_frames == 72) push_tap(app, SDLK_LEFT);
+    if (g_frames == 20 || g_frames == 30 || g_frames == 45 || g_frames == 52 ||
+        g_frames == 64 || g_frames == 90 || g_frames == 100 || g_frames == 108) {
+        SDL_snprintf(line, sizeof line, "open %s, focus on %s, picked %s in %d, wrap %s",
+                     expanded(app), focused_name(app), pe ? pe->label : "nothing", pm,
+                     wrap ? "on" : "off");
+        note(line);
+    }
+    if (g_frames == 94 || g_frames == 102) press_role(app, REAKTOR_A11Y_MENU, "File");
+    if (g_frames > 112) reaktor_quit(app, 0);
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_COLUMN(.w = (float)w) {
+            reaktor_button(&(reaktor_button_spec){ .label = "Before" });
+            reaktor_menubar(&(reaktor_menubar_spec){ .menus = menus, .count = 2,
+                                                     .picked_menu = &pm, .picked = &pe });
+        }
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
 static void
 confirm_page(App *app)
 {
@@ -835,6 +924,10 @@ page(App *app, struct nk_context *ctx, int w, int h)
     }
     if (is("confirm") || is("confirm-cancel")) confirm_page(app);
     if (SDL_strncmp(g_mode, "dialog-", 7) == 0) dialog_page(app);
+    if (is("menu-keys")) {
+        menu_page(app, ctx, w, h);
+        return;
+    }
     if (SDL_strncmp(g_mode, "hold-", 5) == 0) {
         hold_page(app, ctx, w, h);
         return;

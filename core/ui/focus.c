@@ -33,6 +33,7 @@ focusable(const reaktor_a11y_node *n)
     case REAKTOR_A11Y_SLIDER:    case REAKTOR_A11Y_SPINBUTTON:
     case REAKTOR_A11Y_COMBOBOX:  case REAKTOR_A11Y_LISTITEM:
     case REAKTOR_A11Y_TREEITEM:  case REAKTOR_A11Y_MENUITEM:
+    case REAKTOR_A11Y_MENU:
         return !(n->state & REAKTOR_A11Y_DISABLED);
     default:
         return 0;
@@ -161,6 +162,18 @@ focus_key(App *app, const SDL_Event *event)
         }
     }
 
+    if (app->menu_open) {
+        switch (event->key.key) {
+        case SDLK_UP: case SDLK_DOWN: case SDLK_LEFT: case SDLK_RIGHT:
+        case SDLK_HOME: case SDLK_END: case SDLK_RETURN: case SDLK_KP_ENTER:
+        case SDLK_SPACE: case SDLK_ESCAPE:
+            app->menu_key = event->key.key;
+            app->dirty    = 1;
+            return 1;
+        default:
+            break;
+        }
+    }
     switch (event->key.key) {
     case SDLK_RIGHT: case SDLK_KP_6: case SDLK_UP: case SDLK_KP_8:
         if (focus_is_range(app)) { app->focus_step++; break; }

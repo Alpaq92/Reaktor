@@ -1,9 +1,10 @@
 # The four programs
 
 All four share `runtime/` and `core/`; what differs is `samples/`, and which
-modules each links. The showcase takes all three — the accessibility bridges,
-Locale and Text. The others take none, so they show what the runtime costs by
-itself, and a screen reader finds nothing in them.
+modules each links. The showcase takes every module. Notepad takes settings and
+popup menus; bench and simple take none, so they show what the runtime costs by
+itself. Without the accessibility module, a screen reader finds nothing in
+notepad, bench or simple.
 
 | | Lines | For |
 | --- | --- | --- |

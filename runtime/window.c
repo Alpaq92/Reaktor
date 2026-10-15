@@ -119,11 +119,20 @@ shut(int i, int tell)
     }
 }
 
-int
-reaktor_window_open(App *app, const reaktor_window *spec)
+/* Logical units of the main window to its window coordinates. */
+static float
+to_points(const App *m)
+{
+    float d = SDL_GetWindowPixelDensity(m->win);
+
+    return reaktor_scale() / (d > 0.0f ? d : 1.0f);
+}
+
+static int
+open_window(const reaktor_window *spec, const struct nk_rect *popup)
 {
 #ifdef __EMSCRIPTEN__
-    (void)app; (void)spec;
+    (void)spec; (void)popup;
     SDL_Log("a page opens no windows of its own");
     return 0;
 #else
@@ -131,12 +140,19 @@ reaktor_window_open(App *app, const reaktor_window *spec)
     rwin *w;
     int   i;
 
-    (void)app;
     if (!m || !spec || !spec->page || g_win_n == WINDOW_MAX) return 0;
     if (!(a = (App *)SDL_calloc(1, sizeof *a))) return 0;
     a->secondary      = 1;
     a->hot_last       = -1;
     a->queue.moved_ok = 1;
+    if (popup) {
+        float k = to_points(m);
+
+        a->win = SDL_CreatePopupWindow(m->win, (int)(popup->x * k), (int)(popup->y * k),
+                                       (int)(popup->w * k + 0.5f), (int)(popup->h * k + 0.5f),
+                                       SDL_WINDOW_POPUP_MENU | SDL_WINDOW_NOT_FOCUSABLE |
+                                       SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+    } else
     a->win = SDL_CreateWindow(spec->window.title ? spec->window.title : "",
                               reaktor_px(spec->window.w > 0 ? (float)spec->window.w : 420.0f),
                               reaktor_px(spec->window.h > 0 ? (float)spec->window.h : 280.0f),
@@ -181,7 +197,7 @@ reaktor_window_open(App *app, const reaktor_window *spec)
     apply_render_scale(a);
     rebuild_font(a);
     apply_widget_style(a);
-    {
+    if (!popup) {
         const char *icon = reaktor_asset_name(&spec->window.icon,
                                               "app/window-icon.svg");
 
@@ -200,10 +216,53 @@ reaktor_window_open(App *app, const reaktor_window *spec)
     w->app   = a;
     w->spec  = *spec;
     w->title = SDL_strdup(spec->window.title ? spec->window.title : "");
-    SDL_ShowWindow(a->win);
+    if (!spec->window.hidden) SDL_ShowWindow(a->win);
     reaktor_wake(a);
     return w->id;
 #endif
+}
+
+int
+reaktor_window_open(App *app, const reaktor_window *spec)
+{
+    (void)app;
+    return open_window(spec, NULL);
+}
+
+int
+reaktor_window_spawn(const reaktor_window *spec, const struct nk_rect *popup)
+{
+    return open_window(spec, popup);
+}
+
+void
+reaktor_window_move(int id, struct nk_rect r)
+{
+    rwin *w = by_id(id);
+    App  *m = reaktor_main_app();
+    float k;
+
+    if (!w || !m) return;
+    k = to_points(m);
+    SDL_SetWindowPosition(w->app->win, (int)(r.x * k), (int)(r.y * k));
+    SDL_SetWindowSize(w->app->win, (int)(r.w * k + 0.5f), (int)(r.h * k + 0.5f));
+    w->app->dirty = 1;
+}
+
+App *
+reaktor_window_app(int id)
+{
+    rwin *w = by_id(id);
+
+    return w ? w->app : NULL;
+}
+
+float
+reaktor_window_points(void)
+{
+    App *m = reaktor_main_app();
+
+    return m ? to_points(m) : 1.0f;
 }
 
 void
