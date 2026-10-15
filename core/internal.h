@@ -87,6 +87,12 @@ struct field_undo {
     int                     n, top;
 };
 
+typedef struct undo_stack {
+    struct reaktor_undo_step *step;
+    unsigned                 *group, next, open;
+    int                       n, top, cap, saved, depth;
+} undo_stack;
+
 struct App {
     SDL_Window        *win;
     SDL_Renderer      *ren;
@@ -212,6 +218,9 @@ struct App {
     unsigned       page_node;
     int            focus_scroll;
     int            menu_open, popups_inline;
+    undo_stack     undo;
+    struct { const char *buf; int from, to, asked; } field_pick;
+    struct { char kind[32], from[64], label[96]; int item, armed, active; struct nk_vec2 at; } drag;
     SDL_Keycode    menu_key;
     struct nk_rect focus_scroll_rect;
     int            focus_layer;
@@ -423,8 +432,8 @@ void reaktor_knob_dial(App *app, struct nk_context *ctx, float *val,
 
 void reaktor_property_push(struct nk_context *ctx);
 void reaktor_property_pop(struct nk_context *ctx);
-void reaktor_property_chrome(App *app, struct nk_context *ctx,
-                             struct nk_rect b);
+void reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
+                            struct nk_rect *steps);
 
 struct nk_rect reaktor_combo_content(struct nk_context *ctx, struct nk_rect h);
 void reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h,

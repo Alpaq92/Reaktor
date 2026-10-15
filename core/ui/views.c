@@ -128,13 +128,37 @@ reaktor_tabs(const reaktor_tabs_spec *s)
     return nav_list(s, 1);
 }
 
+/* A tree is a list whose first column is indented, with a chevron on each branch. */
+typedef struct tree_rows {
+    const reaktor_tree_spec *s;
+    int *node, *depth, *row;
+    int  n, jump;
+} tree_rows;
+
+static int
+tree_branch(const tree_rows *t, int node)
+{
+    return node + 1 < t->s->count && t->s->parent(node + 1, t->s->user) == node;
+}
+
+static const char *
+tree_cell(int r, int c, void *user)
+{
+    const tree_rows *t = (const tree_rows *)user;
+
+    (void)c;
+    return t->s->label(t->node[r], t->s->user);
+}
+
 static int
 list_neighbor(const reaktor_list_spec *s, int r, struct nk_rect area, float row_h,
-              float scrolled, int focused)
+              float scrolled, int focused, const tree_rows *t)
 {
     struct nk_rect row = nk_rect(area.x, area.y + (float)r * row_h - scrolled,
                                  area.w, row_h);
-    unsigned id = reaktor_note(g_frame_app, REAKTOR_A11Y_LISTITEM, s->cell(r, 0, s->user),
+    unsigned id = reaktor_note(g_frame_app,
+                               t ? REAKTOR_A11Y_TREEITEM : REAKTOR_A11Y_LISTITEM,
+                               s->cell(r, 0, s->user),
                                NULL, s->selected && *s->selected == r
                                      ? REAKTOR_A11Y_SELECTED : 0u, row);
 
@@ -168,8 +192,164 @@ list_follow(const reaktor_list_spec *s, int focused, struct nk_rect area, float 
     return changed;
 }
 
+/* Row r's first column in a tree; 1 when the selection should move to t->jump. */
+static int
+tree_first(tree_rows *t, int r, unsigned id, struct nk_color fg, float pad)
+{
+    struct nk_context *ctx = g_frame_ctx;
+    const struct nk_user_font *f = ctx->style.font;
+    const reaktor_tree_spec *s = t->s;
+    int node = t->node[r], branch = tree_branch(t, node), step;
+    struct nk_rect b, chev;
+    const char *label = s->label(node, s->user);
+    const char *icon = s->icon ? s->icon(node, s->user) : NULL;
+    float x;
+
+    nk_widget(&b, ctx);
+    x = b.x + pad + 16.0f * (float)t->depth[node];
+    chev = nk_rect(x, b.y, 16.0f, b.h);
+    if (branch) {
+        reaktor_chevron_at(g_frame_app, ctx, chev,
+                           s->open[node] ? "chevron-down-outline" : "chevron-forward-outline",
+                           fg);
+        if (nk_input_mouse_clicked(&ctx->input, NK_BUTTON_LEFT, chev))
+            s->open[node] = !s->open[node];
+    }
+    x += 20.0f;
+    if (icon) {
+        float px = (float)(int)(f->height + 0.5f);
+        struct nk_image im = reaktor_ionicon_col(g_frame_app, icon, (int)px, fg);
+
+        nk_draw_image(nk_window_get_canvas(ctx),
+                      nk_rect(x, (float)(int)(b.y + (b.h - px) * 0.5f), px, px), &im,
+                      nk_rgb(255, 255, 255));
+        x += px + 6.0f;
+    }
+    if (label)
+        nk_draw_text(nk_window_get_canvas(ctx),
+                     nk_rect(x, (float)(int)(b.y + (b.h - f->height) * 0.5f),
+                             b.x + b.w - x, f->height),
+                     label, (int)strlen(label), f, nk_rgba(0, 0, 0, 0), fg);
+    if (t->jump == node) {
+        reaktor_focus_take(g_frame_app, id, b);
+        t->jump = -1;
+    }
+    step = reaktor_focus_step(g_frame_app, id);
+    if (step > 0 && branch && !s->open[node]) s->open[node] = 1;
+    else if (step > 0 && branch && r + 1 < t->n) t->jump = t->node[r + 1];
+    else if (step < 0 && branch && s->open[node]) s->open[node] = 0;
+    else if (step < 0 && s->parent(node, s->user) >= 0) t->jump = s->parent(node, s->user);
+    if (step) {
+        g_frame_app->dirty = 1;
+        reaktor_wake(g_frame_app);
+    }
+    return step && t->jump >= 0;
+}
+
+static int list_draw(const reaktor_list_spec *s, tree_rows *t);
+
+/* Rows with .drag start a drag; a list of the same kind shows where it lands. */
+static float
+list_drag(const reaktor_list_spec *s, struct nk_rect area, float row_h, int *changed)
+{
+    App *app = g_frame_app;
+    struct nk_context *ctx = g_frame_ctx;
+    const struct nk_input *in = &ctx->input;
+    const char *name = s->name ? s->name : "list";
+    struct nk_vec2 m = in->mouse.pos;
+    nk_uint sx = 0, sy = 0;
+    int at;
+
+    nk_group_get_scroll(ctx, name, &sx, &sy);
+    at = (int)((m.y - area.y + (float)sy) / row_h + 0.5f);
+    if (nk_input_is_mouse_pressed(in, NK_BUTTON_LEFT) &&
+        nk_input_is_mouse_hovering_rect(in, area) && at >= 0) {
+        int r = (int)((m.y - area.y + (float)sy) / row_h);
+        const char *label = r < s->count ? s->cell(r, 0, s->user) : NULL;
+
+        if (r < s->count) {
+            SDL_strlcpy(app->drag.kind, s->drag, sizeof app->drag.kind);
+            SDL_strlcpy(app->drag.from, name, sizeof app->drag.from);
+            SDL_strlcpy(app->drag.label, label ? label : "", sizeof app->drag.label);
+            app->drag.item  = r;
+            app->drag.armed = 1;
+            app->drag.at    = m;
+        }
+    }
+    if (app->drag.armed && !app->drag.active && SDL_strcmp(app->drag.from, name) == 0 &&
+        (SDL_fabsf(m.x - app->drag.at.x) > 4.0f || SDL_fabsf(m.y - app->drag.at.y) > 4.0f))
+        app->drag.active = 1;
+    if (!app->drag.active || SDL_strcmp(app->drag.kind, s->drag) != 0) return -1.0f;
+    if (SDL_strcmp(app->drag.from, name) == 0) app->tip = app->drag.label;
+    if (!nk_input_is_mouse_hovering_rect(in, area)) return -1.0f;
+    if (at > s->count) at = s->count;
+    if (nk_input_is_mouse_released(in, NK_BUTTON_LEFT) && s->dropped) {
+        s->dropped(app->drag.from, app->drag.item, at, s->user);
+        app->drag.active = app->drag.armed = 0;
+        *changed = 1;
+        return -1.0f;
+    }
+    return area.y + (float)at * row_h - (float)sy - 1.0f;
+}
+
 int
 reaktor_list(const reaktor_list_spec *s)
+{
+    return list_draw(s, NULL);
+}
+
+int
+reaktor_tree(const reaktor_tree_spec *s)
+{
+    static int        *buf, cap, jump = -1;
+    static const char *jump_in;
+    tree_rows          t;
+    reaktor_list_spec  l;
+    int                i, sel = -1, changed;
+
+    if (!g_frame_app || !s || s->count < 0 || !s->parent || !s->label || !s->open) return 0;
+    if (s->count * 3 > cap) {
+        int *more = (int *)SDL_realloc(buf, (size_t)s->count * 3 * sizeof *buf);
+
+        if (!more) return 0;
+        buf = more;
+        cap = s->count * 3;
+    }
+    t.s     = s;
+    t.node  = buf;
+    t.depth = buf + s->count;
+    t.row   = buf + 2 * s->count;
+    t.n     = 0;
+    t.jump  = jump_in == s->name ? jump : -1;
+    for (i = 0; i < s->count; i++) {
+        int p = s->parent(i, s->user);
+
+        t.depth[i] = p >= 0 && p < i ? t.depth[p] + 1 : 0;
+        t.row[i]   = p < 0 || (p < i && t.row[p] >= 0 && s->open[p]) ? t.n : -1;
+        if (t.row[i] >= 0) t.node[t.n++] = i;
+    }
+    if (s->selected && *s->selected >= 0 && *s->selected < s->count)
+        sel = t.row[*s->selected];
+    memset(&l, 0, sizeof l);
+    l.name     = s->name;
+    l.count    = t.n;
+    l.cell     = tree_cell;
+    l.user     = &t;
+    l.selected = s->selected ? &sel : NULL;
+    l.row_h    = s->row_h;
+    l.box      = s->box;
+    changed = list_draw(&l, &t);
+    if (s->selected && sel >= 0 && sel < t.n && t.node[sel] != *s->selected) {
+        *s->selected = t.node[sel];
+        changed = 1;
+    }
+    jump    = t.jump;
+    jump_in = s->name;
+    return changed;
+}
+
+static int
+list_draw(const reaktor_list_spec *s, tree_rows *t)
 {
     const struct nk_user_font *head_f, *cell_f;
     struct nk_list_view        view;
@@ -240,12 +420,14 @@ reaktor_list(const reaktor_list_spec *s)
         nk_style_push_vec2(g_frame_ctx, &g_frame_ctx->style.window.group_padding, nk_vec2(0.0f, 0.0f));
         nk_style_push_vec2(g_frame_ctx, &g_frame_ctx->style.text.padding, nk_vec2(pad, 0.0f));
         nk_style_push_font(g_frame_ctx, cell_f);
+        float line = s->drag ? list_drag(s, area, row_h, &changed) : -1.0f;
+
         if (nk_list_view_begin(g_frame_ctx, &view, s->name ? s->name : "list",
                                s->count <= shown ? NK_WINDOW_NO_SCROLLBAR : 0,
                                (int)row_h, s->count)) {
             if (view.begin > 0)
                 focused = list_neighbor(s, view.begin - 1, area, row_h,
-                                        (float)view.scroll_value, focused);
+                                        (float)view.scroll_value, focused, t);
             for (r = view.begin; r < view.end; r++) {
                 struct nk_command_buffer *cv = nk_window_get_canvas(g_frame_ctx);
                 struct nk_color fg = g_frame_ctx->style.text.color;
@@ -258,8 +440,12 @@ reaktor_list(const reaktor_list_spec *s)
                 row.w = nk_window_get_content_region(g_frame_ctx).w;
                 nk_fill_rect(cv, row, 0.0f, (r & 1) ? even : odd);
                 if (s->selected) reaktor_hot(g_frame_app, row, REAKTOR_CURSOR_DEFAULT, 1);
-                id = reaktor_note(g_frame_app, REAKTOR_A11Y_LISTITEM, s->cell(r, 0, s->user),
-                                  NULL, on ? REAKTOR_A11Y_SELECTED : 0u, row);
+                id = reaktor_note(g_frame_app,
+                                  t ? REAKTOR_A11Y_TREEITEM : REAKTOR_A11Y_LISTITEM,
+                                  s->cell(r, 0, s->user), NULL,
+                                  (on ? REAKTOR_A11Y_SELECTED : 0u) |
+                                  (t && tree_branch(t, t->node[r]) && t->s->open[t->node[r]]
+                                   ? REAKTOR_A11Y_EXPANDED : 0u), row);
                 if (id && id == g_frame_app->focus_id) focused = r;
                 if (s->selected && on) {
                     nk_fill_rect(cv, row, 0.0f, g_frame_app->accent);
@@ -270,9 +456,22 @@ reaktor_list(const reaktor_list_spec *s)
                                  reaktor_token("--background-hover", nk_rgba(128, 128, 128, 60)));
                 }
                 for (c = 0; c < cols; c++) {
-                    const char *t = s->cell(r, c, s->user);
+                    const char *cell = s->cell(r, c, s->user);
 
-                    nk_label_colored(g_frame_ctx, t ? t : "", NK_TEXT_LEFT, fg);
+                    if (t && c == 0) {
+                        if (tree_first(t, r, id, fg, pad) && s->selected) {
+                            int k = 0;
+
+                            while (k < t->n && t->node[k] != t->jump) k++;
+                            if (k < t->n && *s->selected != k) {
+                                *s->selected = k;
+                                changed      = 1;
+                            }
+                        }
+                        if (id && id == g_frame_app->focus_id) focused = r;
+                        continue;
+                    }
+                    nk_label_colored(g_frame_ctx, cell ? cell : "", NK_TEXT_LEFT, fg);
                 }
                 if (nk_input_mouse_clicked(&g_frame_ctx->input, NK_BUTTON_LEFT, row)) on = 1;
                 if (s->selected && *s->selected != r &&
@@ -283,9 +482,12 @@ reaktor_list(const reaktor_list_spec *s)
             }
             if (view.end < s->count)
                 focused = list_neighbor(s, view.end, area, row_h,
-                                        (float)view.scroll_value, focused);
+                                        (float)view.scroll_value, focused, t);
             nk_list_view_end(&view);
         }
+        if (line >= 0.0f)
+            nk_fill_rect(nk_window_get_canvas(g_frame_ctx), nk_rect(area.x, line, area.w, 2.0f),
+                         0.0f, g_frame_app->accent);
         changed |= list_follow(s, focused, area, row_h);
         nk_style_pop_font(g_frame_ctx);
         nk_style_pop_vec2(g_frame_ctx);

@@ -118,8 +118,9 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
     section(app, ctx, "Properties",
             "A property is a labeled number that can be dragged, clicked "
             "through its two steppers, or typed into - the three ways a "
-            "person expects to change a number, in one widget.");
-    api(app, ctx, "reaktor_property with .ivalue / .fvalue / .dvalue");
+            "person expects to change a number, in one widget. A spinner "
+            "steps through any list of values the same way, and wraps if asked.");
+    api(app, ctx, "reaktor_property with .ivalue / .fvalue / .dvalue  /  reaktor_spinner");
 
     {
         REAKTOR_ROW(.h = ROW,
@@ -140,6 +141,38 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                 .box = { .flags = REAKTOR_LAY_FILL_X |
                                   REAKTOR_LAY_FILL_Y } });
         }
+        REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+            static const char *const quality[] = { "Low", "Medium", "High", "Best" };
+            static const char *const days[] = { "Monday", "Tuesday", "Wednesday",
+                                                "Thursday", "Friday", "Saturday",
+                                                "Sunday" };
+
+            reaktor_spinner(&(reaktor_spinner_spec){
+                .label = "Quality:", .items = quality, .count = 4, .chosen = &s->spin_q,
+                .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+            reaktor_spinner(&(reaktor_spinner_spec){
+                .label = "Day:", .items = days, .count = 7, .chosen = &s->spin_d,
+                .wrap = 1,
+                .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+        }
+    }
+
+    section(app, ctx, "Dates and times",
+            "A field of segments in the order the language writes a date, each a "
+            "hint until a value is set. A click or Enter opens wheels that loop "
+            "where the values do: scroll one, click a row, or use the arrows - Up "
+            "and Down turn the wheel, Left and Right move between wheels. Enter or "
+            "the check sets the value, Escape or the cross leaves it.");
+    api(app, ctx, "reaktor_date_pick  /  reaktor_time_pick");
+
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        reaktor_date_pick(&(reaktor_date_spec){
+            .name = "Date", .year = &s->date_y, .month = &s->date_m, .day = &s->date_d });
+        reaktor_time_pick(&(reaktor_time_spec){
+            .name = "Time", .hour = &s->time_h, .minute = &s->time_m });
+        reaktor_time_pick(&(reaktor_time_spec){
+            .name = "Time, 12-hour", .hour = &s->time12_h, .minute = &s->time12_m,
+            .clock12 = 1 });
     }
 
     section(app, ctx, "Combo boxes",

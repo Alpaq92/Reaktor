@@ -84,7 +84,10 @@ typedef struct showcase_state {
 
     float series[SC_SERIES_N];
     int   list_sel;
-    reaktor_bool tree_leaf[3];
+    unsigned char tree_open[16];
+    int          tree_sel;
+    int          spin_q, spin_d;
+    int          date_y, date_m, date_d, time_h, time_m, time12_h, time12_m;
 
     int   anim_slot;
     int   anim_curve;
@@ -133,8 +136,6 @@ void popup_style_pop(struct reaktor_context *ctx);
 void popup_style_push(struct reaktor_context *ctx);
 void rule(struct reaktor_context *ctx);
 void section(App *app, struct reaktor_context *ctx, const char *title, const char *note);
-void tree_chevron(App *app, struct reaktor_context *ctx, struct reaktor_rect b, int open);
-struct reaktor_rect tree_header_bounds(struct reaktor_context *ctx);
 
 void page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s);
 void page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s);

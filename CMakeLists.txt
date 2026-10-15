@@ -464,6 +464,7 @@ add_library(reaktor_runtime STATIC
     core/ui/declare.c
     core/ui/controls.c
     core/ui/views.c
+    core/ui/picker.c
     core/ui/focus.c
     core/ui/keys.c
     core/ui/layout.c
@@ -476,6 +477,7 @@ add_library(reaktor_runtime STATIC
     runtime/app.c
     runtime/input.c
     runtime/services.c
+    runtime/undo.c
     runtime/window.c)
 target_compile_definitions(reaktor_runtime PRIVATE
     REAKTOR_VERSION_STRING="${PROJECT_VERSION}")

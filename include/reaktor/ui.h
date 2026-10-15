@@ -180,6 +180,25 @@ void        reaktor_setting_set(const char *key, const char *value);
 void        reaktor_settings_save(void);
 void        reaktor_settings_clear(void);
 
+typedef struct reaktor_undo_step {
+    const char *label;
+    void      (*undo)(void *data);
+    void      (*redo)(void *data);
+    void      (*free)(void *data);
+    void       *data;
+    unsigned    merge;
+} reaktor_undo_step;
+
+void        reaktor_undo_push(App *app, const reaktor_undo_step *s);
+int         reaktor_undo(App *app);
+int         reaktor_redo(App *app);
+const char *reaktor_undo_label(App *app);
+const char *reaktor_redo_label(App *app);
+void        reaktor_undo_group(App *app, int begin);
+void        reaktor_undo_saved(App *app);
+int         reaktor_undo_dirty(App *app);
+void        reaktor_undo_clear(App *app);
+
 typedef struct reaktor_diag {
     const char *renderer;
     const char *mode;

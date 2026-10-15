@@ -864,6 +864,216 @@ menu_page(App *app, struct nk_context *ctx, int w, int h)
     reaktor_wake(app);
 }
 
+static const int   g_tree_parent[6] = { -1, 0, 1, 1, -1, 4 };
+static const char *g_tree_label[6]  = { "A", "A1", "A1a", "A1b", "B", "B1" };
+
+static int         tree_parent(int n, void *u) { (void)u; return g_tree_parent[n]; }
+static const char *tree_label(int n, void *u)  { (void)u; return g_tree_label[n]; }
+
+static void
+tree_page(App *app, struct nk_context *ctx, int w, int h)
+{
+    static unsigned char open[6];
+    static int sel = -1;
+    char line[96];
+    static const SDL_Keycode keys[] = { SDLK_TAB, SDLK_RIGHT, SDLK_RIGHT, SDLK_RIGHT,
+                                        SDLK_DOWN, SDLK_LEFT, SDLK_LEFT };
+    int k = (g_frames - 4) / 6;
+
+    (void)ctx;
+    if (g_frames >= 4 && (g_frames - 4) % 6 == 0 && k < (int)SDL_arraysize(keys))
+        push_tap(app, keys[k]);
+    if (g_frames >= 4 && (g_frames - 4) % 6 == 5 && k < (int)SDL_arraysize(keys)) {
+        SDL_snprintf(line, sizeof line, "focus %s, selected %d, open %d%d%d%d%d%d",
+                     focused_name(app), sel, open[0], open[1], open[2], open[3],
+                     open[4], open[5]);
+        note(line);
+    }
+    if (g_frames == 60) press_role(app, REAKTOR_A11Y_TREEITEM, "B");
+    if (g_frames == 66) {
+        const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
+        int n = app->a11y.count[1 - app->a11y.front], i;
+
+        for (i = 0; i < n; i++)
+            if (t[i].role == REAKTOR_A11Y_TREEITEM && SDL_strcmp(t[i].name, "B") == 0)
+                push_click(app, t[i].bounds.x + 15.0f, t[i].bounds.y + t[i].bounds.h * 0.5f);
+    }
+    if (g_frames == 72) {
+        SDL_snprintf(line, sizeof line, "clicked: selected %d, B open %d", sel, open[4]);
+        note(line);
+    }
+    if (g_frames > 76) reaktor_quit(app, 0);
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        reaktor_tree(&(reaktor_tree_spec){ .name = "Tree", .count = 6,
+                                           .parent = tree_parent, .label = tree_label,
+                                           .open = open, .selected = &sel,
+                                           .box = { .w = (float)w, .h = (float)h } });
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static void
+find_page(App *app, struct nk_context *ctx, int w, int h)
+{
+    static char  *text, run[601];
+    static int    len, cap;
+    struct nk_window *pw = nk_window_find(ctx, "page");
+    char line[96];
+
+    if (g_frames == 3) {
+        SDL_memset(run, 'x', 600);
+        run[300] = '\n';
+        press_role(app, REAKTOR_A11Y_TEXTBOX, "Doc");
+    }
+    if (g_frames == 8) push_text(app, run);
+    if (g_frames == 70) {
+        SDL_snprintf(line, sizeof line, "len %d, room %s", len, cap > len ? "kept" : "short");
+        note(line);
+        reaktor_field_select(app, text, 10, 20);
+    }
+    if (g_frames == 84 && pw) {
+        SDL_snprintf(line, sizeof line, "active %d, selected %d to %d", pw->edit.active,
+                     pw->edit.sel_start, pw->edit.sel_end);
+        note(line);
+    }
+    if (g_frames > 88) reaktor_quit(app, 0);
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        reaktor_field(&(reaktor_field_spec){ .heap = &text, .heap_cap = &cap, .len = &len,
+                                             .name = "Doc", .multiline = 1,
+                                             .line_numbers = 1,
+                                             .box = { .w = (float)w, .h = (float)h } });
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static void
+spin_page(App *app, struct nk_context *ctx, int w, int h)
+{
+    static const char *const items[] = { "a", "b", "c" };
+    static const SDL_Keycode keys[] = { SDLK_TAB, SDLK_RIGHT, SDLK_UP, SDLK_RIGHT,
+                                        SDLK_LEFT, SDLK_TAB, SDLK_LEFT };
+    static int one, two;
+    int k = (g_frames - 4) / 6;
+    char line[64];
+
+    (void)ctx;
+    if (g_frames >= 4 && (g_frames - 4) % 6 == 0 && k < (int)SDL_arraysize(keys))
+        push_tap(app, keys[k]);
+    if (g_frames == 50) {
+        SDL_snprintf(line, sizeof line, "stops at %d, wraps to %d", one, two);
+        note(line);
+    }
+    if (g_frames > 54) reaktor_quit(app, 0);
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_COLUMN(.w = (float)w) {
+            reaktor_spinner(&(reaktor_spinner_spec){ .name = "One", .items = items,
+                                                     .count = 3, .chosen = &one });
+            reaktor_spinner(&(reaktor_spinner_spec){ .name = "Two", .items = items,
+                                                     .count = 3, .chosen = &two,
+                                                     .wrap = 1 });
+        }
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static void
+date_page(App *app, struct nk_context *ctx, int w, int h)
+{
+    static int y, m, d, hh = -1, mm;
+    static const SDL_Keycode keys[] = { SDLK_TAB, SDLK_RETURN, SDLK_DOWN, SDLK_LEFT,
+                                        SDLK_LEFT, SDLK_DOWN, SDLK_RETURN, SDLK_TAB,
+                                        SDLK_RETURN, SDLK_UP, SDLK_ESCAPE };
+    int k = (g_frames - 4) / 8;
+    char line[96];
+
+    (void)ctx;
+    if (g_frames >= 4 && (g_frames - 4) % 8 == 0 && k < (int)SDL_arraysize(keys))
+        push_tap(app, keys[k]);
+    if (g_frames == 16) note(d ? "set too early" : "open, not set");
+    if (g_frames == 60) {
+        SDL_snprintf(line, sizeof line, "hour %d, focus on %s", hh, focused_name(app));
+        note(line);
+    }
+    if (g_frames == 100) {
+        SDL_snprintf(line, sizeof line, "after escape: hour %d, focus on %s", hh,
+                     focused_name(app));
+        note(line);
+    }
+    if (g_frames > 104) reaktor_quit(app, 0);
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_ROW(.w = (float)w, .h = 30.0f) {
+            if (reaktor_date_pick(&(reaktor_date_spec){ .name = "Date", .year = &y,
+                                                       .month = &m, .day = &d })) {
+                SDL_snprintf(line, sizeof line, "set %04d-%02d-%02d", y, m, d);
+                note(line);
+            }
+            reaktor_time_pick(&(reaktor_time_spec){ .name = "Time", .hour = &hh,
+                                                    .minute = &mm });
+        }
+    }
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
+static int g_undo_v;
+
+static void undo_minus(void *d) { g_undo_v -= *(int *)d; }
+static void undo_plus(void *d)  { g_undo_v += *(int *)d; }
+
+static void
+push_chord(App *app, SDL_Keycode key, SDL_Keymod mod)
+{
+    SDL_Event e;
+
+    SDL_zero(e);
+    e.type = SDL_EVENT_KEY_DOWN;
+    e.key.windowID = SDL_GetWindowID(app->win);
+    e.key.key = key;
+    e.key.mod = mod;
+    e.key.down = true;
+    SDL_PushEvent(&e);
+    e.type = SDL_EVENT_KEY_UP;
+    e.key.down = false;
+    SDL_PushEvent(&e);
+}
+
+static void
+undo_page(App *app)
+{
+    static int one = 1;
+    char line[128];
+
+    if (g_frames == 2) {
+        reaktor_undo_step s = { "Add", undo_minus, undo_plus, NULL, &one, 0 };
+
+        reaktor_undo_push(app, &s); g_undo_v++;
+        s.label = "Type"; s.merge = 7;
+        reaktor_undo_push(app, &s); g_undo_v++;
+        reaktor_undo_push(app, &s); g_undo_v++;
+        reaktor_undo_group(app, 1);
+        s.label = "Paste"; s.merge = 0;
+        reaktor_undo_push(app, &s); g_undo_v++;
+        reaktor_undo_push(app, &s); g_undo_v++;
+        reaktor_undo_group(app, 0);
+        reaktor_undo_saved(app);
+    }
+    if (g_frames == 6 || g_frames == 12) push_chord(app, SDLK_Z, SDL_KMOD_CTRL);
+    if (g_frames == 18) push_chord(app, SDLK_Z, SDL_KMOD_CTRL | SDL_KMOD_SHIFT);
+    if (g_frames == 4 || g_frames == 16 || g_frames == 24) {
+        SDL_snprintf(line, sizeof line, "value %d, undo %s, redo %s, %s", g_undo_v,
+                     reaktor_undo_label(app) ? reaktor_undo_label(app) : "-",
+                     reaktor_redo_label(app) ? reaktor_redo_label(app) : "-",
+                     reaktor_undo_dirty(app) ? "changed" : "saved");
+        note(line);
+    }
+    if (g_frames > 28) reaktor_quit(app, 0);
+    app->dirty = 1;
+    reaktor_wake(app);
+}
+
 static void
 confirm_page(App *app)
 {
@@ -924,6 +1134,26 @@ page(App *app, struct nk_context *ctx, int w, int h)
     }
     if (is("confirm") || is("confirm-cancel")) confirm_page(app);
     if (SDL_strncmp(g_mode, "dialog-", 7) == 0) dialog_page(app);
+    if (is("undo")) {
+        undo_page(app);
+        return;
+    }
+    if (is("date-keys")) {
+        date_page(app, ctx, w, h);
+        return;
+    }
+    if (is("spin-keys")) {
+        spin_page(app, ctx, w, h);
+        return;
+    }
+    if (is("field-find")) {
+        find_page(app, ctx, w, h);
+        return;
+    }
+    if (is("tree-keys")) {
+        tree_page(app, ctx, w, h);
+        return;
+    }
     if (is("menu-keys")) {
         menu_page(app, ctx, w, h);
         return;

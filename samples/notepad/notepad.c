@@ -3,11 +3,11 @@
 #include "reaktor/reaktor.h"
 #include "reaktor/main.h"
 
-#define TEXT_CAP 65536
-
 static struct {
-    char     text[TEXT_CAP];
-    int      len;
+    char    *text;
+    int      len, cap;
+    char     find[128];
+    int      find_len, find_open, find_at;
     char     path[520];
     unsigned saved_hash;
     int      saved_len;
@@ -47,9 +47,23 @@ shown_name(void)
     return slash ? slash + 1 : g.path;
 }
 
+static int
+room(int n)
+{
+    char *more;
+
+    if (n < g.cap) return 1;
+    more = (char *)SDL_realloc(g.text, (size_t)n + 256);
+    if (!more) return 0;
+    g.text = more;
+    g.cap  = n + 256;
+    return 1;
+}
+
 static void
 new_file(void)
 {
+    if (!room(0)) return;
     g.text[0] = '\0';
     g.len = 0;
     g.path[0] = '\0';
@@ -68,10 +82,8 @@ load(const char *path)
         SDL_snprintf(g.status, sizeof(g.status), "Could not read %s", path);
         return;
     }
-    if (n >= TEXT_CAP) {
-        SDL_snprintf(g.status, sizeof(g.status),
-                     "%s is %.0f KB, and this editor holds %d KB",
-                     path, (double)n / 1024.0, TEXT_CAP / 1024);
+    if (!room((int)n)) {
+        SDL_snprintf(g.status, sizeof(g.status), "%s does not fit in memory", path);
         SDL_free(body);
         return;
     }
@@ -145,6 +157,25 @@ save(App *app)
 }
 
 static void
+find_next(App *app)
+{
+    int i, k, line = 1;
+
+    g.find[g.find_len] = '\0';
+    if (!g.find_len) return;
+    for (k = 0; k < 2; k++, g.find_at = 0)
+        for (i = g.find_at; i + g.find_len <= g.len; i++)
+            if (SDL_memcmp(g.text + i, g.find, (size_t)g.find_len) == 0) {
+                g.find_at = i + g.find_len;
+                reaktor_field_select(app, g.text, i, g.find_at);
+                while (--i >= 0) line += g.text[i] == '\n';
+                SDL_snprintf(g.status, sizeof(g.status), "Found on line %d", line);
+                return;
+            }
+    SDL_snprintf(g.status, sizeof(g.status), "\"%s\" is not there", g.find);
+}
+
+static void
 page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
 {
     char line[220];
@@ -167,36 +198,57 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
                 { NULL },
                 { .label = "Quit",    .keys = "Ctrl+Q" }
             };
+            static const reaktor_menu_entry edit[] = {
+                { .label = "Find...",   .keys = "Ctrl+F" },
+                { .label = "Find next", .keys = "F3" }
+            };
             static const reaktor_menu_entry help[] = {
                 { .label = "Shortcuts", .keys = "Ctrl+K" },
                 { .label = "About" }
             };
-            static const reaktor_menu menus[2] = {
-                { "File", file, 5 }, { "Help", help, 2 }
+            static const reaktor_menu menus[3] = {
+                { "File", file, 5 }, { "Edit", edit, 2 }, { "Help", help, 2 }
             };
             int m = -1, i = -1;
 
             if (reaktor_menubar(&(reaktor_menubar_spec){
-                    .menus = menus, .count = 2,
+                    .menus = menus, .count = 3,
                     .box = { .ml = 4.0f, .mt = 2.0f, .mb = 2.0f },
                     .picked_menu = &m, .picked_item = &i })) {
                 if (m == 0 && i == 0) new_file();
                 if (m == 0 && i == 1) ask_file(app, REAKTOR_FILE_OPEN);
                 if (m == 0 && i == 2) save(app);
                 if (m == 0 && i == 4) reaktor_request_quit(app);
-                if (m == 1 && i == 0)
+                if (m == 1 && i == 0) g.find_open = 1;
+                if (m == 1 && i == 1) find_next(app);
+                if (m == 2 && i == 0)
                     SDL_strlcpy(g.status,
-                                "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+Q quit",
+                                "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+F find, F3 next, Ctrl+Q quit",
                                 sizeof(g.status));
-                if (m == 1 && i == 1)
+                if (m == 2 && i == 1)
                     SDL_strlcpy(g.status, "A text editor in one file, on Reaktor",
                                 sizeof(g.status));
             }
         }
 
+        if (g.find_open)
+            REAKTOR_ROW(.h = 30.0f, .gap = 6.0f, .ml = 6.0f, .mr = 6.0f, .mt = 4.0f,
+                        .flags = REAKTOR_LAY_FILL_X) {
+                reaktor_field(&(reaktor_field_spec){
+                    .buf = g.find, .len = &g.find_len, .cap = (int)sizeof g.find,
+                    .hint = "Find", .name = "Find",
+                    .box = { .flags = REAKTOR_LAY_FILL_X } });
+                if (reaktor_button(&(reaktor_button_spec){ .label = "Next", .keys = "F3",
+                                                           .box = { .w = 80.0f } }))
+                    find_next(app);
+                if (reaktor_button(&(reaktor_button_spec){ .label = "Close",
+                                                           .box = { .w = 80.0f } }))
+                    g.find_open = 0;
+            }
+
         reaktor_field(&(reaktor_field_spec){
-            .buf = g.text, .len = &g.len, .cap = TEXT_CAP,
-            .name = "Document", .multiline = 1,
+            .heap = &g.text, .heap_cap = &g.cap, .len = &g.len,
+            .name = "Document", .multiline = 1, .line_numbers = 1,
             .box = { .ml = 6.0f, .mr = 6.0f, .mt = 5.0f, .mb = 3.0f,
                      .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
 
@@ -226,13 +278,15 @@ sample_key(App *app, const SDL_Event *e)
         return 1;
     }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_S)) { save(app); return 1; }
+    if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_F)) { g.find_open = 1; return 1; }
+    if (reaktor_chord(e, 0, SDLK_F3)) { find_next(app); return 1; }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_Q)) {
         reaktor_request_quit(app);
         return 1;
     }
     if (reaktor_chord(e, REAKTOR_MOD_CTRL, SDLK_K)) {
         SDL_strlcpy(g.status,
-                    "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+Q quit",
+                    "Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+F find, F3 next, Ctrl+Q quit",
                     sizeof(g.status));
         return 1;
     }

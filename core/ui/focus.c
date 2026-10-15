@@ -122,8 +122,9 @@ focus_resolve(App *app)
     reaktor_a11y_set_focus(&app->a11y, 0);
 }
 
+/* 1 when every arrow steps the focused widget, 2 when only Left and Right do. */
 static int
-focus_is_range(App *app)
+focus_steps(App *app)
 {
     int n, i;
     const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
@@ -132,7 +133,8 @@ focus_is_range(App *app)
     for (i = 0; i < n; i++)
         if (t[i].id == app->focus_id)
             return t[i].role == REAKTOR_A11Y_SLIDER ||
-                   t[i].role == REAKTOR_A11Y_SPINBUTTON;
+                   t[i].role == REAKTOR_A11Y_SPINBUTTON ? 1
+                 : t[i].role == REAKTOR_A11Y_TREEITEM ? 2 : 0;
     return 0;
 }
 
@@ -141,6 +143,12 @@ focus_key(App *app, const SDL_Event *event)
 {
     int editing = app->editing;
 
+    if (!editing && (event->key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) &&
+        (event->key.key == SDLK_Z || event->key.key == SDLK_Y)) {
+        if (event->key.key == SDLK_Y || (event->key.mod & SDL_KMOD_SHIFT)) reaktor_redo(app);
+        else reaktor_undo(app);
+        return 1;
+    }
     if (event->key.key == SDLK_TAB) {
         if (editing) app->stop_editing = 1;
         focus_move(app, (event->key.mod & SDL_KMOD_SHIFT) ? FOCUS_PREV
@@ -176,13 +184,23 @@ focus_key(App *app, const SDL_Event *event)
     }
     switch (event->key.key) {
     case SDLK_RIGHT: case SDLK_KP_6: case SDLK_UP: case SDLK_KP_8:
-        if (focus_is_range(app)) { app->focus_step++; break; }
+        if (focus_steps(app) == 1 ||
+            (focus_steps(app) == 2 && (event->key.key == SDLK_RIGHT ||
+                                       event->key.key == SDLK_KP_6))) {
+            app->focus_step++;
+            break;
+        }
         focus_move(app, (event->key.key == SDLK_UP ||
                          event->key.key == SDLK_KP_8) ? FOCUS_SIB_PREV
                                                       : FOCUS_SIB_NEXT);
         break;
     case SDLK_LEFT:  case SDLK_KP_4: case SDLK_DOWN: case SDLK_KP_2:
-        if (focus_is_range(app)) { app->focus_step--; break; }
+        if (focus_steps(app) == 1 ||
+            (focus_steps(app) == 2 && (event->key.key == SDLK_LEFT ||
+                                       event->key.key == SDLK_KP_4))) {
+            app->focus_step--;
+            break;
+        }
         focus_move(app, (event->key.key == SDLK_DOWN ||
                          event->key.key == SDLK_KP_2) ? FOCUS_SIB_NEXT
                                                       : FOCUS_SIB_PREV);

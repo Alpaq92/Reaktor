@@ -93,27 +93,6 @@ popup_style_pop(struct reaktor_context *ctx)
     reaktor_style_pop_style_item(ctx);
 }
 
-struct reaktor_rect
-tree_header_bounds(struct reaktor_context *ctx)
-{
-    struct reaktor_rect b = reaktor_widget_bounds(ctx);
-    b.h = ctx->style.font->height + 2.0f * ctx->style.tab.padding.y;
-    return b;
-}
-
-void
-tree_chevron(App *app, struct reaktor_context *ctx, struct reaktor_rect b,
-             int open)
-{
-    float h = ctx->style.font->height;
-    struct reaktor_rect s = reaktor_rect(b.x + ctx->style.tab.padding.x,
-                                         b.y + ctx->style.tab.padding.y, h, h);
-
-    reaktor_chevron_at(app, ctx, s,
-               open ? "chevron-down-outline" : "chevron-forward-outline",
-               ctx->style.tab.text);
-}
-
 void
 draw_tooltip(App *app, struct reaktor_context *ctx, const char *const *lines,
              int n, float bar)
@@ -214,6 +193,9 @@ seed(showcase_state *s)
     s->anim_curve = REAKTOR_EASE_CUBIC_OUT;
     s->anim_slot  = 0;
     for (i = 0; i < 4; i++) s->grow[i] = 1.0f;
+    s->tree_open[0] = s->tree_open[1] = 1;
+    s->tree_sel     = 2;
+    s->time_h = s->time12_h = -1;
 
     SDL_strlcpy(s->name, "Ada Lovelace", sizeof(s->name));
     s->name_len = (int)strlen(s->name);
