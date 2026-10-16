@@ -206,7 +206,7 @@ the module drew. CMake keeps the option until you pass `=ON`. See
 ### How do I install libreaktor and link against it?
 
 Take the release's archive or the `.deb` or `.rpm`, or run
-`sh tools/libreaktor-pkg.sh -i`. Then `find_package(reaktor 0.5 REQUIRED)`
+`sh tools/libreaktor-pkg.sh -i`. Then `find_package(reaktor 0.6 REQUIRED)`
 and link `reaktor::reaktor`, or use `pkg-config --cflags --libs reaktor`. To
 build it into your tree instead, `add_subdirectory` the checkout and call
 `reaktor_add_app`. See [In your own project](DOCUMENTATION.md#in-your-own-project).
