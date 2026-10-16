@@ -205,7 +205,7 @@ tray_demo(App *app, struct reaktor_context *ctx)
 static void
 closing_demo(App *app, struct reaktor_context *ctx)
 {
-    static reaktor_bool ask;
+    static reaktor_bool ask = 1;
 
     section(app, ctx, "Closing",
             "A close can ask first. The close button, the tray's Quit and a "
@@ -215,7 +215,7 @@ closing_demo(App *app, struct reaktor_context *ctx)
     REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X) {
         if (reaktor_check(&(reaktor_check_spec){ .label = "Ask before closing",
                                                  .on = &ask }))
-            reaktor_set_confirm_close(app, ask ? "Close the Showcase?" : NULL);
+            reaktor_set_confirm_close(app, ask ? SC_CLOSE_QUESTION : NULL);
     }
 }
 
@@ -256,6 +256,44 @@ showcase_toasts(App *app)
     reaktor_toast(app, &g_toast_undo);
 }
 
+/* A page of what the Popups tab holds, laid out for paper. */
+static void
+print_sample(App *app, struct reaktor_context *ctx, int index, int w, int h, void *user)
+{
+    (void)app; (void)index; (void)user;
+    reaktor_fill_rect(reaktor_window_get_canvas(ctx), reaktor_rect(0, 0, (float)w, (float)h),
+                      0.0f, reaktor_rgb(255, 255, 255));
+    REAKTOR_FREE(.w = (float)w, .h = (float)h) {
+        REAKTOR_COLUMN(.w = (float)w - 96.0f, .gap = 10.0f, .ml = 48.0f, .mt = 48.0f) {
+            reaktor_label(&(reaktor_label_spec){ .text = "A page from Reaktor", .style = "h4",
+                                                 .color = "#000000" });
+            reaktor_label(&(reaktor_label_spec){
+                .text = "Laid out and drawn as the window draws it, then printed or "
+                        "written to a PDF.", .wrap = 1, .color = "#333333",
+                .box = { .flags = REAKTOR_LAY_FILL_X } });
+            reaktor_button(&(reaktor_button_spec){ .label = "A button on paper",
+                                                   .box = { .w = 180.0f } });
+        }
+    }
+}
+
+static void
+print_done(App *app, int ok, void *user)
+{
+    (void)user;
+    reaktor_toast(app, &(reaktor_toast_spec){ .text = ok ? "Printed" : "Not printed",
+                                              .timeout_ms = 3000 });
+}
+
+static void
+pdf_chosen(App *app, const char *const *paths, int count, void *user)
+{
+    (void)user;
+    if (count)
+        reaktor_print_pdf(app, paths[0], &(reaktor_print_spec){
+            .title = "Reaktor", .pages = 1, .page = print_sample, .done = print_done });
+}
+
 static void
 toast_demos(App *app, struct reaktor_context *ctx)
 {
@@ -265,8 +303,9 @@ toast_demos(App *app, struct reaktor_context *ctx)
             "close button. One stays until it is closed, or goes by itself "
             "when it is given a timeout - five seconds here. A system "
             "notification leaves the window: a toast on Windows, the desktop's "
-            "own on Linux, macOS and the BSDs, the browser's on the web.");
-    api(app, ctx, "reaktor_toast  /  reaktor_notify");
+            "own on Linux, macOS and the BSDs, the browser's on the web. A page "
+            "is printed, or written to a PDF, as the window would draw it.");
+    api(app, ctx, "reaktor_toast  /  reaktor_notify  /  reaktor_print  /  reaktor_print_pdf");
 
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         if (reaktor_button(&(reaktor_button_spec){
@@ -308,6 +347,21 @@ toast_demos(App *app, struct reaktor_context *ctx)
                 .title = "Reaktor", .text = "A notification from outside the window" }))
             reaktor_toast(app, &(reaktor_toast_spec){
                 .text = "This system has no notifications", .timeout_ms = 5000 });
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "Print a page",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }) &&
+            !reaktor_print(app, &(reaktor_print_spec){ .title = "Reaktor", .pages = 1,
+                                                       .page = print_sample,
+                                                       .done = print_done }))
+            reaktor_toast(app, &(reaktor_toast_spec){
+                .text = "This build does not print", .timeout_ms = 5000 });
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "Export as PDF",
+                .box   = { .flags = REAKTOR_LAY_FILL_X } }))
+            reaktor_file_dialog_open(app, &(reaktor_file_dialog){
+                .kind = REAKTOR_FILE_SAVE, .chosen = pdf_chosen,
+                .filters = (const reaktor_file_filter[]){ { "PDF", "pdf" } },
+                .filter_count = 1 });
     }
 }
 

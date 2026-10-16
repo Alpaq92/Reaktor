@@ -30,13 +30,15 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Features
 
-- **19 declared widgets** — buttons, fields, checks, radios, sliders, knobs,
-  combos, a color picker, sidebar, tabs, tables and a splitter, with tooltips;
-  all of Nuklear underneath, under Reaktor's names.
-- **Layers** — in-window dialogs, questions, toasts, more windows, and a tray
-  icon with a menu.
+- **24 declared widgets** — buttons, fields, checks, radios, sliders, knobs,
+  spinners, combos, a color picker, date and time pickers, sidebar, tabs, a
+  menu bar, tables, trees and a splitter, with tooltips; rows drag between
+  lists; all of Nuklear underneath, under Reaktor's names.
+- **Layers** — menus in windows of their own, in-window dialogs, questions,
+  toasts, more windows, and a tray icon with a menu.
 - **Services** — system open, save and folder pickers, timers, main-thread
-  posting, and settings that persist, window position included.
+  posting, settings that persist, an undo stack, system notifications, and
+  printing and PDF export.
 - **Styled by CSS** read at run time: color, type, borders, radii, spacing,
   `:hover` and `:active`, light and dark. Swap the sheet and the app changes.
 - **Accessible with no code** — UI Automation, NSAccessibility, AT-SPI and a
@@ -49,9 +51,9 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
   béziers; keyframed clips staggered across a grid; motion paths,
   oscillators, noise and shakes; colors blended in five spaces; and text
   that arrives a glyph at a time, idle once everything settles.
-- **Modular** — accessibility, localization and text shaping each swap for a
-  stub at build time, and only what they drew stops being drawn; every other
-  pixel stays.
+- **Modular** — accessibility, localization, text shaping, settings, the tray,
+  popup windows, notifications and printing each swap for a stub at build
+  time, and only what they drew stops being drawn; every other pixel stays.
 - **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources,
   on one software rasterizer, at any display scale: x86 and ARM everywhere,
   and RISC-V on Linux ([Platforms](docs/DOCUMENTATION.md#platforms)).

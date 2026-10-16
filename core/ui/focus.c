@@ -170,12 +170,12 @@ focus_key(App *app, const SDL_Event *event)
         }
     }
 
-    if (app->menu_open) {
+    if (app->popup_open) {
         switch (event->key.key) {
         case SDLK_UP: case SDLK_DOWN: case SDLK_LEFT: case SDLK_RIGHT:
         case SDLK_HOME: case SDLK_END: case SDLK_RETURN: case SDLK_KP_ENTER:
         case SDLK_SPACE: case SDLK_ESCAPE:
-            app->menu_key = event->key.key;
+            app->popup_key = event->key.key;
             app->dirty    = 1;
             return 1;
         default:

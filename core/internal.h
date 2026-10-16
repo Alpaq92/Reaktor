@@ -217,13 +217,13 @@ struct App {
     struct nk_rect body_rect;
     unsigned       page_node;
     int            focus_scroll;
-    int            menu_open, popups_inline;
+    int            popup_open, popups_inline;
     undo_stack     undo;
     int            want_capture;
     SDL_Surface   *capture;
     struct { const char *buf; int from, to, asked; } field_pick;
     struct { char kind[32], from[64], label[96]; int item, armed, active; struct nk_vec2 at; } drag;
-    SDL_Keycode    menu_key;
+    SDL_Keycode    popup_key;
     struct nk_rect focus_scroll_rect;
     int            focus_layer;
     const struct nk_window *focus_win;

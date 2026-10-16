@@ -6,6 +6,7 @@
 
 #define PICK_COLS 3
 #define PICK_ROWS 9
+#define PICK_GAP  8.0f
 
 enum { PICK_DAY, PICK_MONTH, PICK_YEAR, PICK_HOUR, PICK_MINUTE, PICK_HALF };
 
@@ -28,6 +29,12 @@ tr_or(const char *key, const char *english)
     const char *s = reaktor_tr(key);
 
     return s && SDL_strcmp(s, key) != 0 ? s : english;
+}
+
+static float
+text_w(const struct nk_user_font *f, const char *s)
+{
+    return f->width(f->userdata, f->height, s, (int)SDL_strlen(s));
 }
 
 static const char *
@@ -158,10 +165,10 @@ pick_draw_wheels(App *app, struct nk_context *ctx, struct nk_rect body, float ro
 static int
 pick_key(App *app)
 {
-    SDL_Keycode key = app->menu_key;
+    SDL_Keycode key = app->popup_key;
     pick_col *c = &g_pick.col[g_pick.key];
 
-    app->menu_key = 0;
+    app->popup_key = 0;
     switch (key) {
     case SDLK_UP:    c->at = pick_wrap(c, c->at - 1); break;
     case SDLK_DOWN:  c->at = pick_wrap(c, c->at + 1); break;
@@ -180,10 +187,22 @@ static int
 pick_flyout(App *app, struct nk_context *ctx, float row)
 {
     struct nk_rect r = g_pick.field, body;
-    float w = 0.0f, h = row * PICK_ROWS + row + 8.0f;
+    float w = 0.0f, h = row * PICK_ROWS + row + 16.0f;
     int k, done;
 
+    const char *no = tr_or("button.cancel", "Cancel"), *ok = tr_or("button.ok", "OK");
+    reaktor_style btn;
+    float need;
+
+    reaktor_style_get("button", &btn);
+    need = 2.0f * (NK_MAX(text_w(ctx->style.font, no), text_w(ctx->style.font, ok)) +
+                   2.0f * (btn.pad_x + btn.border)) + 3.0f * PICK_GAP;
+
     for (k = 0; k < g_pick.n; k++) w += g_pick.col[k].w;
+    if (w < need) {
+        for (k = 0; k < g_pick.n; k++) g_pick.col[k].w = (float)(int)(g_pick.col[k].w * need / w);
+        for (w = 0.0f, k = 0; k < g_pick.n; k++) w += g_pick.col[k].w;
+    }
     r.x += (r.w - w) * 0.5f;
     r.w  = w;
     r.y  = g_pick.field.y + g_pick.field.h * 0.5f - row * (PICK_ROWS / 2 + 0.5f);
@@ -202,8 +221,7 @@ pick_flyout(App *app, struct nk_context *ctx, float row)
         struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
         reaktor_style dlg;
         reaktor_surface s;
-        struct nk_rect ok, no;
-        struct nk_color ink = app->text;
+        struct nk_rect foot;
 
         reaktor_style_get("dialog", &dlg);
         s = reaktor_rule_surface(&dlg, reaktor_popup_rounding());
@@ -212,100 +230,59 @@ pick_flyout(App *app, struct nk_context *ctx, float row)
         nk_push_scissor(cv, body);
         pick_draw_wheels(app, ctx, body, row);
         nk_push_scissor(cv, r);
-        ok = nk_rect(r.x, r.y + h - row - 2.0f, r.w * 0.5f, row);
-        no = nk_rect(r.x + r.w * 0.5f, ok.y, r.w * 0.5f, row);
-        nk_fill_rect(cv, nk_rect(r.x, ok.y - 2.0f, r.w, 1.0f), 0.0f,
-                     reaktor_token("--background-hover", ink));
-        reaktor_hot(app, ok, 1, 1);
-        reaktor_hot(app, no, 1, 1);
-        {
-            struct nk_vec2 c = nk_vec2(ok.x + ok.w * 0.5f, ok.y + ok.h * 0.5f);
-            float pts[6] = { c.x - 6.0f, c.y, c.x - 2.0f, c.y + 4.0f, c.x + 6.0f, c.y - 5.0f };
-
-            struct nk_image x = reaktor_ionicon_col(app, "close-outline", 18, ink);
-
-            nk_stroke_polyline(cv, pts, 3, 2.0f, ink);
-            nk_draw_image(cv, nk_rect((float)(int)(no.x + no.w * 0.5f - 9.0f),
-                                      (float)(int)(no.y + no.h * 0.5f - 9.0f), 18.0f, 18.0f),
-                          &x, nk_rgb(255, 255, 255));
-        }
-        reaktor_note(app, REAKTOR_A11Y_BUTTON, "Set", NULL, 0u, ok);
-        reaktor_note(app, REAKTOR_A11Y_BUTTON, "Dismiss", NULL, 0u, no);
-        if (!g_pick.fresh && nk_input_mouse_clicked(&ctx->input, NK_BUTTON_LEFT, ok)) done = 1;
-        if (!g_pick.fresh && nk_input_mouse_clicked(&ctx->input, NK_BUTTON_LEFT, no)) done = -1;
+        foot = nk_rect(r.x + PICK_GAP, r.y + h - row - 6.0f, (r.w - 3.0f * PICK_GAP) * 0.5f, row);
+        nk_layout_space_begin(ctx, NK_STATIC, h, 2);
+        nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, foot));
+        if (reaktor_button_label(app, ctx, no) && !g_pick.fresh) done = -1;
+        foot.x += foot.w + PICK_GAP;
+        nk_layout_space_push(ctx, nk_layout_space_rect_to_local(ctx, foot));
+        if (reaktor_button_accent(app, ctx, ok) && !g_pick.fresh) done = 1;
+        nk_layout_space_end(ctx);
         reaktor_flyout_end(ctx);
     }
-    if (!done) app->menu_open = 1;
+    if (!done) app->popup_open = 1;
     g_pick.fresh   = 0;
     return done;
 }
 
-/* The field: a segment per wheel, a hint in each until a value is set. */
+/* The field is an input like any other: the value as the language writes it, or a hint. */
 static int
 pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
-           pick_col *cols, int n, const char *const *hints, int set)
+           pick_col *cols, int n, const char *hint, const char *value)
 {
     App *app = g_frame_app;
     struct nk_context *ctx = g_frame_ctx;
     const struct nk_user_font *f = ctx->style.font;
-    struct nk_command_buffer *cv;
     reaktor_style in;
+    reaktor_style_frame sf;
     reaktor_box box = *spec_box;
     struct nk_rect r;
-    float x, row, total = 0.0f, scale;
-    char value[96] = "", buf[64];
+    float row;
+    char buf[64];
     unsigned id;
-    int k, done = 0;
+    int k, v, done = 0;
 
-    for (k = 0; k < n; k++) {
-        float w = f->width(f->userdata, f->height, hints[k], (int)SDL_strlen(hints[k]));
-        int v;
-
-        for (v = cols[k].lo; v <= cols[k].hi; v++) {
-            const char *t = pick_label(&cols[k], v, buf, sizeof buf);
-            float tw = f->width(f->userdata, f->height, t, (int)SDL_strlen(t));
-
-            if (tw > w) w = tw;
-        }
-        cols[k].w = (float)(int)(w + 32.0f);
-        total += cols[k].w;
-        if (set) {
-            if (k) SDL_strlcat(value, " ", sizeof value);
-            SDL_strlcat(value, pick_label(&cols[k], cols[k].at, buf, sizeof buf), sizeof value);
-        }
-    }
+    /* The padding a text field resolves, so the hint sits where a field's does. */
+    sf = push_edit_style(ctx, &in, 0, NULL);
+    reaktor_style_frame_pop(ctx, sf);
     decl_box_from_style(&box, NULL, "input.type-text", "input", 0.0f, 7.0f);
-    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X)) box.w = total;
-    if (!decl_place(REAKTOR_A11Y_BUTTON, name, set ? value : NULL,
+    if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X))
+        box.w = (float)(int)(text_w(f, value ? value : hint) + 2.0f * in.pad_x + 0.5f);
+    if (!decl_place(REAKTOR_A11Y_BUTTON, name, value,
                     g_pick.owner == owner ? REAKTOR_A11Y_EXPANDED : 0u, NULL, &box, &id))
         return 0;
     nk_widget(&r, ctx);
-    cv = nk_window_get_canvas(ctx);
-    reaktor_style_get("input.type-text", &in);
-    {
-        reaktor_surface s = reaktor_rule_surface(&in, ctx->style.edit.rounding);
-
-        if (nk_input_is_mouse_hovering_rect(&ctx->input, r))
-            s.edge = reaktor_token("--focus", s.edge);
-        reaktor_paint_surface(app, cv, r, &s);
-    }
-    reaktor_hot(app, r, 1, 1);
-    scale = r.w / total;
-    row   = (float)(int)(f->height + 14.0f);
-    for (k = 0, x = r.x; k < n; k++) {
-        float w = cols[k].w * scale;
-        const char *t = set ? pick_label(&cols[k], cols[k].at, buf, sizeof buf) : hints[k];
-        float tw = f->width(f->userdata, f->height, t, (int)SDL_strlen(t));
-
-        if (k) nk_fill_rect(cv, nk_rect(x, r.y + 1.0f, 1.0f, r.h - 2.0f), 0.0f,
-                            reaktor_token("--background-hover", app->text));
-        nk_draw_text(cv, nk_rect(x + (w - tw) * 0.5f, (float)(int)(r.y + (r.h - f->height) * 0.5f),
-                                 tw, f->height),
-                     t, (int)SDL_strlen(t), f, nk_rgba(0, 0, 0, 0),
-                     set ? app->text : reaktor_token("--text-muted", app->text));
-        cols[k].w = w;
-        x += w;
-    }
+    reaktor_edit_edge(app, ctx, r, &in);
+    reaktor_hot(app, r, REAKTOR_CURSOR_POINTER, 1);
+    if (value)
+        nk_draw_text(nk_window_get_canvas(ctx),
+                     nk_rect(r.x + in.pad_x, (float)(int)(r.y + (r.h - f->height) * 0.5f),
+                             r.w - 2.0f * in.pad_x, f->height),
+                     value, (int)SDL_strlen(value), f, nk_rgba(0, 0, 0, 0),
+                     ctx->style.edit.text_normal);
+    else
+        draw_hint(ctx, r, hint, &in);
+    row = (float)(int)(f->height + 14.0f);
     if (g_pick.owner != owner &&
         (nk_input_mouse_clicked(&ctx->input, NK_BUTTON_LEFT, r) ||
          reaktor_focus_activated(app, id))) {
@@ -314,11 +291,17 @@ pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
         g_pick.key     = 0;
         g_pick.fresh   = 1;
         SDL_memcpy(g_pick.col, cols, sizeof(pick_col) * (size_t)n);
+        for (k = 0; k < n; k++) {
+            float w = 0.0f;
+
+            for (v = cols[k].lo; v <= cols[k].hi; v++)
+                w = NK_MAX(w, text_w(f, pick_label(&cols[k], v, buf, sizeof buf)));
+            g_pick.col[k].w = (float)(int)(w + 32.0f);
+        }
         pick_days();
     }
     if (g_pick.owner == owner) {
         g_pick.field = r;
-        for (k = 0; k < n; k++) g_pick.col[k].w = cols[k].w;
         done = pick_flyout(app, ctx, row);
         if (done) {
             if (done > 0) SDL_memcpy(cols, g_pick.col, sizeof(pick_col) * (size_t)n);
@@ -334,10 +317,11 @@ pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
 int
 reaktor_date_pick(const reaktor_date_spec *s)
 {
-    static const char *const english[3] = { "day", "month", "year" };
-    pick_col cols[3];
+    pick_col    cols[3];
     const char *hints[3];
-    int kinds[3], k, n, set, today = 1;
+    struct tm   tm;
+    char        hint[96], value[64];
+    int         kinds[3], k, n, set, today = 1;
 
     if (!g_frame_app || !s || !s->year || !s->month || !s->day) return 0;
     set = *s->day > 0;
@@ -360,18 +344,25 @@ reaktor_date_pick(const reaktor_date_spec *s)
         if (c->kind == PICK_DAY) {
             c->lo = 1; c->hi = SDL_GetDaysInMonth(*s->year, *s->month); c->loop = 1;
             c->at = set ? *s->day : today;
-            hints[k] = tr_or("date.day", english[0]);
+            hints[k] = tr_or("date.day", "day");
         } else if (c->kind == PICK_MONTH) {
             c->lo = 1; c->hi = 12; c->loop = 1; c->at = *s->month;
-            hints[k] = tr_or("date.month", english[1]);
+            hints[k] = tr_or("date.month", "month");
         } else {
             c->lo = s->min_year ? s->min_year : 1900;
             c->hi = s->max_year ? s->max_year : 2100;
             c->at = *s->year;
-            hints[k] = tr_or("date.year", english[2]);
+            hints[k] = tr_or("date.year", "year");
         }
     }
-    if (!pick_field(s->day, s->name ? s->name : "Date", &s->box, cols, n, hints, set))
+    SDL_snprintf(hint, sizeof hint, "%s / %s / %s", hints[0], hints[1], hints[2]);
+    SDL_zero(tm);
+    tm.tm_year = *s->year - 1900;
+    tm.tm_mon  = *s->month - 1;
+    tm.tm_mday = set ? *s->day : 1;
+    reaktor_format_date(value, sizeof value, &tm, REAKTOR_DATE_SHORT);
+    if (!pick_field(s->day, s->name ? s->name : "Date", &s->box, cols, n, hint,
+                    set ? value : NULL))
         return 0;
     for (k = 0; k < n; k++) {
         if (cols[k].kind == PICK_DAY)   *s->day = cols[k].at;
@@ -387,6 +378,8 @@ reaktor_time_pick(const reaktor_time_spec *s)
     static char half[16];
     pick_col    cols[3];
     const char *hints[3];
+    struct tm   tm;
+    char        hint[96], value[32];
     int         n = 2, set;
 
     if (!g_frame_app || !s || !s->hour || !s->minute) return 0;
@@ -413,7 +406,14 @@ reaktor_time_pick(const reaktor_time_spec *s)
         hints[2] = pick_label(&cols[2], 0, half, sizeof half);
         n = 3;
     }
-    if (!pick_field(s->hour, s->name ? s->name : "Time", &s->box, cols, n, hints, set))
+    SDL_snprintf(hint, sizeof hint, n == 3 ? "%s:%s %s" : "%s:%s", hints[0], hints[1],
+                 n == 3 ? hints[2] : "");
+    SDL_zero(tm);
+    tm.tm_hour = set ? *s->hour : 0;
+    tm.tm_min  = set ? *s->minute : 0;
+    reaktor_format_pattern(value, sizeof value, &tm, s->clock12 ? "h:mm a" : "HH:mm");
+    if (!pick_field(s->hour, s->name ? s->name : "Time", &s->box, cols, n, hint,
+                    set ? value : NULL))
         return 0;
     *s->minute = cols[1].at;
     *s->hour   = s->clock12 ? cols[0].at % 12 + (cols[2].at ? 12 : 0) : cols[0].at;
