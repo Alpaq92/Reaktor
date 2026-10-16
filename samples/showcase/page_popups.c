@@ -303,9 +303,8 @@ toast_demos(App *app, struct reaktor_context *ctx)
             "close button. One stays until it is closed, or goes by itself "
             "when it is given a timeout - five seconds here. A system "
             "notification leaves the window: a toast on Windows, the desktop's "
-            "own on Linux, macOS and the BSDs, the browser's on the web. A page "
-            "is printed, or written to a PDF, as the window would draw it.");
-    api(app, ctx, "reaktor_toast  /  reaktor_notify  /  reaktor_print  /  reaktor_print_pdf");
+            "own on Linux, macOS and the BSDs, the browser's on the web.");
+    api(app, ctx, "reaktor_toast  /  reaktor_notify");
 
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         if (reaktor_button(&(reaktor_button_spec){
@@ -347,6 +346,20 @@ toast_demos(App *app, struct reaktor_context *ctx)
                 .title = "Reaktor", .text = "A notification from outside the window" }))
             reaktor_toast(app, &(reaktor_toast_spec){
                 .text = "This system has no notifications", .timeout_ms = 5000 });
+    }
+}
+
+static void
+print_demos(App *app, struct reaktor_context *ctx)
+{
+    section(app, ctx, "Printing",
+            "A page is drawn as the window would draw it, at the printer's "
+            "resolution, and goes to the system's print dialog on Windows and "
+            "macOS, or opens as a PDF on Linux and the BSDs. The same pages can "
+            "be written to a PDF file instead.");
+    api(app, ctx, "reaktor_print  /  reaktor_print_pdf");
+
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "Print a page",
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }) &&
@@ -360,6 +373,7 @@ toast_demos(App *app, struct reaktor_context *ctx)
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }))
             reaktor_file_dialog_open(app, &(reaktor_file_dialog){
                 .kind = REAKTOR_FILE_SAVE, .chosen = pdf_chosen,
+                .location = "exported.pdf",
                 .filters = (const reaktor_file_filter[]){ { "PDF", "pdf" } },
                 .filter_count = 1 });
     }
@@ -664,6 +678,7 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
     closing_demo(app, ctx);
     tray_demo(app, ctx);
     toast_demos(app, ctx);
+    print_demos(app, ctx);
     ask_demo(app, ctx);
     settings_demo(app, ctx);
 
