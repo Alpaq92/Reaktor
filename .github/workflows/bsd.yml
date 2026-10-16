@@ -47,6 +47,13 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: ccache-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
+
       - name: Start VM
         id: vm
         uses: cross-platform-actions/action@e0b9770014ba65d5e0815f15b74031c3a635f641 # v1.6.0
@@ -66,16 +73,16 @@ jobs:
           case "$(uname -s)" in
             FreeBSD)
               sudo env IGNORE_OSVERSION=yes pkg install -y \
-                cmake-core ninja pkgconf dbus xorg-vfbserver xorgproto \
+                cmake-core ninja ccache pkgconf dbus xorg-vfbserver xorgproto \
                 libX11 libXext libXcursor libXi libXfixes libXrandr libXrender libXtst \
                 libxkbcommon wayland wayland-protocols libglvnd </dev/null
               ;;
             OpenBSD)
-              sudo pkg_add -I cmake-core ninja dbus libxkbcommon wayland wayland-protocols </dev/null
+              sudo pkg_add -I cmake-core ninja ccache dbus libxkbcommon wayland wayland-protocols </dev/null
               ;;
             NetBSD)
               sudo -E pkgin -y update </dev/null
-              sudo -E pkgin -y install cmake ninja-build pkgconf dbus libxkbcommon wayland wayland-protocols </dev/null
+              sudo -E pkgin -y install cmake ninja-build ccache pkgconf dbus libxkbcommon wayland wayland-protocols </dev/null
               ;;
           esac
 
@@ -90,7 +97,11 @@ jobs:
           uname -a
           cc --version
           cmake --version
-          ./build.sh </dev/null
+          CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=1G
+          export CCACHE_DIR CCACHE_BASEDIR CCACHE_MAXSIZE
+          ccache -z
+          ./build.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache </dev/null
+          ccache -s
 
       - name: Console tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -227,6 +238,13 @@ jobs:
             if [ -f "$f" ]; then cp "$f" smoke/; fi
           done
           rm -rf build
+
+      - name: Save the compiler cache
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
 
       - name: Upload the package
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}

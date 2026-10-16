@@ -1103,11 +1103,16 @@ printed(App *app, int ok, void *user)
 static void
 print_page_test(App *app)
 {
-    if (g_frames == 3 &&
-        !reaktor_print_pdf(app, g_log ? "launchtest-print.pdf" : "x.pdf",
-                           &(reaktor_print_spec){ .title = "Test", .pages = 2,
-                                                  .page = print_body, .done = printed }))
-        note("not queued");
+    if (g_frames == 3) {
+        char *pdf = NULL;
+
+        if (SDL_asprintf(&pdf, "%s.pdf", g_log ? g_log : "launchtest-print") < 0 ||
+            !reaktor_print_pdf(app, pdf,
+                               &(reaktor_print_spec){ .title = "Test", .pages = 2,
+                                                      .page = print_body, .done = printed }))
+            note("not queued");
+        SDL_free(pdf);
+    }
     if (g_frames > 40) reaktor_quit(app, 0);
     app->dirty = 1;
     reaktor_wake(app);
