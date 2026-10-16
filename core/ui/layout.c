@@ -58,7 +58,12 @@ declare(reaktor_layout *l, unsigned id, const reaktor_box *b)
     if (l->count >= REAKTOR_LAY_MAX) { l->overflow_boxes++; return LAY_INVALID_ID; }
 
     it = lay_item(&l->ctx);
-    if (it < REAKTOR_LAY_MAX) { l->flags[it] = b->flags; l->dir[it] = b->dir; }
+    if (it < REAKTOR_LAY_MAX) {
+        l->flags[it] = b->flags;
+        l->dir[it]   = b->dir;
+        l->w[it]     = b->w;
+        l->h[it]     = b->h;
+    }
     lay_set_size_xy(&l->ctx, it, (lay_scalar)b->w, (lay_scalar)b->h);
     lay_set_contain(&l->ctx, it, contain_of(b));
     lay_set_behave(&l->ctx, it, behave_of(b));
@@ -233,6 +238,25 @@ reaktor_layout_rect(const reaktor_layout *l, unsigned id, struct nk_rect *out)
         if (s->gen != l->gen) return 0;
         if (s->id == id) { *out = s->rect; return 1; }
         i = (i + 1) & (REAKTOR_LAY_SLOTS - 1);
+    }
+    return 0;
+}
+
+int
+reaktor_layout_info(const reaktor_layout *l, unsigned id, unsigned *flags,
+                    unsigned char *dir, float *w, float *h)
+{
+    int i;
+
+    for (i = 0; i < l->count; i++) {
+        lay_id it = l->item[i];
+
+        if (l->id[i] != id || it >= REAKTOR_LAY_MAX) continue;
+        *flags = l->flags[it];
+        *dir   = l->dir[it];
+        *w     = l->w[it];
+        *h     = l->h[it];
+        return 1;
     }
     return 0;
 }

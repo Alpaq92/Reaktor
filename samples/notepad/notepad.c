@@ -281,7 +281,7 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
 
             if (reaktor_menubar(&(reaktor_menubar_spec){
                     .menus = menus, .count = 3,
-                    .box = { .ml = 4.0f, .mt = 2.0f, .mb = 2.0f },
+                    .box = { .ml = 4.0f, .mt = 6.0f, .mb = 2.0f },
                     .picked_menu = &m, .picked_item = &i })) {
                 if (m == 0 && i == 0) new_file();
                 if (m == 0 && i == 1) ask_file(app, REAKTOR_FILE_OPEN);
@@ -328,7 +328,7 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
         reaktor_field(&(reaktor_field_spec){
             .heap = &g.text, .heap_cap = &g.cap, .len = &g.len,
             .name = "Document", .multiline = 1, .line_numbers = 1,
-            .box = { .ml = 6.0f, .mr = 6.0f, .mt = 5.0f, .mb = 3.0f,
+            .box = { .ml = 6.0f, .mr = 6.0f, .mt = 2.0f, .mb = 3.0f,
                      .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
 
         REAKTOR_ROW(.h = STATUS_H, .flags = REAKTOR_LAY_FILL_X) {

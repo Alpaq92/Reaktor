@@ -38,6 +38,7 @@ static int            g_css_n, g_cli_css_n, g_css_pending;
 static const char    *g_fallbacks[REAKTOR_LAYER_MAX];
 static int            g_fallback_n;
 static const char    *g_icon_dirs[REAKTOR_LAYER_MAX], *g_cli_icons[REAKTOR_LAYER_MAX];
+static int            g_inspect_flag;
 static SDL_IOStream   *g_log;
 static SDL_LogOutputFunction g_log_next;
 static void          *g_log_next_user;
@@ -277,6 +278,8 @@ take_flags(App *app, int argc, char **argv)
         else if (v && SDL_strcmp(a, "--font-bold") == 0) { g_cli_font_bold = own_here(v); i++; }
         else if (v && SDL_strcmp(a, "--a11y-dump") == 0) { app->dump_path = v; i++; }
         else if (v && SDL_strcmp(a, "--log") == 0)       { log_open(v); i++; }
+        else if (SDL_strcmp(a, "--inspect") == 0)        g_inspect_flag = 1;
+        else if (SDL_strcmp(a, "--no-inspector") == 0)   g_inspect_flag = -1;
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--video") == 0)    { app->video_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--popups") == 0) {
@@ -333,8 +336,8 @@ role_sheet(const App *app)
 static const char *
 theme_sheet(int dark)
 {
-    return dark ? "external/tinycss/src/variables-dark.css"
-                : "external/tinycss/src/variables-light.css";
+    return dark ? "external/watercss/src/variables-dark.css"
+                : "external/watercss/src/variables-light.css";
 }
 
 void
@@ -353,7 +356,9 @@ load_theme(App *app)
     base = n;
     for (i = 0; i < g_css_n && n < SHEET_MAX; i++) sheets[n++] = g_css[i];
     for (i = 0; i < g_cli_css_n && n < SHEET_MAX; i++) sheets[n++] = g_cli_css[i];
+    if (reaktor_inspector_sheet() && n < SHEET_MAX) sheets[n++] = reaktor_inspector_sheet();
     app->sheets = n;
+    app->why |= REAKTOR_WHY_STYLE;
 
     t0 = SDL_GetPerformanceCounter();
     if (!reaktor_style_init(sheets, n, app->dark ? "dark" : "light"))
@@ -653,6 +658,7 @@ app_init(void **appstate, int argc, char *argv[])
 
     app->queue.moved_ok = 1;
     app->theme_mode = (int)g_launch.theme;
+    reaktor_inspector_early();
     argc = take_flags(app, argc, argv);
     if (g_launch.log) log_open(g_launch.log);
     reaktor_process_start((int)g_launch.console, launch_title());
@@ -819,6 +825,7 @@ app_init(void **appstate, int argc, char *argv[])
     nk_input_begin(app->ctx);
     g_started = 1;
     SDL_SetAtomicInt(&g_running, 1);
+    reaktor_inspector_start(app, &g_launch.inspector, g_inspect_flag);
     return SDL_APP_CONTINUE;
 }
 
@@ -829,6 +836,7 @@ reaktor_take_event(App *app, SDL_Event *event)
     if (reaktor_input_page_key(app, event)) return;
 #endif
     if (app->secondary) reaktor_windows_take(app, event);
+    else if (reaktor_inspector_event(app, event)) return;
 
     switch (event->type) {
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -849,6 +857,7 @@ reaktor_take_event(App *app, SDL_Event *event)
     case SDL_EVENT_LOCALE_CHANGED:
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
         app->dirty = 1;
+        app->why |= REAKTOR_WHY_INPUT;
         break;
     default:
         break;
@@ -1096,8 +1105,14 @@ reaktor_app_due(App *app, int w, int h)
 {
     SDL_Window *over = SDL_GetMouseFocus();
 
-    if (w != app->laid_w || h != app->laid_h) app->dirty = 1;
-    if (app->fling_v != 0.0f) app->dirty = 1;
+    if (w != app->laid_w || h != app->laid_h) {
+        app->dirty = 1;
+        app->why |= REAKTOR_WHY_RESIZE;
+    }
+    if (app->fling_v != 0.0f) {
+        app->dirty = 1;
+        app->why |= REAKTOR_WHY_MOTION;
+    }
 
     if (app->hover_pending &&
         SDL_GetTicks() - app->last_draw_ms >= g_hover_gap_ms) {
@@ -1205,6 +1220,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     app->laid_h  = win_h;
     app->hot_n   = 0;
     app->editing = 0;
+    app->surface_at = nk_rect(0, 0, 0, 0);
     if (app->last_frame_ms) app->frame_gap_ms = (float)(now - app->last_frame_ms);
     app->last_frame_ms = now;
 
@@ -1260,7 +1276,8 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
         int ring = app->focus_visible && app->focus_seen &&
                    app->focus_layer == FOCUS_POPUP;
 
-        if (ring || app->tip) reaktor_overlay(app, ctx, ring);
+        if (ring || app->tip || (is_main && reaktor_inspector_marks(app)))
+            reaktor_overlay(app, ctx, ring);
     }
     app->stop_editing = 0;
 
@@ -1285,6 +1302,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     if (is_main) {
         reaktor_a11y_platform_push(&app->a11y, app->focus_id);
         a11y_dump_once(app);
+        reaktor_inspector_frame(app);
     } else {
         reaktor_a11y_platform_window_push(app->win, &app->a11y, app->focus_id,
                                           reader_activate, reader_focus, app);
@@ -1405,6 +1423,7 @@ app_quit(void *appstate, SDL_AppResult result)
         reaktor_process_end();
         return;
     }
+    reaktor_inspector_stop(app);
     run_stop(app);
     if (remembers(app)) reaktor_window_remember(app);
     reaktor_timers_drop(NULL);
@@ -1582,6 +1601,14 @@ reaktor_set_css(App *app, const reaktor_asset *css, int count)
     }
     g_css_pending = 1;
     reaktor_wake(app);
+}
+
+void
+reaktor_restyle(void)
+{
+    if (!g_app) return;
+    g_app->theme_pending = g_app->theme_mode + 1;
+    reaktor_wake(g_app);
 }
 
 void

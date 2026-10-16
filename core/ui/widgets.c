@@ -750,14 +750,16 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
     reaktor_style s;
     reaktor_style_frame f;
     nk_flags state;
+    struct nk_vec2 hint_pad;
 
     note_field_rect(app, ctx, bounds);
     hot_push(app, bounds, 2, 0);
 
-    f = push_edit_style(ctx, &s, 0, sel);
+    f = push_edit_style(ctx, &s, sel);
     reaktor_edit_edge(app, ctx, bounds, &s);
     if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
     if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;
+    hint_pad = ctx->style.edit.padding;
     /* One byte short, so the value is always there to be read as a string. */
     state = field_edit(app, ctx, flags, buf, len, cap > 0 ? cap - 1 : 0,
                        filter);
@@ -769,7 +771,16 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
                  hint ? hint : ((flags & NK_EDIT_BOX) ? "Notes" : "Text"), buf,
                  state & NK_EDIT_ACTIVE ? REAKTOR_A11Y_FOCUSED : 0u, bounds);
 
-    if (hint && *len == 0) draw_hint(ctx, bounds, hint, &s);
+    if (hint && *len == 0) {
+        struct nk_rect at = bounds;
+
+        /* Where the first line would be: a box's sits at the top. */
+        if (flags & NK_EDIT_MULTILINE) {
+            s.pad_x = hint_pad.x;
+            at.h    = 2.0f * hint_pad.y + ctx->style.font->height;
+        }
+        draw_hint(ctx, at, hint, &s);
+    }
     return state;
 }
 

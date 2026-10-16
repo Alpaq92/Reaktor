@@ -263,7 +263,7 @@ pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
     int k, v, done = 0;
 
     /* The padding a text field resolves, so the hint sits where a field's does. */
-    sf = push_edit_style(ctx, &in, 0, NULL);
+    sf = push_edit_style(ctx, &in, NULL);
     reaktor_style_frame_pop(ctx, sf);
     decl_box_from_style(&box, NULL, "input.type-text", "input", 0.0f, 7.0f);
     if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X))

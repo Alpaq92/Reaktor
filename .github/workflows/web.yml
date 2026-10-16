@@ -54,7 +54,7 @@ jobs:
           cp build-wasm/keylog.js build-wasm/reaktor-icon.svg build-wasm/reaktor-icon.png \
              "dist/$name/"
           cp build-wasm/licenses/*.txt "dist/$name/licenses/"
-          cp external/simplecss/LICENSE "dist/$name/licenses/simplecss.txt"
+          cp external/bamboocss/LICENSE "dist/$name/licenses/bamboocss.txt"
           cp assets/fonts/Aileron-Notice.txt assets/fonts/MPLUS1p-Notice.txt \
              "dist/$name/licenses/"
           cp docs/NOTICE.md "dist/$name/"

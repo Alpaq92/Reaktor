@@ -9,6 +9,8 @@
 #define REAKTOR_LAY_DEPTH 32
 #define REAKTOR_LAY_SLOTS 512
 
+#define REAKTOR_LAY_SIZED_W (1u << 26)
+#define REAKTOR_LAY_SIZED_H (1u << 27)
 #define REAKTOR_LAY_SHEET_L (1u << 28)
 #define REAKTOR_LAY_SHEET_T (1u << 29)
 #define REAKTOR_LAY_SHEET_R (1u << 30)
@@ -30,6 +32,7 @@ typedef struct reaktor_layout {
 
     unsigned      flags[REAKTOR_LAY_MAX];
     unsigned char dir[REAKTOR_LAY_MAX];
+    float         w[REAKTOR_LAY_MAX], h[REAKTOR_LAY_MAX];
 
     lay_id      stack[REAKTOR_LAY_DEPTH];
     int         depth;
@@ -43,6 +46,8 @@ typedef struct reaktor_layout {
 } reaktor_layout;
 
 void reaktor_layout_begin(reaktor_layout *l, struct nk_rect root);
+int  reaktor_layout_info(const reaktor_layout *l, unsigned id, unsigned *flags,
+                         unsigned char *dir, float *w, float *h);
 
 void reaktor_layout_open(reaktor_layout *l, unsigned id, const reaktor_box *b);
 void reaktor_layout_leaf(reaktor_layout *l, unsigned id, const reaktor_box *b);

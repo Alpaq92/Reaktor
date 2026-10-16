@@ -500,6 +500,10 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     int r, m;
 
     if (b.w <= 0.0f || b.h <= 0.0f || !col.a) return;
+    if (app) {
+        app->surface_at = b;
+        app->surface    = col;
+    }
     b = whole_px(b);
     if (b.w <= 0.0f || b.h <= 0.0f) return;
     r = corner_px(b, rounding);

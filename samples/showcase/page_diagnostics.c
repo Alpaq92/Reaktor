@@ -49,6 +49,25 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
     (void)st;
     reaktor_diagnostics(app, &d);
 
+    section(app, ctx, "Inspector",
+            "The widget tree, a widget's box and style, the last frame and "
+            "the log, in a window of its own. Ctrl+Shift+I opens it from any "
+            "page; Pick, then a click here, finds the widget under the "
+            "pointer.");
+    api(app, ctx, ".inspector = { .attach = 1 }  /  reaktor_inspector_open");
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        int shown = reaktor_inspector_shown(app);
+
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = shown ? "Close the Inspector" : "Open the Inspector",
+                .name  = "Inspector", .keys = "Ctrl+Shift+I",
+                .box   = { .w = 240.0f } })) {
+            if (shown) reaktor_inspector_close(app);
+            else reaktor_inspector_open(app);
+        }
+        reaktor_soak();
+    }
+
     section(app, ctx, "Rendering",
             "Which backend SDL settled on. It is the software rasterizer "
             "on every platform: this draws nothing at rest, so a GPU buys it "
