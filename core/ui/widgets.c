@@ -755,7 +755,7 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
     note_field_rect(app, ctx, bounds);
     hot_push(app, bounds, 2, 0);
 
-    f = push_edit_style(ctx, &s, 0, sel);
+    f = push_edit_style(ctx, &s, sel);
     reaktor_edit_edge(app, ctx, bounds, &s);
     if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
     if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;

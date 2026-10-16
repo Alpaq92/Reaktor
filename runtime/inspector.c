@@ -7,8 +7,6 @@
 #define LOG_TEXT 240
 #define ROWS     40
 #define CSS_CAP  4096
-#define ICON_BOX 32.0f
-#define ICON_W   24.0f
 
 enum { TAB_TREE, TAB_BOX, TAB_STYLE, TAB_FRAME, TAB_LOGS, TABS };
 
@@ -410,6 +408,16 @@ tab_logs(void)
         .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
 }
 
+/* A flat icon beside the tabs; its name is also what the pointer shows. */
+static int
+tool(const char *icon, const char *name, const char *tip, int on, int off, float mr)
+{
+    return reaktor_button(&(reaktor_button_spec){
+        .icon = icon, .name = name, .tooltip = tip ? tip : name, .flat = 1,
+        .accent = (unsigned char)on, .disabled = (unsigned char)off,
+        .box = { .w = 24.0f, .h = 32.0f, .mr = mr } });
+}
+
 static void
 page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
 {
@@ -423,26 +431,18 @@ page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
             reaktor_tabs(&(reaktor_tabs_spec){ .items = tabs, .count = TABS, .chosen = &g_tab,
                                                .name = "Inspector",
                                                .box = { .flags = REAKTOR_LAY_FILL_X } });
-            if (g_tab == TAB_LOGS &&
-                reaktor_button(&(reaktor_button_spec){
-                    .icon = "close-circle-outline", .name = "Clear the log", .flat = 1,
-                    .tooltip = "Clear the log", .box = { .w = ICON_W, .h = ICON_BOX } })) {
+            if (g_tab == TAB_LOGS && tool("close-circle-outline", "Clear the log", NULL, 0, 0, 0.0f)) {
                 SDL_LockMutex(g_log_lock);
                 g_log_n = g_log_head = 0;
                 SDL_UnlockMutex(g_log_lock);
             }
-            if (reaktor_button(&(reaktor_button_spec){
-                    .icon = "help-circle-outline", .name = "Pick a widget", .flat = 1,
-                    .accent = (unsigned char)g_picking,
-                    .tooltip = g_picking ? "Click a widget in the app" : "Pick a widget in the app",
-                    .box = { .w = ICON_W, .h = ICON_BOX } })) {
+            if (tool("help-circle-outline", "Pick a widget",
+                     g_picking ? "Click a widget in the app" : "Pick a widget in the app",
+                     g_picking, 0, 0.0f)) {
                 g_picking = !g_picking;
                 redraw();
             }
-            if (reaktor_button(&(reaktor_button_spec){
-                    .icon = "remove-circle-outline", .name = "Clear the selection", .flat = 1,
-                    .disabled = (unsigned char)(g_sel == 0), .tooltip = "Clear the selection",
-                    .box = { .w = ICON_W, .h = ICON_BOX, .mr = 8.0f } })) {
+            if (tool("remove-circle-outline", "Clear the selection", NULL, 0, g_sel == 0, 8.0f)) {
                 g_sel = 0;
                 redraw();
             }

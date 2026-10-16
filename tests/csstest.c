@@ -83,9 +83,7 @@ main(void)
     char *out;
     int   i;
 
-    reaktor_css_token_max(32);
-    out = reaktor_css_flatten(test, 1, "light", NULL);
-    reaktor_css_token_max(0);
+    out = reaktor_css_flatten(test, 1, "light", 32, NULL);
     ok("a sheet flattens", out != NULL);
     if (out) {
         ok("two :not() in one compound are dropped", !strstr(out, "not("));
@@ -106,7 +104,7 @@ main(void)
     }
 
     for (i = 0; i < 2; i++) {
-        out = reaktor_css_flatten(bamboo, 1, i ? "dark" : "light", NULL);
+        out = reaktor_css_flatten(bamboo, 1, i ? "dark" : "light", 0, NULL);
         ok(i ? "Bamboo flattens, dark" : "Bamboo flattens, light",
            out != NULL && strstr(out, "button") != NULL);
         ok("  and no compound in it holds two :not()", out != NULL && !not_twice(out));

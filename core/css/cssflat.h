@@ -5,11 +5,9 @@
 
 typedef struct reaktor_cssvars reaktor_cssvars;
 
-/* Drop a declaration or selector the engine could not hold as one token. */
-void reaktor_css_token_max(size_t n);
-
-char *reaktor_css_flatten(const char *const *paths, int count,
-                          const char *theme, reaktor_cssvars **out_vars);
+/* A declaration or selector of token_max bytes or more is dropped; 0 keeps all. */
+char *reaktor_css_flatten(const char *const *paths, int count, const char *theme,
+                          size_t token_max, reaktor_cssvars **out_vars);
 
 const char *reaktor_cssvars_get(const reaktor_cssvars *vars, const char *name);
 

@@ -6,14 +6,6 @@
 #include <string.h>
 #include <ctype.h>
 
-static size_t g_token_max = (size_t)-1;
-
-void
-reaktor_css_token_max(size_t n)
-{
-    g_token_max = n ? n : (size_t)-1;
-}
-
 typedef struct buf {
     char  *p;
     size_t len, cap;
@@ -803,6 +795,7 @@ typedef struct emit_ctx {
     buf                 *out;
     int                  wrote;
     float                rem_px, em_px;
+    size_t               token_max;
 } emit_ctx;
 
 static void emit_one(void *c, const char *p, size_t plen,
@@ -832,7 +825,7 @@ static void emit_one(void *c, const char *p, size_t plen,
     }
 
     /* The engine ends a value at any ';', even one inside url(). */
-    if (plen >= g_token_max || conv.len >= g_token_max ||
+    if (plen >= ctx->token_max || conv.len >= ctx->token_max ||
         (conv.p && memchr(conv.p, ';', conv.len))) {
         free(tmp.p);
         free(conv.p);
@@ -900,7 +893,8 @@ unwrap_color_scheme(char *src, const char *theme)
     }
 }
 
-static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
+static char *flatten(char *src, const char *theme, size_t token_max,
+                     reaktor_cssvars **out_vars)
 {
     reaktor_cssvars *m = (reaktor_cssvars *)calloc(1, sizeof(*m));
     buf out;
@@ -1018,7 +1012,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
                         t = rw;
                         if (!tn) continue;
                     }
-                    if (tn >= g_token_max || selector_repeats(t, tn)) continue;
+                    if (tn >= token_max || selector_repeats(t, tn)) continue;
                     if (n_emitted) buf_str(&sel, ", ");
                     buf_add(&sel, t, tn);
                 }
@@ -1028,6 +1022,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
 
             ctx.m = m;
             ctx.out = &out;
+            ctx.token_max = token_max;
             ctx.wrote = 0;
             ctx.rem_px = root.px;
             ctx.em_px  = root.em;
@@ -1036,6 +1031,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
                 emit_ctx bctx;
                 memset(&body, 0, sizeof(body));
                 bctx.m = m; bctx.out = &body; bctx.wrote = 0;
+                bctx.token_max = token_max;
                 bctx.rem_px = root.px;
                 bctx.em_px  = root.em;
                 each_decl(src, body_s, body_e, emit_one, &bctx);
@@ -1141,8 +1137,8 @@ static int load_sheet(const char *path, int depth, buf *all)
     return ok;
 }
 
-char *reaktor_css_flatten(const char *const *paths, int count,
-                          const char *theme, reaktor_cssvars **out_vars)
+char *reaktor_css_flatten(const char *const *paths, int count, const char *theme,
+                          size_t token_max, reaktor_cssvars **out_vars)
 {
     buf all;
     int i;
@@ -1154,5 +1150,5 @@ char *reaktor_css_flatten(const char *const *paths, int count,
             return NULL;
         }
     if (!all.p) all.p = (char *)calloc(1, 1);
-    return flatten(all.p, theme, out_vars);
+    return flatten(all.p, theme, token_max ? token_max : (size_t)-1, out_vars);
 }

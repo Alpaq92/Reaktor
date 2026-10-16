@@ -402,7 +402,7 @@ int  css_button_icon(App *app, struct nk_context *ctx, const char *selector,
 
 struct nk_color readable_on(const unsigned char bg[4], const char *preferred,
                             const char *fallback);
-reaktor_style_frame push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
+reaktor_style_frame push_edit_style(struct nk_context *ctx, reaktor_style *out,
                             const char *sel);
 nk_flags reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
                                nk_flags flags, char *buf, int *len, int cap,

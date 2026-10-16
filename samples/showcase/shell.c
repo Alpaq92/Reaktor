@@ -440,6 +440,8 @@ login_card(App *app, struct reaktor_context *ctx, float body_x, float body_w,
     reaktor_style_pop_style_item(ctx);
 }
 
+#define STRIP_ROUND 4.0f
+
 static reaktor_style_frame
 push_strip_look(struct reaktor_context *ctx, struct reaktor_color fg, struct reaktor_color wash)
 {
@@ -453,7 +455,7 @@ push_strip_look(struct reaktor_context *ctx, struct reaktor_color fg, struct rea
     reaktor_style_push_color(ctx, &ctx->style.button.text_hover,  fg);
     reaktor_style_push_color(ctx, &ctx->style.button.text_active, fg);
     reaktor_style_push_float(ctx, &ctx->style.button.border, 0.0f);
-    reaktor_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
+    reaktor_style_push_float(ctx, &ctx->style.button.rounding, STRIP_ROUND);
     /* The width was measured with this padding; the sheet's own may be wider. */
     reaktor_style_push_vec2(ctx, &ctx->style.button.padding,
                             reaktor_vec2((float)TAB_PAD_X, ctx->style.button.padding.y));
@@ -481,7 +483,7 @@ sample_option(App *app, struct reaktor_context *ctx, const char *label, float w,
         const struct reaktor_user_font *f = ctx->style.font;
         /* Nuklear takes the rounding out of a button's text room too. */
         w = f->width(f->userdata, f->height, label, (int)strlen(label))
-          + 2.0f * ((float)TAB_PAD_X + 4.0f);
+          + 2.0f * ((float)TAB_PAD_X + STRIP_ROUND);
     }
     reaktor_layout_row_push(ctx, w);
     b = reaktor_widget_bounds(ctx);

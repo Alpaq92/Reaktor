@@ -415,41 +415,45 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     return clicked;
 }
 
+static int
+press_blank(struct nk_context *ctx)
+{
+    int clicked;
+
+    reaktor_button_arm(ctx);
+    clicked = nk_button_text(ctx, "", 0);
+    reaktor_chrome_disarm();
+    return clicked;
+}
+
+static void
+image_centered(struct nk_context *ctx, struct nk_rect b, struct nk_image im, float px)
+{
+    nk_draw_image(nk_window_get_canvas(ctx),
+                  nk_rect((float)(int)(b.x + (b.w - px) * 0.5f),
+                          (float)(int)(b.y + (b.h - px) * 0.5f), px, px),
+                  &im, nk_rgb(255, 255, 255));
+}
+
 /* An icon alone: no fill or edge until the pointer is over it, then the sheet's hover. */
 int
 reaktor_css_button_flat(App *app, struct nk_context *ctx, const char *icon,
                         const char *name, int accent)
 {
-    struct nk_rect  b = nk_widget_bounds(ctx);
-    struct nk_color none = nk_rgba(0, 0, 0, 0);
-    struct nk_color ink;
-    struct nk_image im;
-    reaktor_style   hov;
-    float           px = (float)(int)(b.h * 0.6f);
-    int             clicked;
+    struct nk_rect b = nk_widget_bounds(ctx);
+    float px = (float)(int)(b.h * 0.6f);
+    int clicked;
 
     hot_push(app, b, 1, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, name, 0);
-    reaktor_style_get("button:hover", &hov);
-    nk_style_push_style_item(ctx, &ctx->style.button.normal, nk_style_item_color(none));
-    nk_style_push_style_item(ctx, &ctx->style.button.hover, nk_style_item_color(
-        hov.matched && hov.bg[3] ? nk_rgba_bv(hov.bg) : reaktor_token("--background-hover", none)));
-    nk_style_push_style_item(ctx, &ctx->style.button.active, nk_style_item_color(
-        reaktor_token("--background-hover", none)));
+    nk_style_push_style_item(ctx, &ctx->style.button.normal,
+                             nk_style_item_color(nk_rgba(0, 0, 0, 0)));
     nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
-    reaktor_button_arm(ctx);
-    clicked = nk_button_text(ctx, "", 0);
-    reaktor_chrome_disarm();
+    clicked = press_blank(ctx);
     nk_style_pop_float(ctx);
     nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    ink = accent ? app->accent : app->text;
-    im  = reaktor_ionicon_col(app, icon, (int)px, ink);
-    nk_draw_image(nk_window_get_canvas(ctx),
-                  nk_rect((float)(int)(b.x + (b.w - px) * 0.5f),
-                          (float)(int)(b.y + (b.h - px) * 0.5f), px, px),
-                  &im, nk_rgb(255, 255, 255));
+    image_centered(ctx, b, reaktor_ionicon_col(app, icon, (int)px,
+                                               accent ? app->accent : app->text), px);
     return clicked;
 }
 
@@ -465,24 +469,17 @@ reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
     hot_push(app, b, 1, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, name, 0);
     f = push_button_style(app, ctx, selector);
-    reaktor_button_arm(ctx);
-    clicked = nk_button_text(ctx, "", 0);
-    reaktor_chrome_disarm();
+    clicked = press_blank(ctx);
     reaktor_style_frame_pop(ctx, f);
-    nk_draw_image(nk_window_get_canvas(ctx),
-                  nk_rect((float)(int)(b.x + (b.w - px) * 0.5f),
-                          (float)(int)(b.y + (b.h - px) * 0.5f), px, px),
-                  &im, nk_rgb(255, 255, 255));
+    image_centered(ctx, b, im, px);
     return clicked;
 }
 
 reaktor_style_frame
-push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
-                const char *sel)
+push_edit_style(struct nk_context *ctx, reaktor_style *out, const char *sel)
 {
     reaktor_style s, foc, btn;
     reaktor_style_frame f = { 0, 0, 0, 0, 0 };
-    unsigned char body[4];
     char focus[96];
 
     if (!sel) sel = "input.type-text";
@@ -493,11 +490,6 @@ push_edit_style(struct nk_context *ctx, reaktor_style *out, int inset,
     s.pad_x += s.border;
     if (btn.matched && btn.pad_x > s.pad_x) s.pad_x = btn.pad_x;
     if (s.pad_x < 16.0f) s.pad_x = 16.0f;
-    if (inset && reaktor_style_token("--background-body", body)) {
-        int k;
-        for (k = 0; k < 3; k++)
-            s.bg[k] = (unsigned char)((s.bg[k] * 3 + body[k] * 2) / 5);
-    }
     *out = s;
     if (!s.matched) return f;
 
