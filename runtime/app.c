@@ -38,6 +38,9 @@ static int            g_css_n, g_cli_css_n, g_css_pending;
 static const char    *g_fallbacks[REAKTOR_LAYER_MAX];
 static int            g_fallback_n;
 static const char    *g_icon_dirs[REAKTOR_LAYER_MAX], *g_cli_icons[REAKTOR_LAYER_MAX];
+static SDL_IOStream   *g_log;
+static SDL_LogOutputFunction g_log_next;
+static void          *g_log_next_user;
 static int            g_icon_dir_n, g_cli_icon_n;
 
 static const char *
@@ -194,6 +197,54 @@ own_here(const char *path)
     return owned;
 }
 
+static void SDLCALL
+log_line(void *user, int category, SDL_LogPriority priority, const char *message)
+{
+    static const char *const level[] = { "", "TRACE", "VERBOSE", "DEBUG", "INFO",
+                                         "WARN", "ERROR", "CRITICAL" };
+    static const char *const area[] = { "app", "error", "assert", "system", "audio",
+                                        "video", "render", "input", "test", "gpu" };
+    SDL_Time    now = 0;
+    SDL_DateTime t;
+    char        cat[16];
+
+    SDL_zero(t);
+    if (SDL_GetCurrentTime(&now)) SDL_TimeToDateTime(now, &t, true);
+    if (category >= 0 && category < (int)SDL_arraysize(area))
+        SDL_strlcpy(cat, area[category], sizeof cat);
+    else
+        SDL_snprintf(cat, sizeof cat, "%d", category);
+    SDL_IOprintf(g_log, "%04d-%02d-%02d %02d:%02d:%02d.%03d %-8s %-6s %s\n",
+                 t.year, t.month, t.day, t.hour, t.minute, t.second,
+                 t.nanosecond / 1000000,
+                 (unsigned)priority < SDL_arraysize(level) ? level[priority] : "?",
+                 cat, message);
+    SDL_FlushIO(g_log);
+    if (g_log_next) g_log_next(g_log_next_user, category, priority, message);
+}
+
+static void
+log_open(const char *path)
+{
+    if (g_log) return;
+    g_log = SDL_IOFromFile(path, "ab");
+    if (!g_log) {
+        SDL_Log("--log: %s", SDL_GetError());
+        return;
+    }
+    SDL_GetLogOutputFunction(&g_log_next, &g_log_next_user);
+    SDL_SetLogOutputFunction(log_line, NULL);
+}
+
+static void
+log_close(void)
+{
+    if (!g_log) return;
+    SDL_SetLogOutputFunction(g_log_next, g_log_next_user);
+    SDL_CloseIO(g_log);
+    g_log = NULL;
+}
+
 static int
 take_flags(App *app, int argc, char **argv)
 {
@@ -225,6 +276,7 @@ take_flags(App *app, int argc, char **argv)
         else if (v && SDL_strcmp(a, "--font") == 0)      { g_cli_font = own_here(v); i++; }
         else if (v && SDL_strcmp(a, "--font-bold") == 0) { g_cli_font_bold = own_here(v); i++; }
         else if (v && SDL_strcmp(a, "--a11y-dump") == 0) { app->dump_path = v; i++; }
+        else if (v && SDL_strcmp(a, "--log") == 0)       { log_open(v); i++; }
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--video") == 0)    { app->video_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--popups") == 0) {
@@ -602,6 +654,7 @@ app_init(void **appstate, int argc, char *argv[])
     app->queue.moved_ok = 1;
     app->theme_mode = (int)g_launch.theme;
     argc = take_flags(app, argc, argv);
+    if (g_launch.log) log_open(g_launch.log);
     reaktor_process_start((int)g_launch.console, launch_title());
 
     if (g_launch.name || g_launch.version || g_launch.id)
@@ -1390,6 +1443,7 @@ app_quit(void *appstate, SDL_AppResult result)
     g_app = NULL;
     reaktor_signal_unwatch();
     reaktor_process_end();
+    log_close();
 }
 
 static void
@@ -1402,6 +1456,7 @@ launch_copy(const reaktor_launch *l)
     g_launch.name         = own(l->name);
     g_launch.id           = own(l->id);
     g_launch.version      = own(l->version);
+    g_launch.log          = own(l->log);
     g_launch.window.title = own(l->window.title);
     g_confirm   = l->confirm_close ? SDL_strdup(l->confirm_close) : NULL;
     g_icon_name = reaktor_asset_name(&l->window.icon, "app/icon.svg");

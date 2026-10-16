@@ -170,7 +170,9 @@ hook sees them first.
 | `reaktor_undo_clear(app)` | Drop every step |
 
 Clipboard, URLs and logging are SDL's: `SDL_SetClipboardText`,
-`SDL_GetClipboardText`, `SDL_OpenURL` (behind a link's `.url`), `SDL_Log`.
+`SDL_GetClipboardText`, `SDL_OpenURL` (behind a link's `.url`), `SDL_Log`;
+`.log` names a file that gets a copy of every line, with the time, priority
+and category, appended; `--log <path>` overrides it.
 
 **Console.** `.console` is `REAKTOR_CONSOLE_NONE` (the window alone),
 `_PARENT` (on Windows, the terminal it was started from) or `_DEBUG` (that
@@ -1035,6 +1037,7 @@ removes them from `argv` before the application sees it:
 | `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
 | `--popups inline` | Menus inside the window, not in windows of their own |
 | `--console <none\|parent\|debug>` | Override `.console` |
+| `--log <path>` | Override `.log` |
 | `--css <path>` | A sheet after the application's; up to four |
 | `--font <path>`, `--font-bold <path>` | Replace the UI face and its bold |
 | `--icons <dir>` | Look for `<name>.svg` here first; up to four |

@@ -67,6 +67,7 @@ typedef struct reaktor_launch {
     const char          *name, *id, *version;
     reaktor_window_spec  window;
     reaktor_console      console;
+    const char          *log;
     reaktor_theme        theme;
     const char          *confirm_close;
 
