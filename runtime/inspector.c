@@ -431,7 +431,10 @@ page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
             reaktor_tabs(&(reaktor_tabs_spec){ .items = tabs, .count = TABS, .chosen = &g_tab,
                                                .name = "Inspector",
                                                .box = { .flags = REAKTOR_LAY_FILL_X } });
-            if (g_tab == TAB_LOGS && tool("close-circle-outline", "Clear the log", NULL, 0, 0, 0.0f)) {
+            /* A floater has no titlebar to close it from. */
+            if (g_floater && tool("close-circle-outline", "Close the Inspector", NULL, 0, 0, 0.0f))
+                reaktor_inspector_close(g_main);
+            if (g_tab == TAB_LOGS && tool("reload-circle-outline", "Clear the log", NULL, 0, 0, 0.0f)) {
                 SDL_LockMutex(g_log_lock);
                 g_log_n = g_log_head = 0;
                 SDL_UnlockMutex(g_log_lock);
