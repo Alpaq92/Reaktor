@@ -431,10 +431,7 @@ page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
             reaktor_tabs(&(reaktor_tabs_spec){ .items = tabs, .count = TABS, .chosen = &g_tab,
                                                .name = "Inspector",
                                                .box = { .flags = REAKTOR_LAY_FILL_X } });
-            /* A floater has no titlebar to close it from. */
-            if (g_floater && tool("close-circle-outline", "Close the Inspector", NULL, 0, 0, 0.0f))
-                reaktor_inspector_close(g_main);
-            if (g_tab == TAB_LOGS && tool("reload-circle-outline", "Clear the log", NULL, 0, 0, 0.0f)) {
+            if (g_tab == TAB_LOGS && tool("checkmark-circle-outline", "Clear the log", NULL, 0, 0, 0.0f)) {
                 SDL_LockMutex(g_log_lock);
                 g_log_n = g_log_head = 0;
                 SDL_UnlockMutex(g_log_lock);
@@ -445,10 +442,20 @@ page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
                 g_picking = !g_picking;
                 redraw();
             }
+#ifdef __EMSCRIPTEN__
+            if (tool("remove-circle-outline", "Clear the selection", NULL, 0, g_sel == 0, 0.0f)) {
+                g_sel = 0;
+                redraw();
+            }
+            /* The page's floater has no titlebar to close it from. */
+            if (tool("close-circle-outline", "Close the Inspector", NULL, 0, 0, 8.0f))
+                reaktor_inspector_close(g_main);
+#else
             if (tool("remove-circle-outline", "Clear the selection", NULL, 0, g_sel == 0, 8.0f)) {
                 g_sel = 0;
                 redraw();
             }
+#endif
         }
         REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y, .gap = 8.0f) {
             switch (g_tab) {
