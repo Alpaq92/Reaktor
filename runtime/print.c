@@ -13,7 +13,6 @@
 
 typedef struct print_job {
     reaktor_print_spec spec;
-    App               *app;
     char              *path;
     int                index, to_printer;
 } print_job;
@@ -186,7 +185,6 @@ print_queue(App *app, const char *path, const reaktor_print_spec *s, int to_prin
     if (job->spec.w <= 0.0f) job->spec.w = 595.0f;
     if (job->spec.h <= 0.0f) job->spec.h = 842.0f;
     if (job->spec.dpi <= 0) job->spec.dpi = 200;
-    job->app        = app;
     job->to_printer = to_printer;
     if (path) {
         job->path = SDL_strdup(path);

@@ -801,6 +801,7 @@ main(int argc, char **argv)
         .window         = { .w = WINDOW_WIDTH, .h = WINDOW_HEIGHT, .hidden = 1,
                             .borderless = 1, .hit_test = window_hit_test },
         .font_fallbacks = { { .path = "assets/fonts/MPLUS1p-Regular.ttf" } },
+        .confirm_close  = SC_CLOSE_QUESTION,
         .page           = page_shell,
         .key            = sample_key,
         .start          = sample_start,

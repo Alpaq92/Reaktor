@@ -158,21 +158,23 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
     }
 
     section(app, ctx, "Dates and times",
-            "A field of segments in the order the language writes a date, each a "
-            "hint until a value is set. A click or Enter opens wheels that loop "
-            "where the values do: scroll one, click a row, or use the arrows - Up "
-            "and Down turn the wheel, Left and Right move between wheels. Enter or "
-            "the check sets the value, Escape or the cross leaves it.");
+            "An input that shows the value as the language writes it, or a hint "
+            "until one is set. A click or Enter opens wheels, in the language's "
+            "order, that loop where the values do: scroll one, click a row, or use "
+            "the arrows - Up and Down turn the wheel, Left and Right move between "
+            "wheels. Enter or OK sets the value, Escape or Cancel leaves it.");
     api(app, ctx, "reaktor_date_pick  /  reaktor_time_pick");
 
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         reaktor_date_pick(&(reaktor_date_spec){
-            .name = "Date", .year = &s->date_y, .month = &s->date_m, .day = &s->date_d });
+            .name = "Date", .year = &s->date_y, .month = &s->date_m, .day = &s->date_d,
+            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
         reaktor_time_pick(&(reaktor_time_spec){
-            .name = "Time", .hour = &s->time_h, .minute = &s->time_m });
+            .name = "Time", .hour = &s->time_h, .minute = &s->time_m,
+            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
         reaktor_time_pick(&(reaktor_time_spec){
             .name = "Time, 12-hour", .hour = &s->time12_h, .minute = &s->time12_m,
-            .clock12 = 1 });
+            .clock12 = 1, .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
     }
 
     section(app, ctx, "Combo boxes",

@@ -1170,7 +1170,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     file_answer(app);
 
     app->focus_seen = 0;
-    app->menu_open  = 0;
+    app->popup_open  = 0;
     app->popup_lo = app->popup_hi = app->trap_lo = app->trap_hi = -1;
     if (!app->anim) app->anim = reaktor_anim_create();
     if (app->anim) reaktor_anim_frame(app->anim, app->frame_gap_ms);

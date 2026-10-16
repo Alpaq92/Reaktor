@@ -250,14 +250,16 @@ draws a gutter of line numbers beside a multiline field.
 is a search over the buffer and this call, as in the notepad sample. Lines do
 not wrap: Nuklear's editor lays text out in hard lines only.
 
-**A date or time is picked on wheels.** The field shows a segment per part,
-in the order the language writes a short date, each a hint (`date.day`,
-`date.month`, `date.year`, `time.hour`, `time.minute`) until a value is set. A
-click or Enter opens a column of wheels over it: days, months and hours loop,
-years stop at `.min_year` and `.max_year` (1900 and 2100 unset). Scroll a
-wheel, click a row, or use the arrows: Up and Down turn the focused wheel,
-Left and Right move between wheels. Enter or the check sets the value and
-answers 1; Escape, the cross or a click outside leaves it. Days follow the
+**A date or time is picked on wheels.** The field is drawn as an input,
+from `input`, and shows the value as the language writes a short date or
+time, or a hint (`date.day`, `date.month`, `date.year`, `time.hour`,
+`time.minute`) until one is set. A click or Enter opens wheels over it, a
+dialog surface with a wheel per part in the language's order: days, months
+and hours loop, years stop at `.min_year` and `.max_year` (1900 and 2100
+unset). Scroll a wheel, click a row, or use the arrows: Up and Down turn the
+focused wheel, Left and Right move between wheels. Enter or OK
+(`button.ok`) sets the value and answers 1; Escape, Cancel (`button.cancel`)
+or a click outside leaves it. Days follow the
 month and year on the wheels. Month names are the stand-alone form,
 `date.months.standalone`, as Polish names a month alone differently from one
 in a date.

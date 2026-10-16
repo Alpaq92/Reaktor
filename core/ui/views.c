@@ -460,10 +460,9 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
 
                     if (t && c == 0) {
                         if (tree_first(t, r, id, fg, pad) && s->selected) {
-                            int k = 0;
+                            int k = t->row[t->jump];
 
-                            while (k < t->n && t->node[k] != t->jump) k++;
-                            if (k < t->n && *s->selected != k) {
+                            if (k >= 0 && *s->selected != k) {
                                 *s->selected = k;
                                 changed      = 1;
                             }
@@ -825,12 +824,12 @@ menu_window(App *app, struct nk_context *ctx, int w, int h, void *user)
 static void
 menu_key(const reaktor_menubar_spec *s, App *app)
 {
-    SDL_Keycode key = app->menu_key;
+    SDL_Keycode key = app->popup_key;
     int k = g_menu.kcol, *hi = &g_menu.hi[k];
     const menu_col *c = &g_menu.col[k];
     const reaktor_menu_entry *e = *hi >= 0 ? &c->items[*hi] : NULL;
 
-    app->menu_key = 0;
+    app->popup_key = 0;
     if (!key) return;
     g_menu.keyed = 1;
     menu_changed();
@@ -1037,7 +1036,7 @@ reaktor_menubar(const reaktor_menubar_spec *s)
             reaktor_flyout_end(ctx);
         }
     }
-    if (g_menu.open >= 0) app->menu_open = 1;
+    if (g_menu.open >= 0) app->popup_open = 1;
 
     if (g_menu.open >= 0 && g_menu.picked_k >= 0 && g_menu.picked_k < g_menu.n) {
         const reaktor_menu_entry *e = &g_menu.col[g_menu.picked_k].src[g_menu.picked_i];
@@ -1051,7 +1050,7 @@ reaktor_menubar(const reaktor_menubar_spec *s)
             reaktor_focus_take(app, g_menu.tid[g_menu.open], g_menu.title[g_menu.open]);
         g_menu.picked_k = -1;
         g_menu.open     = -1;
-        app->menu_open = 0;
+        app->popup_open = 0;
         menu_windows();
         picked = 1;
     }

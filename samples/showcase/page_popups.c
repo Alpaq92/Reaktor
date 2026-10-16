@@ -205,7 +205,7 @@ tray_demo(App *app, struct reaktor_context *ctx)
 static void
 closing_demo(App *app, struct reaktor_context *ctx)
 {
-    static reaktor_bool ask;
+    static reaktor_bool ask = 1;
 
     section(app, ctx, "Closing",
             "A close can ask first. The close button, the tray's Quit and a "
@@ -215,7 +215,7 @@ closing_demo(App *app, struct reaktor_context *ctx)
     REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X) {
         if (reaktor_check(&(reaktor_check_spec){ .label = "Ask before closing",
                                                  .on = &ask }))
-            reaktor_set_confirm_close(app, ask ? "Close the Showcase?" : NULL);
+            reaktor_set_confirm_close(app, ask ? SC_CLOSE_QUESTION : NULL);
     }
 }
 

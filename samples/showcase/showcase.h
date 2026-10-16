@@ -14,6 +14,7 @@
 #define SC_BOX_CAP   512
 #define SC_SERIES_N  32
 #define SC_LIST_N    64
+#define SC_CLOSE_QUESTION "Close the Showcase?"
 #define SC_PATH_CAP  520
 
 #define WINDOW_WIDTH  1100

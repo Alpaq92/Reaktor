@@ -25,17 +25,36 @@ reaktor_notify(App *app, const reaktor_notification *n)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
+#include <stdlib.h>
 
 #define NOTIFY_ID 0x5245u
 
 static NOTIFYICONDATAW g_icon;
 
 static void
+notify_remove(void)
+{
+    if (g_icon.hWnd) Shell_NotifyIconW(NIM_DELETE, &g_icon);
+    g_icon.hWnd = NULL;
+}
+
+static void
 notify_gone(App *app, void *user)
 {
     (void)app; (void)user;
-    Shell_NotifyIconW(NIM_DELETE, &g_icon);
-    g_icon.hWnd = NULL;
+    notify_remove();
+}
+
+/* As much of s as fits, cut short rather than lost. */
+static void
+notify_text(const char *s, WCHAR *out, int cap)
+{
+    int    n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+    WCHAR *w = n > 0 ? (WCHAR *)SDL_malloc((size_t)n * sizeof *w) : NULL;
+
+    out[0] = 0;
+    if (w && MultiByteToWideChar(CP_UTF8, 0, s, -1, w, n) > 0) SDL_wcslcpy(out, w, (size_t)cap);
+    SDL_free(w);
 }
 
 /* A balloon from an icon of our own, which Windows 10 and 11 show as a toast. */
@@ -43,6 +62,7 @@ int
 reaktor_notify(App *app, const reaktor_notification *n)
 {
     static unsigned gone;
+    static int      watched;
     HWND hwnd;
     int  added;
 
@@ -58,17 +78,16 @@ reaktor_notify(App *app, const reaktor_notification *n)
     g_icon.uFlags = NIF_ICON | NIF_TIP | NIF_INFO;
     g_icon.hIcon  = (HICON)SendMessageW(hwnd, WM_GETICON, ICON_SMALL, 0);
     if (!g_icon.hIcon) g_icon.hIcon = LoadIconW(NULL, (LPCWSTR)IDI_APPLICATION);
-    MultiByteToWideChar(CP_UTF8, 0, n->title, -1, g_icon.szInfoTitle,
-                        (int)SDL_arraysize(g_icon.szInfoTitle) - 1);
-    MultiByteToWideChar(CP_UTF8, 0, n->title, -1, g_icon.szTip,
-                        (int)SDL_arraysize(g_icon.szTip) - 1);
-    MultiByteToWideChar(CP_UTF8, 0, n->text ? n->text : "", -1, g_icon.szInfo,
-                        (int)SDL_arraysize(g_icon.szInfo) - 1);
+    notify_text(n->title, g_icon.szInfoTitle, (int)SDL_arraysize(g_icon.szInfoTitle));
+    notify_text(n->title, g_icon.szTip, (int)SDL_arraysize(g_icon.szTip));
+    notify_text(n->text ? n->text : "", g_icon.szInfo, (int)SDL_arraysize(g_icon.szInfo));
     g_icon.dwInfoFlags = NIIF_USER | NIIF_RESPECT_QUIET_TIME;
     if (!Shell_NotifyIconW(added ? NIM_MODIFY : NIM_ADD, &g_icon)) {
         g_icon.hWnd = NULL;
         return 0;
     }
+    /* A timer dies with the window; a quit before it fires would leave the icon. */
+    if (!watched) watched = atexit(notify_remove) == 0;
     if (gone) reaktor_timer_stop(gone);
     gone = reaktor_timer(app, 10000, 0, notify_gone, NULL);
     return 1;
@@ -109,6 +128,7 @@ reaktor_notify(App *app, const reaktor_notification *n)
     ok = dbus_connection_send(c, m, NULL);
     dbus_connection_flush(c);
     dbus_message_unref(m);
+    dbus_connection_unref(c);
     return ok ? 1 : 0;
 }
 

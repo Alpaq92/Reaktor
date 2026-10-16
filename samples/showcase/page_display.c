@@ -287,11 +287,11 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
         SDL_snprintf(redo, sizeof redo, "Redo %s", reaktor_redo_label(app) ? reaktor_redo_label(app) : "");
         if (reaktor_button(&(reaktor_button_spec){ .label = undo, .name = "Undo",
                                                    .disabled = !reaktor_undo_label(app),
-                                                   .box = { .w = 180.0f } }))
+                                                   .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } }))
             reaktor_undo(app);
         if (reaktor_button(&(reaktor_button_spec){ .label = redo, .name = "Redo",
                                                    .disabled = !reaktor_redo_label(app),
-                                                   .box = { .w = 180.0f } }))
+                                                   .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } }))
             reaktor_redo(app);
     }
 
