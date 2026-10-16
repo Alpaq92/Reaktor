@@ -899,13 +899,14 @@ apply_widget_style(App *app)
     st->chart.selected_color = focus;
     st->chart.border         = 1.0f;
 
-    st->scrollh.normal        = nk_style_item_color(body);
-    st->scrollh.hover         = nk_style_item_color(body);
-    st->scrollh.active        = nk_style_item_color(body);
+    /* No track: a scrollbar sits on lists and panels as well as the page. */
+    st->scrollh.normal        = i_none;
+    st->scrollh.hover         = i_none;
+    st->scrollh.active        = i_none;
     st->scrollh.cursor_normal = nk_style_item_color(thumb);
     st->scrollh.cursor_hover  = nk_style_item_color(thumb_hi);
     st->scrollh.cursor_active = nk_style_item_color(thumb_hi);
-    st->scrollh.border_color  = body;
+    st->scrollh.border_color  = nk_rgba(0, 0, 0, 0);
     st->scrollh.rounding      = 3.0f;
     st->scrollh.rounding_cursor = 3.0f;
     st->scrollh.show_buttons  = nk_false;
