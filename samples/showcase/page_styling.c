@@ -44,8 +44,8 @@ rule_says(const char *selector)
 void
 page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
 {
-    static const reaktor_asset simple_css = {
-        .path = "external/simplecss/simple.css" };
+    static const reaktor_asset bamboo_css = {
+        .path = "external/bamboocss/dist/bamboo.min.css" };
     static reaktor_bool on;
 
     section(app, ctx, "Change the stylesheet, change the application",
@@ -54,15 +54,15 @@ page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
             "in the window follows - the buttons, the fields, the borders, "
             "the corners. That is the only claim this library makes about "
             "styling, and it is either true in front of you or it is not.");
-    api(app, ctx, "external/simplecss");
+    api(app, ctx, "external/bamboocss");
 
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         if (reaktor_check(&(reaktor_check_spec){
-                .label = "Read simple.css over the top of tiny.css",
+                .label = "Read Bamboo over the top of Water.css",
                 .name  = "Override stylesheet",
                 .on    = &on,
                 .box   = { .w = 380.0f, .flags = REAKTOR_LAY_CENTER_Y } }))
-            reaktor_set_css(app, on ? &simple_css : NULL, on ? 1 : 0);
+            reaktor_set_css(app, on ? &bamboo_css : NULL, on ? 1 : 0);
         reaktor_soak();
     }
 
@@ -130,12 +130,12 @@ page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
     }
 
     section(app, ctx, "Three sheets, read in order",
-            "The palette, then tiny.css, then this application's own, then "
+            "The palette, then Water.css, then this application's own, then "
             "the override if there is one. There is no merging step and no "
             "precedence table - CSS resolves a tie by document order, so the "
             "last sheet read wins, and reading one last is the whole "
             "mechanism. A selector the override says nothing about still "
-            "resolves to tiny.css's rule; one neither mentions leaves the "
+            "resolves to Water.css's rule; one neither mentions leaves the "
             "widget on Nuklear's own default.");
     api(app, ctx, "reaktor_style_init(sheets, n, theme)");
 
@@ -150,7 +150,7 @@ page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
             .name = "Controls with no rule", .color = "--text-muted",
             .wrap = 1, .box = { .flags = REAKTOR_LAY_FILL_X } });
         reaktor_label(&(reaktor_label_spec){
-            .text = "simple.css keeps its dark palette in "
+            .text = "Bamboo keeps its dark palette in "
                     "@media (prefers-color-scheme: dark), which this tree "
                     "used to drop along with every other at-rule - so a "
                     "sheet written that way loaded light-only. That branch "

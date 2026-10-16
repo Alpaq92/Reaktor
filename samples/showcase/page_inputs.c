@@ -7,7 +7,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
     char line[96];
 
     section(app, ctx, "Text",
-            "One rule - tiny.css's `input` - supplies the fill, the radius, "
+            "One rule - Water.css's `input` - supplies the fill, the radius, "
             "the padding and the border - 2px of transparent until "
             "`input:focus` colors it. Only the focused field takes that "
             "color; the rest get the neutral edge, because the rule assumes "

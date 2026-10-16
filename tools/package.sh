@@ -19,6 +19,6 @@ fi
 : >"$dest/.reaktor-root"
 sh "$root/tools/assets.sh" "$root" "$dest"
 cp "$build/licenses/"*.txt "$dest/licenses/"
-cp "$root/external/simplecss/LICENSE" "$dest/licenses/simplecss.txt"
+cp "$root/external/bamboocss/LICENSE" "$dest/licenses/bamboocss.txt"
 cp "$root/docs/NOTICE.md" "$dest/"
 echo "packaged: $dest"

@@ -499,6 +499,11 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     float R, D;
     int r, m;
 
+    if (app) {
+        app->surface_at = b;
+        app->surface    = col;
+    }
+
     if (b.w <= 0.0f || b.h <= 0.0f || !col.a) return;
     b = whole_px(b);
     if (b.w <= 0.0f || b.h <= 0.0f) return;

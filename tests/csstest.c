@@ -14,7 +14,10 @@ static const char g_sheet[] =
     "button:enabled:hover { color: #123456; }\n"
     "button[disabled] { color: #654321; }\n"
     "p { padding: calc(1.5 * 8px) calc(8px / 2); top: calc(0px - 8px); "
-    "margin: calc(2 * (3px + 1px)); width: calc(100% - 2 * 8px); }\n";
+    "margin: calc(2 * (3px + 1px)); width: calc(100% - 2 * 8px); }\n"
+    "q { background-image: url(data:image/svg+xml;base64,AAAA); color: #010203; }\n"
+    "q.v { content: \"a value longer than the engine token\"; color: #040506; }\n"
+    ".a-selector-longer-than-the-engines-token, u { color: #070809; }\n";
 
 char *
 reaktor_asset_load(const char *name, size_t *len)
@@ -76,11 +79,13 @@ int
 main(void)
 {
     static const char *const test[1] = { "test.css" };
-    static const char *const simple[1] = { "external/simplecss/simple.css" };
+    static const char *const bamboo[1] = { "external/bamboocss/dist/bamboo.min.css" };
     char *out;
     int   i;
 
+    reaktor_css_token_max(32);
     out = reaktor_css_flatten(test, 1, "light", NULL);
+    reaktor_css_token_max(0);
     ok("a sheet flattens", out != NULL);
     if (out) {
         ok("two :not() in one compound are dropped", !strstr(out, "not("));
@@ -94,12 +99,15 @@ main(void)
         ok("  with a subtraction", strstr(out, "top: -8px;") != NULL);
         ok("  and brackets", strstr(out, "margin: 8px;") != NULL);
         ok("calc() with a percentage is left", strstr(out, "width: calc(100% - 2 * 8px);") != NULL);
+        ok("a value with a ';' is dropped", !strstr(out, "base64") && strstr(out, "#010203"));
+        ok("a value past the token is dropped", !strstr(out, "longer") && strstr(out, "#040506"));
+        ok("a selector past the token is dropped", !strstr(out, "a-selector") && strstr(out, "u {"));
         free(out);
     }
 
     for (i = 0; i < 2; i++) {
-        out = reaktor_css_flatten(simple, 1, i ? "dark" : "light", NULL);
-        ok(i ? "simple.css flattens, dark" : "simple.css flattens, light",
+        out = reaktor_css_flatten(bamboo, 1, i ? "dark" : "light", NULL);
+        ok(i ? "Bamboo flattens, dark" : "Bamboo flattens, light",
            out != NULL && strstr(out, "button") != NULL);
         ok("  and no compound in it holds two :not()", out != NULL && !not_twice(out));
         free(out);

@@ -21,7 +21,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     section(app, ctx, "Buttons",
             "The fill, border, radius, padding and font all come from "
-            "tiny.css's `button` rule; the hover color is its "
+            "Water.css's `button` rule; the hover color is its "
             "--button-hover. The accent is --links, which is the only thing "
             "in a classless stylesheet that means \"this is the one to "
             "press\".");
@@ -89,6 +89,36 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
                                               REAKTOR_LAY_FILL_Y } }))
                         s->presses++;
             }
+        }
+    }
+
+    section(app, ctx, "Flat icons",
+            "An icon with no label and .flat set is a toolbar button: no "
+            "fill and no edge until the pointer is over it, then the sheet's "
+            "button:hover. The icon takes the text color, or the accent's "
+            "with .accent, which is how a tool shows it is on. Its .name is "
+            "what a reader hears, and .tooltip what the pointer shows.");
+    api(app, ctx, "reaktor_button  /  .icon  /  .flat");
+
+    {
+        static const struct { const char *icon, *name; } tools[8] = {
+            { "cut-outline",       "Cut" },     { "copy-outline",     "Copy" },
+            { "clipboard-outline", "Paste" },   { "arrow-undo-outline", "Undo" },
+            { "arrow-redo-outline", "Redo" },   { "search-outline",   "Find" },
+            { "locate-outline",    "Pick" },    { "trash-outline",    "Delete" }
+        };
+        static int on = 6;
+
+        REAKTOR_ROW(.h = 32.0f, .gap = 2.0f) {
+            for (i = 0; i < 8; i++)
+                if (reaktor_button(&(reaktor_button_spec){
+                        .icon = tools[i].icon, .name = tools[i].name,
+                        .tooltip = tools[i].name, .flat = 1,
+                        .accent = (unsigned char)(i == on),
+                        .box = { .w = 32.0f, .h = 32.0f } })) {
+                    on = i;
+                    s->presses++;
+                }
         }
     }
 

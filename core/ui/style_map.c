@@ -376,7 +376,10 @@ icon_place(struct nk_context *ctx, struct nk_rect b, float pad_x,
     at->y = b.y + s->padding.y + s->image_padding.y;
     at->w = b.h - 2.0f * s->padding.y - 2.0f * s->image_padding.x;
     at->h = b.h - 2.0f * s->padding.y - 2.0f * s->image_padding.y;
-    return b.w >= text + 2.0f * (3.0f * pad_x + s->image_padding.x + at->w);
+    if (b.w >= text + 2.0f * (3.0f * pad_x + s->image_padding.x + at->w)) return 1;
+    /* A wide padding still leaves room once the icon moves to the edge. */
+    at->x = b.x + pad_x + s->image_padding.x;
+    return b.w >= text + 2.0f * (1.5f * pad_x + s->image_padding.x + at->w);
 }
 
 int
@@ -409,6 +412,44 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
                       nk_rgb_factor(ink, bs->color_factor_text));
     }
     reaktor_style_frame_pop(ctx, f);
+    return clicked;
+}
+
+/* An icon alone: no fill or edge until the pointer is over it, then the sheet's hover. */
+int
+reaktor_css_button_flat(App *app, struct nk_context *ctx, const char *icon,
+                        const char *name, int accent)
+{
+    struct nk_rect  b = nk_widget_bounds(ctx);
+    struct nk_color none = nk_rgba(0, 0, 0, 0);
+    struct nk_color ink;
+    struct nk_image im;
+    reaktor_style   hov;
+    float           px = (float)(int)(b.h * 0.6f);
+    int             clicked;
+
+    hot_push(app, b, 1, 1);
+    reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, name, 0);
+    reaktor_style_get("button:hover", &hov);
+    nk_style_push_style_item(ctx, &ctx->style.button.normal, nk_style_item_color(none));
+    nk_style_push_style_item(ctx, &ctx->style.button.hover, nk_style_item_color(
+        hov.matched && hov.bg[3] ? nk_rgba_bv(hov.bg) : reaktor_token("--background-hover", none)));
+    nk_style_push_style_item(ctx, &ctx->style.button.active, nk_style_item_color(
+        reaktor_token("--background-hover", none)));
+    nk_style_push_float(ctx, &ctx->style.button.border, 0.0f);
+    reaktor_button_arm(ctx);
+    clicked = nk_button_text(ctx, "", 0);
+    reaktor_chrome_disarm();
+    nk_style_pop_float(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    nk_style_pop_style_item(ctx);
+    ink = accent ? app->accent : app->text;
+    im  = reaktor_ionicon_col(app, icon, (int)px, ink);
+    nk_draw_image(nk_window_get_canvas(ctx),
+                  nk_rect((float)(int)(b.x + (b.w - px) * 0.5f),
+                          (float)(int)(b.y + (b.h - px) * 0.5f), px, px),
+                  &im, nk_rgb(255, 255, 255));
     return clicked;
 }
 
@@ -517,9 +558,18 @@ void
 reaktor_edit_edge(App *app, struct nk_context *ctx, struct nk_rect b,
           const reaktor_style *s)
 {
+    struct nk_rect  on = app->surface_at;
+    struct nk_color fill = nk_rgba_bv(s->bg);
+
     if (!s->matched) return;
+    /* A sheet may fill a field like the card it sits on; it then takes the page's. */
+    if (on.w > b.w && b.x >= on.x && b.y >= on.y &&
+        b.x + b.w <= on.x + on.w && b.y + b.h <= on.y + on.h &&
+        SDL_abs(fill.r - app->surface.r) + SDL_abs(fill.g - app->surface.g) +
+        SDL_abs(fill.b - app->surface.b) <= 3)
+        fill = reaktor_page_color(app);
     reaktor_paint_surface(app, nk_window_get_canvas(ctx), reaktor_rect_trunc(b),
-                          &(reaktor_surface){ nk_rgba_bv(s->bg), nk_rgba_bv(s->border_col),
+                          &(reaktor_surface){ fill, nk_rgba_bv(s->border_col),
                                               s->border, s->rounding });
 }
 

@@ -12,8 +12,8 @@ from the project's own license file at the pinned revision.
 | [NukAnim](https://github.com/Alpaq92/NukAnim) | Every animation, and `nukanim.h` for applications — a port of [ImAnim](https://github.com/soufianekhiat/ImAnim) with [ImAnimate](https://github.com/RaidcoreGG/ImAnimate)'s `animate` | MIT |
 | [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parse, match, cascade) and `yutil` | MIT |
 | [Onlay](https://github.com/Alpaq92/Onlay) | The rectangles — a fork of [randrew/layout](https://github.com/randrew/layout) | MIT |
-| [tiny.css](https://github.com/ihsan6133/tiny.css) | The stylesheet the look comes from, compiled in | MIT |
-| [simple.css](https://github.com/kevquirk/simple.css) | The sheet the Styling page swaps in | MIT |
+| [Water.css](https://github.com/kognise/water.css) | The stylesheet the look comes from, compiled in | MIT |
+| [Bamboo](https://github.com/rilwis/bamboo) | The sheet the Styling page swaps in | MIT |
 | [Ionicons](https://github.com/ionic-team/ionicons) | Every icon, as SVG; the seven the widgets draw are compiled in | MIT |
 | [plutosvg](https://github.com/sammycage/plutosvg) | Rasterizing the SVGs | MIT |
 | [plutovg](https://github.com/sammycage/plutovg) | plutosvg's canvas (nested submodule) | MIT |
@@ -133,13 +133,13 @@ end of the header, so the header itself is `licenses/ini.h.txt`): ship that fold
 and this file, with a binary.
 
 The binary also carries the default assets in `REAKTOR_BUILTINS`, byte for
-byte: tiny.css's `core.css`, `variables-light.css` and `variables-dark.css`
-(MIT); the seven Ionicons `chevron-down-outline`, `chevron-back-outline`,
+byte: Water.css's `variables-light.css`, `variables-dark.css` and the nine
+files in `src/parts/` (MIT); the seven Ionicons `chevron-down-outline`, `chevron-back-outline`,
 `chevron-forward-outline`, `ellipse`, `ellipse-outline`, `radio-button-off`
 and `close-outline` (MIT); Aileron Regular and Bold (CC0); and the mark and
 `assets/css/reaktor.css` (MIT). Their licenses are in `licenses/` too.
 
-The rest of Ionicons, simple.css, the Japanese font and the catalogs are not
+The rest of Ionicons, Bamboo, the Japanese font and the catalogs are not
 embedded (the catalogs are with `-DREAKTOR_LOCALE_EMBED=ON`); a build that uses
 them ships them beside the binary, under the `.reaktor-root` marker. The
 WebAssembly build packs the ones it uses into its `.data` bundle.

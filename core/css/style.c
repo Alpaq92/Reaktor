@@ -117,6 +117,8 @@ static int style_load(const char *const *css_paths, int count,
 
     reaktor_cssvars_free(g.vars);
     g.vars = NULL;
+    /* The parser copies each token into a buffer this size without a bound. */
+    reaktor_css_token_max(CSS_PARSER_BUFFER_SIZE - 1);
     flat = reaktor_css_flatten(css_paths, count, theme, &g.vars);
     if (!flat) return 0;
 

@@ -336,8 +336,8 @@ role_sheet(const App *app)
 static const char *
 theme_sheet(int dark)
 {
-    return dark ? "external/tinycss/src/variables-dark.css"
-                : "external/tinycss/src/variables-light.css";
+    return dark ? "external/watercss/src/variables-dark.css"
+                : "external/watercss/src/variables-light.css";
 }
 
 void
@@ -1220,6 +1220,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     app->laid_h  = win_h;
     app->hot_n   = 0;
     app->editing = 0;
+    app->surface_at = nk_rect(0, 0, 0, 0);
     if (app->last_frame_ms) app->frame_gap_ms = (float)(now - app->last_frame_ms);
     app->last_frame_ms = now;
 

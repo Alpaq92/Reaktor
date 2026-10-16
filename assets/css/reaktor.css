@@ -1,3 +1,10 @@
+:root {
+    --background-hover: var(--button-hover);
+    --table: var(--links);
+    --table-bg: var(--background-body);
+    --table-bg-alt: var(--background-alt);
+}
+
 h4 {
     font-size: 19px;
     font-weight: 700;
@@ -120,10 +127,6 @@ dialog {
 }
 
 @media (prefers-color-scheme: light) {
-    :root {
-        --button-hover: var(--background);
-    }
-
     .sidebar-item:hover {
         background-color: color-mix(in srgb, var(--text-main) 12%, var(--background));
     }

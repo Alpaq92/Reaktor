@@ -49,7 +49,7 @@ void reaktor_rss_mark(int step);
 #define GLYPH_STROKE  2.0f
 
 #define SHEET_MAX 12
-#define CORE_SHEET "external/tinycss/src/core.css"
+#define CORE_SHEET "external/watercss/src/parts/_core.css"
 #define APP_SHEET  "assets/css/reaktor.css"
 #define FONT_FILE      "assets/fonts/Aileron-Regular.otf"
 #define FONT_BOLD_FILE "assets/fonts/Aileron-Bold.otf"
@@ -181,6 +181,9 @@ struct App {
     unsigned char  hot_last_repaint;
 
     int   dirty;
+    /* The last rounded surface filled this frame, which a field may sit on. */
+    struct nk_rect  surface_at;
+    struct nk_color surface;
     unsigned why;
 
     struct input_queue {
@@ -318,6 +321,8 @@ void a11y_dump_once(App *app);
 void hot_push(App *app, struct nk_rect r, int cursor, int repaint);
 int  css_button_accent(App *app, struct nk_context *ctx, const char *selector,
                        const char *label);
+int  reaktor_css_button_flat(App *app, struct nk_context *ctx, const char *icon,
+                             const char *name, int accent);
 int  reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
                       struct nk_image im, float px, const char *name);
 void reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w,

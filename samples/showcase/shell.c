@@ -128,7 +128,7 @@ splash_page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
     SDL_snprintf(line, sizeof line, "SDL %d.%d.%d  \xC2\xB7  Nuklear  \xC2\xB7  NukAnim  \xC2\xB7  LCUI  \xC2\xB7  plutosvg",
                  SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v));
     credit(cv, reaktor_font(app, 12, 0), line, 250.0f, w, muted, tag);
-    credit(cv, reaktor_font(app, 12, 0), "Onlay  \xC2\xB7  mojibake  \xC2\xB7  kb_text_shape  \xC2\xB7  tiny.css",
+    credit(cv, reaktor_font(app, 12, 0), "Onlay  \xC2\xB7  mojibake  \xC2\xB7  kb_text_shape  \xC2\xB7  Water.css",
            268.0f, w, muted, tag);
 }
 
@@ -454,7 +454,10 @@ push_strip_look(struct reaktor_context *ctx, struct reaktor_color fg, struct rea
     reaktor_style_push_color(ctx, &ctx->style.button.text_active, fg);
     reaktor_style_push_float(ctx, &ctx->style.button.border, 0.0f);
     reaktor_style_push_float(ctx, &ctx->style.button.rounding, 4.0f);
-    return (reaktor_style_frame){ 3, 3, 2, 0, 0 };
+    /* The width was measured with this padding; the sheet's own may be wider. */
+    reaktor_style_push_vec2(ctx, &ctx->style.button.padding,
+                            reaktor_vec2((float)TAB_PAD_X, ctx->style.button.padding.y));
+    return (reaktor_style_frame){ 3, 3, 2, 1, 0 };
 }
 
 static struct reaktor_color
@@ -476,8 +479,9 @@ sample_option(App *app, struct reaktor_context *ctx, const char *label, float w,
 
     if (w <= 0.0f) {
         const struct reaktor_user_font *f = ctx->style.font;
+        /* Nuklear takes the rounding out of a button's text room too. */
         w = f->width(f->userdata, f->height, label, (int)strlen(label))
-          + 2.0f * (float)TAB_PAD_X;
+          + 2.0f * ((float)TAB_PAD_X + 4.0f);
     }
     reaktor_layout_row_push(ctx, w);
     b = reaktor_widget_bounds(ctx);

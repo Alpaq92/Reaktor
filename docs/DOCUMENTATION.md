@@ -179,7 +179,7 @@ and category, appended; `--log <path>` overrides it.
 terminal or a console of its own, plus SDL's debug log). A redirected stream
 stays redirected. Ctrl+C reaches the app only from a console it owns.
 
-**Assets.** `.css` adds up to four sheets after tiny.css and reaktor.css
+**Assets.** `.css` adds up to four sheets after Water.css and reaktor.css
 (`.no_reaktor_css` drops reaktor.css), `.font` and `.font_bold` replace
 Aileron (which stands in for one that cannot be read, or that is cut short or
 not a font at all), `.font_fallbacks` feed the Text module, `.icon_dirs` are searched for
@@ -274,7 +274,8 @@ first column names the row. With `.selected`, a click picks a row and the
 selection follows keyboard focus; the arrow keys move it, scrolling the row
 into view. Without it the rows are plain text. Unsized, a list shows up to
 eight rows and fills its row. Colors come from `thead`, `th`, `td`,
-`--table-bg` and `--table-bg-alt`, as in tiny.css.
+`--table-bg` and `--table-bg-alt`, which reaktor.css takes from Water.css's
+`--links`, `--background-body` and `--background-alt`.
 
 **A row can be dragged** out of a list that names a `.drag` kind, a string.
 Its first column follows the pointer as a tooltip would, and any list of the
@@ -454,7 +455,7 @@ in [`include/reaktor/ui.h`](../include/reaktor/ui.h); all of them are main-threa
 
 A dialog inside the main window. `reaktor_floater_open` centers one whose body
 is `.w` by `.h`, as CSS sizes a box, with the `dialog` rule's padding around it;
-it answers its id, and calls `.body` every frame inside tiny.css's `dialog`
+it answers its id, and calls `.body` every frame inside the `dialog` rule's
 look, with the body's size; `.title` is its accessible name. A `.modal` one dims the window by
 `--dialog-backdrop` and holds everything under it — the page, the toasts,
 earlier floaters — until it closes, and Tab stays with it and the floaters
@@ -602,8 +603,15 @@ detaches it, but no flag gives an Inspector to an app that did not attach one.
 ## Styling
 
 Sheets are read in order and the last rule wins, as CSS settles a tie:
-tiny.css's palette (`variables-light.css` or `variables-dark.css`), tiny.css,
-`reaktor.css`, the application's `.css`, then `--css`. Nothing merges them.
+Water.css's palette (`variables-light.css` or `variables-dark.css`), Water.css
+(`parts/_core.css` and the parts it imports), `reaktor.css`, the application's
+`.css`, then `--css`. Nothing merges them. An `@import` is read in place,
+relative to the sheet that names it; one with a condition, such as
+`(prefers-color-scheme: dark)`, is read as that `@media` block. A selector or
+value longer than libcss holds as one token, or a value with a `;` in it, is
+dropped before libcss sees it. A field filled exactly like the rounded panel it sits on
+takes the page's color instead, so a sheet that styles `input` and `details`
+alike still shows its fields on a card.
 
 A widget asks for a selector and gets computed values, or `matched` clear and
 Nuklear's default:
@@ -670,11 +678,11 @@ and the accent. An icon on a button takes its label's color.
   current sidebar entry from `--links`.
 
 `reaktor_set_css` swaps the application's sheets at the next frame. The
-showcase's Styling page lays simple.css over tiny.css that way, which is the
-test that the look is not in the code. reaktor.css is written in tiny.css's
+showcase's Styling page lays Bamboo over Water.css that way, which is the
+test that the look is not in the code. reaktor.css is written in Water.css's
 names, so once such a sheet is read, `--links`, `--background-body` and
 `--text-main` are given its link, page and text colors in one more sheet read
-last; Reaktor's own chrome then follows it too. A sheet laid over tiny.css
+last; Reaktor's own chrome then follows it too. A sheet laid over Water.css
 costs a second read.
 
 ## Keyboard
@@ -838,11 +846,11 @@ in `core/` knows which application it is in.
 
 **The default look is compiled in**: Aileron in both weights, the mark, the
 seven Ionicons the widgets draw (three chevrons, three discs and the toast's
-close cross), `reaktor.css` and tiny.css's three sheets, copied byte for byte
+close cross), `reaktor.css` and Water.css's palettes and parts, copied byte for byte
 at configure time. `reaktor_asset_load` still tries the file under the
 `.reaktor-root` marker first, so an edited sheet shows without a rebuild.
 Nothing is read from the working directory, and a path a user hands over is
-made absolute where it is taken. The rest of Ionicons, simple.css and the
+made absolute where it is taken. The rest of Ionicons, Bamboo and the
 catalogs are read from files; an icon that is not there is drawn as nothing,
 and the log names it.
 
@@ -1118,7 +1126,7 @@ Built by default and run from `build/`:
 | `animtest` | Curves, retargeting, a context a window |
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
-| `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and simple.css read through it |
+| `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and Bamboo read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
 | `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `print-pdf`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
@@ -1310,7 +1318,7 @@ None is a bug, and each cost an afternoon.
   `NK_BUTTON_TRIGGER_ON_RELEASE` is defined.
 - **A button's content rect is bounds − padding − border − rounding.** A large
   radius drives a small button's content negative and its symbol vanishes.
-- **A negative content rect moves the label instead of hiding it**: tiny.css's
+- **A negative content rect moves the label instead of hiding it**: a sheet's
   inset drew labels 4.6 px low on 30 px controls. `style_map.c` trims the
   vertical padding to what the row holds.
 - **`nk_stroke_rect` is asymmetric**, 1 px on the left and top of a 2 px

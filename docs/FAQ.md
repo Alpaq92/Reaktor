@@ -115,7 +115,7 @@ as `[href^="http"]` are dropped. See [Styling](DOCUMENTATION.md#styling).
 
 ### How do I ship my own stylesheet or theme?
 
-Pass up to four sheets in `.css`; they are read after tiny.css and
+Pass up to four sheets in `.css`; they are read after Water.css and
 reaktor.css, and the last rule wins. `reaktor_set_css` swaps them at run time,
 and `--css` adds one on top. `.no_reaktor_css` drops reaktor.css. See
 [Services](DOCUMENTATION.md#services) and [Styling](DOCUMENTATION.md#styling).

@@ -6,6 +6,14 @@
 #include <string.h>
 #include <ctype.h>
 
+static size_t g_token_max = (size_t)-1;
+
+void
+reaktor_css_token_max(size_t n)
+{
+    g_token_max = n ? n : (size_t)-1;
+}
+
 typedef struct buf {
     char  *p;
     size_t len, cap;
@@ -671,7 +679,7 @@ static int is_theme_selector(const char *s, size_t len, const char *theme)
     return 0;
 }
 
-/* tiny.css declares its dialog's properties on ::backdrop. */
+/* A sheet may declare its dialog's properties on ::backdrop. */
 static int is_vars_selector(const char *s, size_t len)
 {
     size_t i;
@@ -823,6 +831,13 @@ static void emit_one(void *c, const char *p, size_t plen,
         resolve_pixel_calcs(&conv);
     }
 
+    /* The engine ends a value at any ';', even one inside url(). */
+    if (plen >= g_token_max || conv.len >= g_token_max ||
+        (conv.p && memchr(conv.p, ';', conv.len))) {
+        free(tmp.p);
+        free(conv.p);
+        return;
+    }
     buf_add(ctx->out, p, plen);
     buf_str(ctx->out, ": ");
     buf_add(ctx->out, conv.p ? conv.p : "", conv.len);
@@ -1003,7 +1018,7 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
                         t = rw;
                         if (!tn) continue;
                     }
-                    if (selector_repeats(t, tn)) continue;
+                    if (tn >= g_token_max || selector_repeats(t, tn)) continue;
                     if (n_emitted) buf_str(&sel, ", ");
                     buf_add(&sel, t, tn);
                 }
@@ -1041,6 +1056,91 @@ static char *flatten(char *src, const char *theme, reaktor_cssvars **out_vars)
     return out.p;
 }
 
+#define IMPORT_DEPTH 8
+
+/* `to` resolved against the folder of `from`, with "." and ".." folded away. */
+static char *import_path(const char *from, const char *to, size_t n)
+{
+    const char *slash = strrchr(from, '/');
+    size_t      dir = slash ? (size_t)(slash - from) + 1 : 0;
+    char       *p = (char *)malloc(dir + n + 1), *w, *r;
+
+    if (!p) return NULL;
+    memcpy(p, from, dir);
+    memcpy(p + dir, to, n);
+    p[dir + n] = 0;
+    for (w = r = p; *r;) {
+        if (strncmp(r, "./", 2) == 0) { r += 2; continue; }
+        if (strncmp(r, "../", 3) == 0) {
+            if (w > p) {
+                w--;
+                while (w > p && w[-1] != '/') w--;
+            }
+            r += 3;
+            continue;
+        }
+        while (*r && *r != '/') *w++ = *r++;
+        if (*r) *w++ = *r++;
+    }
+    *w = 0;
+    return p;
+}
+
+static int load_sheet(const char *path, int depth, buf *all)
+{
+    char  *t = reaktor_asset_load(path, NULL);
+    size_t i = 0, from = 0, n;
+    int    ok = 1;
+
+    if (!t) {
+        fprintf(stderr, "css: cannot read %s; skipped\n", path);
+        return 1;
+    }
+    n = strlen(t);
+    while (i < n && ok) {
+        size_t s, e, q_s, q_e;
+        char   end = 0, *to;
+
+        if (t[i] == '/' && t[i + 1] == '*') {
+            const char *c = strstr(t + i + 2, "*/");
+            i = c ? (size_t)(c - t) + 2 : n;
+            continue;
+        }
+        if (t[i] != '@' || strncmp(t + i, "@import", 7) != 0) { i++; continue; }
+        s = i + 7;
+        while (s < n && isspace((unsigned char)t[s])) s++;
+        if (strncmp(t + s, "url(", 4) == 0) { s += 4; end = ')'; }
+        while (s < n && isspace((unsigned char)t[s])) s++;
+        if (t[s] == '\'' || t[s] == '"') end = t[s++];
+        e = s;
+        while (e < n && (end ? t[e] != end : !isspace((unsigned char)t[e]) && t[e] != ';')) e++;
+        q_s = e < n && end ? e + 1 : e;
+        if (end == '\'' || end == '"') {
+            while (q_s < n && isspace((unsigned char)t[q_s])) q_s++;
+            if (strncmp(t + q_s, ")", 1) == 0) q_s++;
+        }
+        q_e = q_s;
+        while (q_e < n && t[q_e] != ';') q_e++;
+
+        ok = buf_add(all, t + from, i - from);
+        from = i = q_e < n ? q_e + 1 : n;
+        if (!ok || depth >= IMPORT_DEPTH || e == s) continue;
+        if (!(to = import_path(path, t + s, e - s))) { ok = 0; continue; }
+        trim(t, &q_s, &q_e);
+        if (q_e > q_s) {
+            ok = buf_str(all, "@media ") && buf_add(all, t + q_s, q_e - q_s) &&
+                 buf_str(all, " {\n") && load_sheet(to, depth + 1, all) &&
+                 buf_str(all, "}\n");
+        } else {
+            ok = load_sheet(to, depth + 1, all);
+        }
+        free(to);
+    }
+    ok = ok && buf_add(all, t + from, n - from) && buf_str(all, "\n");
+    reaktor_free(t);
+    return ok;
+}
+
 char *reaktor_css_flatten(const char *const *paths, int count,
                           const char *theme, reaktor_cssvars **out_vars)
 {
@@ -1048,18 +1148,11 @@ char *reaktor_css_flatten(const char *const *paths, int count,
     int i;
 
     memset(&all, 0, sizeof(all));
-    for (i = 0; i < count; i++) {
-        char *t = reaktor_asset_load(paths[i], NULL);
-        if (!t) {
-            fprintf(stderr, "css: cannot read %s; skipped\n", paths[i]);
-            continue;
-        }
-        if (!buf_str(&all, t) || !buf_str(&all, "\n")) {
-            reaktor_free(t); free(all.p);
+    for (i = 0; i < count; i++)
+        if (!load_sheet(paths[i], 0, &all)) {
+            free(all.p);
             return NULL;
         }
-        reaktor_free(t);
-    }
     if (!all.p) all.p = (char *)calloc(1, 1);
     return flatten(all.p, theme, out_vars);
 }

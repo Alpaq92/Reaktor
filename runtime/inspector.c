@@ -7,6 +7,8 @@
 #define LOG_TEXT 240
 #define ROWS     40
 #define CSS_CAP  4096
+#define ICON_BOX 32.0f
+#define ICON_W   24.0f
 
 enum { TAB_TREE, TAB_BOX, TAB_STYLE, TAB_FRAME, TAB_LOGS, TABS };
 
@@ -158,7 +160,8 @@ static void
 note(const char *text)
 {
     reaktor_label(&(reaktor_label_spec){ .text = text, .wrap = 1,
-                                         .box = { .flags = REAKTOR_LAY_FILL_X } });
+                                         .box = { .flags = REAKTOR_LAY_FILL_X,
+                                                  .ml = 16.0f, .mr = 12.0f } });
 }
 
 static int
@@ -180,19 +183,6 @@ tab_tree(void)
 {
     int sel = g_sel_ix;
 
-    REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X, .gap = 8.0f) {
-        if (reaktor_button(&(reaktor_button_spec){
-                .label = g_picking ? "Click a widget in the app" : "Pick",
-                .accent = (unsigned char)g_picking, .fit_content = 1 })) {
-            g_picking = !g_picking;
-            redraw();
-        }
-        if (reaktor_button(&(reaktor_button_spec){ .label = "Clear", .fit_content = 1,
-                                                   .disabled = (unsigned char)(g_sel == 0) })) {
-            g_sel = 0;
-            redraw();
-        }
-    }
     reaktor_tree(&(reaktor_tree_spec){
         .name = "Widgets", .count = g_n, .parent = tree_parent, .label = tree_label,
         .open = g_open, .selected = &sel,
@@ -329,8 +319,9 @@ tab_style(void)
         reaktor_field(&(reaktor_field_spec){
             .buf = g_css, .len = &g_css_len, .cap = CSS_CAP, .multiline = 1,
             .name = "Extra CSS", .hint = "button { border-radius: 0 }",
-            .box = { .flags = REAKTOR_LAY_FILL_X, .h = 120.0f } });
-        REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X, .gap = 8.0f) {
+            .pad_x = 10.0f, .pad_y = 8.0f,
+            .box = { .flags = REAKTOR_LAY_FILL_X, .h = 120.0f, .ml = 12.0f, .mr = 12.0f } });
+        REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X, .gap = 2.0f, .ml = 12.0f) {
             if (reaktor_button(&(reaktor_button_spec){ .label = "Apply", .accent = 1,
                                                        .fit_content = 1 }))
                 apply_css();
@@ -404,12 +395,7 @@ tab_logs(void)
     REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X, .gap = 8.0f) {
         reaktor_spinner(&(reaktor_spinner_spec){
             .label = "Show:", .items = levels, .count = 5, .chosen = &g_log_min,
-            .box = { .w = 300.0f } });
-        if (reaktor_button(&(reaktor_button_spec){ .label = "Clear", .fit_content = 1 })) {
-            SDL_LockMutex(g_log_lock);
-            g_log_n = g_log_head = 0;
-            SDL_UnlockMutex(g_log_lock);
-        }
+            .box = { .w = 300.0f, .ml = 12.0f, .mb = 8.0f } });
     }
     SDL_LockMutex(g_log_lock);
     for (g_log_rows = i = 0; i < g_log_n; i++) {
@@ -429,14 +415,38 @@ page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
 {
     static const char *const tabs[TABS] = { "Tree", "Box", "Style", "Frame", "Logs" };
 
-    (void)app; (void)ctx; (void)user;
+    (void)app; (void)ctx; (void)user; (void)w;
     if (!g_main) return;
     snapshot();
-    REAKTOR_COLUMN(.w = (float)w, .h = (float)h, .gap = 8.0f,
-                   .ml = 0.0f, .mt = 0.0f) {
-        reaktor_tabs(&(reaktor_tabs_spec){ .items = tabs, .count = TABS, .chosen = &g_tab,
-                                           .name = "Inspector",
-                                           .box = { .flags = REAKTOR_LAY_FILL_X } });
+    REAKTOR_COLUMN(.h = (float)h - 12.0f, .gap = 10.0f, .flags = REAKTOR_LAY_FILL_X) {
+        REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X, .gap = 2.0f) {
+            reaktor_tabs(&(reaktor_tabs_spec){ .items = tabs, .count = TABS, .chosen = &g_tab,
+                                               .name = "Inspector",
+                                               .box = { .flags = REAKTOR_LAY_FILL_X } });
+            if (g_tab == TAB_LOGS &&
+                reaktor_button(&(reaktor_button_spec){
+                    .icon = "close-circle-outline", .name = "Clear the log", .flat = 1,
+                    .tooltip = "Clear the log", .box = { .w = ICON_W, .h = ICON_BOX } })) {
+                SDL_LockMutex(g_log_lock);
+                g_log_n = g_log_head = 0;
+                SDL_UnlockMutex(g_log_lock);
+            }
+            if (reaktor_button(&(reaktor_button_spec){
+                    .icon = "help-circle-outline", .name = "Pick a widget", .flat = 1,
+                    .accent = (unsigned char)g_picking,
+                    .tooltip = g_picking ? "Click a widget in the app" : "Pick a widget in the app",
+                    .box = { .w = ICON_W, .h = ICON_BOX } })) {
+                g_picking = !g_picking;
+                redraw();
+            }
+            if (reaktor_button(&(reaktor_button_spec){
+                    .icon = "remove-circle-outline", .name = "Clear the selection", .flat = 1,
+                    .disabled = (unsigned char)(g_sel == 0), .tooltip = "Clear the selection",
+                    .box = { .w = ICON_W, .h = ICON_BOX, .mr = 8.0f } })) {
+                g_sel = 0;
+                redraw();
+            }
+        }
         REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y, .gap = 8.0f) {
             switch (g_tab) {
             case TAB_TREE:  tab_tree();  break;

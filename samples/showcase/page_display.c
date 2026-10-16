@@ -4,7 +4,7 @@ static const char *const g_grid[7][3] = {
     { "SDL3",      "Zlib",   "window, input, renderer, main loop" },
     { "Nuklear",   "MIT/PD", "the widgets and their layout" },
     { "LCUI css",  "MIT",    "parses the stylesheet, computes values" },
-    { "tiny.css",  "MIT",    "the stylesheet itself" },
+    { "Water.css", "MIT",    "the stylesheet itself" },
     { "plutosvg",  "MIT",    "rasterises the icons" },
     { "Ionicons",  "MIT",    "the icons" },
     { "Aileron",   "CC0",    "the typeface" }
@@ -28,7 +28,7 @@ section_grid(App *app, struct reaktor_context *ctx)
             "The only widget on these pages that Nuklear does not have - and "
             "one whose colors come from the stylesheet's own table rules: "
             "thead, th, td and the --table-bg stripes are read straight out of "
-            "tiny.css. Only the rows on screen are drawn, so a list of a "
+            "Water.css. Only the rows on screen are drawn, so a list of a "
             "million costs what a list of eight does; a row is chosen by a "
             "click or from the keyboard.");
     api(app, ctx, "reaktor_list");

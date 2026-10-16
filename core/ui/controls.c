@@ -93,7 +93,10 @@ reaktor_button(const reaktor_button_spec *s)
     }
     fitted = reaktor_fit_label(g_frame_app, g_frame_ctx, r);
     reaktor_note_mute(g_frame_app, 1);
-    if (s->icon && !s->label) {
+    if (s->flat && s->icon && !s->label) {
+        hit = reaktor_css_button_flat(g_frame_app, g_frame_ctx, s->icon, s->name,
+                                      s->accent);
+    } else if (s->icon && !s->label) {
         float px = (float)(int)(r.h * 0.6f);
 
         hit = reaktor_css_button_image(g_frame_app, g_frame_ctx, sel,
@@ -287,6 +290,11 @@ reaktor_label(const reaktor_label_spec *s)
                    : s->align == REAKTOR_RIGHT  ? NK_TEXT_RIGHT
                                                 : NK_TEXT_LEFT;
         struct nk_color c = reaktor_token(s->color, g_frame_ctx->style.text.color);
+
+        /* A sheet can repaint the page without redefining the token. */
+        if (s->color)
+            c = reaktor_visible(c, reaktor_page_color(g_frame_app),
+                                g_frame_ctx->style.text.color);
 
         styled = decl_push_font(s->style);
         if (s->wrap) wrap_draw(f, s->text, c, lines);
