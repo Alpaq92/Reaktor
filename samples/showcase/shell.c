@@ -802,6 +802,7 @@ main(int argc, char **argv)
                             .borderless = 1, .hit_test = window_hit_test },
         .font_fallbacks = { { .path = "assets/fonts/MPLUS1p-Regular.ttf" } },
         .confirm_close  = SC_CLOSE_QUESTION,
+        .inspector      = { .attach = 1 },
         .page           = page_shell,
         .key            = sample_key,
         .start          = sample_start,

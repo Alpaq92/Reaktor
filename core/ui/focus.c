@@ -361,5 +361,6 @@ reaktor_overlay(App *app, struct nk_context *ctx, int ring)
     o->begin = o->end = o->last = ctx->memory.allocated;
     if (ring) focus_ring(app, ctx, o);
     if (app->tip) reaktor_tip_draw(app, ctx, o);
+    reaktor_inspector_mark(app, ctx, o);
     o->end = ctx->memory.allocated;
 }

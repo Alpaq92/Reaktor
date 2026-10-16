@@ -566,6 +566,39 @@ and GTK 3 when the tray opens; nothing links them, and without them there is
 no tray. GTK sets the user's locale as it starts, and the runtime puts the C
 library's back.
 
+### Inspector
+
+The Inspector looks into a running app from a window of its own, titled
+"<window title> - Inspector"; on the web it is a floater in the page. Its tabs:
+
+- **Tree**: the widget tree, as screen readers get it. Selecting a node
+  outlines the widget in the app; **Pick**, then a click in the app, selects
+  the widget under the pointer without pressing it.
+- **Box**: the widget's bounds, its rectangle in its parent, and where its
+  width and height come from: its parent, its content, the stylesheet, or the
+  page. A size the page fixed is one no rule can change.
+- **Style**: what the widget's element (`button`, `input`, ...) gets from the
+  sheets, and a box of CSS applied after every other sheet, to this run only.
+- **Frame**: frames drawn, what made the last one run, and the build, render
+  and present times.
+- **Logs**: every `SDL_Log` line since the app started, filtered by priority.
+
+An app opts in with `.inspector`; left zero, there is no Inspector and the
+shortcut is the app's. `.mods` and `.key` replace the shortcut, Ctrl+Shift+I
+(Cmd+Option+I on macOS); `.key = -1` leaves it without one. `.open` opens it at
+start.
+
+```c
+launchApp(argc, argv, &(reaktor_launch){
+    .inspector = { .attach = 1 },
+    .page = page });
+```
+
+`reaktor_inspector_open(app)` opens it and answers 0 when the app has none,
+`reaktor_inspector_close(app)` closes it, and `reaktor_inspector_shown(app)`
+says whether it is open. `--inspect` opens it at start and `--no-inspector`
+detaches it, but no flag gives an Inspector to an app that did not attach one.
+
 ## Styling
 
 Sheets are read in order and the last rule wins, as CSS settles a tie:
@@ -974,6 +1007,7 @@ Passed to CMake, through either script:
 | `REAKTOR_POPUP_WINDOWS` | `ON` | Menus in windows of their own |
 | `REAKTOR_NOTIFY` | `ON` | System notifications |
 | `REAKTOR_PRINT` | `ON` | Printing and PDF export, through libHaru |
+| `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Linux and the BSDs |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
@@ -983,7 +1017,7 @@ pass `=ON` to switch one back.
 
 **A module is two interface libraries**, and a program links one:
 `reaktor_a11y` or `reaktor_a11y_none`, and likewise `_locale`, `_text`,
-`_settings`, `_tray`, `_popups`, `_notify` and `_print`. Both define the same functions. The
+`_settings`, `_tray`, `_popups`, `_notify`, `_print` and `_inspector`. Both define the same functions. The
 showcase takes every module; `notepad` takes settings, popups and print; `simple` and
 `bench` take none, and show what the runtime costs alone. An option switched off swaps in the `_none` half everywhere, and leaves
 pixels and `--a11y-dump` byte-identical apart from what the module itself
@@ -1016,6 +1050,8 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
   and GTK 3 are never loaded on Linux and the BSDs.
 - **`REAKTOR_PRINT=OFF`** leaves libHaru out; `reaktor_print` and
   `reaktor_print_pdf` answer 0.
+- **`REAKTOR_INSPECTOR=OFF`** answers 0 from `reaktor_inspector_open` and
+  ignores `.inspector`, its shortcut and its flags.
 - **`REAKTOR_NOTIFY=OFF`** answers 0 from `reaktor_notify` and links nothing
   for it: not `shell32`, `dbus-1` or the UserNotifications framework.
 - **`REAKTOR_POPUP_WINDOWS=OFF`** draws menus inside the window, fitted to it,
@@ -1038,6 +1074,7 @@ removes them from `argv` before the application sees it:
 | `--popups inline` | Menus inside the window, not in windows of their own |
 | `--console <none\|parent\|debug>` | Override `.console` |
 | `--log <path>` | Override `.log` |
+| `--inspect`, `--no-inspector` | Open the [Inspector](#inspector) at start; detach it |
 | `--css <path>` | A sheet after the application's; up to four |
 | `--font <path>`, `--font-bold <path>` | Replace the UI face and its bold |
 | `--icons <dir>` | Look for `<name>.svg` here first; up to four |

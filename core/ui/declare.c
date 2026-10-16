@@ -109,8 +109,10 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
     if (g_depth == 0) {
         float room = nk_window_get_content_region_size(g_frame_ctx).x;
 
-        if (box.w <= 0.0f || ((box.flags & REAKTOR_LAY_FILL_X) && box.w < room))
+        if (box.w <= 0.0f || ((box.flags & REAKTOR_LAY_FILL_X) && box.w < room)) {
             box.w = room;
+            box.flags |= REAKTOR_LAY_SIZED_W;
+        }
         box.flags &= ~(unsigned)REAKTOR_LAY_FILL_X;
     }
 
@@ -322,6 +324,7 @@ decl_box_from_style(reaktor_box *box, const char *text, const char *selector,
         if (w < st.min_width) w = st.min_width;
         if (st.max_width > 0.0f && w > st.max_width) w = st.max_width;
         box->w = w;
+        box->flags |= REAKTOR_LAY_SIZED_W;
     }
     if (box->h <= 0.0f && !(box->flags & REAKTOR_LAY_FILL_Y)) {
         float line = st.line_height > 0.0f ? st.line_height : f->height;
@@ -329,6 +332,7 @@ decl_box_from_style(reaktor_box *box, const char *text, const char *selector,
         if (h < st.min_height) h = st.min_height;
         if (st.max_height > 0.0f && h > st.max_height) h = st.max_height;
         box->h = h;
+        box->flags |= REAKTOR_LAY_SIZED_H;
     }
 
     if (st.matched) {

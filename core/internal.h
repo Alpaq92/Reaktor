@@ -181,6 +181,7 @@ struct App {
     unsigned char  hot_last_repaint;
 
     int   dirty;
+    unsigned why;
 
     struct input_queue {
         SDL_Event     *ev;
@@ -268,6 +269,26 @@ enum { HOLD_NONE, HOLD_ALL, HOLD_FRESH };
 int  focus_key(App *app, const SDL_Event *event);
 void focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv);
 void reaktor_overlay(App *app, struct nk_context *ctx, int ring);
+
+enum {
+    REAKTOR_WHY_INPUT  = 1u << 0,
+    REAKTOR_WHY_RESIZE = 1u << 1,
+    REAKTOR_WHY_MOTION = 1u << 2,
+    REAKTOR_WHY_STYLE  = 1u << 3
+};
+
+/* The Inspector module, or its _none twin. */
+struct reaktor_inspector_spec;
+void reaktor_inspector_early(void);
+void reaktor_inspector_start(App *app, const struct reaktor_inspector_spec *spec, int flag);
+void reaktor_inspector_stop(App *app);
+int  reaktor_inspector_event(App *app, const SDL_Event *e);
+void reaktor_inspector_frame(App *app);
+int  reaktor_inspector_marks(App *app);
+void reaktor_inspector_mark(App *app, struct nk_context *ctx,
+                            struct nk_command_buffer *o);
+const char *reaktor_inspector_sheet(void);
+void reaktor_restyle(void);
 void reaktor_tip_draw(App *app, struct nk_context *ctx,
                       struct nk_command_buffer *cv);
 void focus_resolve(App *app);

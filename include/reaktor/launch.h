@@ -63,11 +63,19 @@ typedef struct reaktor_window_spec {
                                           const SDL_Point *pt, void *data);
 } reaktor_window_spec;
 
+typedef struct reaktor_inspector_spec {
+    int          attach;
+    unsigned     mods;
+    SDL_Keycode  key;
+    int          open;
+} reaktor_inspector_spec;
+
 typedef struct reaktor_launch {
     const char          *name, *id, *version;
     reaktor_window_spec  window;
     reaktor_console      console;
     const char          *log;
+    reaktor_inspector_spec inspector;
     reaktor_theme        theme;
     const char          *confirm_close;
 
@@ -155,6 +163,10 @@ int   reaktor_floater_is_open(App *app, int id);
 int   reaktor_tray_open(App *app, const reaktor_tray *tray);
 void  reaktor_tray_check(App *app, int item, int checked);
 void  reaktor_tray_close(App *app);
+
+int   reaktor_inspector_open(App *app);
+void  reaktor_inspector_close(App *app);
+int   reaktor_inspector_shown(App *app);
 
 #ifndef REAKTOR_NO_SHORT_NAMES
 static SDL_INLINE int
