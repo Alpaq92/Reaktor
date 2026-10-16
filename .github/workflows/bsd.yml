@@ -47,12 +47,15 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Restore the compiler cache
+      # The build folder keeps CMake's checks, which ccache cannot: they link.
+      - name: Restore the build cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .ccache
-          key: ccache-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
-          restore-keys: ccache-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
+          path: |
+            .ccache
+            build
+          key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
 
       - name: Start VM
         id: vm
@@ -237,14 +240,15 @@ jobs:
           for f in build/CMakeCache.txt build/CMakeFiles/CMakeConfigureLog.yaml; do
             if [ -f "$f" ]; then cp "$f" smoke/; fi
           done
-          rm -rf build
 
-      - name: Save the compiler cache
+      - name: Save the build cache
         if: ${{ always() && steps.build.outcome == 'success' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .ccache
-          key: ccache-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            .ccache
+            build
+          key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
 
       - name: Upload the package
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
