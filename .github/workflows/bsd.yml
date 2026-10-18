@@ -57,6 +57,28 @@ jobs:
           key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
           restore-keys: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
 
+      # ninja rebuilds by mtime, and a checkout dates every file now. Date them
+      # before the cached objects instead, and only what changed since the
+      # commit that build came from after them. Commit times would not do: a
+      # branch older than the cache would never rebuild its own changes.
+      - name: Date the sources against the cached build
+        shell: bash
+        run: |
+          old=$(cat build/.reaktor-cache-sha 2>/dev/null || true)
+          git ls-files -z --recurse-submodules | xargs -0 touch -h -d 2000-01-01T00:00:00Z
+          if [ -n "$old" ] &&
+             { git cat-file -e "$old^{commit}" 2>/dev/null ||
+               git fetch -q --depth=1 origin "$old" 2>/dev/null; }; then
+            git diff --name-only -z "$old" HEAD | while IFS= read -r -d '' p; do
+              if [ -d "$p" ]; then find "$p" -type f -exec touch {} +
+              elif [ -e "$p" ]; then touch "$p"; fi
+            done
+            echo "cached build is from $old; $(git diff --name-only "$old" HEAD | wc -l) paths differ"
+          else
+            git ls-files -z --recurse-submodules | xargs -0 touch -h
+            echo "no cached build to diff against; every source is new"
+          fi
+
       - name: Start VM
         id: vm
         uses: cross-platform-actions/action@e0b9770014ba65d5e0815f15b74031c3a635f641 # v1.6.0
@@ -103,7 +125,9 @@ jobs:
           CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=1G
           export CCACHE_DIR CCACHE_BASEDIR CCACHE_MAXSIZE
           ccache -z
-          ./build.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache </dev/null
+          # SDL compiles through a precompiled header, which ccache will not cache.
+          ./build.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                        -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
           ccache -s
 
       - name: Console tests
@@ -240,6 +264,11 @@ jobs:
           for f in build/CMakeCache.txt build/CMakeFiles/CMakeConfigureLog.yaml; do
             if [ -f "$f" ]; then cp "$f" smoke/; fi
           done
+
+      - name: Note which commit the cached build is from
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: git rev-parse HEAD > build/.reaktor-cache-sha
 
       - name: Save the build cache
         if: ${{ always() && steps.build.outcome == 'success' }}
