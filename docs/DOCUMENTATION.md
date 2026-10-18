@@ -179,6 +179,11 @@ and category, appended; `--log <path>` overrides it.
 terminal or a console of its own, plus SDL's debug log). A redirected stream
 stays redirected. Ctrl+C reaches the app only from a console it owns.
 
+**Anti-aliasing.** `.anti_aliasing` is `REAKTOR_AA_AUTO` (strokes on every
+renderer, fills on a GPU one; the default), `_ON` (fills on the software
+renderer too, which it pays for) or `_OFF`. `--aa <auto|on|off>` overrides it.
+Rounded fills are masks and look the same under each.
+
 **Assets.** `.css` adds up to four sheets after Water.css and reaktor.css
 (`.no_reaktor_css` drops reaktor.css), `.font` and `.font_bold` replace
 Aileron (which stands in for one that cannot be read, or that is cut short or
@@ -1078,6 +1083,7 @@ removes them from `argv` before the application sees it:
 | `--lang <code>` | Open in that catalog: `en`, `pl`, `ja` |
 | `--font-fallback <path>` | A font for the Text module, before the application's; repeatable |
 | `--renderer <name>` | `software` (default), `auto`, or a driver name |
+| `--aa <auto\|on\|off>` | Override `.anti_aliasing` |
 | `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
 | `--popups inline` | Menus inside the window, not in windows of their own |
 | `--console <none\|parent\|debug>` | Override `.console` |
@@ -1147,8 +1153,9 @@ about. `--renderer auto` lets SDL choose; a driver name pins one.
   software renderer turns two triangles into a fill and truncates position and
   size apart at fractional scales.
 - **A one-pixel stroke is two half-alpha rows**, so borders are fills:
-  `reaktor_edge_round`. Fill anti-aliasing is off on every renderer, so rounded
-  fills are masks: `reaktor_fill_round`, and each rounded fill Nuklear draws
+  `reaktor_edge_round`. Fill anti-aliasing is off on the software renderer
+  and on under a GPU one unless `.anti_aliasing` says otherwise; rounded fills
+  do not depend on it, as they are masks: `reaktor_fill_round`, and each rounded fill Nuklear draws
   itself — a scrollbar, a tree's header, a combo, a menu item — is swapped for
   masks before the frame is drawn.
 

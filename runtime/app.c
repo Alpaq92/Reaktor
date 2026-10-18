@@ -258,6 +258,12 @@ take_flags(App *app, int argc, char **argv)
         const char *v = (i + 1 < argc) ? argv[i + 1] : NULL;
 
         if (v && SDL_strcmp(a, "--shot") == 0)       { app->shot_path = v; i++; }
+        else if (v && SDL_strcmp(a, "--aa") == 0) {
+            g_launch.anti_aliasing = SDL_strcmp(v, "on") == 0  ? REAKTOR_AA_ON
+                                   : SDL_strcmp(v, "off") == 0 ? REAKTOR_AA_OFF
+                                   : REAKTOR_AA_AUTO;
+            i++;
+        }
         else if (v && SDL_strcmp(a, "--console") == 0) {
             g_launch.console = SDL_strcmp(v, "debug") == 0  ? REAKTOR_CONSOLE_DEBUG
                              : SDL_strcmp(v, "parent") == 0 ? REAKTOR_CONSOLE_PARENT
@@ -773,7 +779,7 @@ app_init(void **appstate, int argc, char *argv[])
     reaktor_a11y_platform_init(reader_activate, reader_focus, app);
 
     app->vsync_on = SDL_SetRenderVSync(app->ren, 1) ? 1 : 0;
-    app->aa = 1;
+    app->aa_mode = (int)g_launch.anti_aliasing;
     app->redraw_always = 0;
 
     SDL_strlcpy(app->frame_rate, "waitevent", sizeof(app->frame_rate));

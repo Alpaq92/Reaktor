@@ -1266,8 +1266,9 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
         out->font = drawn[0] ? line : app->font_status;
     }
     out->vsync      = app->vsync_on;
-    out->aa = !app->aa ? "off"
-            : app->renderer_is_sw && app->sw_noaa ? "off (software renderer)"
+    out->aa = app->aa_mode == REAKTOR_AA_OFF ? "off"
+            : !reaktor_aa_lines(app) ? "off (software renderer)"
+            : reaktor_aa_fills(app) ? "strokes and fills"
             : "strokes only";
     out->dark       = app->dark;
     out->sheets     = app->sheets;

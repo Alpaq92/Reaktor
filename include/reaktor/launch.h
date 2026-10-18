@@ -26,6 +26,12 @@ typedef enum reaktor_theme {
     REAKTOR_THEME_DARK
 } reaktor_theme;
 
+typedef enum reaktor_aa {
+    REAKTOR_AA_AUTO = 0,
+    REAKTOR_AA_ON,
+    REAKTOR_AA_OFF
+} reaktor_aa;
+
 typedef enum reaktor_quit_reason {
     REAKTOR_QUIT_WINDOW = 0,
     REAKTOR_QUIT_APP,
@@ -77,6 +83,7 @@ typedef struct reaktor_launch {
     const char          *log;
     reaktor_inspector_spec inspector;
     reaktor_theme        theme;
+    reaktor_aa           anti_aliasing;
     const char          *confirm_close;
 
     reaktor_asset        css[REAKTOR_LAYER_MAX];
