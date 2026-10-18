@@ -499,6 +499,156 @@ static int calc_sum(calc_in *c, calc_val *out)
     }
 }
 
+/* libcss reads a border width only as a length, and its border shorthands
+   crash on the keywords; CSS gives them these lengths. */
+static void line_width_keywords(buf *b)
+{
+    static const struct { const char *word; const char *px; } kw[3] = {
+        { "thin", "1px" }, { "medium", "3px" }, { "thick", "5px" }
+    };
+    size_t i = 0;
+
+    while (b->p && i < b->len) {
+        int k, hit = -1;
+
+        if (i > 0 && (isalnum((unsigned char)b->p[i - 1]) || b->p[i - 1] == '-')) { i++; continue; }
+        for (k = 0; k < 3; k++) {
+            size_t n = strlen(kw[k].word);
+
+            if (i + n <= b->len && strncmp(b->p + i, kw[k].word, n) == 0 &&
+                (i + n == b->len || !(isalnum((unsigned char)b->p[i + n]) || b->p[i + n] == '-'))) {
+                hit = k;
+                break;
+            }
+        }
+        if (hit < 0) { i++; continue; }
+        {
+            size_t n = strlen(kw[hit].word), m = strlen(kw[hit].px);
+            buf r;
+
+            memset(&r, 0, sizeof(r));
+            if (!buf_add(&r, b->p, i) || !buf_str(&r, kw[hit].px) ||
+                !buf_add(&r, b->p + i + n, b->len - i - n)) {
+                free(r.p);
+                return;
+            }
+            free(b->p);
+            *b = r;
+            i += m;
+        }
+    }
+}
+
+/* libcss's border shorthands read three parsed parts whatever they got, and
+   crash on a value that parses as one part ("red", "dotted", "unset"). The
+   shorthand is spelled out as longhands instead, with the parts it leaves
+   out at the values libcss gives them: 0px, none, transparent. */
+static int border_side_of(const char *p, size_t plen, const char **side)
+{
+    static const char *const sides[4] = { "top", "right", "bottom", "left" };
+    int k;
+
+    if (plen == 6 && strncmp(p, "border", 6) == 0) { *side = NULL; return 1; }
+    for (k = 0; k < 4; k++) {
+        size_t n = strlen(sides[k]);
+
+        if (plen == 7 + n && strncmp(p, "border-", 7) == 0 &&
+            strncmp(p + 7, sides[k], n) == 0) {
+            *side = sides[k];
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int word_is(const char *s, size_t n, const char *w)
+{
+    size_t i;
+
+    if (strlen(w) != n) return 0;
+    for (i = 0; i < n; i++)
+        if (tolower((unsigned char)s[i]) != w[i]) return 0;
+    return 1;
+}
+
+static int is_line_style(const char *s, size_t n)
+{
+    static const char *const styles[] = { "none", "hidden", "dotted", "dashed", "solid",
+                                          "double", "groove", "ridge", "inset", "outset" };
+    size_t k;
+
+    for (k = 0; k < sizeof(styles) / sizeof(styles[0]); k++)
+        if (word_is(s, n, styles[k])) return 1;
+    return 0;
+}
+
+static int is_length(const char *s, size_t n)
+{
+    size_t i = (n && (s[0] == '-' || s[0] == '+')) ? 1 : 0;
+
+    return i < n && (isdigit((unsigned char)s[i]) || s[i] == '.');
+}
+
+/* 1 when written out, 0 to drop the declaration. */
+static int expand_border(buf *out, const char *p, size_t plen, const char *v, size_t vlen)
+{
+    static const char *const sides[4] = { "top", "right", "bottom", "left" };
+    const char *side, *part[3] = { "0px", "none", "transparent" };
+    size_t partn[3] = { 3, 4, 11 };
+    int have[3] = { 0, 0, 0 }, k, words = 0, important = 0, wide = 0;
+    size_t i = 0;
+
+    if (!border_side_of(p, plen, &side)) return -1;
+    while (i < vlen) {
+        size_t s, depth = 0;
+        int kind;
+
+        while (i < vlen && isspace((unsigned char)v[i])) i++;
+        if (i >= vlen) break;
+        s = i;
+        while (i < vlen && (depth || !isspace((unsigned char)v[i]))) {
+            if (v[i] == '(') depth++;
+            else if (v[i] == ')' && depth) depth--;
+            i++;
+        }
+        if (v[s] == '!') {
+            if (!word_is(v + s, i - s, "!important") || important) return 0;
+            important = 1;
+            continue;
+        }
+        words++;
+        if (word_is(v + s, i - s, "inherit")) return 0;
+        if (word_is(v + s, i - s, "unset") || word_is(v + s, i - s, "initial") ||
+            word_is(v + s, i - s, "revert") || word_is(v + s, i - s, "revert-layer")) {
+            wide = 1;
+            continue;
+        }
+        kind = is_length(v + s, i - s) ? 0 : is_line_style(v + s, i - s) ? 1 : 2;
+        if (have[kind]) return 0;
+        have[kind] = 1;
+        part[kind] = v + s;
+        partn[kind] = i - s;
+    }
+    if (!words || (wide && words > 1)) return 0;
+    for (k = 0; k < 4; k++) {
+        static const char *const what[3] = { "width", "style", "color" };
+        int w;
+
+        if (side && strcmp(side, sides[k]) != 0) continue;
+        for (w = 0; w < 3; w++) {
+            buf_str(out, "border-");
+            buf_str(out, sides[k]);
+            buf_ch(out, '-');
+            buf_str(out, what[w]);
+            buf_str(out, ": ");
+            buf_add(out, part[w], partn[w]);
+            if (important) buf_str(out, " !important");
+            buf_str(out, ";\n");
+        }
+    }
+    return 1;
+}
+
 static void resolve_pixel_calcs(buf *b)
 {
     static const char fn[] = "calc(";
@@ -823,6 +973,9 @@ static void emit_one(void *c, const char *p, size_t plen,
                       ctx->rem_px, ctx->em_px, &conv);
         resolve_pixel_calcs(&conv);
     }
+    if ((plen >= 6 && strncmp(p, "border", 6) == 0) ||
+        (plen >= 7 && strncmp(p, "outline", 7) == 0))
+        line_width_keywords(&conv);
 
     /* The engine ends a value at any ';', even one inside url(). */
     if (plen >= ctx->token_max || conv.len >= ctx->token_max ||
@@ -830,6 +983,16 @@ static void emit_one(void *c, const char *p, size_t plen,
         free(tmp.p);
         free(conv.p);
         return;
+    }
+    {
+        int done = expand_border(ctx->out, p, plen, conv.p ? conv.p : "", conv.len);
+
+        if (done >= 0) {
+            ctx->wrote |= done;
+            free(tmp.p);
+            free(conv.p);
+            return;
+        }
     }
     buf_add(ctx->out, p, plen);
     buf_str(ctx->out, ": ");
