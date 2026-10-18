@@ -322,6 +322,22 @@ read_roles(App *app)
                 : reaktor_token("--links", app->text);
 }
 
+/* Whether the sheets' own tokens already say what the role sheet would. */
+static int
+roles_hold(const App *app)
+{
+    const struct nk_color *c[3] = { &app->accent, &app->page, &app->text };
+    static const char *const name[3] = { "--links", "--background-body", "--text-main" };
+    unsigned char t[4];
+    int i;
+
+    for (i = 0; i < 3; i++)
+        if (!reaktor_style_token(name[i], t) || c[i]->a != 255 || t[3] != 255 ||
+            t[0] != c[i]->r || t[1] != c[i]->g || t[2] != c[i]->b)
+            return 0;
+    return 1;
+}
+
 static const char *
 role_sheet(const App *app)
 {
@@ -370,7 +386,7 @@ load_theme(App *app)
     if (!reaktor_style_init(sheets, n, app->dark ? "dark" : "light"))
         SDL_Log("stylesheets failed to load; Nuklear defaults apply");
     read_roles(app);
-    if (n > base && n < SHEET_MAX) {
+    if (n > base && n < SHEET_MAX && !roles_hold(app)) {
         sheets[n] = role_sheet(app);
         if (reaktor_style_init(sheets, n + 1, app->dark ? "dark" : "light"))
             read_roles(app);

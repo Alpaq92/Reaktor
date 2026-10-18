@@ -11,6 +11,17 @@ rect_of(float x, float y, float w, float h)
     return r;
 }
 
+/* The direction a box was declared with, read back from onlay's own item. */
+static unsigned char
+dir_of(const reaktor_layout *l, lay_id it)
+{
+    switch (lay_get_item(&l->ctx, it)->flags & 3u) {
+    case LAY_ROW:    return REAKTOR_LAY_ROW;
+    case LAY_COLUMN: return REAKTOR_LAY_COLUMN;
+    default:         return REAKTOR_LAY_FREE;
+    }
+}
+
 static uint32_t
 contain_of(const reaktor_box *b)
 {
@@ -60,9 +71,6 @@ declare(reaktor_layout *l, unsigned id, const reaktor_box *b)
     it = lay_item(&l->ctx);
     if (it < REAKTOR_LAY_MAX) {
         l->flags[it] = b->flags;
-        l->dir[it]   = b->dir;
-        l->w[it]     = b->w;
-        l->h[it]     = b->h;
     }
     lay_set_size_xy(&l->ctx, it, (lay_scalar)b->w, (lay_scalar)b->h);
     lay_set_contain(&l->ctx, it, contain_of(b));
@@ -140,7 +148,7 @@ reaktor_layout_open_dir(const reaktor_layout *l)
 
     if (l->depth <= 1 || l->depth > REAKTOR_LAY_DEPTH) return REAKTOR_LAY_COLUMN;
     box = l->stack[l->depth - 1];
-    return box < REAKTOR_LAY_MAX ? l->dir[box] : REAKTOR_LAY_COLUMN;
+    return box < REAKTOR_LAY_MAX ? dir_of(l, box) : REAKTOR_LAY_COLUMN;
 }
 
 static reaktor_lay_slot *
@@ -182,8 +190,8 @@ part_neighbors(reaktor_layout *l, lay_id box)
     lay_id c, prev = LAY_INVALID_ID;
     int    lead, trail;
 
-    if (box >= REAKTOR_LAY_MAX || l->dir[box] == REAKTOR_LAY_FREE) return;
-    lead  = l->dir[box] == REAKTOR_LAY_ROW ? 0 : 1;
+    if (box >= REAKTOR_LAY_MAX || dir_of(l, box) == REAKTOR_LAY_FREE) return;
+    lead  = dir_of(l, box) == REAKTOR_LAY_ROW ? 0 : 1;
     trail = lead + 2;
 
     for (c = lay_first_child(&l->ctx, box); c != LAY_INVALID_ID;
@@ -253,9 +261,11 @@ reaktor_layout_info(const reaktor_layout *l, unsigned id, unsigned *flags,
 
         if (l->id[i] != id || it >= REAKTOR_LAY_MAX) continue;
         *flags = l->flags[it];
-        *dir   = l->dir[it];
-        *w     = l->w[it];
-        *h     = l->h[it];
+        lay_vec2 size = lay_get_size((lay_context *)&l->ctx, it);
+
+        *dir   = dir_of(l, it);
+        *w     = size.v[0];
+        *h     = size.v[1];
         return 1;
     }
     return 0;

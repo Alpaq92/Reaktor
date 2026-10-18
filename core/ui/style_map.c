@@ -824,13 +824,8 @@ apply_widget_style(App *app)
     st->progress.cursor_border_color = accent;
     st->progress.border              = 0.0f;
     st->progress.cursor_border       = 0.0f;
-    {
-        reaktor_style bs;
-
-        reaktor_style_get("button", &bs);
-        st->progress.rounding        = bs.matched ? bs.rounding : 3.0f;
-        st->progress.cursor_rounding = st->progress.rounding;
-    }
+    st->progress.rounding        = btn.matched ? btn.rounding : 3.0f;
+    st->progress.cursor_rounding = st->progress.rounding;
 
     st->property.normal       = i_base;
     st->property.hover        = i_hover;

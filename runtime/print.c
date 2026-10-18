@@ -120,7 +120,7 @@ print_run(App *app, void *user)
 
         job->index = i;
         reaktor_app_size(pa, &w, &h);
-        for (k = 0; k < 6 || (!reaktor_frame_settled(pa) && k < 24); k++)
+        for (k = 0; k < 3 || (!reaktor_frame_settled(pa) && k < 24); k++)
             reaktor_app_frame(pa, w, h, "", print_page, job);
         pa->want_capture = 1;
         reaktor_app_frame(pa, w, h, "", print_page, job);

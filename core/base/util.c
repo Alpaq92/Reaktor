@@ -44,18 +44,11 @@ FILE *reaktor_fopen(const char *path, const char *mode)
 #endif
 }
 
-static FILE *open_rb(const char *path)
-{
-    return reaktor_fopen(path, "rb");
-}
-
 static int file_exists(const char *path)
 {
-    FILE *f = open_rb(path);
+    SDL_PathInfo info;
 
-    if (!f) return 0;
-    fclose(f);
-    return 1;
+    return SDL_GetPathInfo(path, &info) && info.type == SDL_PATHTYPE_FILE;
 }
 
 static int copy_out(char *out, size_t cap, const char *src)

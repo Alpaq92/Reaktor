@@ -70,6 +70,8 @@ NK_API bool                 nk_sdl_set_coverage_palette(SDL_Texture *tex);
 
 struct nk_sdl_device {
     struct nk_buffer cmds;
+    /* REAKTOR: kept across frames, as cmds is, so a frame allocates nothing. */
+    struct nk_buffer vbuf, ebuf;
     struct nk_draw_null_texture tex_null;
     SDL_Texture *font_tex;
     /* REAKTOR: white texel for untextured geometry. */
@@ -416,7 +418,6 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         /* convert from command queue into draw list and draw to screen */
         const struct nk_draw_command *cmd;
         const nk_draw_index *offset = NULL;
-        struct nk_buffer vbuf, ebuf;
 
         /* fill converting configuration */
         struct nk_convert_config config;
@@ -440,9 +441,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         config.line_AA = line_AA;
 
         /* convert shapes into vertices */
-        nk_buffer_init(&vbuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
-        nk_buffer_init(&ebuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
-        nk_convert(&sdl->ctx, &sdl->ogl.cmds, &vbuf, &ebuf, &config);
+        nk_convert(&sdl->ctx, &sdl->ogl.cmds, &sdl->ogl.vbuf, &sdl->ogl.ebuf, &config);
 
         /* REAKTOR: software vertices on the device pixel grid. */
         is_sw = SDL_strcmp(SDL_GetRendererName(sdl->renderer), "software") == 0;
@@ -450,8 +449,8 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
             sy <= 0.0f)
             sx = sy = 1.0f;
         if (is_sw) {
-            nk_byte *v = (nk_byte *)nk_buffer_memory(&vbuf);
-            nk_size i, n = vbuf.needed / (nk_size)vs;
+            nk_byte *v = (nk_byte *)nk_buffer_memory(&sdl->ogl.vbuf);
+            nk_size i, n = sdl->ogl.vbuf.needed / (nk_size)vs;
             for (i = 0; i < n; i++) {
                 float *pos = (float *)(v + i * (nk_size)vs + vp);
                 pos[0] = (SDL_floorf(pos[0] * sx + 0.5f) + 0.5f) / sx;
@@ -460,7 +459,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         }
 
         /* iterate over and execute each draw command */
-        offset = (const nk_draw_index*)nk_buffer_memory_const(&ebuf);
+        offset = (const nk_draw_index*)nk_buffer_memory_const(&sdl->ogl.ebuf);
 
         clipping_enabled = SDL_RenderClipEnabled(sdl->renderer);
         SDL_GetRenderClipRect(sdl->renderer, &saved_clip);
@@ -479,7 +478,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
             /* REAKTOR: glyph quads on the pixel grid. */
             if (!is_sw && cmd->texture.ptr == (void *)sdl->ogl.font_tex) {
-                nk_byte *v = (nk_byte *)nk_buffer_memory(&vbuf);
+                nk_byte *v = (nk_byte *)nk_buffer_memory(&sdl->ogl.vbuf);
                 nk_uint k;
                 for (k = 0; k < cmd->elem_count; k++) {
                     float *pos = (float *)(v + (nk_size)offset[k] * (nk_size)vs
@@ -499,8 +498,8 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
             }
 
             {
-                const void *vertices = nk_buffer_memory_const(&vbuf);
-                int n = (int)(vbuf.needed / (nk_size)vs);
+                const void *vertices = nk_buffer_memory_const(&sdl->ogl.vbuf);
+                int n = (int)(sdl->ogl.vbuf.needed / (nk_size)vs);
 
                 /* REAKTOR: shapes untextured. */
                 SDL_Texture *tex = (SDL_Texture *)cmd->texture.ptr;
@@ -555,8 +554,8 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
         nk_clear(&sdl->ctx);
         nk_buffer_clear(&sdl->ogl.cmds);
-        nk_buffer_free(&vbuf);
-        nk_buffer_free(&ebuf);
+        nk_buffer_clear(&sdl->ogl.vbuf);
+        nk_buffer_clear(&sdl->ogl.ebuf);
     }
 }
 
@@ -641,6 +640,8 @@ nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer, struct nk_allocator allocat
     sdl->ctx.clip.paste = nk_sdl_clipboard_paste;
     sdl->ctx.clip.userdata = nk_handle_ptr((void*)sdl);
     nk_buffer_init(&sdl->ogl.cmds, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
+    nk_buffer_init(&sdl->ogl.vbuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
+    nk_buffer_init(&sdl->ogl.ebuf, &sdl->allocator, NK_BUFFER_DEFAULT_INITIAL_SIZE);
     sdl->edit_was_active = false;
     sdl->insert_toggle = false;
     sdl->last_render = SDL_GetTicksNS();
@@ -858,6 +859,8 @@ void nk_sdl_shutdown(struct nk_context* ctx)
 #endif
 
     nk_buffer_free(&sdl->ogl.cmds);
+    nk_buffer_free(&sdl->ogl.vbuf);
+    nk_buffer_free(&sdl->ogl.ebuf);
 
     if (sdl->ogl.font_tex != NULL) {
         SDL_DestroyTexture(sdl->ogl.font_tex);

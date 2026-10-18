@@ -893,9 +893,34 @@ unwrap_color_scheme(char *src, const char *theme)
     }
 }
 
+/* The next rule at *i: its selector and body spans; 0 at the end. */
+static int next_rule(const char *s, size_t len, size_t *i, size_t *sel_s,
+                     size_t *sel_e, size_t *body_s, size_t *body_e)
+{
+    for (;;) {
+        size_t depth = 1;
+
+        *sel_s = *i;
+        while (*i < len && s[*i] != '{' && s[*i] != '}') (*i)++;
+        if (*i >= len) return 0;
+        if (s[*i] == '}') { (*i)++; continue; }
+        *sel_e = (*i)++;
+        *body_s = *i;
+        while (*i < len && depth) {
+            if (s[*i] == '{') depth++;
+            else if (s[*i] == '}') depth--;
+            if (depth) (*i)++;
+        }
+        *body_e = *i;
+        if (*i < len) (*i)++;
+        return 1;
+    }
+}
+
 static char *flatten(char *src, const char *theme, size_t token_max,
                      reaktor_cssvars **out_vars)
 {
+    size_t sel_s, sel_e, body_s, body_e;
     reaktor_cssvars *m = (reaktor_cssvars *)calloc(1, sizeof(*m));
     buf out;
     size_t i, len, pass;
@@ -910,24 +935,7 @@ static char *flatten(char *src, const char *theme, size_t token_max,
     len = strlen(src);
 
     i = 0;
-    while (i < len) {
-        size_t sel_s, sel_e, body_s, body_e, depth;
-
-        sel_s = i;
-        while (i < len && src[i] != '{' && src[i] != '}') i++;
-        if (i >= len) break;
-        if (src[i] == '}') { i++; continue; }
-        sel_e = i++;
-        body_s = i;
-        depth = 1;
-        while (i < len && depth) {
-            if (src[i] == '{') depth++;
-            else if (src[i] == '}') depth--;
-            if (depth) i++;
-        }
-        body_e = i;
-        if (i < len) i++;
-
+    while (next_rule(src, len, &i, &sel_s, &sel_e, &body_s, &body_e)) {
         trim(src, &sel_s, &sel_e);
         if (is_vars_selector(src + sel_s, sel_e - sel_s) ||
             is_theme_selector(src + sel_s, sel_e - sel_s, theme)) {
@@ -965,24 +973,8 @@ static char *flatten(char *src, const char *theme, size_t token_max,
                   "   @media and unsupported selectors removed. */\n");
 
     i = 0;
-    while (i < len) {
-        size_t sel_s, sel_e, body_s, body_e, depth, part, n_emitted;
-        emit_ctx ctx;
-
-        sel_s = i;
-        while (i < len && src[i] != '{' && src[i] != '}') i++;
-        if (i >= len) break;
-        if (src[i] == '}') { i++; continue; }
-        sel_e = i++;
-        body_s = i;
-        depth = 1;
-        while (i < len && depth) {
-            if (src[i] == '{') depth++;
-            else if (src[i] == '}') depth--;
-            if (depth) i++;
-        }
-        body_e = i;
-        if (i < len) i++;
+    while (next_rule(src, len, &i, &sel_s, &sel_e, &body_s, &body_e)) {
+        size_t part, n_emitted;
 
         trim(src, &sel_s, &sel_e);
         if (sel_e <= sel_s) continue;
@@ -1020,12 +1012,6 @@ static char *flatten(char *src, const char *theme, size_t token_max,
             }
             if (!n_emitted) { free(sel.p); continue; }
 
-            ctx.m = m;
-            ctx.out = &out;
-            ctx.token_max = token_max;
-            ctx.wrote = 0;
-            ctx.rem_px = root.px;
-            ctx.em_px  = root.em;
             {
                 buf body;
                 emit_ctx bctx;

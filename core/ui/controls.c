@@ -277,10 +277,10 @@ reaktor_label(const reaktor_label_spec *s)
         if (!reaktor_layout_rect(&g_frame_app->lay, id, &prev) || prev.h != box.h)
             g_frame_unsettled++;
     } else {
-        decl_box_default(&box,
-                         f->width(f->userdata, f->height, s->text,
-                             (int)strlen(s->text)),
-                    f->height);
+        float w = box.w > 0.0f || (box.flags & REAKTOR_LAY_FILL_X) ? 0.0f
+                : f->width(f->userdata, f->height, s->text, (int)strlen(s->text));
+
+        decl_box_default(&box, w, f->height);
     }
 
     if (!decl_emit(id, NULL, &box)) return;
