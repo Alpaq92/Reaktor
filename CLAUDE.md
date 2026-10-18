@@ -61,7 +61,8 @@ regression oracle for every layout or style change.
   corners, and its runs cut from the mask's middle texels, which hold a
   straight band so a run is sharp and as thick as its corners at any scale.
 - **A rounded fill is jagged unless it is a mask.** Fill anti-aliasing is off
-  on every renderer, so a fill with corners goes through `reaktor_fill_round`,
+  on the software renderer, the default (`.anti_aliasing` and `--aa` decide;
+  a GPU renderer has it on), so a fill with corners goes through `reaktor_fill_round`,
   and `reaktor_render` swaps each one Nuklear drew itself for masks, relinking
   the built command list — whose end is wherever a `next` reaches
   `ctx->memory.allocated`.

@@ -119,7 +119,7 @@ struct App {
     const char *tip;
 
     char render_mode[32];
-    int  vsync_on, aa, redraw_always;
+    int  vsync_on, aa_mode, redraw_always;
 
     char frame_rate[16];
     char drag_rate[16];
@@ -272,6 +272,8 @@ enum { HOLD_NONE, HOLD_ALL, HOLD_FRESH };
 int  focus_key(App *app, const SDL_Event *event);
 void focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv);
 void reaktor_overlay(App *app, struct nk_context *ctx, int ring);
+int  reaktor_aa_lines(const App *app);
+int  reaktor_aa_fills(const App *app);
 
 enum {
     REAKTOR_WHY_INPUT  = 1u << 0,

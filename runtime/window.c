@@ -187,7 +187,7 @@ open_window(const reaktor_window *spec, const struct nk_rect *popup)
     SDL_SetRenderVSync(a->ren, 1);
     a->renderer_is_sw = SDL_strcmp(SDL_GetRendererName(a->ren), "software") == 0;
     a->sw_noaa        = m->sw_noaa;
-    a->aa             = 1;
+    a->aa_mode        = m->aa_mode;
     a->font_face      = m->font_face;
     a->font_face_bold = m->font_face_bold;
     for (i = 0; i < m->icon_dir_count; i++) a->icon_dirs[i] = m->icon_dirs[i];

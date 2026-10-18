@@ -1,4 +1,5 @@
 #include "internal.h"
+#include "reaktor/launch.h"
 #include "locale.h"
 
 static const int g_font_px[FONT_STEPS] =
@@ -375,6 +376,20 @@ mask_rounded_fills(App *app)
             ctx->memory.allocated;
 }
 
+int
+reaktor_aa_lines(const App *app)
+{
+    return app->aa_mode != REAKTOR_AA_OFF && !(app->renderer_is_sw && app->sw_noaa);
+}
+
+/* Left to a GPU renderer by default; rounded fills are masks either way. */
+int
+reaktor_aa_fills(const App *app)
+{
+    return app->aa_mode == REAKTOR_AA_ON ||
+           (app->aa_mode == REAKTOR_AA_AUTO && !app->renderer_is_sw);
+}
+
 void
 reaktor_render(App *app)
 {
@@ -382,9 +397,9 @@ reaktor_render(App *app)
                            app->clear.a);
     SDL_RenderClear(app->ren);
     mask_rounded_fills(app);
-    nk_sdl_render_ex(app->ctx, NK_ANTI_ALIASING_OFF,
-                     app->aa && !(app->renderer_is_sw && app->sw_noaa)
-                     ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
+    nk_sdl_render_ex(app->ctx,
+                     reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
+                     reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
 }
 
 nk_size
