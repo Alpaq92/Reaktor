@@ -79,6 +79,15 @@ jobs:
             echo "no cached build to diff against; every source is new"
           fi
 
+      # The packages the machine downloads, kept so the next run installs without fetching them.
+      - name: Restore the package cache
+        id: pkgcache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pkgcache
+          key: pkg-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: pkg-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
+
       - name: Start VM
         id: vm
         uses: cross-platform-actions/action@e0b9770014ba65d5e0815f15b74031c3a635f641 # v1.6.0
@@ -95,15 +104,23 @@ jobs:
         run: |
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
+          mkdir -p .pkgcache
+          case "$(uname -s)" in
+            NetBSD)
+              sudo sed -i.orig 's#^ftp://ftp\.NetBSD\.org#https://cdn.NetBSD.org#' /usr/pkg/etc/pkgin/repositories.conf
+              sudo rm -rf /var/db/pkgin/cache
+              sudo ln -s "$PWD/.pkgcache" /var/db/pkgin/cache
+              ;;
+          esac
           case "$(uname -s)" in
             FreeBSD)
-              sudo env IGNORE_OSVERSION=yes pkg install -y \
+              sudo env IGNORE_OSVERSION=yes PKG_CACHEDIR="$PWD/.pkgcache" pkg install -y \
                 cmake-core ninja ccache pkgconf dbus xorg-vfbserver xorgproto \
                 libX11 libXext libXcursor libXi libXfixes libXrandr libXrender libXtst \
                 libxkbcommon wayland wayland-protocols libglvnd </dev/null
               ;;
             OpenBSD)
-              sudo pkg_add -I cmake-core ninja ccache dbus libxkbcommon wayland wayland-protocols llvm%21 </dev/null
+              sudo env PKG_CACHE="$PWD/.pkgcache/" PKG_PATH="$PWD/.pkgcache/:$(cat /etc/installurl)/%c/packages/%a/" pkg_add -I cmake-core ninja ccache dbus libxkbcommon wayland wayland-protocols llvm%21 </dev/null
               ;;
             NetBSD)
               sudo -E pkgin -y update </dev/null
@@ -111,6 +128,7 @@ jobs:
                 clang lld llvm </dev/null
               ;;
           esac
+          sudo chown -R "$(id -u)" .pkgcache
 
       - name: Build
         id: build
@@ -196,6 +214,13 @@ jobs:
             build
             build-arm64
           key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+
+      - name: Save the package cache
+        if: ${{ always() && steps.vm.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pkgcache
+          key: ${{ steps.pkgcache.outputs.cache-primary-key }}
 
       - name: Upload the arm64 build
         if: ${{ matrix.cross && steps.cross.outcome == 'success' }}
@@ -343,6 +368,15 @@ jobs:
           chmod +x build-arm64/*
           ls -l build-arm64 dist
 
+      # The packages the machine downloads, kept so the next run installs without fetching them.
+      - name: Restore the package cache
+        id: pkgcache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pkgcache
+          key: pkg-${{ matrix.os }}-${{ matrix.version }}-arm64-${{ github.run_id }}
+          restore-keys: pkg-${{ matrix.os }}-${{ matrix.version }}-arm64-
+
       - name: Start VM
         id: vm
         uses: cross-platform-actions/action@e0b9770014ba65d5e0815f15b74031c3a635f641 # v1.6.0
@@ -359,9 +393,17 @@ jobs:
         run: |
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
+          mkdir -p .pkgcache
+          case "$(uname -s)" in
+            NetBSD)
+              sudo sed -i.orig 's#^ftp://ftp\.NetBSD\.org#https://cdn.NetBSD.org#' /usr/pkg/etc/pkgin/repositories.conf
+              sudo rm -rf /var/db/pkgin/cache
+              sudo ln -s "$PWD/.pkgcache" /var/db/pkgin/cache
+              ;;
+          esac
           case "$(uname -s)" in
             FreeBSD)
-              sudo env IGNORE_OSVERSION=yes pkg install -y \
+              sudo env IGNORE_OSVERSION=yes PKG_CACHEDIR="$PWD/.pkgcache" pkg install -y \
                 cmake-core ninja pkgconf dbus xorg-vfbserver \
                 libX11 libXext libXcursor libXi libXfixes libXrandr libXrender libXtst \
                 libxkbcommon wayland libglvnd </dev/null
@@ -371,11 +413,24 @@ jobs:
               sudo -E pkgin -y install cmake ninja-build pkgconf dbus libxkbcommon wayland </dev/null
               ;;
             OpenBSD)
-              sudo pkg_add -I cmake-core ninja dbus libxkbcommon wayland </dev/null
+              sudo env PKG_CACHE="$PWD/.pkgcache/" PKG_PATH="$PWD/.pkgcache/:$(cat /etc/installurl)/%c/packages/%a/" pkg_add -I cmake-core ninja dbus libxkbcommon wayland </dev/null
               ;;
           esac
+          sudo chown -R "$(id -u)" .pkgcache
           uname -a
           file build-arm64/showcase
+
+      - name: Keep the packages
+        if: ${{ always() && steps.vm.outcome == 'success' }}
+        shell: cpa.sh {0} --sync-files vm-to-runner
+        run: ':'
+
+      - name: Save the package cache
+        if: ${{ always() && steps.vm.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pkgcache
+          key: ${{ steps.pkgcache.outputs.cache-primary-key }}
 
       - name: Console tests
         id: tests

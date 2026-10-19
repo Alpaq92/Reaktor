@@ -5,8 +5,9 @@
 
 #include "a11y.h"
 #include "a11y_snapshot.h"
+#include "test.h"
 
-static int failures;
+#define check test_eq
 
 static struct nk_rect
 r(float x, float y, float w, float h)
@@ -14,14 +15,6 @@ r(float x, float y, float w, float h)
     struct nk_rect v;
     v.x = x; v.y = y; v.w = w; v.h = h;
     return v;
-}
-
-static void
-check(const char *what, int got, int want)
-{
-    if (got == want) return;
-    printf("FAIL %s: got %d, want %d\n", what, got, want);
-    failures++;
 }
 
 static void
@@ -397,10 +390,5 @@ int main(int argc, char **argv)
     check("overflow clamps at the arena size", n, REAKTOR_A11Y_MAX_NODES);
     check("overflow is counted", a.overflow_nodes > 0, 1);
 
-    if (failures) {
-        printf("\n%d check%s failed\n", failures, failures == 1 ? "" : "s");
-        return 1;
-    }
-    printf("a11y: all checks passed\n");
-    return 0;
+    return test_done("a11y");
 }

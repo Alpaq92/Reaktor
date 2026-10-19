@@ -3,8 +3,9 @@
 #include <string.h>
 
 #include "cssflat.h"
+#include "test.h"
 
-static int g_fail;
+#define ok test_ok
 
 static const char g_sheet[] =
     "input:not([type=\"a\"]):not([type=\"b\"]) { color: #ff0000; }\n"
@@ -61,13 +62,6 @@ void
 reaktor_free(void *p)
 {
     free(p);
-}
-
-static void
-ok(const char *what, int got)
-{
-    if (!got) g_fail++;
-    printf("  %-52s %s\n", what, got ? "ok" : "FAILED");
 }
 
 static int
@@ -139,6 +133,5 @@ main(void)
         free(out);
     }
 
-    printf("\n%s\n", g_fail ? "FAILED" : "css: all checks passed");
-    return g_fail ? 1 : 0;
+    return test_done("css");
 }

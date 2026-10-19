@@ -2,8 +2,9 @@
 #include <string.h>
 
 #include "layout.h"
+#include "test.h"
 
-static int g_fail;
+#define ok test_eq
 
 static struct nk_rect
 R(float x, float y, float w, float h)
@@ -12,17 +13,6 @@ R(float x, float y, float w, float h)
 
     r.x = x; r.y = y; r.w = w; r.h = h;
     return r;
-}
-
-static void
-ok(const char *what, int got, int want)
-{
-    if (got != want) {
-        g_fail++;
-        printf("  %-52s got %d, wanted %d   FAILED\n", what, got, want);
-    } else {
-        printf("  %-52s ok\n", what);
-    }
 }
 
 static void
@@ -373,6 +363,5 @@ main(void)
     test_limits(&l);
     reaktor_layout_free(&l);
 
-    printf("\n%s\n", g_fail ? "FAILED" : "layout: all checks passed");
-    return g_fail ? 1 : 0;
+    return test_done("layout");
 }

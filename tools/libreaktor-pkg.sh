@@ -5,13 +5,14 @@ set -eu
 
 usage() {
     cat <<'EOF'
-usage: libreaktor-pkg.sh [-i] [-b BUILD] [-p PREFIX] [-o DIR] [-f FORMAT] [-m MAINTAINER]
+usage: libreaktor-pkg.sh [-i] [-b BUILD] [-p PREFIX] [-o DIR] [-f FORMAT] [-m MAINTAINER] [-a ARCH]
   -i  install the package once it is built (through sudo or doas)
   -b  pack from this configured build instead of building one
   -p  where the files go (/opt/reaktor on Linux, /usr/local/reaktor on the BSDs)
   -o  where the package is written (dist)
   -f  deb, rpm, freebsd, openbsd, netbsd or tar (picked from the system)
   -m  the maintainer the package names
+  -a  the .deb's architecture, for a cross build (dpkg's own otherwise)
 EOF
 }
 
@@ -23,8 +24,9 @@ out="$root/dist"
 format=""
 maintainer="Reaktor <reaktor@invalid>"
 build=""
+debarch=""
 
-while getopts ib:p:o:f:m:h opt; do
+while getopts ib:p:o:f:m:a:h opt; do
     case $opt in
         i) install=1 ;;
         b) build=$OPTARG ;;
@@ -32,6 +34,7 @@ while getopts ib:p:o:f:m:h opt; do
         o) out=$OPTARG ;;
         f) format=$OPTARG ;;
         m) maintainer=$OPTARG ;;
+        a) debarch=$OPTARG ;;
         h) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -93,7 +96,7 @@ as_root() {
 
 case $format in
 deb)
-    arch=$(dpkg --print-architecture)
+    arch=${debarch:-$(dpkg --print-architecture)}
     pkg="$out/libreaktor-dev_${version}_$arch.deb"
     mkdir -p "$stage/DEBIAN"
     cat >"$stage/DEBIAN/control" <<EOF

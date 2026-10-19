@@ -80,6 +80,9 @@ struct nk_sdl_vertex {
     float col[4];
 };
 
+/* NK_ALIGNOF declares its struct inside offsetof, which MSVC warns about. */
+struct nk_sdl_vertex_align { char c; struct nk_sdl_vertex v; };
+
 struct nk_sdl {
     SDL_Window *win;
     SDL_Renderer *renderer;
@@ -401,7 +404,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         NK_MEMSET(&config, 0, sizeof(config));
         config.vertex_layout = vertex_layout;
         config.vertex_size = sizeof(struct nk_sdl_vertex);
-        config.vertex_alignment = NK_ALIGNOF(struct nk_sdl_vertex);
+        config.vertex_alignment = offsetof(struct nk_sdl_vertex_align, v);
         config.tex_null = sdl->ogl.tex_null;
         /* REAKTOR: 22 upstream. */
         config.circle_segment_count = 48;
