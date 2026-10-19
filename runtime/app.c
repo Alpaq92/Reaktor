@@ -160,7 +160,7 @@ reaktor_hint(const char *name, const char *value)
     SDL_SetHintWithPriority(name, value, SDL_HINT_OVERRIDE);
 }
 
-void
+static void
 reaktor_rss_mark(int step)
 {
     reaktor_process_memory(&reaktor_rss[step], &reaktor_priv[step]);
@@ -362,7 +362,7 @@ theme_sheet(int dark)
                 : "external/watercss/src/variables-light.css";
 }
 
-void
+static void
 load_theme(App *app)
 {
     const char *sheets[SHEET_MAX];
@@ -452,7 +452,7 @@ web_on_resize(int type, const EmscriptenUiEvent *ev, void *user)
 #if defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #define COBJMACROS
 #include <dxgi.h>
-int
+static int
 renderer_is_software(SDL_Renderer *ren)
 {
     IUnknown *dev;
@@ -479,7 +479,7 @@ renderer_is_software(SDL_Renderer *ren)
     return software;
 }
 #else
-int renderer_is_software(SDL_Renderer *ren) { (void)ren; return 0; }
+static int renderer_is_software(SDL_Renderer *ren) { (void)ren; return 0; }
 #endif
 
 #define HOVER_GAP_MS 50
@@ -509,7 +509,7 @@ calibrate_hover_gap(App *app)
                    : HOVER_GAP_MS;
 }
 
-int
+static int
 reaktor_hot_motion(App *app, float mx, float my)
 {
     struct nk_rect nr;
@@ -556,7 +556,7 @@ reaktor_cursor(int kind)
     return g_cursor[kind];
 }
 
-void
+static void
 reaktor_show_cursor(App *app)
 {
     SDL_Cursor *c;
@@ -567,7 +567,7 @@ reaktor_show_cursor(App *app)
     app->cur_shown = app->want_cursor;
 }
 
-void
+static void
 reaktor_place_ime(App *app)
 {
     SDL_Window *keys = SDL_GetKeyboardFocus();
@@ -577,7 +577,7 @@ reaktor_place_ime(App *app)
     app->ime_valid = 0;
 }
 
-void
+static void
 reaktor_hover_redraw(App *app)
 {
     if (app->dragging || SDL_GetTicks() - app->last_draw_ms >= g_hover_gap_ms) {
@@ -851,6 +851,14 @@ app_init(void **appstate, int argc, char *argv[])
     return SDL_APP_CONTINUE;
 }
 
+static void
+drag_end(App *app)
+{
+    app->dragging      = 0;
+    app->drag_in_field = 0;
+    app->restore_rate  = 2;
+}
+
 void
 reaktor_take_event(App *app, SDL_Event *event)
 {
@@ -909,16 +917,12 @@ reaktor_take_event(App *app, SDL_Event *event)
 
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         if (app->dragging) {
-            app->dragging      = 0;
-            app->drag_in_field = 0;
-            app->restore_rate  = 2;
+            drag_end(app);
         }
         break;
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
-        app->dragging = 0;
-        app->drag_in_field = 0;
-        app->restore_rate = 2;
+        drag_end(app);
         break;
 
     /* Nuklear scrolls a panel at its end, after drawing what it holds. */
@@ -1147,9 +1151,7 @@ reaktor_app_due(App *app, int w, int h)
         !(SDL_GetGlobalMouseState(NULL, NULL) &
           (SDL_BUTTON_LMASK | SDL_BUTTON_MMASK | SDL_BUTTON_RMASK |
            SDL_BUTTON_X1MASK | SDL_BUTTON_X2MASK))) {
-        app->dragging      = 0;
-        app->drag_in_field = 0;
-        app->restore_rate  = 2;
+        drag_end(app);
         app->dirty = 1;
     }
 

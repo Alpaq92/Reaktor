@@ -9,7 +9,6 @@ typedef struct reaktor_cssvars reaktor_cssvars;
 char *reaktor_css_flatten(const char *const *paths, int count, const char *theme,
                           size_t token_max, reaktor_cssvars **out_vars);
 
-const char *reaktor_cssvars_get(const reaktor_cssvars *vars, const char *name);
 
 int reaktor_cssvars_color(const reaktor_cssvars *vars, const char *name,
                           unsigned char rgba[4]);

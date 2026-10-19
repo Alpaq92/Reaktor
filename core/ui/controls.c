@@ -23,7 +23,7 @@ fit_button(reaktor_box *box, const reaktor_button_spec *s)
     border = st.matched ? st.border : nb->border;
     edge   = border + (st.matched ? st.rounding : nb->rounding);
     if (s->label)
-        text = f->width(f->userdata, f->height, s->label, (int)strlen(s->label));
+        text = reaktor_text_w(f, s->label);
 
     w = text + 2.0f * (pad_x + (st.matched ? border : edge));
     if (s->icon && s->label) {
@@ -286,7 +286,7 @@ reaktor_label(const reaktor_label_spec *s)
             g_frame_unsettled++;
     } else {
         float w = box.w > 0.0f || (box.flags & REAKTOR_LAY_FILL_X) ? 0.0f
-                : f->width(f->userdata, f->height, s->text, (int)strlen(s->text));
+                : reaktor_text_w(f, s->text);
 
         decl_box_default(&box, w, f->height);
     }
@@ -495,8 +495,7 @@ reaktor_swatch(const reaktor_swatch_spec *s)
     decl_box_default(&box, 40.0f, 0.0f);
     decl_box_default(&box, 0.0f, box.w);
 
-    SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x",
-                 s->fill.r, s->fill.g, s->fill.b);
+    reaktor_hex(s->fill, hex);
     if (!decl_place(REAKTOR_A11Y_BUTTON, s->name, hex, 0u, NULL, &box, &id))
         return 0;
 
@@ -806,7 +805,7 @@ reaktor_spinner(const reaktor_spinner_spec *s)
     if (s->label)
         nk_draw_text(cv, nk_rect(step[0].x + step[0].w + 8.0f, y, r.w * 0.5f, f->height),
                      s->label, (int)strlen(s->label), f, nk_rgba(0, 0, 0, 0), st->label_normal);
-    w = f->width(f->userdata, f->height, value, (int)strlen(value));
+    w = reaktor_text_w(f, value);
     nk_draw_text(cv, nk_rect(step[1].x - 8.0f - w, y, w, f->height), value,
                  (int)strlen(value), f, nk_rgba(0, 0, 0, 0), st->label_normal);
     if (nk_input_mouse_clicked(&ctx->input, NK_BUTTON_LEFT, step[0])) d = -1;
@@ -917,7 +916,7 @@ reaktor_color_pick(const reaktor_color_spec *s)
 
     if (!g_frame_app || !s || !s->value) return;
     c = nk_rgb_cf(*s->value);
-    SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x", c.r, c.g, c.b);
+    reaktor_hex(c, hex);
 
     box = s->box;
     decl_box_default(&box, 210.0f, 132.0f);

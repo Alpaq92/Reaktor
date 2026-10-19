@@ -44,7 +44,6 @@ enum {
 
 extern size_t reaktor_rss[REAKTOR_RSS_STEPS];
 extern size_t reaktor_priv[REAKTOR_RSS_STEPS];
-void reaktor_rss_mark(int step);
 
 #define GLYPH_STROKE  2.0f
 
@@ -65,6 +64,18 @@ struct img_slot {
     unsigned        hash;
     int             px, w, h;
 };
+
+static inline float
+reaktor_text_w(const struct nk_user_font *f, const char *s)
+{
+    return s ? f->width(f->userdata, f->height, s, (int)SDL_strlen(s)) : 0.0f;
+}
+
+static inline void
+reaktor_hex(struct nk_color c, char out[8])
+{
+    SDL_snprintf(out, 8, "#%02x%02x%02x", c.r, c.g, c.b);
+}
 
 #define ROUND_CACHE_MAX 32
 struct round_slot {
@@ -301,7 +312,6 @@ void focus_resolve(App *app);
 void reaktor_key_click_ask(App *app);
 int  reaktor_focus_covered(App *app);
 void reaktor_focus_take(App *app, unsigned id, struct nk_rect b);
-float reaktor_cap_offset(const struct nk_user_font *f);
 int  reaktor_flyout_begin(struct nk_context *ctx, const char *name, struct nk_rect r);
 void reaktor_flyout_end(struct nk_context *ctx);
 int  reaktor_window_popup(struct nk_rect r,
@@ -316,8 +326,6 @@ App  *reaktor_window_app(int id);
 
 extern Uint64 g_hover_gap_ms;
 
-int  renderer_is_software(SDL_Renderer *ren);
-void load_theme(App *app);
 void a11y_dump_once(App *app);
 
 
@@ -359,7 +367,6 @@ void reaktor_fade_since(struct nk_context *ctx, const struct nk_command_buffer *
 App *reaktor_main_app(void);
 bool reaktor_app_wake(const App *app);
 void reaktor_hint(const char *name, const char *value);
-void reaktor_hover_redraw(App *app);
 int  reaktor_key_hook(App *app, const SDL_Event *event);
 void reaktor_take_event(App *app, SDL_Event *event);
 void reaktor_input_event(App *app, SDL_Event *event);
@@ -378,10 +385,7 @@ void reaktor_settings_free(void);
 void reaktor_window_restore(App *app);
 void reaktor_window_remember(App *app);
 const char *reaktor_asset_name(const reaktor_asset *a, const char *fallback);
-int  reaktor_hot_motion(App *app, float mx, float my);
 SDL_Cursor *reaktor_cursor(int kind);
-void reaktor_show_cursor(App *app);
-void reaktor_place_ime(App *app);
 void reaktor_render(App *app);
 
 typedef void (*reaktor_page_fn)(App *app, struct nk_context *ctx, int w, int h,

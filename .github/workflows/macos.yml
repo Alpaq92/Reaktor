@@ -174,7 +174,8 @@ jobs:
       - name: Check an app that embeds Reaktor
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
-          cmake -S examples/embedded -B build-embedded -G Ninja -DCMAKE_BUILD_TYPE=Release </dev/null
+          export CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=500M
+          cmake -S examples/embedded -B build-embedded -G Ninja -DCMAKE_BUILD_TYPE=Release                 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache                 -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
           cmake --build build-embedded --target simple </dev/null
           mkdir -p check
           for from in "tree build/simple" "embedded build-embedded/simple"; do

@@ -370,7 +370,7 @@ icon_place(struct nk_context *ctx, struct nk_rect b, float pad_x,
 {
     const struct nk_style_button *s = &ctx->style.button;
     const struct nk_user_font    *f = ctx->style.font;
-    float text = f->width(f->userdata, f->height, label, (int)SDL_strlen(label));
+    float text = reaktor_text_w(f, label);
 
     at->x = b.x + 2.0f * pad_x + s->image_padding.x;
     at->y = b.y + s->padding.y + s->image_padding.y;

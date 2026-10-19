@@ -81,17 +81,11 @@ reaktor_toast_clear(void)
 }
 
 static float
-text_w(const struct nk_user_font *f, const char *s)
-{
-    return s ? f->width(f->userdata, f->height, s, (int)SDL_strlen(s)) : 0.0f;
-}
-
-static float
 action_w(const struct nk_context *ctx, const struct nk_user_font *f, const char *s)
 {
     const struct nk_style_button *b = &ctx->style.button;
 
-    return (float)(int)(text_w(f, s) + 2.0f * (b->padding.x + b->border + b->rounding) + 1.0f);
+    return (float)(int)(reaktor_text_w(f, s) + 2.0f * (b->padding.x + b->border + b->rounding) + 1.0f);
 }
 
 void
@@ -128,7 +122,7 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
     n = g_toast_n - first;
     for (i = 0; i < n; i++) {
         const toast *t = &g_toast[first + i];
-        float tw = pad_l + pad_r + text_w(font, t->text);
+        float tw = pad_l + pad_r + reaktor_text_w(font, t->text);
 
         if (t->icon) tw += 20.0f + 8.0f;
         if (t->spec.content) tw += t->spec.content_w + 8.0f;

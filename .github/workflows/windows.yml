@@ -48,6 +48,7 @@ jobs:
       - name: Install ccache
         id: ccache-tool
         run: |
+          $ProgressPreference = 'SilentlyContinue'
           $v = '4.14.1'
           if ($env:RUNNER_ARCH -eq 'ARM64') {
             $a = 'aarch64'; $sum = '28121851c8c2c8b76214cfc5e119d769fbc39e93d27862e4e3a556905ebd23b2'
