@@ -1,7 +1,7 @@
 #include "internal.h"
 #include "reaktor/launch.h"
 #include "declare.h"
-#include "hpdf.h"
+#include "pdfgen.h"
 #include "plutovg.h"
 
 #define REAKTOR_PRINT_PAGES 64
@@ -105,7 +105,7 @@ print_run(App *app, void *user)
     print_job   *job = (print_job *)user;
     float        keep = reaktor_scale(), pt_w = job->spec.w, pt_h = job->spec.h;
     SDL_Surface *page[REAKTOR_PRINT_PAGES];
-    HPDF_Doc     doc = NULL;
+    struct pdf_doc *doc = NULL;
     App         *pa = NULL;
     int          id, i, n = 0, ok = 1;
 
@@ -138,25 +138,28 @@ print_run(App *app, void *user)
         ok = print_win32(app, page, n, job->spec.title ? job->spec.title : "Reaktor");
     else
 #endif
-    if (ok) doc = HPDF_New(NULL, NULL);
+    if (ok) {
+        struct pdf_info info;
+
+        SDL_zero(info);
+        SDL_strlcpy(info.creator, "Reaktor", sizeof info.creator);
+        if (job->spec.title) SDL_strlcpy(info.title, job->spec.title, sizeof info.title);
+        doc = pdf_create(pt_w, pt_h, &info);
+    }
     for (i = 0; doc && ok && i < n; i++) {
         plutovg_surface_t *s = plutovg_surface_create_for_data(page[i]->pixels, page[i]->w,
                                                                page[i]->h, page[i]->pitch);
-        jpeg_buf   b = { NULL, 0, 0 };
-        HPDF_Page  p = HPDF_AddPage(doc);
-        HPDF_Image im = NULL;
+        jpeg_buf           b = { NULL, 0, 0 };
+        struct pdf_object *p = pdf_append_page(doc);
 
         if (s) plutovg_surface_write_to_jpg_stream(s, jpeg_put, &b, 90);
         plutovg_surface_destroy(s);
-        if (b.len) im = HPDF_LoadJpegImageFromMem(doc, b.bytes, (HPDF_UINT)b.len);
+        if (!p || !b.len ||
+            pdf_add_image_data(doc, p, 0, 0, pt_w, pt_h, b.bytes, b.len) < 0) ok = 0;
         SDL_free(b.bytes);
-        HPDF_Page_SetWidth(p, pt_w);
-        HPDF_Page_SetHeight(p, pt_h);
-        if (!im || HPDF_Page_DrawImage(p, im, 0, 0, pt_w, pt_h) != HPDF_OK) ok = 0;
     }
-    if (doc && job->spec.title) HPDF_SetInfoAttr(doc, HPDF_INFO_TITLE, job->spec.title);
-    if (doc && ok) ok = HPDF_SaveToFile(doc, job->path) == HPDF_OK;
-    if (doc) HPDF_Free(doc);
+    if (doc && ok) ok = pdf_save(doc, job->path) >= 0;
+    if (doc) pdf_destroy(doc);
 #if defined(__APPLE__)
     if (doc && ok && job->to_printer) ok = reaktor_print_macos(job->path);
 #elif !defined(_WIN32)

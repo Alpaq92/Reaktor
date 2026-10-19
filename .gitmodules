@@ -28,12 +28,12 @@
 [submodule "external/mglibs"]
 	path = external/mglibs
 	url = https://github.com/mattiasgustavsson/libs.git
-[submodule "external/libharu"]
-	path = external/libharu
-	url = https://github.com/libharu/libharu.git
 [submodule "external/watercss"]
 	path = external/watercss
 	url = https://github.com/kognise/water.css
 [submodule "external/simplecss"]
 	path = external/simplecss
 	url = https://github.com/kevquirk/simple.css
+[submodule "external/pdfgen"]
+	path = external/pdfgen
+	url = https://github.com/AndreRenaud/PDFGen
