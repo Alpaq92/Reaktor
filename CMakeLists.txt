@@ -32,10 +32,6 @@ foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER GPU OFFSCREEN)
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
 endforeach()
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
-# Linux and the BSDs keep it: their CI runs headless with --video dummy.
-if(WIN32)
-    set(SDL_DUMMYVIDEO OFF CACHE BOOL "" FORCE)
-endif()
 
 foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
