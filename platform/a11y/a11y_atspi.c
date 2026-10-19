@@ -153,15 +153,6 @@ role_name(unsigned char role)
     }
 }
 
-static int
-has_action(unsigned char role)
-{
-    return role == REAKTOR_A11Y_BUTTON || role == REAKTOR_A11Y_LINK ||
-           role == REAKTOR_A11Y_TAB    || role == REAKTOR_A11Y_MENUITEM ||
-           role == REAKTOR_A11Y_CHECKBOX || role == REAKTOR_A11Y_RADIO ||
-           role == REAKTOR_A11Y_LISTITEM;
-}
-
 static void
 append_ref(DBusMessageIter *it, const char *name, const char *path)
 {
@@ -286,7 +277,7 @@ append_interfaces(DBusMessageIter *it, const reaktor_snap_node *n, int is_root)
     } else {
         s = IF_COMPONENT;
         dbus_message_iter_append_basic(&arr, DBUS_TYPE_STRING, &s);
-        if (has_action(n->role)) {
+        if (reaktor_snap_pressable(n->role)) {
             s = IF_ACTION;
             dbus_message_iter_append_basic(&arr, DBUS_TYPE_STRING, &s);
         }
@@ -448,7 +439,7 @@ handle_properties(DBusConnection *c, DBusMessage *m, unsigned id, int is_root,
         }
     } else if (strcmp(iface, IF_ACTION) == 0) {
         if (strcmp(prop, "NActions") == 0)
-            append_variant_int(&it, has_action(n->role) ? 1 : 0);
+            append_variant_int(&it, reaktor_snap_pressable(n->role) ? 1 : 0);
         else {
             dbus_message_unref(r);
             return reply_unknown(c, m);
@@ -619,10 +610,10 @@ handle_action(DBusConnection *c, DBusMessage *m, unsigned id,
     dbus_message_iter_init_append(r, &it);
 
     if (dbus_message_has_member(m, "GetNActions")) {
-        dbus_int32_t v = has_action(n->role) ? 1 : 0;
+        dbus_int32_t v = reaktor_snap_pressable(n->role) ? 1 : 0;
         dbus_message_iter_append_basic(&it, DBUS_TYPE_INT32, &v);
     } else if (dbus_message_has_member(m, "DoAction")) {
-        dbus_bool_t ok = has_action(n->role) ? TRUE : FALSE;
+        dbus_bool_t ok = reaktor_snap_pressable(n->role) ? TRUE : FALSE;
 
         if (ok) reaktor_snap_request_activate(id);
         dbus_message_iter_append_basic(&it, DBUS_TYPE_BOOLEAN, &ok);
@@ -637,7 +628,7 @@ handle_action(DBusConnection *c, DBusMessage *m, unsigned id,
     } else if (dbus_message_has_member(m, "GetActions")) {
         DBusMessageIter arr;
         dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "(sss)", &arr);
-        if (has_action(n->role)) {
+        if (reaktor_snap_pressable(n->role)) {
             DBusMessageIter sub;
             const char *a = "activate", *b = "", *k = "";
 
@@ -862,32 +853,12 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
 }
 
 void
-reaktor_a11y_platform_drain(void)
-{
-    reaktor_snap_drain();
-}
-
-void
 reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
-    int m;
-
     if (!reaktor_snap_update(a, focus_id)) return;
     if (!g.ready) return;
 
-    reaktor_a11y_changes(a, &m);
-    {
-        int i, structural = 0;
-        const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);
-
-        for (i = 0; i < m; i++)
-            if (c[i].kind == REAKTOR_A11Y_ADDED ||
-                c[i].kind == REAKTOR_A11Y_REMOVED) {
-                structural = 1;
-                break;
-            }
-        if (structural) emit_event("ChildrenChanged", "add", 0, 0, 0);
-    }
+    if (reaktor_snap_structural(a)) emit_event("ChildrenChanged", "add", 0, 0, 0);
 
     if (focus_id != g.last_focus) {
         if (g.last_focus)

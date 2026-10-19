@@ -58,6 +58,8 @@ unsigned reaktor_snap_hit(float x, float y);
 unsigned reaktor_snap_focus(void);
 
 int reaktor_snap_focusable(unsigned char role, unsigned state);
+int reaktor_snap_pressable(unsigned char role);
+int reaktor_snap_structural(const reaktor_a11y *a);
 
 void reaktor_snap_request_focus(unsigned id);
 void reaktor_snap_request_activate(unsigned id);

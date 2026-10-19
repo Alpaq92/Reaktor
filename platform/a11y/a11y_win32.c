@@ -795,12 +795,6 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
     SDL_free(wins);
 }
 
-void
-reaktor_a11y_platform_drain(void)
-{
-    reaktor_snap_drain();
-}
-
 static void
 push_into(bridge *b, const reaktor_a11y *a, unsigned focus_id)
 {
@@ -810,25 +804,13 @@ push_into(bridge *b, const reaktor_a11y *a, unsigned focus_id)
     }
     if (!reaktor_snap_update_in(b->snap, a, focus_id)) return;
     if (!UiaClientsAreListening()) return;
-    {
-        int m, i, structural = 0;
-        const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);
+    if (reaktor_snap_structural(a)) {
+        Provider *r = provider_new(b, 0);
 
-        for (i = 0; i < m; i++)
-            if (c[i].kind == REAKTOR_A11Y_ADDED ||
-                c[i].kind == REAKTOR_A11Y_REMOVED) {
-                structural = 1;
-                break;
-            }
-        if (structural) {
-            Provider *r = provider_new(b, 0);
-
-            if (!r) return;
-            UiaRaiseStructureChangedEvent(
-                (IRawElementProviderSimple *)&r->simple,
-                StructureChangeType_ChildrenInvalidated, NULL, 0);
-            IRawElementProviderSimple_Release(&r->simple);
-        }
+        if (!r) return;
+        UiaRaiseStructureChangedEvent((IRawElementProviderSimple *)&r->simple,
+                                      StructureChangeType_ChildrenInvalidated, NULL, 0);
+        IRawElementProviderSimple_Release(&r->simple);
     }
     if (focus_id != b->last_focus) {
         b->last_focus = focus_id;
