@@ -31,12 +31,6 @@ tr_or(const char *key, const char *english)
     return s && SDL_strcmp(s, key) != 0 ? s : english;
 }
 
-static float
-text_w(const struct nk_user_font *f, const char *s)
-{
-    return f->width(f->userdata, f->height, s, (int)SDL_strlen(s));
-}
-
 static const char *
 pick_label(const pick_col *c, int v, char *buf, size_t cap)
 {
@@ -142,7 +136,7 @@ pick_draw_wheels(App *app, struct nk_context *ctx, struct nk_rect body, float ro
                 g_pick.key = k;
             }
             t = pick_label(c, v, buf, sizeof buf);
-            w = f->width(f->userdata, f->height, t, (int)SDL_strlen(t));
+            w = reaktor_text_w(f, t);
             nk_draw_text(cv, nk_rect(r.x + (r.w - w) * 0.5f,
                                      (float)(int)(r.y + (r.h - f->height) * 0.5f), w, f->height),
                          t, (int)SDL_strlen(t), f, nk_rgba(0, 0, 0, 0),
@@ -195,7 +189,7 @@ pick_flyout(App *app, struct nk_context *ctx, float row)
     float need;
 
     reaktor_style_get("button", &btn);
-    need = 2.0f * (NK_MAX(text_w(ctx->style.font, no), text_w(ctx->style.font, ok)) +
+    need = 2.0f * (NK_MAX(reaktor_text_w(ctx->style.font, no), reaktor_text_w(ctx->style.font, ok)) +
                    2.0f * (btn.pad_x + btn.border)) + 3.0f * PICK_GAP;
 
     for (k = 0; k < g_pick.n; k++) w += g_pick.col[k].w;
@@ -267,7 +261,7 @@ pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
     reaktor_style_frame_pop(ctx, sf);
     decl_box_from_style(&box, NULL, "input.type-text", "input", 0.0f, 7.0f);
     if (box.w <= 0.0f && !(box.flags & REAKTOR_LAY_FILL_X))
-        box.w = (float)(int)(text_w(f, value ? value : hint) + 2.0f * in.pad_x + 0.5f);
+        box.w = (float)(int)(reaktor_text_w(f, value ? value : hint) + 2.0f * in.pad_x + 0.5f);
     if (!decl_place(REAKTOR_A11Y_BUTTON, name, value,
                     g_pick.owner == owner ? REAKTOR_A11Y_EXPANDED : 0u, NULL, &box, &id))
         return 0;
@@ -295,7 +289,7 @@ pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
             float w = 0.0f;
 
             for (v = cols[k].lo; v <= cols[k].hi; v++)
-                w = NK_MAX(w, text_w(f, pick_label(&cols[k], v, buf, sizeof buf)));
+                w = NK_MAX(w, reaktor_text_w(f, pick_label(&cols[k], v, buf, sizeof buf)));
             g_pick.col[k].w = (float)(int)(w + 32.0f);
         }
         pick_days();

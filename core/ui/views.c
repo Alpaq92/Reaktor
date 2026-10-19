@@ -575,12 +575,6 @@ static struct {
     int        picked_k, picked_i;
 } g_menu = { -1 };
 
-static float
-menu_text_w(const struct nk_user_font *f, const char *s)
-{
-    return s ? f->width(f->userdata, f->height, s, (int)strlen(s)) : 0.0f;
-}
-
 static int
 menu_rule(const reaktor_menu_entry *e)
 {
@@ -627,8 +621,8 @@ menu_measure(menu_col *c, const struct nk_user_font *f, struct nk_vec2 pad)
         if (i) h += REAKTOR_MENU_GAP;
         h += menu_entry_h(e);
         if (!e->custom && e->label)
-            iw = 28.0f + c->lead + menu_text_w(f, e->label) +
-                 (e->keys ? 24.0f + menu_text_w(f, e->keys) : 0.0f) +
+            iw = 28.0f + c->lead + reaktor_text_w(f, e->label) +
+                 (e->keys ? 24.0f + reaktor_text_w(f, e->keys) : 0.0f) +
                  (e->items ? 22.0f : 0.0f);
         if (iw > w) w = iw;
     }
@@ -724,7 +718,7 @@ menu_draw_entry(const reaktor_menu_entry *e, struct nk_rect b, float lead, int l
                              b.w - 16.0f - lead, f->height),
                  e->label, (int)strlen(e->label), f, nk_rgba(0, 0, 0, 0), fg);
     if (e->keys) {
-        float w = menu_text_w(f, e->keys);
+        float w = reaktor_text_w(f, e->keys);
 
         nk_draw_text(cv, nk_rect(b.x + b.w - w - 8.0f,
                                  (float)(int)(b.y + (b.h - f->height) * 0.5f), w, f->height),
@@ -983,7 +977,7 @@ reaktor_menubar(const reaktor_menubar_spec *s)
         struct nk_style_button st = *mb;
 
         memset(&title, 0, sizeof(title));
-        title.w = (float)(int)(menu_text_w(f, label) +
+        title.w = (float)(int)(reaktor_text_w(f, label) +
                                2.0f * (mb->padding.x + mb->border + mb->rounding) + 2.5f);
         title.h = h;
         if (!decl_place(REAKTOR_A11Y_MENU, label, NULL,

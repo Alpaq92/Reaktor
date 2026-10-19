@@ -319,7 +319,7 @@ decl_box_from_style(reaktor_box *box, const char *text, const char *selector,
     if (box->w <= 0.0f && text && !(box->flags & REAKTOR_LAY_FILL_X)) {
         float w = st.width > 0.0f
                 ? st.width
-                : f->width(f->userdata, f->height, text, (int)strlen(text))
+                : reaktor_text_w(f, text)
                   + extra_w;
         if (w < st.min_width) w = st.min_width;
         if (st.max_width > 0.0f && w > st.max_width) w = st.max_width;

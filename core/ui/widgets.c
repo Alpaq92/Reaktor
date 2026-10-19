@@ -37,9 +37,16 @@ icon_src(char out[192], const char *name, const char *hex, float sw)
 }
 
 static void
-hex_of(struct nk_color c, char out[8])
+push_clear(struct nk_context *ctx, struct nk_style_item *const *items, int n,
+           struct nk_style_item clear)
 {
-    SDL_snprintf(out, 8, "#%02x%02x%02x", c.r, c.g, c.b);
+    while (n--) nk_style_push_style_item(ctx, *items++, clear);
+}
+
+static void
+pop_items(struct nk_context *ctx, int n)
+{
+    while (n--) nk_style_pop_style_item(ctx);
 }
 
 struct nk_image
@@ -58,7 +65,7 @@ reaktor_ionicon_exact(App *app, const char *name, int px,
     char hex[8], src[192];
 
     if (sw <= 0.0f) sw = px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f;
-    hex_of(stroke, hex);
+    reaktor_hex(stroke, hex);
     return icon_over(app, icon_src(src, name, hex, sw), px, 1.0f);
 }
 
@@ -67,7 +74,7 @@ reaktor_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
 {
     char hex[8], src[192];
 
-    hex_of(stroke, hex);
+    reaktor_hex(stroke, hex);
     return icon(app, icon_src(src, name, hex, px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f), px);
 }
 
@@ -154,22 +161,19 @@ reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
     int side, dot_px;
     int clicked = 0;
 
-    nk_style_push_style_item(ctx, &ctx->style.option.normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.active, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.cursor_normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.option.cursor_hover, clear);
+    push_clear(ctx, (struct nk_style_item *[]){
+        &ctx->style.option.normal,
+        &ctx->style.option.hover,
+        &ctx->style.option.active,
+        &ctx->style.option.cursor_normal,
+        &ctx->style.option.cursor_hover }, 5, clear);
     nk_style_push_color(ctx, &ctx->style.option.border_color, clear.data.color);
     nk_style_push_float(ctx, &ctx->style.option.border, 0.0f);
     if (nk_option_label_align(ctx, label, on, NK_WIDGET_RIGHT, NK_TEXT_LEFT))
         clicked = 1;
     nk_style_pop_float(ctx);
     nk_style_pop_color(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
+    pop_items(ctx, 5);
 
     ring   = nk_rect(r.x + r.w - h, r.y + r.h * 0.5f - h * 0.5f, h, h);
     dot    = nk_rect(ring.x + st->padding.x + st->border,
@@ -222,15 +226,14 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
     nk_style_push_color(ctx, &ctx->style.slider.bar_hover, clear.data.color);
     nk_style_push_color(ctx, &ctx->style.slider.bar_active, clear.data.color);
     nk_style_push_color(ctx, &ctx->style.slider.bar_filled, clear.data.color);
-    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.slider.cursor_active, clear);
+    push_clear(ctx, (struct nk_style_item *[]){
+        &ctx->style.slider.cursor_normal,
+        &ctx->style.slider.cursor_hover,
+        &ctx->style.slider.cursor_active }, 3, clear);
     nk_style_push_float(ctx, &ctx->style.slider.border, 0.0f);
     nk_slider_float(ctx, lo, val, hi, step);
     nk_style_pop_float(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
+    pop_items(ctx, 3);
     nk_style_pop_color(ctx);
     nk_style_pop_color(ctx);
     nk_style_pop_color(ctx);
@@ -299,23 +302,19 @@ reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max
     if (r < 0.0f) r = 0.0f;
 
     hot_push(app, b, 0, 1);
-    nk_style_push_style_item(ctx, &ctx->style.progress.normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.active, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_normal, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.progress.cursor_active, clear);
+    push_clear(ctx, (struct nk_style_item *[]){
+        &ctx->style.progress.normal,
+        &ctx->style.progress.hover,
+        &ctx->style.progress.active,
+        &ctx->style.progress.cursor_normal,
+        &ctx->style.progress.cursor_hover,
+        &ctx->style.progress.cursor_active }, 6, clear);
     nk_style_push_float(ctx, &ctx->style.progress.border, 0.0f);
     nk_style_push_float(ctx, &ctx->style.progress.cursor_border, 0.0f);
     nk_progress(ctx, cur, max, modifiable);
     nk_style_pop_float(ctx);
     nk_style_pop_float(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
+    pop_items(ctx, 6);
 
     if (track_it.type == NK_STYLE_ITEM_COLOR)
         reaktor_fill_round(app, cv, b, track_r, track_it.data.color);
@@ -349,9 +348,10 @@ reaktor_knob_dial(App *app, struct nk_context *ctx, float *val, float lo, float 
     cols[4] = &st->cursor_normal;   cols[5] = &st->cursor_hover;
     cols[6] = &st->cursor_active;
 
-    nk_style_push_style_item(ctx, &st->normal, clear);
-    nk_style_push_style_item(ctx, &st->hover, clear);
-    nk_style_push_style_item(ctx, &st->active, clear);
+    push_clear(ctx, (struct nk_style_item *[]){
+        &st->normal,
+        &st->hover,
+        &st->active }, 3, clear);
     for (i = 0; i < 7; i++)
         nk_style_push_color(ctx, cols[i], clear.data.color);
     nk_style_push_float(ctx, &st->knob_border, 0.0f);
@@ -359,9 +359,7 @@ reaktor_knob_dial(App *app, struct nk_context *ctx, float *val, float lo, float 
     nk_style_pop_float(ctx);
     for (i = 0; i < 7; i++)
         nk_style_pop_color(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
+    pop_items(ctx, 3);
 
     a = (hi > lo) ? (*val - lo) / (hi - lo) : 0.0f;
     a = a * NK_PI * 2.0f + zero_rads[zero];
@@ -405,7 +403,7 @@ stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
 }
 
 /* How far below a centered line's middle its capitals' middle lies. */
-float
+static float
 reaktor_cap_offset(const struct nk_user_font *f)
 {
     const struct nk_font *nf = f ? (const struct nk_font *)f->userdata.ptr : NULL;
@@ -443,19 +441,17 @@ reaktor_property_push(struct nk_context *ctx)
 {
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
 
-    nk_style_push_style_item(ctx, &ctx->style.property.dec_button.hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.property.dec_button.active, clear);
-    nk_style_push_style_item(ctx, &ctx->style.property.inc_button.hover, clear);
-    nk_style_push_style_item(ctx, &ctx->style.property.inc_button.active, clear);
+    push_clear(ctx, (struct nk_style_item *[]){
+        &ctx->style.property.dec_button.hover,
+        &ctx->style.property.dec_button.active,
+        &ctx->style.property.inc_button.hover,
+        &ctx->style.property.inc_button.active }, 4, clear);
 }
 
 void
 reaktor_property_pop(struct nk_context *ctx)
 {
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
+    pop_items(ctx, 4);
 }
 
 #define COMBO_MARGIN   12.0f
@@ -560,7 +556,7 @@ reaktor_css_button_color(App *app, struct nk_context *ctx, const char *name,
     int clicked;
 
     hot_push(app, b, 1, 1);
-    SDL_snprintf(hex, sizeof(hex), "#%02x%02x%02x", fill.r, fill.g, fill.b);
+    reaktor_hex(fill, hex);
     reaktor_note(app, REAKTOR_A11Y_BUTTON, name, hex, 0, b);
 
     hov[0] = fill.r; hov[1] = fill.g; hov[2] = fill.b; hov[3] = fill.a;
@@ -577,9 +573,7 @@ reaktor_css_button_color(App *app, struct nk_context *ctx, const char *name,
     clicked = nk_button_label(ctx, "");
     reaktor_chrome_disarm();
     nk_style_pop_color(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
-    nk_style_pop_style_item(ctx);
+    pop_items(ctx, 3);
 
     return clicked;
 }

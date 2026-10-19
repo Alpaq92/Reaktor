@@ -59,7 +59,7 @@ static int copy_out(char *out, size_t cap, const char *src)
     return 1;
 }
 
-int reaktor_root(char *out, size_t cap)
+static int reaktor_root(char *out, size_t cap)
 {
     static char cached[REAKTOR_PATH_CAP];
     static int  resolved;

@@ -36,6 +36,8 @@ jobs:
           - { arch: arm64, platform: linux/arm64, image: 'debian:bookworm', runner: ubuntu-24.04-arm, emulated: false, timeout: 60 }
           - { arch: armhf, platform: linux/arm/v7, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: true, timeout: 240 }
           - { arch: riscv64, platform: linux/riscv64, image: 'debian:trixie', runner: ubuntu-24.04, emulated: true, timeout: 240 }
+        # The emulated ones are not required checks and take the longest: master and releases run them.
+        exclude: ${{ github.event_name == 'pull_request' && fromJSON('[{"emulated":true}]') || fromJSON('[]') }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

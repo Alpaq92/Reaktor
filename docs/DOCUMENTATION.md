@@ -907,7 +907,7 @@ repaint to make something update is the wrong fix** — mark what changed.
 | NetBSD | x86-64, ARM64 | 11.0 |
 | Web | WebAssembly | Chromium; emscripten 6.0.9 targets Chrome 85, Firefox 79 and Safari 15 |
 
-Every pull request builds each native one, runs the seven console tests, and
+Every pull request builds each native one, runs the eight console tests, and
 writes a `--shot` and an `--a11y-dump` of `simple` and the showcase through
 the system's video driver and SDL's `dummy` one: `.github/workflows/` holds a
 workflow per system. The BSDs run in virtual machines, and their ARM64
@@ -917,7 +917,8 @@ the toolchain file `tools/cross/<system>-aarch64.cmake` and
 `-DREAKTOR_SYSROOT=<dir>`; OpenBSD's compiler has no ARM64 backend, so there
 the ports LLVM builds them. An ARM64 machine, which runs under emulation, then
 only runs the programs, and a job that emulates may fail without failing its
-run. The web
+run. Linux on ARMv7 and RISC-V, emulated as well, is built on master and for
+releases rather than on every pull request. The web
 build is built and packed on every pull request too (`web.yml`), and checked
 by hand in headless Edge, as desktop, Android and iOS.
 

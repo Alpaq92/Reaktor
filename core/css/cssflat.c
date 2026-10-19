@@ -90,7 +90,7 @@ static int vars_set(reaktor_cssvars *m, const char *name, size_t nlen,
     return 1;
 }
 
-const char *reaktor_cssvars_get(const reaktor_cssvars *m, const char *name)
+static const char *reaktor_cssvars_get(const reaktor_cssvars *m, const char *name)
 {
     size_t i;
 

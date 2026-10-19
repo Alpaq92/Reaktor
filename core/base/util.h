@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <stdio.h>
 
-int reaktor_root(char *out, size_t cap);
 
 int reaktor_path(char *out, size_t cap, const char *rel);
 
