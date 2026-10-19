@@ -133,6 +133,25 @@ jobs:
           Shot simple-dummy dummy "./${{ matrix.out }}/simple.exe" @('--theme', 'light')
           exit $script:fail
 
+      - name: One copy at a time
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          New-Item -ItemType Directory -Force smoke | Out-Null
+          $exe = "./${{ matrix.out }}/showcase.exe"
+          $first = Start-Process $exe -ArgumentList '--video', 'dummy', '--log', 'smoke/instance.log' -PassThru
+          Start-Sleep -Seconds 5
+          $second = Start-Process $exe -ArgumentList '--video', 'dummy', 'handed-over.txt' -PassThru
+          if (-not $second.WaitForExit(60000)) { $second.Kill(); throw "the second launch did not exit" }
+          if ($second.ExitCode -ne 0) { throw "the second launch exited with $($second.ExitCode)" }
+          Start-Sleep -Seconds 2
+          if ($first.HasExited) { throw "the running copy is gone" }
+          # The log is held open until the copy ends.
+          $first.Kill(); $first.WaitForExit()
+          if (-not (Select-String -Path smoke/instance.log -Pattern 'handed-over.txt' -Quiet)) {
+            Get-Content smoke/instance.log; throw "the running copy did not get the file"
+          }
+          Write-Host "second launch handed its file over: ok"
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

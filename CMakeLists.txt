@@ -558,6 +558,7 @@ add_library(reaktor_runtime STATIC
     platform/lifecycle.c
     runtime/app.c
     runtime/input.c
+    runtime/instance.c
     runtime/services.c
     runtime/undo.c
     runtime/window.c)
