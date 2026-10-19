@@ -6,6 +6,7 @@
 #include "locale.h"
 #include "reaktor/launch.h"
 #include "lifecycle.h"
+#include "cssflat.h"
 #ifdef __EMSCRIPTEN__
 #include "keyboard_web.h"
 #endif
@@ -39,6 +40,7 @@ static const char    *g_fallbacks[REAKTOR_LAYER_MAX];
 static int            g_fallback_n;
 static const char    *g_icon_dirs[REAKTOR_LAYER_MAX], *g_cli_icons[REAKTOR_LAYER_MAX];
 static int            g_inspect_flag;
+static int            g_motion_flag, g_contrast_flag, g_reduced, g_contrast, g_watch;
 static SDL_IOStream   *g_log;
 static SDL_LogOutputFunction g_log_next;
 static void          *g_log_next_user;
@@ -286,6 +288,15 @@ take_flags(App *app, int argc, char **argv)
         else if (v && SDL_strcmp(a, "--log") == 0)       { log_open(v); i++; }
         else if (SDL_strcmp(a, "--inspect") == 0)        g_inspect_flag = 1;
         else if (SDL_strcmp(a, "--no-inspector") == 0)   g_inspect_flag = -1;
+        else if (SDL_strcmp(a, "--watch-css") == 0)      g_watch = 1;
+        else if (v && SDL_strcmp(a, "--motion") == 0) {
+            g_motion_flag = SDL_strcmp(v, "reduce") == 0 ? 1 : SDL_strcmp(v, "full") == 0 ? -1 : 0;
+            i++;
+        }
+        else if (v && SDL_strcmp(a, "--contrast") == 0) {
+            g_contrast_flag = SDL_strcmp(v, "more") == 0 ? 1 : SDL_strcmp(v, "normal") == 0 ? -1 : 0;
+            i++;
+        }
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--video") == 0)    { app->video_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--popups") == 0) {
@@ -362,6 +373,102 @@ theme_sheet(int dark)
                 : "external/watercss/src/variables-light.css";
 }
 
+/* Whether the system's reduced motion or contrast changed what applies. */
+static int
+read_prefs(void)
+{
+    int r = g_motion_flag ? g_motion_flag > 0 : reaktor_prefers_reduced_motion();
+    int c = g_contrast_flag ? g_contrast_flag > 0 : reaktor_prefers_contrast();
+    int changed = r != g_reduced || c != g_contrast;
+
+    g_reduced = r;
+    g_contrast = c;
+    reaktor_css_media(r, c);
+    reaktor_anim_reduce(r);
+    return changed;
+}
+
+int reaktor_reduced_motion(void) { return g_reduced; }
+int reaktor_high_contrast(void)  { return g_contrast; }
+
+#define WATCH_MAX 64
+
+static struct {
+    SDL_Mutex   *lock;
+    SDL_TimerID  timer;
+    char        *path[WATCH_MAX];
+    SDL_Time     when[WATCH_MAX];
+    int          n;
+} g_watched;
+
+static void
+watch_reload(App *app, void *user)
+{
+    (void)app; (void)user;
+    SDL_Log("css: a sheet changed on disk; restyling");
+    reaktor_restyle();
+}
+
+static Uint32 SDLCALL
+watch_tick(void *user, SDL_TimerID id, Uint32 interval)
+{
+    int i, changed = 0;
+
+    (void)user; (void)id;
+    SDL_LockMutex(g_watched.lock);
+    for (i = 0; i < g_watched.n; i++) {
+        SDL_PathInfo info;
+
+        if (SDL_GetPathInfo(g_watched.path[i], &info) && info.modify_time != g_watched.when[i]) {
+            g_watched.when[i] = info.modify_time;
+            changed = 1;
+        }
+    }
+    SDL_UnlockMutex(g_watched.lock);
+    if (changed && g_app) reaktor_post(g_app, watch_reload, NULL);
+    return interval;
+}
+
+static void
+watch_seen(const char *name)
+{
+    char         full[1024];
+    SDL_PathInfo info;
+    int          i;
+
+    if (reaktor_path_absolute(name)) SDL_strlcpy(full, name, sizeof full);
+    else if (!reaktor_path(full, sizeof full, name)) return;
+    if (!SDL_GetPathInfo(full, &info) || info.type != SDL_PATHTYPE_FILE) return;
+    SDL_LockMutex(g_watched.lock);
+    for (i = 0; i < g_watched.n && SDL_strcmp(g_watched.path[i], full) != 0; i++) {}
+    if (i == g_watched.n && g_watched.n < WATCH_MAX && (g_watched.path[i] = SDL_strdup(full))) {
+        g_watched.when[i] = info.modify_time;
+        g_watched.n++;
+    }
+    SDL_UnlockMutex(g_watched.lock);
+}
+
+static void
+watch_begin(void)
+{
+    if (!g_watched.lock && !(g_watched.lock = SDL_CreateMutex())) return;
+    SDL_LockMutex(g_watched.lock);
+    while (g_watched.n) SDL_free(g_watched.path[--g_watched.n]);
+    SDL_UnlockMutex(g_watched.lock);
+    reaktor_css_track(watch_seen);
+    if (!g_watched.timer) g_watched.timer = SDL_AddTimer(500, watch_tick, NULL);
+}
+
+static void
+watch_stop(void)
+{
+    if (g_watched.timer) SDL_RemoveTimer(g_watched.timer);
+    g_watched.timer = 0;
+    while (g_watched.n) SDL_free(g_watched.path[--g_watched.n]);
+    SDL_DestroyMutex(g_watched.lock);
+    g_watched.lock = NULL;
+}
+
 static void
 load_theme(App *app)
 {
@@ -371,6 +478,8 @@ load_theme(App *app)
     Uint64 t0, t1;
 
     app->dark = effective_dark(app);
+    read_prefs();
+    if (g_watch) watch_begin();
 
     sheets[n++] = theme_sheet(app->dark);
     sheets[n++] = CORE_SHEET;
@@ -915,6 +1024,12 @@ reaktor_take_event(App *app, SDL_Event *event)
         reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
         break;
 
+    /* Windows and most desktops send nothing when reduced motion or
+       contrast changes; coming back from their settings is the cue. */
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        if (!app->secondary && read_prefs()) load_theme(app);
+        break;
+
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         if (app->dragging) {
             drag_end(app);
@@ -937,7 +1052,7 @@ reaktor_take_event(App *app, SDL_Event *event)
         break;
 
     case SDL_EVENT_SYSTEM_THEME_CHANGED:
-        if (app->theme_mode == REAKTOR_THEME_SYSTEM) load_theme(app);
+        if (app->theme_mode == REAKTOR_THEME_SYSTEM || read_prefs()) load_theme(app);
         break;
 
     case SDL_EVENT_LOCALE_CHANGED:
@@ -1448,6 +1563,7 @@ app_quit(void *appstate, SDL_AppResult result)
         return;
     }
     reaktor_inspector_stop(app);
+    watch_stop();
     run_stop(app);
     if (remembers(app)) reaktor_window_remember(app);
     reaktor_timers_drop(NULL);

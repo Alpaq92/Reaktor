@@ -987,8 +987,79 @@ static void emit_one(void *c, const char *p, size_t plen,
     free(conv.p);
 }
 
+static int g_reduce_motion, g_more_contrast;
+
+void reaktor_css_media(int reduce_motion, int more_contrast)
+{
+    g_reduce_motion = reduce_motion;
+    g_more_contrast = more_contrast;
+}
+
+static int is_word(const char *s, size_t n, const char *w)
+{
+    return strlen(w) == n && strncmp(s, w, n) == 0;
+}
+
+/* 1 or 0 for a feature this runtime answers, -1 for any other. */
+static int media_feature(const char *s, size_t n, const char *theme)
+{
+    const char *colon = (const char *)memchr(s, ':', n);
+    size_t      nl = colon ? (size_t)(colon - s) : n, vl = 0;
+    const char *v = colon ? colon + 1 : s + n;
+
+    while (nl && isspace((unsigned char)s[nl - 1])) nl--;
+    if (colon) {
+        while (v < s + n && isspace((unsigned char)*v)) v++;
+        vl = (size_t)(s + n - v);
+        while (vl && isspace((unsigned char)v[vl - 1])) vl--;
+    }
+    if (is_word(s, nl, "prefers-color-scheme"))
+        return colon && is_word(v, vl, theme);
+    if (is_word(s, nl, "prefers-reduced-motion")) {
+        if (!colon || is_word(v, vl, "reduce")) return g_reduce_motion;
+        return is_word(v, vl, "no-preference") && !g_reduce_motion;
+    }
+    if (is_word(s, nl, "prefers-contrast")) {
+        if (!colon || is_word(v, vl, "more")) return g_more_contrast;
+        return is_word(v, vl, "no-preference") && !g_more_contrast;
+    }
+    return -1;
+}
+
+/* Whether a lowercased @media prelude holds: one of its comma-separated
+   queries names only features answered here, each true. */
+static int media_matches(const char *q, const char *theme)
+{
+    while (*q) {
+        int ok = 1, features = 0;
+
+        while (*q && *q != ',' && *q != '{') {
+            const char *s;
+
+            if (isspace((unsigned char)*q)) { q++; continue; }
+            if (*q == '(') {
+                s = ++q;
+                while (*q && *q != ')') q++;
+                if (media_feature(s, (size_t)(q - s), theme) != 1) ok = 0;
+                features++;
+                if (*q) q++;
+                continue;
+            }
+            s = q;
+            while (*q && !isspace((unsigned char)*q) && *q != '(' && *q != ',' && *q != '{') q++;
+            if (!is_word(s, (size_t)(q - s), "only") && !is_word(s, (size_t)(q - s), "and") &&
+                !is_word(s, (size_t)(q - s), "screen") && !is_word(s, (size_t)(q - s), "all"))
+                ok = 0;
+        }
+        if (ok && features) return 1;
+        if (*q != ',') return 0;
+        q++;
+    }
+    return 0;
+}
+
 static void
-unwrap_color_scheme(char *src, const char *theme)
+unwrap_media(char *src, const char *theme)
 {
     const char *want = (theme && *theme) ? theme : "light";
     size_t i = 0, len = strlen(src);
@@ -1016,8 +1087,7 @@ unwrap_color_scheme(char *src, const char *theme)
                 low[k] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
             }
             low[n] = '\0';
-            keep = strstr(low, "prefers-color-scheme") != NULL &&
-                   strstr(low, want) != NULL;
+            keep = media_matches(low + 6, want);
         }
 
         body_s = prelude_e + 1;
@@ -1078,7 +1148,7 @@ static char *flatten(char *src, const char *theme, size_t token_max,
 
     if (!m) { free(src); return NULL; }
     strip_comments(src);
-    unwrap_color_scheme(src, theme);
+    unwrap_media(src, theme);
     len = strlen(src);
 
     i = 0;
@@ -1215,9 +1285,16 @@ static char *import_path(const char *from, const char *to, size_t n)
     return p;
 }
 
+static void (*g_seen)(const char *path);
+
+void reaktor_css_track(void (*seen)(const char *path)) { g_seen = seen; }
+
 static int load_sheet(const char *path, int depth, buf *all)
 {
-    char  *t = reaktor_asset_load(path, NULL);
+    char  *t;
+
+    if (g_seen) g_seen(path);
+    t = reaktor_asset_load(path, NULL);
     size_t i = 0, from = 0, n;
     int    ok = 1;
 

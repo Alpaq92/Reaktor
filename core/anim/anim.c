@@ -88,11 +88,19 @@ reaktor_ease_name(unsigned char curve)
     return curve < REAKTOR_EASE_COUNT ? n[curve] : "?";
 }
 
+static int g_reduce;
+
+void
+reaktor_anim_reduce(int on)
+{
+    g_reduce = on;
+}
+
 float
 reaktor_animate(unsigned id, unsigned channel, float to, float ms,
                 unsigned char curve)
 {
-    if (ms <= 0.0f || !g_anim) return to;
+    if (ms <= 0.0f || g_reduce || !g_anim) return to;
     return nka_tween_float(g_anim, id, channel, to, ms / 1000.0f,
                            nka_ease(curve), NKA_POLICY_CROSSFADE, to);
 }

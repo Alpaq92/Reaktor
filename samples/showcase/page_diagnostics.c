@@ -136,7 +136,11 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
     section(app, ctx, "Style and text",
             "The stylesheets are parsed by LCUI's libcss on every theme "
             "change, and the font atlas is baked per size at the display's "
-            "scale.");
+            "scale. The system's reduced motion and contrast reach the sheets as "
+            "@media queries, and with --watch-css a sheet saved on disk restyles "
+            "the window.");
+    api(app, ctx, "reaktor_reduced_motion  /  reaktor_high_contrast  /  "
+                  "--motion, --contrast, --watch-css");
 
     SDL_snprintf(v, sizeof(v), "%s", d.dark ? "dark" : "light");
     DIAG_ROWS(ctx) {
@@ -147,6 +151,10 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
         SDL_snprintf(v, sizeof(v), "%.2fx", (double)d.scale);
         diag_row(app, ctx, "display scale", v);
         diag_row(app, ctx, "font", d.font);
+        diag_row(app, ctx, "reduced motion",
+                 reaktor_reduced_motion() ? "on: animations jump to their end" : "off");
+        diag_row(app, ctx, "contrast",
+                 reaktor_high_contrast() ? "more: @media (prefers-contrast: more)" : "no preference");
     }
 
     section(app, ctx, "Memory",

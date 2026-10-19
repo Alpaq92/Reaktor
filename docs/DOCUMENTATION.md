@@ -63,6 +63,7 @@ errors, so an internal function cannot slip back in.
 | `reaktor_wake(app)` | Draw a frame of that App's window. Any thread |
 | `reaktor_set_theme(app, theme)` | `REAKTOR_THEME_SYSTEM`, `_LIGHT` or `_DARK`, for every window |
 | `reaktor_set_css(app, sheets, n)` | Replace the application's sheets; `--css` stays on top |
+| `reaktor_reduced_motion()`, `reaktor_high_contrast()` | Whether the system asks for less motion or more contrast, after `--motion` and `--contrast` |
 | `reaktor_set_title(app, title)` | Retitle that App's window |
 | `reaktor_set_confirm_close(app, question)` | Ask `question` before quitting, or with `NULL` stop asking |
 | `reaktor_user(app)` | The launch's `.user` |
@@ -672,8 +673,9 @@ and the accent. An icon on a button takes its label's color.
   `color-mix(in srgb, …)`, writes every `rgb()` as `rgba()` with four
   arguments, clamped, turns `em` and `rem` into pixels, works out `calc()`
   over pixels and plain numbers (one with a percentage is left, and dropped),
-  keeps the `@media (prefers-color-scheme)` branch for the active scheme and
-  drops width and print queries, rewrites `[type=range]` as `.type-range`
+  keeps an `@media` block whose queries are all `prefers-color-scheme`,
+  `prefers-reduced-motion` or `prefers-contrast` and hold now, and drops
+  width and print queries, rewrites `[type=range]` as `.type-range`
   and `[disabled]` as `.disabled`, and drops `:enabled`, since every widget
   that asks is enabled and a disabled one asks for `:disabled`. An operator
   form like `[href^="http"]` cannot be expressed, and its rule is dropped, as
@@ -683,6 +685,21 @@ and the accent. An icon on a button takes its label's color.
   whatever the program's locale.
   reaktor.css uses the scheme branch to strengthen light hovers and tint the
   current sidebar entry from `--links`.
+
+**The system's settings.** Reduced motion and high contrast are read from the
+system: Windows' animation and high-contrast settings, macOS's accessibility
+display options, the desktop portal's `reduced-motion` and `contrast` (GNOME's
+own keys where the portal lacks them), and the browser's media queries. They
+reach the sheets as `@media (prefers-reduced-motion: reduce)` and
+`(prefers-contrast: more)`; reaktor.css answers more contrast by drawing muted
+text, placeholders and borders in `--text-bright`. Under reduced motion every
+`reaktor_animate` returns its end value at once. Both are read again when the
+system theme changes and when the window regains focus.
+
+**Live reload.** With `--watch-css` the runtime looks at every sheet it read
+from disk, `@import`s included, twice a second, and restyles when one is
+saved. A sheet compiled in is not watched; one on disk is preferred to it, so
+in a checkout the built-in sheets are watched too.
 
 `reaktor_set_css` swaps the application's sheets at the next frame. The
 showcase's Styling page lays Simple.css over Water.css that way, which is the
@@ -1100,6 +1117,9 @@ removes them from `argv` before the application sees it:
 | `--log <path>` | Override `.log` |
 | `--inspect`, `--no-inspector` | Open the [Inspector](#inspector) at start; detach it |
 | `--css <path>` | A sheet after the application's; up to four |
+| `--watch-css` | Restyle when a sheet read from disk is saved |
+| `--motion <reduce\|full>` | Override the system's reduced motion |
+| `--contrast <more\|normal>` | Override the system's contrast |
 | `--font <path>`, `--font-bold <path>` | Replace the UI face and its bold |
 | `--icons <dir>` | Look for `<name>.svg` here first; up to four |
 
