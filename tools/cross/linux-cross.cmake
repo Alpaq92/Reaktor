@@ -7,6 +7,8 @@ string(REGEX MATCH "^[^-]+" CMAKE_SYSTEM_PROCESSOR "${REAKTOR_CROSS_TRIPLE}")
 set(CMAKE_C_COMPILER ${REAKTOR_CROSS_TRIPLE}-gcc)
 set(CMAKE_CXX_COMPILER ${REAKTOR_CROSS_TRIPLE}-g++)
 set(CMAKE_LIBRARY_ARCHITECTURE ${REAKTOR_CROSS_TRIPLE})
+# The cross C library (libm among it) sits in /usr/<triple>, beside the multiarch ones.
+set(CMAKE_FIND_ROOT_PATH /usr/${REAKTOR_CROSS_TRIPLE})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/${REAKTOR_CROSS_TRIPLE}/pkgconfig:/usr/share/pkgconfig")
 set(ENV{PKG_CONFIG_PATH} "")
