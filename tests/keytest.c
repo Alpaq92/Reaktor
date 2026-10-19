@@ -2,19 +2,9 @@
 #include <string.h>
 
 #include "keys.h"
+#include "test.h"
 
-static int g_fail;
-
-static void
-ok(const char *what, int got, int want)
-{
-    if (got != want) {
-        g_fail++;
-        printf("  %-52s got %d, wanted %d   FAILED\n", what, got, want);
-    } else {
-        printf("  %-52s ok\n", what);
-    }
-}
+#define ok test_eq
 
 static SDL_Event
 press(SDL_Keycode key, SDL_Keymod mod)
@@ -139,7 +129,7 @@ text(const char *what, unsigned mods, SDL_Keycode key, const char *want)
     char buf[64];
     reaktor_chord_text(mods, key, buf, (int)sizeof(buf));
     if (strcmp(buf, want) != 0) {
-        g_fail++;
+        failures++;
         printf("  %-52s got \"%s\", wanted \"%s\"   FAILED\n", what, buf, want);
     } else {
         printf("  %-52s \"%s\"\n", what, buf);
@@ -192,7 +182,7 @@ list(const char *what, int action, int index, const char *want)
     buf[0] = '\0';
     reaktor_shortcut_text(LIST, LIST_N, action, index, buf, (int)sizeof(buf));
     if (strcmp(buf, want) != 0) {
-        g_fail++;
+        failures++;
         printf("  %-52s got \"%s\", wanted \"%s\"   FAILED\n", what, buf, want);
     } else {
         printf("  %-52s \"%s\"\n", what, buf);
@@ -245,6 +235,5 @@ main(void)
     test_table();
     test_text();
     test_list();
-    printf("\n%s\n", g_fail ? "FAILED" : "keys: all checks passed");
-    return g_fail ? 1 : 0;
+    return test_done("keys");
 }

@@ -34,8 +34,8 @@ jobs:
           - { arch: x86-64, platform: linux/amd64, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: false, timeout: 60 }
           - { arch: x86, platform: linux/386, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: false, timeout: 60 }
           - { arch: arm64, platform: linux/arm64, image: 'debian:bookworm', runner: ubuntu-24.04-arm, emulated: false, timeout: 60 }
-          - { arch: armhf, platform: linux/arm/v7, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: true, timeout: 240 }
-          - { arch: riscv64, platform: linux/riscv64, image: 'debian:trixie', runner: ubuntu-24.04, emulated: true, timeout: 240 }
+          - { arch: armhf, platform: linux/arm/v7, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: true, timeout: 240, triple: arm-linux-gnueabihf, debarch: armhf }
+          - { arch: riscv64, platform: linux/riscv64, image: 'debian:trixie', runner: ubuntu-24.04, emulated: true, timeout: 240, triple: riscv64-linux-gnu, debarch: riscv64 }
         # The emulated ones are not required checks and take the longest: master and releases run them.
         exclude: ${{ github.event_name == 'pull_request' && fromJSON('[{"emulated":true}]') || fromJSON('[]') }}
 
@@ -80,19 +80,41 @@ jobs:
           key: ccache-linux-${{ matrix.arch }}-${{ matrix.image }}-${{ github.run_id }}
           restore-keys: ccache-linux-${{ matrix.arch }}-${{ matrix.image }}-
 
+      # The emulated architectures are compiled by a native x86-64 Debian with
+      # Debian's cross compilers, in the same checkout; the emulated machine
+      # then only runs what was built.
+      - name: Start the cross builder
+        if: ${{ matrix.emulated }}
+        run: |
+          docker run -d --name builder --platform linux/amd64             -v "$PWD:/src" -w /src ${{ matrix.image }} sleep infinity
+          docker exec -i -e A=${{ matrix.debarch }} builder sh -eu <<'EOF'
+          export DEBIAN_FRONTEND=noninteractive
+          dpkg --add-architecture "$A"
+          apt-get update </dev/null
+          apt-get install -y --no-install-recommends             cmake ninja-build pkgconf file ccache crossbuild-essential-"$A"             libwayland-bin wayland-protocols             libx11-dev:"$A" libxext-dev:"$A" libxcursor-dev:"$A" libxi-dev:"$A" libxfixes-dev:"$A"             libxrandr-dev:"$A" libxrender-dev:"$A" libxtst-dev:"$A" libxkbcommon-dev:"$A"             libwayland-dev:"$A" libegl-dev:"$A" libdbus-1-dev:"$A" </dev/null
+          EOF
+
       - name: Build
         id: build
         run: |
-          docker exec -i debian sh -eu <<'EOF'
+          ctr=debian
+          cross=""
+          if [ "${{ matrix.emulated }}" = true ]; then
+            ctr=builder
+            cross="-DCMAKE_TOOLCHAIN_FILE=/src/tools/cross/linux-cross.cmake -DREAKTOR_CROSS_TRIPLE=${{ matrix.triple }}"
+          fi
+          docker exec -i -e CROSS="$cross" -e TRIPLE="${{ matrix.triple }}" "$ctr" sh -eu <<'EOF'
           uname -a
-          cc --version
           cmake --version
           export CCACHE_DIR=/src/.ccache CCACHE_BASEDIR=/src CCACHE_MAXSIZE=500M
           ccache -z
-          ./build.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          ./build.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON $CROSS </dev/null
+          cmake --build build --target libreaktor </dev/null
           ccache -s
           file build/showcase
-          echo "needs $(objdump -T build/showcase | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+          dump=objdump
+          if [ -n "$CROSS" ]; then dump=$TRIPLE-objdump; fi
+          echo "needs $($dump -T build/showcase | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
           EOF
 
       - name: Save the compiler cache

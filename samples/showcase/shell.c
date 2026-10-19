@@ -308,7 +308,7 @@ titlebar(App *app, struct reaktor_context *ctx, int win_w)
 #define ROW_BRAND   28
 #define ROW_FIELD   38
 #define ROW_BUTTON  40
-#define ROW_SMALL   18
+#define ROW_NOTE    18
 #define ROW_GAP     15
 #define CONTACT_ROWS 3
 
@@ -320,10 +320,10 @@ card_height(int with_diag)
 {
     int rows = 7;
     float h = (float)(ROW_BRAND + ROW_FIELD + ROW_BUTTON +
-                      ROW_SMALL + ROW_BUTTON + ROW_BUTTON + ROW_SMALL);
+                      ROW_NOTE + ROW_BUTTON + ROW_BUTTON + ROW_NOTE);
     if (with_diag) {
         rows += CONTACT_ROWS;
-        h += CONTACT_ROWS * ROW_SMALL;
+        h += CONTACT_ROWS * ROW_NOTE;
     }
     return h + (rows - 1) * ROW_GAP + 2.0f * CARD_PAD_Y + 6.0f;
 }
@@ -398,7 +398,7 @@ login_card(App *app, struct reaktor_context *ctx, float body_x, float body_w,
 
             reaktor_label(&(reaktor_label_spec){
                 .text = "or", .style = ".card-note", .align = REAKTOR_CENTER,
-                .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                .box = { .h = ROW_NOTE, .flags = REAKTOR_LAY_FILL_X,
                          .ml = CARD_PAD_X, .mr = CARD_PAD_X } });
 
             reaktor_button(&(reaktor_button_spec){
@@ -413,7 +413,7 @@ login_card(App *app, struct reaktor_context *ctx, float body_x, float body_w,
             if (reaktor_link(&(reaktor_link_spec){
                     .text = g_show_contact ? "hide contact" : "contact",
                     .style = ".card-link",
-                    .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                    .box = { .h = ROW_NOTE, .flags = REAKTOR_LAY_FILL_X,
                              .ml = CARD_PAD_X, .mr = CARD_PAD_X,
                              .mb = g_show_contact ? 0.0f : CARD_PAD_Y } }))
                 g_show_contact = !g_show_contact;
@@ -429,7 +429,7 @@ login_card(App *app, struct reaktor_context *ctx, float body_x, float body_w,
                 for (i = 0; i < CONTACT_ROWS; i++)
                     reaktor_label(&(reaktor_label_spec){
                         .text = lines[i], .style = ".card-link", .align = REAKTOR_CENTER,
-                        .box = { .h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
+                        .box = { .h = ROW_NOTE, .flags = REAKTOR_LAY_FILL_X,
                                  .ml = CARD_PAD_X, .mr = CARD_PAD_X,
                                  .mb = i == CONTACT_ROWS - 1 ? CARD_PAD_Y : 0.0f } });
             }

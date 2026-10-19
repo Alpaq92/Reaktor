@@ -919,7 +919,8 @@ the toolchain file `tools/cross/<system>-aarch64.cmake` and
 `-DREAKTOR_SYSROOT=<dir>`; OpenBSD's compiler has no ARM64 backend, so there
 the ports LLVM builds them. An ARM64 machine, which runs under emulation, then
 only runs the programs, and a job that emulates may fail without failing its
-run. Linux on ARMv7 and RISC-V, emulated as well, is built on master and for
+run. Linux on ARMv7 and RISC-V is cross-compiled in an x86-64 Debian with
+`tools/cross/linux-cross.cmake` and run in an emulated one, on master and for
 releases rather than on every pull request. The web
 build is built and packed on every pull request too (`web.yml`), and checked
 by hand in headless Edge, as desktop, Android and iOS.

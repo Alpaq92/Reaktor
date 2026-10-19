@@ -6,6 +6,9 @@
 #include "nk_common.h"
 #include "util.h"
 #include "text.h"
+#include "test.h"
+
+#define check test_eq
 
 #define FONT_FILE     "assets/fonts/Aileron-Regular.otf"
 #define JAPANESE_FILE "assets/fonts/MPLUS1p-Regular.ttf"
@@ -23,15 +26,8 @@ struct vertex {
     nk_byte col[4];
 };
 
-static int failures;
+struct vertex_align { char c; struct vertex v; };
 
-static void
-check(const char *what, long got, long want)
-{
-    if (got == want) return;
-    printf("FAIL %s: got %ld, want %ld\n", what, got, want);
-    failures++;
-}
 
 static void
 check_near(const char *what, float got, float want)
@@ -92,7 +88,7 @@ frame(struct nk_context *ctx, SDL_Renderer *ren, const char *text,
     memset(&cfg, 0, sizeof cfg);
     cfg.vertex_layout        = layout;
     cfg.vertex_size          = sizeof(struct vertex);
-    cfg.vertex_alignment     = NK_ALIGNOF(struct vertex);
+    cfg.vertex_alignment     = offsetof(struct vertex_align, v);
     cfg.circle_segment_count = cfg.curve_segment_count = cfg.arc_segment_count = 22;
     cfg.global_alpha         = 1.0f;
     nk_buffer_init_default(&cmds);
@@ -206,10 +202,5 @@ main(void)
     directions();
     drawing();
 
-    if (failures) {
-        printf("\n%d check%s failed\n", failures, failures == 1 ? "" : "s");
-        return 1;
-    }
-    printf("text: all checks passed\n");
-    return 0;
+    return test_done("text");
 }

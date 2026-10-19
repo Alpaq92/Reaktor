@@ -3,16 +3,11 @@
 #include <SDL3/SDL.h>
 
 #include "anim.h"
+#include "test.h"
 
-static int g_fail;
+#define ok test_ok
+
 static int g_moving;
-
-static void
-ok(const char *what, int cond)
-{
-    printf("  %-56s %s\n", what, cond ? "ok" : "FAILED");
-    if (!cond) g_fail = 1;
-}
 
 static float
 frame(struct nka_context *a, unsigned id, unsigned channel, float to, float ms,
@@ -209,6 +204,5 @@ main(void)
     test_curves();
     test_table();
 
-    printf("\n%s\n", g_fail ? "FAILED" : "anim: all checks passed");
-    return g_fail ? 1 : 0;
+    return test_done("anim");
 }

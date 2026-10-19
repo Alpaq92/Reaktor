@@ -878,8 +878,8 @@ apply_widget_style(App *app)
         st->tab.rounding = det.rounding;
         st->tab.padding  = nk_vec2(det.pad_x, det.pad_y);
     }
-    st->tab.sym_minimize = NK_SYMBOL_NONE;
-    st->tab.sym_maximize = NK_SYMBOL_NONE;
+    st->tab.sym_minimize = NK_SYMBOL_TRIANGLE_RIGHT;
+    st->tab.sym_maximize = NK_SYMBOL_TRIANGLE_DOWN;
     st->property.sym_left  = NK_SYMBOL_NONE;
     st->property.sym_right = NK_SYMBOL_NONE;
 

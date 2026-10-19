@@ -3,6 +3,9 @@
 #include <time.h>
 
 #include "locale_internal.h"
+#include "test.h"
+
+#define check test_eq
 
 #define CATALOG(code, text) \
     { code, (const unsigned char *)(text), sizeof(text) - 1 }
@@ -55,7 +58,6 @@ const struct reaktor_locale_catalog reaktor_locale_catalogs[] = {
 const int reaktor_locale_catalog_count =
     (int)(sizeof reaktor_locale_catalogs / sizeof reaktor_locale_catalogs[0]);
 
-static int failures;
 
 /* locale_runtime.c asks SDL; the test answers for it. */
 static const char *g_system_code = "en";
@@ -64,14 +66,6 @@ const char *
 reaktor_locale_system_code(void)
 {
     return g_system_code;
-}
-
-static void
-check(const char *what, long got, long want)
-{
-    if (got == want) return;
-    printf("FAIL %s: got %ld, want %ld\n", what, got, want);
-    failures++;
 }
 
 static void
@@ -342,10 +336,5 @@ main(void)
     catalogs();
     formats();
 
-    if (failures) {
-        printf("\n%d check%s failed\n", failures, failures == 1 ? "" : "s");
-        return 1;
-    }
-    printf("locale: all checks passed\n");
-    return 0;
+    return test_done("locale");
 }
