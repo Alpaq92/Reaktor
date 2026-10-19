@@ -34,12 +34,8 @@ jobs:
           - { arch: x86-64, platform: linux/amd64, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: false, timeout: 60 }
           - { arch: x86, platform: linux/386, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: false, timeout: 60 }
           - { arch: arm64, platform: linux/arm64, image: 'debian:bookworm', runner: ubuntu-24.04-arm, emulated: false, timeout: 60 }
-          - { arch: armhf, platform: linux/arm/v7, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: true, timeout: 240, triple: arm-linux-gnueabihf, debarch: armhf }
-          - { arch: riscv64, platform: linux/riscv64, image: 'debian:trixie', runner: ubuntu-24.04, emulated: true, timeout: 240, triple: riscv64-linux-gnu, debarch: riscv64 }
-        # The emulated ones are not required checks and take the longest: master and releases run them.
-        exclude: ${{ github.event_name == 'pull_request' && fromJSON('[{"emulated":true}]') || fromJSON('[]') }}
 
-    steps:
+    steps: &linux-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
@@ -249,6 +245,22 @@ jobs:
           path: smoke/
           if-no-files-found: warn
           retention-days: 14
+
+  linux-emulated:
+    # Not required checks, and the slowest: master and releases run them.
+    if: ${{ github.event_name != 'pull_request' }}
+    name: linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    continue-on-error: ${{ matrix.emulated && !inputs.strict }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: armhf, platform: linux/arm/v7, image: 'debian:bookworm', runner: ubuntu-24.04, emulated: true, timeout: 240, triple: arm-linux-gnueabihf, debarch: armhf }
+          - { arch: riscv64, platform: linux/riscv64, image: 'debian:trixie', runner: ubuntu-24.04, emulated: true, timeout: 240, triple: riscv64-linux-gnu, debarch: riscv64 }
+
+    steps: *linux-steps
 
   rpm:
     name: linux rpm ${{ matrix.arch }}
