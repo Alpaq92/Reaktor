@@ -910,8 +910,14 @@ repaint to make something update is the wrong fix** — mark what changed.
 Every pull request builds each native one, runs the seven console tests, and
 writes a `--shot` and an `--a11y-dump` of `simple` and the showcase through
 the system's video driver and SDL's `dummy` one: `.github/workflows/` holds a
-workflow per system. The BSDs run in virtual machines, ARM64 among them under
-emulation, and a job that emulates may fail without failing its run. The web
+workflow per system. The BSDs run in virtual machines. FreeBSD and NetBSD on
+ARM64 are cross-compiled in the x86-64 machine, against a sysroot
+`tools/cross/sysroot.sh` gathers from the release's sets and packages, with
+the toolchain file `tools/cross/<system>-aarch64.cmake` and
+`-DREAKTOR_SYSROOT=<dir>`; an ARM64 machine, which runs under emulation, then
+only runs the programs. OpenBSD's compiler has no ARM64 backend, so its ARM64
+job builds under emulation too, and a job that emulates may fail without
+failing its run. The web
 build is built and packed on every pull request too (`web.yml`), and checked
 by hand in headless Edge, as desktop, Android and iOS.
 
