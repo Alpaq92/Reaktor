@@ -366,6 +366,28 @@ int main(int argc, char **argv)
 
     check_snapshot(&a);
 
+    {
+        int frame, added_late = 0, swaps = 0, side = a.pool_side;
+
+        for (frame = 0; frame < 600; frame++) {
+            char value[32];
+
+            snprintf(value, sizeof value, "%d%%", frame);
+            reaktor_a11y_begin(&a, "w", r(0, 0, 10, 10));
+            reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, "OK", NULL, 0, r(0, 0, 1, 1));
+            reaktor_a11y_add(&a, REAKTOR_A11Y_PROGRESS, "Copying", value, 0, r(0, 2, 1, 1));
+            reaktor_a11y_end(&a);
+            if (a.pool_side != side) { side = a.pool_side; swaps++; }
+            if (frame > 0) {
+                const reaktor_a11y_change *c = reaktor_a11y_changes(&a, &n);
+                for (i = 0; i < n; i++)
+                    if (c[i].kind == REAKTOR_A11Y_ADDED) added_late++;
+            }
+        }
+        check("a changing value refills the string pool", swaps > 0, 1);
+        check("a refilled pool adds no node", added_late, 0);
+    }
+
     a.overflow_nodes = 0;
     reaktor_a11y_begin(&a, "w", r(0, 0, 10, 10));
     for (i = 0; i < REAKTOR_A11Y_MAX_NODES + 64; i++)

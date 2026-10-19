@@ -744,7 +744,10 @@ wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         LRESULT res;
 
         if (!r) return 0;
-        b->wanted = 1;
+        if (!b->wanted) {
+            b->wanted = 1;
+            reaktor_snap_wake_in(b->snap);
+        }
         res = UiaReturnRawElementProvider(h, wp, lp,
                                           (IRawElementProviderSimple *)&r->simple);
         IRawElementProviderSimple_Release(&r->simple);
@@ -801,9 +804,12 @@ reaktor_a11y_platform_drain(void)
 static void
 push_into(bridge *b, const reaktor_a11y *a, unsigned focus_id)
 {
+    if (!b->wanted) {
+        reaktor_snap_skip_in(b->snap);
+        return;
+    }
     if (!reaktor_snap_update_in(b->snap, a, focus_id)) return;
-
-    if (!b->wanted || !UiaClientsAreListening()) return;
+    if (!UiaClientsAreListening()) return;
     {
         int m, i, structural = 0;
         const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);

@@ -125,13 +125,16 @@ img_lookup(App *app, const char *src, int px)
     SDL_Surface *sdlsurf;
     SDL_Texture *tex;
     struct img_slot *slot;
+    unsigned hash;
     int i, w, h, stride;
 
     if (px < 8) px = 8;
     if (px > 512) px = 512;
 
+    hash = reaktor_fnv(REAKTOR_FNV ^ (unsigned)px, src);
     for (i = 0; i < app->img_count; i++)
-        if (app->img[i].px == px && strcmp(app->img[i].src, src) == 0) {
+        if (app->img[i].hash == hash && app->img[i].px == px &&
+            strcmp(app->img[i].src, src) == 0) {
             app->img[i].s.seen = app->ctx->seq;
             return app->img[i].s.tex ? &app->img[i] : NULL;
         }
@@ -167,6 +170,7 @@ img_lookup(App *app, const char *src, int px)
                                     icol[0] ? icol : NULL, swk);
 
     SDL_strlcpy(slot->src, src, sizeof(slot->src));
+    slot->hash   = hash;
     slot->px     = px;
     slot->s.tex  = NULL;
     slot->w      = slot->h = 0;

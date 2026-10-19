@@ -22,7 +22,10 @@ static const char g_sheet[] =
     "i { border-style: thin-ish; }\n"
     "s { border: unset; }\n"
     "u.x { border: inherit; color: #0a0b0c; }\n"
-    "a.y { border-top: 2px dotted #0d0e0f !important; }\n";
+    "a.y { border-top: 2px dotted #0d0e0f !important; }\n"
+    "em { color: color-mix(in srgb, rgb(255 0 0 / 50%) 50%, red); "
+    "background-color: color-mix(in srgb, hsl(120, 100%, 50%), black); "
+    "border-top-color: color-mix(in srgb, #ff000080, rgba(0, 0, 255, 1)); }\n";
 
 char *
 reaktor_asset_load(const char *name, size_t *len)
@@ -122,6 +125,9 @@ main(void)
            strstr(out, "border-top-style: dotted !important;") &&
            strstr(out, "border-top-color: #0d0e0f !important;"));
         ok("  but not inside another word", strstr(out, "thin-ish") != NULL);
+        ok("color-mix() takes the space form, hsl() and names",
+           !strstr(out, "color-mix") && !strstr(out, "hsl("));
+        ok("  and the comma form with a hex alpha", strstr(out, "border-top-color: rgba(") != NULL);
         free(out);
     }
 

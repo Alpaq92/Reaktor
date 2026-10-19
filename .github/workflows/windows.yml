@@ -22,6 +22,10 @@ jobs:
   windows:
     name: windows ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    env:
+      CCACHE_DIR: ${{ github.workspace }}\.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 500M
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -40,9 +44,25 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Install ccache
+        run: choco install ccache -y --no-progress
+
+      # ccache only: the build folder is rebuilt, so a stale cache cannot hide a broken one.
+      - name: Restore the compiler cache
+        id: ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-windows-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: ccache-windows-${{ matrix.arch }}-
+
+      # Release objects carry no debug info, which is what lets ccache take MSVC's.
       - name: Build
         id: build
-        run: ./build.ps1 -Arch ${{ matrix.arch }} '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded'
+        run: |
+          ccache -z
+          ./build.ps1 -Arch ${{ matrix.arch }} '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded' '-DCMAKE_C_COMPILER_LAUNCHER=ccache' '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache' '-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON'
+          ccache -s
 
       - name: Console tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -129,7 +149,14 @@ jobs:
       - name: Build libreaktor
         id: lib
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: ./build.ps1 -Arch ${{ matrix.arch }} -Out build-lib libreaktor
+        run: ./build.ps1 -Arch ${{ matrix.arch }} -Out build-lib libreaktor '-DCMAKE_C_COMPILER_LAUNCHER=ccache' '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache' '-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON'
+
+      - name: Save the compiler cache
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Check and zip libreaktor
         id: libcheck

@@ -142,8 +142,18 @@ wrap_guess(const struct nk_user_font *f, const char *s, int len, float space)
     nk_rune cp;
 
     while (at < len) {
-        int   n = nk_utf_decode(s + at, &cp, len - at);
+        int   n, e = at;
         float g;
+
+        while (e < len && s[e] != ' ') e++;
+        if (e < len) e++;
+        g = f->width(f->userdata, f->height, s + at, e - at);
+        if (w + g <= space) {
+            w  += g;
+            at  = e;
+            continue;
+        }
+        n = nk_utf_decode(s + at, &cp, len - at);
 
         if (n <= 0) return at ? at : len;
         g = f->width(f->userdata, f->height, s + at, n);
@@ -182,16 +192,14 @@ wrap_lines(unsigned id, const struct nk_user_font *f, const char *s,
            float space, const wrapped **out)
 {
     wrapped    *w = &g_wraps[id & 63];
-    unsigned    h = 2166136261u, loads = reaktor_style_loads();
-    const char *p;
+    unsigned    h = reaktor_fnv(REAKTOR_FNV, s), loads = reaktor_style_loads();
     int         len, done = 0, lines = 0;
 
-    for (p = s; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
     *out = w;
     if (w->hash == h && w->f == f && w->space == space &&
         w->height == f->height && w->loads == loads)
         return w->lines > 0 ? w->lines : 1;
-    len = (int)(p - s);
+    len = (int)SDL_strlen(s);
     while (done < len) {
         done += wrap_fit(f, s + done, len - done, space);
         if (lines < WRAP_LINES) w->end[lines] = done;

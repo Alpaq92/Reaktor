@@ -55,6 +55,7 @@ typedef struct shape_entry {
     int    file, len, text;
     int    glyph, glyphs, next;
     float  width;
+    Uint32 used;
 } shape_entry;
 
 typedef struct text_char {
@@ -75,6 +76,7 @@ typedef struct kb_config {
     kbts_shape_config     *shape;
     kbts_glyph_config     *glyph;
     kbts_shape_scratchpad *scratch;
+    Uint32                 used;
 } kb_config;
 
 typedef struct glyph_slot {
@@ -112,6 +114,7 @@ static char        *g_bytes;
 static int          g_entries, g_entry_cap, g_glyphs, g_glyph_cap;
 static int          g_byte_n, g_byte_cap;
 static int          g_bucket[BUCKETS];
+static Uint32       g_stamp;
 
 static text_char *g_ch;
 static text_run  *g_run;
@@ -451,13 +454,20 @@ config_for(int font, kbts_script script)
     for (i = 0; i < g_configs && !c; i++)
         if (g_config[i].font == font && g_config[i].script == script)
             c = &g_config[i];
+    if (c) c->used = g_stamp;
     if (c && c->scratch) return c;
     if (!c) {
         if (g_configs == CONFIGS_MAX) {
-            for (i = 0; i < g_configs; i++) config_free(&g_config[i]);
-            g_configs = 0;
+            int old = 0;
+
+            for (i = 1; i < g_configs; i++)
+                if (g_config[i].used < g_config[old].used) old = i;
+            config_free(&g_config[old]);
+            g_config[old] = g_config[--g_configs];
         }
         c = &g_config[g_configs];
+        SDL_zerop(c);
+        c->used   = g_stamp;
         c->font   = font;
         c->script = script;
         c->shape  = kbts_CreateShapeConfig(&g_font[font].kb, script,
@@ -517,17 +527,18 @@ static int
 shape(int file, const char *s, int len)
 {
     shape_entry *e;
-    Uint32       hash = 2166136261u ^ (Uint32)file;
+    Uint32       hash = reaktor_fnv_n(REAKTOR_FNV ^ (Uint32)file, s, (size_t)(len > 0 ? len : 0));
     void        *p;
     float        pen = 0.0f;
     int          i, n, runs, first;
 
-    for (i = 0; i < len; i++) hash = (hash ^ (Uint8)s[i]) * 16777619u;
     for (i = g_bucket[hash & (BUCKETS - 1)]; i > 0; i = g_entry[i - 1].next) {
         e = &g_entry[i - 1];
         if (e->hash == hash && e->file == file && e->len == len &&
-            SDL_memcmp(g_bytes + e->text, s, (size_t)len) == 0)
+            SDL_memcmp(g_bytes + e->text, s, (size_t)len) == 0) {
+            e->used = g_stamp;
             return i - 1;
+        }
     }
 
     if (len <= 0 || !font_open(file) || (n = decode(s, len)) <= 0) return -1;
@@ -554,6 +565,7 @@ shape(int file, const char *s, int len)
     e->glyph  = first;
     e->glyphs = g_glyphs - first;
     e->width  = pen;
+    e->used   = g_stamp;
     e->next   = g_bucket[hash & (BUCKETS - 1)];
     g_bucket[hash & (BUCKETS - 1)] = g_entries + 1;
     SDL_memcpy(g_bytes + g_byte_n, s, (size_t)len);
@@ -561,17 +573,31 @@ shape(int file, const char *s, int len)
     return g_entries++;
 }
 
+/* Keeps what the frame just measured, so a full cache does not reshape
+   everything on screen at once. */
 static void
-shapes_forget(void)
+shapes_compact(void)
 {
-    SDL_free(g_entry);
-    SDL_free(g_glyph);
-    SDL_free(g_bytes);
-    g_entry = NULL;
-    g_glyph = NULL;
-    g_bytes = NULL;
-    g_entries = g_entry_cap = g_glyphs = g_glyph_cap = g_byte_n = g_byte_cap = 0;
+    int i, n = 0, glyphs = 0, bytes = 0;
+
     SDL_memset(g_bucket, 0, sizeof g_bucket);
+    for (i = 0; i < g_entries; i++) {
+        shape_entry e = g_entry[i];
+
+        if (e.used != g_stamp) continue;
+        SDL_memmove(g_glyph + glyphs, g_glyph + e.glyph, (size_t)e.glyphs * sizeof *g_glyph);
+        SDL_memmove(g_bytes + bytes, g_bytes + e.text, (size_t)e.len);
+        e.glyph = glyphs;
+        e.text  = bytes;
+        e.next  = g_bucket[e.hash & (BUCKETS - 1)];
+        g_bucket[e.hash & (BUCKETS - 1)] = n + 1;
+        glyphs += e.glyphs;
+        bytes  += e.len;
+        g_entry[n++] = e;
+    }
+    g_entries = n;
+    g_glyphs  = glyphs;
+    g_byte_n  = bytes;
 }
 
 static int
@@ -830,7 +856,8 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
     g_draws     = 0;
     if (!g_took) return;
     g_took = 0;
-    if (g_glyphs > SHAPED_MAX) shapes_forget();
+    if (g_glyphs > SHAPED_MAX) shapes_compact();
+    g_stamp++;
     if (g_full) glyphs_forget();
 
     nk_foreach(cmd, ctx) {

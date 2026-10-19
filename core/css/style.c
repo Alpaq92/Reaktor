@@ -57,10 +57,7 @@ static void cache_clear(int release)
 
 static unsigned hash_of(const char *s)
 {
-    unsigned h = 2166136261u;
-
-    while (*s) h = (h ^ (unsigned char)*s++) * 16777619u;
-    return h;
+    return reaktor_fnv(REAKTOR_FNV, s);
 }
 
 static cache_entry *cache_slot(const char *selector, unsigned h)

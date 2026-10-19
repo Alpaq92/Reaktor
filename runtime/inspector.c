@@ -625,7 +625,7 @@ reaktor_inspector_frame(App *app)
     {
         static unsigned last;
         const reaktor_a11y_node *n;
-        unsigned h = 2166136261u;
+        unsigned h = REAKTOR_FNV;
         int i, count;
 
         n = reaktor_a11y_tree(&app->a11y, &count);
@@ -639,12 +639,8 @@ reaktor_inspector_frame(App *app)
             v[3] = (unsigned)(int)n[i].bounds.y;
             v[4] = (unsigned)(int)n[i].bounds.w;
             v[5] = (unsigned)(int)n[i].bounds.h;
-            for (k = 0; k < 6; k++) h = (h ^ v[k]) * 16777619u;
-            if (n[i].value) {
-                const char *c;
-
-                for (c = n[i].value; *c; c++) h = (h ^ (unsigned char)*c) * 16777619u;
-            }
+            h = reaktor_fnv_n(h, v, sizeof v);
+            h = reaktor_fnv(h, n[i].value);
         }
         h ^= reaktor_style_loads();
         if (h == last && g_tab != TAB_FRAME) return;

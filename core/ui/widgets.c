@@ -25,45 +25,50 @@ reaktor_font(App *app, int px, int bold)
 
 #define ICON_HAIRLINE_BELOW 20
 
+static const char *
+icon_src(char out[192], const char *name, const char *hex, float sw)
+{
+    if (sw < 0.0f)
+        SDL_snprintf(out, 192, "external/ionicons/src/svg/%s.svg?stroke=%s", name, hex);
+    else
+        SDL_snprintf(out, 192, "external/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
+                     name, hex, (double)sw);
+    return out;
+}
+
+static void
+hex_of(struct nk_color c, char out[8])
+{
+    SDL_snprintf(out, 8, "#%02x%02x%02x", c.r, c.g, c.b);
+}
+
 struct nk_image
 reaktor_ionicon(App *app, const char *name, int px)
 {
     char src[192];
 
-    if (px < ICON_HAIRLINE_BELOW)
-        SDL_snprintf(src, sizeof(src),
-                     "external/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
-                     name, app->icon_hex, (double)GLYPH_STROKE);
-    else
-        SDL_snprintf(src, sizeof(src),
-                     "external/ionicons/src/svg/%s.svg?stroke=%s",
-                     name, app->icon_hex);
-    return icon(app, src, px);
+    return icon(app, icon_src(src, name, app->icon_hex,
+                              px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : -1.0f), px);
 }
 
 struct nk_image
 reaktor_ionicon_exact(App *app, const char *name, int px,
                       struct nk_color stroke, float sw)
 {
-    char src[192];
+    char hex[8], src[192];
 
     if (sw <= 0.0f) sw = px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f;
-    SDL_snprintf(src, sizeof(src),
-                 "external/ionicons/src/svg/%s.svg?stroke=#%02x%02x%02x"
-                 "&sw=%.2f", name, stroke.r, stroke.g, stroke.b, (double)sw);
-    return icon_over(app, src, px, 1.0f);
+    hex_of(stroke, hex);
+    return icon_over(app, icon_src(src, name, hex, sw), px, 1.0f);
 }
 
 struct nk_image
 reaktor_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
 {
-    char src[192];
+    char hex[8], src[192];
 
-    SDL_snprintf(src, sizeof(src),
-                 "external/ionicons/src/svg/%s.svg?stroke=#%02x%02x%02x"
-                 "&sw=%.2f", name, stroke.r, stroke.g, stroke.b,
-                 px < ICON_HAIRLINE_BELOW ? (double)GLYPH_STROKE : 1.0);
-    return icon(app, src, px);
+    hex_of(stroke, hex);
+    return icon(app, icon_src(src, name, hex, px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f), px);
 }
 
 struct nk_color

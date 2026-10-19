@@ -62,6 +62,7 @@ struct tex_slot {
 struct img_slot {
     struct tex_slot s;
     char            src[192];
+    unsigned        hash;
     int             px, w, h;
 };
 

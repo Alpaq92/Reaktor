@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "a11y.h"
+#include "../base/util.h"
 
 static const char *const g_role_names[REAKTOR_A11Y_ROLE_COUNT] = {
     "none", "window", "group", "tablist", "tab", "button", "link",
@@ -18,12 +19,7 @@ reaktor_a11y_role_name(unsigned char role)
 static unsigned
 hash_str(unsigned h, const char *s)
 {
-    if (!s) return h * 16777619u;
-    while (*s) {
-        h ^= (unsigned char)*s++;
-        h *= 16777619u;
-    }
-    return h;
+    return s ? reaktor_fnv(h, s) : h * 16777619u;
 }
 
 static const char *
@@ -42,21 +38,21 @@ intern(reaktor_a11y *a, const char *s, unsigned h)
                 a->pool_used + (int)n > REAKTOR_A11Y_POOL) {
                 return NULL;
             }
-            memcpy(a->pool + a->pool_used, s, n);
+            memcpy(a->pool[a->pool_side] + a->pool_used, s, n);
             sl->gen = a->pool_gen;
             sl->key = h;
             sl->val = a->pool_used;
             a->pool_used += (int)n;
             a->pool_entries++;
-            return a->pool + sl->val;
+            return a->pool[a->pool_side] + sl->val;
         }
-        if (sl->key == h && strcmp(a->pool + sl->val, s) == 0)
-            return a->pool + sl->val;
+        if (sl->key == h && strcmp(a->pool[a->pool_side] + sl->val, s) == 0)
+            return a->pool[a->pool_side] + sl->val;
         i = (i + 1) & mask;
     }
 }
 
-#define same_str(x, y) ((x) == (y))
+#define same_str(x, y) ((x) == (y) || ((x) && (y) && strcmp((x), (y)) == 0))
 
 static reaktor_a11y_slot *
 slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
@@ -112,7 +108,7 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
 
     parent = a->depth > 0 ? a->parent[a->depth - 1] : 0u;
 
-    nh   = hash_str(2166136261u, name);
+    nh   = hash_str(REAKTOR_FNV, name);
     base = nh ^ ((unsigned)role * 0x9e3779b9u);
     base ^= parent + 0x9e3779b9u + (base << 6) + (base >> 2);
 
@@ -132,7 +128,7 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
     n->level  = (unsigned char)a->depth;
     n->state  = state;
     n->name   = intern(a, name, nh);
-    n->value  = intern(a, value, hash_str(2166136261u, value));
+    n->value  = intern(a, value, hash_str(REAKTOR_FNV, value));
     n->keys   = NULL;
     n->bounds = bounds;
     n->num = n->lo = n->hi = n->step = 0.0f;
@@ -153,7 +149,7 @@ node_of(reaktor_a11y *a, unsigned id)
 static const char *
 intern_str(reaktor_a11y *a, const char *s)
 {
-    return (s && *s) ? intern(a, s, hash_str(2166136261u, s)) : NULL;
+    return (s && *s) ? intern(a, s, hash_str(REAKTOR_FNV, s)) : NULL;
 }
 
 void
@@ -211,10 +207,10 @@ reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
 
     if (a->pool_used > REAKTOR_A11Y_POOL - REAKTOR_A11Y_POOL / 4 ||
         a->pool_entries >= REAKTOR_A11Y_SLOTS) {
+        a->pool_side   ^= 1;
         a->pool_used    = 0;
         a->pool_entries = 0;
         a->pool_gen++;
-        a->count[0] = a->count[1] = 0;
     }
 
     reaktor_a11y_push(a, REAKTOR_A11Y_WINDOW, window_name, NULL, 0, bounds);

@@ -32,15 +32,52 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Restore emsdk
+        id: emsdk
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSCRIPTEN_VERSION }}
+
+      # ccache only: the build folder is rebuilt, so a stale cache cannot hide a broken one.
+      - name: Restore the compiler cache
+        id: ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-web-${{ env.EMSCRIPTEN_VERSION }}-${{ github.run_id }}
+          restore-keys: ccache-web-${{ env.EMSCRIPTEN_VERSION }}-
+
       - name: Install emsdk
         run: |
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
-          "$HOME/emsdk/emsdk" install "$EMSCRIPTEN_VERSION"
+          if [ ! -d "$HOME/emsdk" ]; then
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+            "$HOME/emsdk/emsdk" install "$EMSCRIPTEN_VERSION"
+          fi
           "$HOME/emsdk/emsdk" activate "$EMSCRIPTEN_VERSION"
-          sudo apt-get update && sudo apt-get install -y ninja-build
+          sudo apt-get update && sudo apt-get install -y ninja-build ccache
+
+      - name: Save emsdk
+        if: ${{ steps.emsdk.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSCRIPTEN_VERSION }}
 
       - name: Build
-        run: EMSDK="$HOME/emsdk" ./build-wasm.sh
+        id: build
+        run: |
+          export CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=500M
+          ccache -z
+          EMSDK="$HOME/emsdk" ./build-wasm.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
+          ccache -s
+
+      - name: Save the compiler cache
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Package
         run: |

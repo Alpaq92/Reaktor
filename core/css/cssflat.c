@@ -1,4 +1,5 @@
 #include "cssflat.h"
+#include <plutovg.h>
 #include "util.h"
 
 #include <stdio.h>
@@ -99,14 +100,6 @@ const char *reaktor_cssvars_get(const reaktor_cssvars *m, const char *name)
     return NULL;
 }
 
-static int hex1(int c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
 /* Not strtod, which reads the locale's decimal mark. */
 static float css_number(const char *p, const char **end)
 {
@@ -142,48 +135,39 @@ static void color_text(char *out, size_t cap, const float c[4])
              (int)(c[1] + 0.5f), (int)(c[2] + 0.5f), a / 1000, a % 1000);
 }
 
+/* plutovg reads only the comma form of rgb() and hsl(), so a space or a '/'
+   between arguments becomes a comma first. */
 static int parse_color(const char *s, size_t n, float c[4])
 {
     char tmp[64];
-    float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    const char *p, *end;
-    int h[8], i, k;
+    const char *open;
+    plutovg_color_t col;
+    size_t i, k = 0;
+    int depth = 0, gap = 0;
 
     while (n && isspace((unsigned char)*s)) { s++; n--; }
     while (n && isspace((unsigned char)s[n - 1])) n--;
     if (n == 0 || n >= sizeof(tmp)) return 0;
-    memcpy(tmp, s, n);
-    tmp[n] = 0;
-    if (strcmp(tmp, "transparent") == 0) {
-        c[0] = c[1] = c[2] = c[3] = 0.0f;
-        return 1;
-    }
-    if (tmp[0] == '#') {
-        for (k = 0; k < 8 && tmp[k + 1]; k++)
-            if ((h[k] = hex1((unsigned char)tmp[k + 1])) < 0) return 0;
-        if (tmp[k + 1] || (k != 3 && k != 4 && k != 6 && k != 8)) return 0;
-        for (i = 0; i < k / (k < 6 ? 1 : 2); i++)
-            v[i] = k < 6 ? (float)(h[i] * 17) : (float)(h[2 * i] * 16 + h[2 * i + 1]);
-        if (k == 4 || k == 8) v[3] /= 255.0f;
-    } else if (strncmp(tmp, "rgb", 3) == 0 && (p = strchr(tmp, '('))) {
-        for (i = 0, p++; i < 4; i++) {
-            while (*p == ' ' || *p == ',' || *p == '/') p++;
-            if (*p == ')') break;
-            v[i] = css_number(p, &end);
-            if (end == p) return 0;
-            if (*end == '%') { v[i] *= i < 3 ? 2.55f : 0.01f; end++; }
-            p = end;
-        }
-        while (*p == ' ') p++;
-        if (i < 3 || *p != ')' || p[1]) return 0;
-    } else {
-        return 0;
-    }
-    for (i = 0; i < 4; i++) {
-        float hi = i < 3 ? 255.0f : 1.0f;
+    open = memchr(s, '(', n);
+    for (i = 0; i < n; i++) {
+        char ch = s[i];
 
-        c[i] = v[i] > 0.0f ? (v[i] < hi ? v[i] : hi) : 0.0f;
+        if (open && depth == 1 && (isspace((unsigned char)ch) || ch == ',' || ch == '/')) {
+            gap = 1;
+            continue;
+        }
+        if (ch == '(') depth++;
+        if (ch == ')') { depth--; gap = 0; }
+        if (gap && tmp[k - 1] != '(') tmp[k++] = ',';
+        gap = 0;
+        tmp[k++] = ch;
     }
+    tmp[k] = 0;
+    if (plutovg_color_parse(&col, tmp, (int)k) != (int)k) return 0;
+    c[0] = col.r * 255.0f;
+    c[1] = col.g * 255.0f;
+    c[2] = col.b * 255.0f;
+    c[3] = col.a;
     return 1;
 }
 

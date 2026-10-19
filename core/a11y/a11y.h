@@ -49,7 +49,8 @@ typedef struct reaktor_a11y {
     int             count[2];
     int             front;
 
-    char            pool[REAKTOR_A11Y_POOL];
+    char            pool[2][REAKTOR_A11Y_POOL];
+    int             pool_side;
     int             pool_used;
     int             pool_entries;
     unsigned        pool_gen;
