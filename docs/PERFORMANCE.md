@@ -183,7 +183,7 @@ fix). With a real GPU that reverses — see **Against the others**.
 ## What it needs to run
 
 **No GPU**, and about **10 MB of RAM**. The default look is compiled in, so a
-program needs no files beside it until it uses other Ionicons, Bamboo, the
+program needs no files beside it until it uses other Ionicons, Simple.css, the
 catalogs or the Japanese font, found by walking up to the `.reaktor-root`
 marker. The web build packs those into its `.data` and needs an HTTP server,
 since a `file://` page cannot fetch the `.wasm`.

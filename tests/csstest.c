@@ -84,7 +84,7 @@ int
 main(void)
 {
     static const char *const test[1] = { "test.css" };
-    static const char *const bamboo[1] = { "external/bamboocss/dist/bamboo.min.css" };
+    static const char *const simple[1] = { "external/simplecss/simple.css" };
     char *out;
     int   i;
 
@@ -126,8 +126,8 @@ main(void)
     }
 
     for (i = 0; i < 2; i++) {
-        out = reaktor_css_flatten(bamboo, 1, i ? "dark" : "light", 0, NULL);
-        ok(i ? "Bamboo flattens, dark" : "Bamboo flattens, light",
+        out = reaktor_css_flatten(simple, 1, i ? "dark" : "light", 0, NULL);
+        ok(i ? "Simple.css flattens, dark" : "Simple.css flattens, light",
            out != NULL && strstr(out, "button") != NULL);
         ok("  and no compound in it holds two :not()", out != NULL && !not_twice(out));
         free(out);
