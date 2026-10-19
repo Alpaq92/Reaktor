@@ -28,16 +28,28 @@ static const char g_sheet[] =
     "background-color: color-mix(in srgb, hsl(120, 100%, 50%), black); "
     "border-top-color: color-mix(in srgb, #ff000080, rgba(0, 0, 255, 1)); }\n";
 
+static const char g_media[] =
+    "@media (prefers-color-scheme: dark) { h1 { color: #000001; } }\n"
+    "@media (prefers-reduced-motion: reduce) { h2 { color: #000002; } }\n"
+    "@media (prefers-reduced-motion: no-preference) { h3 { color: #000003; } }\n"
+    "@media (prefers-contrast: more) { h4 { color: #000004; } }\n"
+    "@media screen and (prefers-contrast) { h5 { color: #000005; } }\n"
+    "@media print, (prefers-reduced-motion) { h6 { color: #000006; } }\n"
+    "@media (prefers-contrast: more) and (max-width: 720px) { ol { color: #000007; } }\n"
+    "@media print { ul { color: #000008; } }\n";
+
 char *
 reaktor_asset_load(const char *name, size_t *len)
 {
     char *out = NULL;
     long  n = 0;
 
-    if (strcmp(name, "test.css") == 0) {
-        n = (long)strlen(g_sheet);
+    if (strcmp(name, "test.css") == 0 || strcmp(name, "media.css") == 0) {
+        const char *s = name[0] == 't' ? g_sheet : g_media;
+
+        n = (long)strlen(s);
         out = malloc((size_t)n + 1);
-        if (out) memcpy(out, g_sheet, (size_t)n + 1);
+        if (out) memcpy(out, s, (size_t)n + 1);
     } else {
         FILE *f = fopen(name, "rb");
 
@@ -81,6 +93,7 @@ int
 main(void)
 {
     static const char *const test[1] = { "test.css" };
+    static const char *const media[1] = { "media.css" };
     static const char *const simple[1] = { "external/simplecss/simple.css" };
     char *out;
     int   i;
@@ -124,6 +137,21 @@ main(void)
         ok("  and the comma form with a hex alpha", strstr(out, "border-top-color: rgba(") != NULL);
         free(out);
     }
+
+    out = reaktor_css_flatten(media, 1, "light", 0, NULL);
+    ok("with no preference, only no-preference queries apply",
+       out && strstr(out, "#000003") && !strstr(out, "#000001") && !strstr(out, "#000002") &&
+       !strstr(out, "#000004") && !strstr(out, "#000005") && !strstr(out, "#000006"));
+    free(out);
+    reaktor_css_media(1, 1);
+    out = reaktor_css_flatten(media, 1, "dark", 0, NULL);
+    ok("reduced motion and more contrast apply theirs",
+       out && strstr(out, "#000001") && strstr(out, "#000002") && !strstr(out, "#000003") &&
+       strstr(out, "#000004") && strstr(out, "#000005") && strstr(out, "#000006"));
+    ok("  but not with a feature not answered here, nor print",
+       out && !strstr(out, "#000007") && !strstr(out, "#000008"));
+    free(out);
+    reaktor_css_media(0, 0);
 
     for (i = 0; i < 2; i++) {
         out = reaktor_css_flatten(simple, 1, i ? "dark" : "light", 0, NULL);

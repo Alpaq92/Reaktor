@@ -5,6 +5,16 @@
     --table-bg-alt: var(--background-alt);
 }
 
+@media (prefers-contrast: more) {
+    :root {
+        --text-main: var(--text-bright);
+        --text-muted: var(--text-bright);
+        --form-placeholder: var(--text-bright);
+        --border: var(--text-bright);
+        --focus: var(--links);
+    }
+}
+
 h4 {
     font-size: 19px;
     font-weight: 700;

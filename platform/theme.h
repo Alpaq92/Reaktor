@@ -2,6 +2,8 @@
 #define REAKTOR_THEME_H
 
 int reaktor_prefers_dark(void);
+int reaktor_prefers_reduced_motion(void);
+int reaktor_prefers_contrast(void);
 
 struct SDL_Window;
 

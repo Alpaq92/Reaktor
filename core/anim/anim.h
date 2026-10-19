@@ -9,5 +9,6 @@ void reaktor_anim_destroy(struct nka_context *a);
 void reaktor_anim_frame(struct nka_context *a, float dt_ms);
 
 int reaktor_anim_settle(void);
+void reaktor_anim_reduce(int on);
 
 #endif

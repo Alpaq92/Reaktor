@@ -145,6 +145,8 @@ void  reaktor_request_quit(App *app);
 void  reaktor_wake(App *app);
 void  reaktor_set_theme(App *app, reaktor_theme theme);
 void  reaktor_set_css(App *app, const reaktor_asset *css, int count);
+int   reaktor_reduced_motion(void);
+int   reaktor_high_contrast(void);
 void  reaktor_set_title(App *app, const char *title);
 void  reaktor_set_confirm_close(App *app, const char *question);
 void *reaktor_user(App *app);
