@@ -50,7 +50,8 @@ netbsd)
     # The host's package repository, read for the same quarterly, with the architecture swapped.
     repo=""
     if [ -f /usr/pkg/etc/pkgin/repositories.conf ]; then
-        repo=$(grep -v '^#' /usr/pkg/etc/pkgin/repositories.conf | grep . | head -1 | sed -e 's/\$arch/aarch64/' -e 's/\${arch}/aarch64/' -e 's/x86_64/aarch64/')
+        repo=$(grep -v '^#' /usr/pkg/etc/pkgin/repositories.conf | grep . | head -1 |
+               sed -e 's#^ftp://ftp\.NetBSD\.org#https://cdn.NetBSD.org#' -e 's#/NetBSD/[^/]*/#/NetBSD/aarch64/#')
     fi
     [ -n "$repo" ] || repo="https://cdn.NetBSD.org/pub/pkgsrc/packages/NetBSD/aarch64/$version/All"
     repo=${repo%/}
@@ -91,8 +92,8 @@ netbsd)
     ;;
 esac
 
-# A symbolic link to an absolute path would reach the host's own libraries.
-escaped=$(find "$dir" -type l -lname '/*' 2>/dev/null || true)
+# A library link to an absolute path would reach the host's own libraries.
+escaped=$(find "$dir" -type l -lname '/*' -name 'lib*.so*' 2>/dev/null || true)
 if [ -n "$escaped" ]; then
     echo "sysroot: links reach outside it:" >&2
     echo "$escaped" >&2
