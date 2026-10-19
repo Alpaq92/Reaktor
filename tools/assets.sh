@@ -10,7 +10,7 @@ copy() {
 }
 
 for f in assets/fonts/MPLUS1p-Regular.ttf assets/fonts/MPLUS1p-Notice.txt \
-         assets/fonts/Aileron-Notice.txt external/bamboocss/dist/bamboo.min.css; do
+         assets/fonts/Aileron-Notice.txt external/simplecss/simple.css; do
     copy "$f"
 done
 for f in "$root"/assets/locale/*.txt; do

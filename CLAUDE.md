@@ -114,7 +114,7 @@ regression oracle for every layout or style change.
   and its `src/parts/`, and the seven Ionicons the widgets draw (three chevrons, three discs, the
   toast's close cross) are compiled in byte for byte, beside the Aileron
   fonts, the mark and reaktor.css. Nothing else from a submodule is — not the
-  rest of Ionicons, not Bamboo.
+  rest of Ionicons, not Simple.css.
 - Applications see only `include/reaktor/`. The samples include
   `reaktor/reaktor.h` and `reaktor/main.h`, nothing from `core/`, and
   `App` is opaque to them; what a sample needs becomes a public call there.

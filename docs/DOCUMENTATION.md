@@ -683,7 +683,7 @@ and the accent. An icon on a button takes its label's color.
   current sidebar entry from `--links`.
 
 `reaktor_set_css` swaps the application's sheets at the next frame. The
-showcase's Styling page lays Bamboo over Water.css that way, which is the
+showcase's Styling page lays Simple.css over Water.css that way, which is the
 test that the look is not in the code. reaktor.css is written in Water.css's
 names, so once such a sheet is read, `--links`, `--background-body` and
 `--text-main` are given its link, page and text colors in one more sheet read
@@ -855,7 +855,7 @@ close cross), `reaktor.css` and Water.css's palettes and parts, copied byte for 
 at configure time. `reaktor_asset_load` still tries the file under the
 `.reaktor-root` marker first, so an edited sheet shows without a rebuild.
 Nothing is read from the working directory, and a path a user hands over is
-made absolute where it is taken. The rest of Ionicons, Bamboo and the
+made absolute where it is taken. The rest of Ionicons, Simple.css and the
 catalogs are read from files; an icon that is not there is drawn as nothing,
 and the log names it.
 
@@ -1132,7 +1132,7 @@ Built by default and run from `build/`:
 | `animtest` | Curves, retargeting, a context a window |
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
-| `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and Bamboo read through it |
+| `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and Simple.css read through it |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
 | `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `print-pdf`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 

@@ -17,7 +17,12 @@ static const char g_sheet[] =
     "margin: calc(2 * (3px + 1px)); width: calc(100% - 2 * 8px); }\n"
     "q { background-image: url(data:image/svg+xml;base64,AAAA); color: #010203; }\n"
     "q.v { content: \"a value longer than the engine token\"; color: #040506; }\n"
-    ".a-selector-longer-than-the-engines-token, u { color: #070809; }\n";
+    ".a-selector-longer-than-the-engines-token, u { color: #070809; }\n"
+    "b { border: thin solid #010101; border-left: medium; border-top-width: thick; }\n"
+    "i { border-style: thin-ish; }\n"
+    "s { border: unset; }\n"
+    "u.x { border: inherit; color: #0a0b0c; }\n"
+    "a.y { border-top: 2px dotted #0d0e0f !important; }\n";
 
 char *
 reaktor_asset_load(const char *name, size_t *len)
@@ -79,7 +84,7 @@ int
 main(void)
 {
     static const char *const test[1] = { "test.css" };
-    static const char *const bamboo[1] = { "external/bamboocss/dist/bamboo.min.css" };
+    static const char *const simple[1] = { "external/simplecss/simple.css" };
     char *out;
     int   i;
 
@@ -100,12 +105,29 @@ main(void)
         ok("a value with a ';' is dropped", !strstr(out, "base64") && strstr(out, "#010203"));
         ok("a value past the token is dropped", !strstr(out, "longer") && strstr(out, "#040506"));
         ok("a selector past the token is dropped", !strstr(out, "a-selector") && strstr(out, "u {"));
+        ok("border keyword widths become lengths",
+           strstr(out, "border-right-width: 1px;") && strstr(out, "border-left-width: 3px;") &&
+           strstr(out, "border-top-width: 5px;"));
+        ok("a border shorthand is spelled out as longhands",
+           !strstr(out, "border: ") && !strstr(out, "border-left: ") &&
+           strstr(out, "border-bottom-style: solid;") &&
+           strstr(out, "border-bottom-color: #010101;"));
+        ok("  with what it leaves out at libcss's own values",
+           strstr(out, "border-left-style: none;") &&
+           strstr(out, "border-left-color: transparent;"));
+        ok("border: unset is no border", strstr(out, "border-top-width: 0px;") != NULL);
+        ok("border: inherit is dropped, the rest of its rule kept",
+           !strstr(out, "inherit") && strstr(out, "#0a0b0c"));
+        ok("!important reaches every longhand",
+           strstr(out, "border-top-style: dotted !important;") &&
+           strstr(out, "border-top-color: #0d0e0f !important;"));
+        ok("  but not inside another word", strstr(out, "thin-ish") != NULL);
         free(out);
     }
 
     for (i = 0; i < 2; i++) {
-        out = reaktor_css_flatten(bamboo, 1, i ? "dark" : "light", 0, NULL);
-        ok(i ? "Bamboo flattens, dark" : "Bamboo flattens, light",
+        out = reaktor_css_flatten(simple, 1, i ? "dark" : "light", 0, NULL);
+        ok(i ? "Simple.css flattens, dark" : "Simple.css flattens, light",
            out != NULL && strstr(out, "button") != NULL);
         ok("  and no compound in it holds two :not()", out != NULL && !not_twice(out));
         free(out);

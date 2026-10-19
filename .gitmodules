@@ -34,6 +34,6 @@
 [submodule "external/watercss"]
 	path = external/watercss
 	url = https://github.com/kognise/water.css
-[submodule "external/bamboocss"]
-	path = external/bamboocss
-	url = https://github.com/rilwis/bamboo
+[submodule "external/simplecss"]
+	path = external/simplecss
+	url = https://github.com/kevquirk/simple.css

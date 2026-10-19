@@ -35,7 +35,7 @@ Animation, Styling, Translations, Diagnostics — with the color scheme and the
 titlebar switch at its foot, and an icon in the tray. It is the reference for
 what the library draws, and where its claims are tested rather than asserted:
 
-- **Styling** lays Bamboo over Water.css at the flick of a checkbox, and
+- **Styling** lays Simple.css over Water.css at the flick of a checkbox, and
   prints what each rule resolved to beside the widgets it painted.
 - **Translations** sets the opening of *The Ugly Duckling* in English, Polish
   and Japanese from the catalogs, beside a date, a number, one amount in three
