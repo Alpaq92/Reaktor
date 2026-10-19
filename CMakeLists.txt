@@ -502,7 +502,7 @@ else()
     endif()
 endif()
 
-option(REAKTOR_PRINT "Printing and PDF export, through libHaru" ON)
+option(REAKTOR_PRINT "Printing and PDF export, through PDFGen" ON)
 
 add_library(reaktor_print_none INTERFACE)
 target_sources(reaktor_print_none INTERFACE
@@ -512,22 +512,17 @@ if(NOT REAKTOR_PRINT OR EMSCRIPTEN)
     target_link_libraries(reaktor_print INTERFACE reaktor_print_none)
     message(STATUS "print: off")
 else()
-    file(GLOB _hpdf_src CONFIGURE_DEPENDS "${TP}/libharu/src/hpdf_*.c")
-    # Pages are JPEG images in a standard font: the CJK encoders and fonts go unlinked.
-    list(FILTER _hpdf_src EXCLUDE REGEX "hpdf_(encoder|fontdef)_(cns|cnt|jp|kr)[.]c$")
-    configure_file("${TP}/libharu/include/hpdf_config.h.cmake"
-                   "${CMAKE_BINARY_DIR}/hpdf/hpdf_config.h")
-    add_library(hpdf STATIC ${_hpdf_src})
-    target_include_directories(hpdf PUBLIC "${TP}/libharu/include" "${CMAKE_BINARY_DIR}/hpdf")
+    add_library(pdfgen STATIC "${TP}/pdfgen/pdfgen.c")
+    target_include_directories(pdfgen PUBLIC "${TP}/pdfgen")
     if(MSVC)
-        target_compile_options(hpdf PRIVATE /w)
-        target_compile_definitions(hpdf PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(pdfgen PRIVATE /w)
+        target_compile_definitions(pdfgen PRIVATE _CRT_SECURE_NO_WARNINGS)
     else()
-        target_compile_options(hpdf PRIVATE -w)
-        target_link_libraries(hpdf PUBLIC m)
+        target_compile_options(pdfgen PRIVATE -w)
+        target_link_libraries(pdfgen PUBLIC m)
     endif()
     target_sources(reaktor_print INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/print.c")
-    target_link_libraries(reaktor_print INTERFACE hpdf plutovg)
+    target_link_libraries(reaktor_print INTERFACE pdfgen plutovg)
     if(WIN32)
         target_link_libraries(reaktor_print INTERFACE comdlg32 gdi32)
     elseif(APPLE)
@@ -602,7 +597,7 @@ set(REAKTOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
 
 foreach(_lic SDL/LICENSE.txt lcui/LICENSE.TXT plutosvg/LICENSE nuklear/LICENSE
              nukanim/LICENSE onlay/LICENSE watercss/LICENSE.md ionicons/LICENSE mojibake/LICENSE
-             kb/LICENSE libharu/LICENSE)
+             kb/LICENSE pdfgen/LICENSE)
     string(REGEX REPLACE "/.*" "" _who "${_lic}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/${_lic}"
                    "${CMAKE_BINARY_DIR}/licenses/${_who}.txt" COPYONLY)
@@ -840,7 +835,7 @@ target_link_libraries(reaktor_modules PRIVATE reaktor_runtime reaktor_a11y reakt
 set_target_properties(reaktor_modules PROPERTIES EXCLUDE_FROM_ALL ON)
 
 set(_parts reaktor_runtime reaktor_core reaktor_modules plutosvg plutovg lcui onlay SDL3-static)
-foreach(_t mojibake_lib kb_text_shape hpdf)
+foreach(_t mojibake_lib kb_text_shape pdfgen)
     if(TARGET ${_t})
         list(APPEND _parts ${_t})
     endif()
