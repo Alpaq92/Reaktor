@@ -251,8 +251,6 @@ jobs:
           retention-days: 14
 
   linux-emulated:
-    # Not required checks, and the slowest: master and releases run them.
-    if: ${{ github.event_name != 'pull_request' }}
     name: linux ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
