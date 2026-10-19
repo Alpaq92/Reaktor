@@ -1,11 +1,12 @@
-param([string]$Target = "", [ValidateSet("", "x64", "x86", "arm64")][string]$Arch = "",
-      [string]$Out = "", [string]$Source = "")
+param([string]$Target = "", [string]$Arch = "", [string]$Out = "", [string]$Source = "")
 
 $extra = @($args)
 # CMake options bind to whichever positional parameters are left.
 if ($Source -like '-*') { $extra = @($Source) + $extra; $Source = "" }
 if ($Out -like '-*') { $extra = @($Out) + $extra; $Out = "" }
+if ($Arch -like '-*') { $extra = @($Arch) + $extra; $Arch = "" }
 if ($Target -like '-*') { $extra = @($Target) + $extra; $Target = "" }
+if ($Arch -notin @("", "x64", "x86", "arm64")) { throw "-Arch must be x64, x86 or arm64, not '$Arch'" }
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $hostArch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {

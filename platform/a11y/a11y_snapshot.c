@@ -435,25 +435,3 @@ void reaktor_snap_request_focus(unsigned id)
 void reaktor_snap_request_activate(unsigned id)
 { reaktor_snap_request_activate_in(&g, id); }
 void reaktor_snap_drain(void) { reaktor_snap_drain_in(&g); }
-
-#ifndef _WIN32
-void
-reaktor_a11y_platform_window_push(struct SDL_Window *win, const reaktor_a11y *a,
-                                  unsigned focus_id, reaktor_a11y_action activate,
-                                  reaktor_a11y_action focus, void *user)
-{
-    (void)win; (void)a; (void)focus_id; (void)activate; (void)focus; (void)user;
-}
-
-void
-reaktor_a11y_platform_window_drain(struct SDL_Window *win)
-{
-    (void)win;
-}
-
-void
-reaktor_a11y_platform_window_gone(struct SDL_Window *win)
-{
-    (void)win;
-}
-#endif

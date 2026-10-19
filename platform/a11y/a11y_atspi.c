@@ -97,60 +97,43 @@ id_of(const char *path)
     return (long)strtoul(tail, NULL, 10);
 }
 
+static const struct {
+    unsigned    code;
+    const char *name;
+} g_roles[REAKTOR_A11Y_ROLE_COUNT] = {
+    [REAKTOR_A11Y_WINDOW]     = { ATSPI_ROLE_FRAME, "frame" },
+    [REAKTOR_A11Y_GROUP]      = { ATSPI_ROLE_PANEL, "panel" },
+    [REAKTOR_A11Y_TABLIST]    = { ATSPI_ROLE_PAGE_TAB_LIST, "page tab list" },
+    [REAKTOR_A11Y_TAB]        = { ATSPI_ROLE_PAGE_TAB, "page tab" },
+    [REAKTOR_A11Y_BUTTON]     = { ATSPI_ROLE_PUSH_BUTTON, "push button" },
+    [REAKTOR_A11Y_LINK]       = { ATSPI_ROLE_LINK, "link" },
+    [REAKTOR_A11Y_CHECKBOX]   = { ATSPI_ROLE_CHECK_BOX, "check box" },
+    [REAKTOR_A11Y_RADIO]      = { ATSPI_ROLE_RADIO_BUTTON, "radio button" },
+    [REAKTOR_A11Y_TEXTBOX]    = { ATSPI_ROLE_TEXT, "text" },
+    [REAKTOR_A11Y_SLIDER]     = { ATSPI_ROLE_SLIDER, "slider" },
+    [REAKTOR_A11Y_SPINBUTTON] = { ATSPI_ROLE_SPIN_BUTTON, "spin button" },
+    [REAKTOR_A11Y_PROGRESS]   = { ATSPI_ROLE_PROGRESS_BAR, "progress bar" },
+    [REAKTOR_A11Y_COMBOBOX]   = { ATSPI_ROLE_COMBO_BOX, "combo box" },
+    [REAKTOR_A11Y_LISTITEM]   = { ATSPI_ROLE_LIST_ITEM, "list item" },
+    [REAKTOR_A11Y_TREEITEM]   = { ATSPI_ROLE_TREE_ITEM, "tree item" },
+    [REAKTOR_A11Y_MENUBAR]    = { ATSPI_ROLE_MENU_BAR, "menu bar" },
+    [REAKTOR_A11Y_MENU]       = { ATSPI_ROLE_MENU, "menu" },
+    [REAKTOR_A11Y_MENUITEM]   = { ATSPI_ROLE_MENU_ITEM, "menu item" },
+    [REAKTOR_A11Y_DIALOG]     = { ATSPI_ROLE_DIALOG, "dialog" },
+    [REAKTOR_A11Y_LABEL]      = { ATSPI_ROLE_LABEL, "label" },
+};
+
 static unsigned
 role_of(unsigned char role)
 {
-    switch (role) {
-    case REAKTOR_A11Y_WINDOW:     return ATSPI_ROLE_FRAME;
-    case REAKTOR_A11Y_GROUP:      return ATSPI_ROLE_PANEL;
-    case REAKTOR_A11Y_TABLIST:    return ATSPI_ROLE_PAGE_TAB_LIST;
-    case REAKTOR_A11Y_TAB:        return ATSPI_ROLE_PAGE_TAB;
-    case REAKTOR_A11Y_BUTTON:     return ATSPI_ROLE_PUSH_BUTTON;
-    case REAKTOR_A11Y_LINK:       return ATSPI_ROLE_LINK;
-    case REAKTOR_A11Y_CHECKBOX:   return ATSPI_ROLE_CHECK_BOX;
-    case REAKTOR_A11Y_RADIO:      return ATSPI_ROLE_RADIO_BUTTON;
-    case REAKTOR_A11Y_TEXTBOX:    return ATSPI_ROLE_TEXT;
-    case REAKTOR_A11Y_SLIDER:     return ATSPI_ROLE_SLIDER;
-    case REAKTOR_A11Y_SPINBUTTON: return ATSPI_ROLE_SPIN_BUTTON;
-    case REAKTOR_A11Y_PROGRESS:   return ATSPI_ROLE_PROGRESS_BAR;
-    case REAKTOR_A11Y_COMBOBOX:   return ATSPI_ROLE_COMBO_BOX;
-    case REAKTOR_A11Y_LISTITEM:   return ATSPI_ROLE_LIST_ITEM;
-    case REAKTOR_A11Y_TREEITEM:   return ATSPI_ROLE_TREE_ITEM;
-    case REAKTOR_A11Y_MENUBAR:    return ATSPI_ROLE_MENU_BAR;
-    case REAKTOR_A11Y_MENU:       return ATSPI_ROLE_MENU;
-    case REAKTOR_A11Y_MENUITEM:   return ATSPI_ROLE_MENU_ITEM;
-    case REAKTOR_A11Y_DIALOG:     return ATSPI_ROLE_DIALOG;
-    case REAKTOR_A11Y_LABEL:      return ATSPI_ROLE_LABEL;
-    default:                    return ATSPI_ROLE_FILLER;
-    }
+    return role < REAKTOR_A11Y_ROLE_COUNT && g_roles[role].name ? g_roles[role].code
+                                                                : ATSPI_ROLE_FILLER;
 }
 
 static const char *
 role_name(unsigned char role)
 {
-    switch (role) {
-    case REAKTOR_A11Y_WINDOW:     return "frame";
-    case REAKTOR_A11Y_GROUP:      return "panel";
-    case REAKTOR_A11Y_TABLIST:    return "page tab list";
-    case REAKTOR_A11Y_TAB:        return "page tab";
-    case REAKTOR_A11Y_BUTTON:     return "push button";
-    case REAKTOR_A11Y_LINK:       return "link";
-    case REAKTOR_A11Y_CHECKBOX:   return "check box";
-    case REAKTOR_A11Y_RADIO:      return "radio button";
-    case REAKTOR_A11Y_TEXTBOX:    return "text";
-    case REAKTOR_A11Y_SLIDER:     return "slider";
-    case REAKTOR_A11Y_SPINBUTTON: return "spin button";
-    case REAKTOR_A11Y_PROGRESS:   return "progress bar";
-    case REAKTOR_A11Y_COMBOBOX:   return "combo box";
-    case REAKTOR_A11Y_LISTITEM:   return "list item";
-    case REAKTOR_A11Y_TREEITEM:   return "tree item";
-    case REAKTOR_A11Y_MENUBAR:    return "menu bar";
-    case REAKTOR_A11Y_MENU:       return "menu";
-    case REAKTOR_A11Y_MENUITEM:   return "menu item";
-    case REAKTOR_A11Y_DIALOG:     return "dialog";
-    case REAKTOR_A11Y_LABEL:      return "label";
-    default:                    return "filler";
-    }
+    return role < REAKTOR_A11Y_ROLE_COUNT && g_roles[role].name ? g_roles[role].name : "filler";
 }
 
 static void
