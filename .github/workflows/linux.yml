@@ -115,67 +115,14 @@ jobs:
       - name: Shots and dumps
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
-          docker exec -i debian sh -u <<'EOF'
-          rm -rf smoke
-          mkdir smoke
-          Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp </dev/null >smoke/xvfb.log 2>&1 &
-          xvfb_pid=$!
-          trap 'kill "$xvfb_pid" 2>/dev/null || :' EXIT
-          n=0
-          while [ ! -S /tmp/.X11-unix/X99 ]; do
-            n=$((n + 1))
-            if [ "$n" -gt 120 ] || ! kill -0 "$xvfb_pid" 2>/dev/null; then
-              echo "Xvfb did not start"
-              cat smoke/xvfb.log || :
-              exit 1
-            fi
-            sleep 1
-          done
-          fail=0
-          shot() {
-            name=$1
-            driver=$2
-            shift 2
-            if DISPLAY=:99 dbus-run-session -- \
-                timeout 600 "$@" --video "$driver" \
-                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
-                </dev/null >"smoke/$name.log" 2>&1; then
-              if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
-                echo "$name: ok"
-                return 0
-              fi
-              echo "$name: exited 0 without both a shot and a dump"
-            else
-              echo "$name: exit status $?"
-            fi
-            cat "smoke/$name.log" || :
-            fail=1
-          }
-          shot simple x11 ./build/simple --theme light
-          shot showcase x11 ./build/showcase --tab 7 --theme dark
-          shot simple-dummy dummy ./build/simple --theme light
-          exit "$fail"
-          EOF
+          docker exec -i debian sh -u tools/ci/shots.sh -x Xvfb -w "dbus-run-session -- timeout 600" build x11 </dev/null
 
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="reaktor-${version#v}-linux-${{ matrix.arch }}"
-          docker exec -i -e name="$name" debian sh -eu <<'EOF'
-          sh tools/package.sh build "dist/$name"
-          mkdir -p check
-          for from in "built build" "packed dist/$name"; do
-            set -- $from
-            timeout 600 "$2/showcase" --tab 8 --theme light --video dummy \
-              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
-          done
-          for e in bmp txt; do
-            cmp "check/built.$e" "check/packed.$e"
-          done
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          EOF
+          docker exec -i debian sh -eu tools/ci/check-package.sh -w "timeout 600" build "reaktor-${version#v}-linux-${{ matrix.arch }}" </dev/null
 
       - name: Upload the package
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
@@ -191,24 +138,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version#v}-linux-${{ matrix.arch }}"
-          docker exec -i -e name="$name" debian sh -eu <<'EOF'
-          cmake --build build --target libreaktor </dev/null
-          cmake --install build --prefix "dist/$name" --component libreaktor </dev/null
-          cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" </dev/null
-          cmake --build build-consumer </dev/null
-          mkdir -p check
-          for from in "lib-built build/simple" "lib-linked build-consumer/simple"; do
-            set -- $from
-            timeout 600 "$2" --theme light --video dummy \
-              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
-          done
-          for e in bmp txt; do
-            cmp "check/lib-built.$e" "check/lib-linked.$e"
-          done
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          EOF
+          docker exec -i debian sh -eu tools/ci/check-libreaktor.sh -w "timeout 600" build "libreaktor-${version#v}-linux-${{ matrix.arch }}" </dev/null
 
       - name: Pack libreaktor as a .deb
         id: deb

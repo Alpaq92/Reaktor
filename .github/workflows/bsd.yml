@@ -226,45 +226,7 @@ jobs:
             OpenBSD) xvfb=/usr/X11R6/bin/Xvfb ;;
             NetBSD) xvfb=/usr/X11R7/bin/Xvfb ;;
           esac
-          rm -rf smoke
-          mkdir smoke
-          "$xvfb" :99 -screen 0 1280x1024x24 -nolisten tcp >smoke/xvfb.log 2>&1 &
-          xvfb_pid=$!
-          trap 'kill "$xvfb_pid" 2>/dev/null || :' EXIT
-          n=0
-          while [ ! -S /tmp/.X11-unix/X99 ]; do
-            n=$((n + 1))
-            if [ "$n" -gt 60 ] || ! kill -0 "$xvfb_pid" 2>/dev/null; then
-              echo "Xvfb did not start"
-              cat smoke/xvfb.log || :
-              exit 1
-            fi
-            sleep 1
-          done
-          fail=0
-          shot() {
-            name=$1
-            driver=$2
-            shift 2
-            if DISPLAY=:99 dbus-run-session -- \
-                timeout 600 "$@" --video "$driver" \
-                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
-                </dev/null >"smoke/$name.log" 2>&1; then
-              if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
-                echo "$name: ok"
-                return 0
-              fi
-              echo "$name: exited 0 without both a shot and a dump"
-            else
-              echo "$name: exit status $?"
-            fi
-            cat "smoke/$name.log" || :
-            fail=1
-          }
-          shot simple x11 ./build/simple --theme light
-          shot showcase x11 ./build/showcase --tab 7 --theme dark
-          shot simple-dummy dummy ./build/simple --theme light
-          exit "$fail"
+          sh tools/ci/shots.sh -x "$xvfb" -w "dbus-run-session -- timeout 600" build x11
 
       - name: Build mkicon
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -280,19 +242,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          name="reaktor-${version#v}-${{ matrix.os }}-${{ matrix.arch }}"
-          sh tools/package.sh build "dist/$name"
-          mkdir -p check
-          for from in "built build" "packed dist/$name"; do
-            set -- $from
-            dbus-run-session -- "$2/showcase" --tab 8 --theme light --video dummy \
-              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
-          done
-          for e in bmp txt; do
-            cmp "check/built.$e" "check/packed.$e"
-          done
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          rm -rf "dist/$name"
+          sh tools/ci/check-package.sh -w "dbus-run-session --" build "reaktor-${version#v}-${{ matrix.os }}-${{ matrix.arch }}"
 
       - name: Check and pack libreaktor
         id: libcheck
@@ -301,23 +251,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version#v}-${{ matrix.os }}-${{ matrix.arch }}"
-          cmake --build build --target libreaktor </dev/null
-          cmake --install build --prefix "dist/$name" --component libreaktor </dev/null
-          cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" </dev/null
-          cmake --build build-consumer </dev/null
-          mkdir -p check
-          for from in "lib-built build/simple" "lib-linked build-consumer/simple"; do
-            set -- $from
-            dbus-run-session -- "$2" --theme light --video dummy \
-              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
-          done
-          for e in bmp txt; do
-            cmp "check/lib-built.$e" "check/lib-linked.$e"
-          done
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          rm -rf "dist/$name" build-consumer
+          sh tools/ci/check-libreaktor.sh -w "dbus-run-session --" build "libreaktor-${version#v}-${{ matrix.os }}-${{ matrix.arch }}"
 
       - name: Check the libreaktor system package
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
@@ -463,45 +397,7 @@ jobs:
             OpenBSD) xvfb=/usr/X11R6/bin/Xvfb ;;
             NetBSD) xvfb=/usr/X11R7/bin/Xvfb ;;
           esac
-          rm -rf smoke
-          mkdir smoke
-          "$xvfb" :99 -screen 0 1280x1024x24 -nolisten tcp >smoke/xvfb.log 2>&1 &
-          xvfb_pid=$!
-          trap 'kill "$xvfb_pid" 2>/dev/null || :' EXIT
-          n=0
-          while [ ! -S /tmp/.X11-unix/X99 ]; do
-            n=$((n + 1))
-            if [ "$n" -gt 60 ] || ! kill -0 "$xvfb_pid" 2>/dev/null; then
-              echo "Xvfb did not start"
-              cat smoke/xvfb.log || :
-              exit 1
-            fi
-            sleep 1
-          done
-          fail=0
-          shot() {
-            name=$1
-            driver=$2
-            shift 2
-            if DISPLAY=:99 dbus-run-session -- \
-                timeout 600 "$@" --video "$driver" \
-                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
-                </dev/null >"smoke/$name.log" 2>&1; then
-              if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
-                echo "$name: ok"
-                return 0
-              fi
-              echo "$name: exited 0 without both a shot and a dump"
-            else
-              echo "$name: exit status $?"
-            fi
-            cat "smoke/$name.log" || :
-            fail=1
-          }
-          shot simple x11 ./build-arm64/simple --theme light
-          shot showcase x11 ./build-arm64/showcase --tab 7 --theme dark
-          shot simple-dummy dummy ./build-arm64/simple --theme light
-          exit "$fail"
+          sh tools/ci/shots.sh -x "$xvfb" -w "dbus-run-session -- timeout 600" build-arm64 x11
 
       - name: Package
         id: package
@@ -510,19 +406,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          name="reaktor-${version#v}-${{ matrix.os }}-arm64"
-          sh tools/package.sh build-arm64 "dist/$name"
-          mkdir -p check
-          for from in "built build-arm64" "packed dist/$name"; do
-            set -- $from
-            dbus-run-session -- "$2/showcase" --tab 8 --theme light --video dummy \
-              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
-          done
-          for e in bmp txt; do
-            cmp "check/built.$e" "check/packed.$e"
-          done
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          rm -rf "dist/$name"
+          sh tools/ci/check-package.sh -w "dbus-run-session --" build-arm64 "reaktor-${version#v}-${{ matrix.os }}-arm64"
 
       - name: Check and pack libreaktor
         id: libcheck
@@ -531,21 +415,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version#v}-${{ matrix.os }}-arm64"
-          cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" </dev/null
-          cmake --build build-consumer </dev/null
-          mkdir -p check
-          for from in "lib-built build-arm64/simple" "lib-linked build-consumer/simple"; do
-            set -- $from
-            dbus-run-session -- "$2" --theme light --video dummy \
-              --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
-          done
-          for e in bmp txt; do
-            cmp "check/lib-built.$e" "check/lib-linked.$e"
-          done
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          rm -rf "dist/$name" build-consumer
+          sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-${version#v}-${{ matrix.os }}-arm64"
 
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
