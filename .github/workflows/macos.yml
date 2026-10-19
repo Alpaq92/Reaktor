@@ -82,32 +82,7 @@ jobs:
 
       - name: Shots and dumps
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: |
-          rm -rf smoke
-          mkdir smoke
-          fail=0
-          shot() {
-            name=$1
-            driver=$2
-            shift 2
-            if "$@" --video "$driver" \
-                --shot "smoke/$name.bmp" --a11y-dump "smoke/$name.txt" \
-                </dev/null >"smoke/$name.log" 2>&1; then
-              if [ -s "smoke/$name.bmp" ] && [ -s "smoke/$name.txt" ]; then
-                echo "$name: ok"
-                return 0
-              fi
-              echo "$name: exited 0 without both a shot and a dump"
-            else
-              echo "$name: exit status $?"
-            fi
-            cat "smoke/$name.log" || :
-            fail=1
-          }
-          shot simple cocoa ./build/simple --theme light
-          shot showcase cocoa ./build/showcase --tab 7 --theme dark
-          shot simple-dummy dummy ./build/simple --theme light
-          exit "$fail"
+        run: sh tools/ci/shots.sh build cocoa
 
       - name: Package
         id: package
