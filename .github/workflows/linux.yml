@@ -143,6 +143,10 @@ jobs:
         run: |
           docker exec -i debian sh -u tools/ci/shots.sh -x Xvfb -w "dbus-run-session -- timeout 600" build x11 </dev/null
 
+      - name: One copy at a time
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
+        run: docker exec -i debian sh tools/ci/instance.sh -w "dbus-run-session -- timeout 120" build </dev/null
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

@@ -105,6 +105,7 @@ typedef struct showcase_state {
     char menu_pick[40];
     reaktor_bool raw_check, raw_sel;
     char file_pick[SC_PATH_CAP];
+    int  handed;
 
     int seeded;
 } showcase_state;

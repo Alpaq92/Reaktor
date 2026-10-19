@@ -765,7 +765,9 @@ attach(bridge *b, SDL_Window *win)
                                           NULL);
 
     if (!h) {
-        SDL_Log("a11y: no HWND; UI Automation is not served");
+        static int told;
+
+        if (!told++) SDL_Log("a11y: no HWND; UI Automation is not served");
         return 0;
     }
     b->win  = win;

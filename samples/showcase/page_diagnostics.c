@@ -68,6 +68,49 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
         reaktor_soak();
     }
 
+    section(app, ctx, "One copy at a time",
+            "The showcase is launched with .single_instance, so starting it again "
+            "does not open a second window: the new copy hands its file arguments "
+            "to this one, which gets each through .file_opened and comes to the "
+            "front, and the new copy exits. --new-instance starts a separate copy "
+            "anyway.");
+    api(app, ctx, ".single_instance  /  .file_opened  /  --new-instance");
+#ifndef __EMSCRIPTEN__
+    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "Launch the showcase again, with a file",
+                .name  = "Launch again", .box = { .w = 340.0f } })) {
+            char        exe[1024];
+            const char *base = SDL_GetBasePath();
+            const char *args[3];
+            SDL_Process *p;
+
+            SDL_snprintf(exe, sizeof exe, "%sshowcase%s", base ? base : "",
+#ifdef _WIN32
+                         ".exe"
+#else
+                         ""
+#endif
+            );
+            args[0] = exe;
+            args[1] = exe;
+            args[2] = NULL;
+            p = SDL_CreateProcess(args, false);
+            if (p) SDL_DestroyProcess(p);
+            else SDL_Log("could not launch %s: %s", exe, SDL_GetError());
+        }
+        reaktor_soak();
+    }
+#endif
+    SDL_snprintf(v, sizeof v, "%d, the last %s", st->handed,
+                 st->handed ? st->file_pick : "none yet");
+    REAKTOR_ROW(.h = ROW_SMALL) {
+        reaktor_label(&(reaktor_label_spec){ .text = "Files handed over", .name = "Files handed over",
+                                             .box = { .w = 180.0f } });
+        reaktor_label(&(reaktor_label_spec){ .text = v, .name = "Handed over",
+                                             .box = { .flags = REAKTOR_LAY_FILL_X } });
+    }
+
     section(app, ctx, "Rendering",
             "Which backend SDL settled on. It is the software rasterizer "
             "on every platform: this draws nothing at rest, so a GPU buys it "

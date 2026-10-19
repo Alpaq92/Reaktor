@@ -253,6 +253,8 @@ sample_file_opened(App *app, const char *path)
     (void)app;
     SDL_strlcpy(g_show.file_pick, path ? path : "no file",
                 sizeof(g_show.file_pick));
+    g_show.handed++;
+    SDL_Log("file opened: %s", g_show.file_pick);
 }
 
 void

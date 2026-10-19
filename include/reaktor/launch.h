@@ -102,6 +102,7 @@ typedef struct reaktor_launch {
     void (*file_opened)(App *app, const char *path);
     void  *user;
     int    remember_window;
+    int    single_instance;
     reaktor_save save_settings;
     int    save_ms;
 } reaktor_launch;

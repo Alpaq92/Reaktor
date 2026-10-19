@@ -84,6 +84,10 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: sh tools/ci/shots.sh build cocoa
 
+      - name: One copy at a time
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: sh tools/ci/instance.sh build
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

@@ -54,7 +54,7 @@ errors, so an internal function cannot slip back in.
 | `key(app, event)` | A key press in any window, with that window's App, before focus navigation; non-zero keeps the key and its text from everything else |
 | `closing(app, reason)` | Before quitting; non-zero refuses a close button (`REAKTOR_QUIT_WINDOW`), `reaktor_request_quit` or macOS's Quit (`_APP`) and a first Ctrl+C (`_CONSOLE`). SIGTERM (`_SIGNAL`) and logoff (`_SESSION`) ask but cannot be refused |
 | `stop(app)` | Once before teardown when `start` succeeded, at logoff and page unload too — the only place for cleanup |
-| `file_opened(app, path)` | A file dropped on a window, with that window's App |
+| `file_opened(app, path)` | A file dropped on a window, with that window's App; with `.single_instance`, also each file a later launch hands over |
 
 | Call | Effect |
 | --- | --- |
@@ -122,6 +122,19 @@ main window's position, size and maximized state as settings, so it needs a
 save mode to last, and restores them at start. Under `--shot` and
 `--a11y-dump` settings are neither read nor written, so a user's file cannot
 change a test.
+
+**One copy at a time.** With `.single_instance`, a launch that finds the
+application already running does not open a window: it hands its arguments,
+made absolute, to the running copy and exits with 0. The running copy gets
+each as `file_opened`, on the main thread, and comes to the front, restored
+if it was minimized. The copies find each other by `.id` (or `.name`), per
+user: a named mutex and a named pipe on Windows, a Unix socket in the
+application's preference folder on macOS, Linux and the BSDs, replaced if a
+copy that crashed left it behind. Launches that race each other settle on
+one. `--new-instance` starts a separate copy anyway, and so do `--shot` and
+`--a11y-dump`, which are tests. On the web there is one page per tab and the
+field is ignored. On macOS, Finder and the Dock already hand a running app
+its files, through the same `file_opened`.
 
 **Notifications.** `reaktor_notify(app, &(reaktor_notification){ .title,
 .text })` tells the user something outside the window and answers 1 when it
@@ -1116,6 +1129,7 @@ removes them from `argv` before the application sees it:
 | `--console <none\|parent\|debug>` | Override `.console` |
 | `--log <path>` | Override `.log` |
 | `--inspect`, `--no-inspector` | Open the [Inspector](#inspector) at start; detach it |
+| `--new-instance` | Start a separate copy even with `.single_instance` |
 | `--css <path>` | A sheet after the application's; up to four |
 | `--watch-css` | Restyle when a sheet read from disk is saved |
 | `--motion <reduce\|full>` | Override the system's reduced motion |
