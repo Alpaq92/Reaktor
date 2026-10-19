@@ -49,8 +49,12 @@
 #define REAKTOR_POPUP_DYNAMIC       NK_POPUP_DYNAMIC
 #define REAKTOR_STATIC              NK_STATIC
 #define REAKTOR_STYLE_ITEM_COLOR    NK_STYLE_ITEM_COLOR
+#define REAKTOR_SYMBOL_CIRCLE_SOLID NK_SYMBOL_CIRCLE_SOLID
+#define REAKTOR_SYMBOL_NONE         NK_SYMBOL_NONE
+#define REAKTOR_SYMBOL_RECT_SOLID   NK_SYMBOL_RECT_SOLID
 #define REAKTOR_TEXT_CENTERED       NK_TEXT_CENTERED
 #define REAKTOR_TEXT_LEFT           NK_TEXT_LEFT
+#define REAKTOR_TEXT_RIGHT          NK_TEXT_RIGHT
 #define REAKTOR_TREE_NODE           NK_TREE_NODE
 #define REAKTOR_TREE_TAB            NK_TREE_TAB
 #define REAKTOR_WIDGET_RIGHT        NK_WIDGET_RIGHT
@@ -139,7 +143,7 @@
 #define reaktor_style_push_style_item            nk_style_push_style_item
 #define reaktor_style_push_vec2                  nk_style_push_vec2
 #define reaktor_tooltip                          nk_tooltip
-#define reaktor_tree_element                     nk_tree_element
+#define reaktor_tree_element_pop                 nk_tree_element_pop
 #define reaktor_tree_element_push                nk_tree_element_push
 #define reaktor_tree_pop                         nk_tree_pop
 #define reaktor_tree_push                        nk_tree_push

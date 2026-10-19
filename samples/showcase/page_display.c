@@ -320,4 +320,61 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     reaktor_layout_row_dynamic(ctx, 8.0f, 1);
     reaktor_spacer(ctx);
+
+    section(app, ctx, "Nuklear underneath",
+            "Every widget here is drawn by Nuklear, and its own calls answer "
+            "to reaktor_ names for whatever the declared widgets leave out: a "
+            "tree node, a menu of its own, a checkbox with its box on the "
+            "right. Its style structs read the same way.");
+    api(app, ctx, "reaktor_tree_push  /  reaktor_menu_begin_label  /  "
+                  "reaktor_checkbox_label_align");
+    {
+        struct reaktor_rect           panel = reaktor_window_get_bounds(ctx);
+        const struct reaktor_style_button *btn = &ctx->style.button;
+        const struct reaktor_style_selectable *sel = &ctx->style.selectable;
+        struct reaktor_style_item     fill = btn->normal;
+        char                          line[96];
+
+        reaktor_layout_row_dynamic(ctx, 28.0f, 4);
+        hot(app, ctx, REAKTOR_A11Y_MENU, "Nuklear menu", 0);
+        if (reaktor_menu_begin_label(ctx, "Nuklear menu", REAKTOR_TEXT_LEFT,
+                                     reaktor_vec2(170.0f, reaktor_menu_height(2)))) {
+            reaktor_layout_row_dynamic(ctx, REAKTOR_MENU_ROW, 1);
+            if (reaktor_menu_item_symbol_label(ctx, REAKTOR_SYMBOL_CIRCLE_SOLID, "Round",
+                                               REAKTOR_TEXT_RIGHT))
+                SDL_strlcpy(s->menu_pick, "Nuklear: Round", sizeof(s->menu_pick));
+            if (reaktor_menu_item_symbol_label(ctx, REAKTOR_SYMBOL_RECT_SOLID, "Square",
+                                               REAKTOR_TEXT_RIGHT))
+                SDL_strlcpy(s->menu_pick, "Nuklear: Square", sizeof(s->menu_pick));
+            reaktor_menu_end(ctx);
+        }
+
+        if (reaktor_tree_push(ctx, REAKTOR_TREE_NODE, "A Nuklear tree node",
+                              REAKTOR_MINIMIZED)) {
+            reaktor_layout_row_dynamic(ctx, 26.0f, 1);
+            hot(app, ctx, REAKTOR_A11Y_CHECKBOX, "Box on the right",
+                s->raw_check ? REAKTOR_A11Y_CHECKED : 0u);
+            reaktor_checkbox_label_align(ctx, "Box on the right", &s->raw_check,
+                                         REAKTOR_WIDGET_RIGHT, REAKTOR_TEXT_LEFT);
+            if (reaktor_tree_element_push(ctx, REAKTOR_TREE_NODE, "A selectable element",
+                                          REAKTOR_MAXIMIZED, &s->raw_sel)) {
+                reaktor_layout_row_dynamic(ctx, 22.0f, 1);
+                reaktor_text_label(ctx, s->raw_sel ? "selected" : "not selected",
+                                   REAKTOR_TEXT_LEFT);
+                reaktor_tree_element_pop(ctx);
+            }
+            reaktor_tree_pop(ctx);
+        }
+
+        reaktor_layout_row_dynamic(ctx, 22.0f, 1);
+        SDL_snprintf(line, sizeof line, "This panel: %.0f x %.0f; a button pads %.0f x %.0f, "
+                     "a selectable %.0f x %.0f; button fill %s",
+                     panel.w, panel.h, btn->padding.x, btn->padding.y,
+                     sel->padding.x, sel->padding.y,
+                     fill.type == REAKTOR_STYLE_ITEM_COLOR ? "is a color" : "is not a color");
+        reaktor_text_label(ctx, line, REAKTOR_TEXT_LEFT);
+    }
+
+    reaktor_layout_row_dynamic(ctx, 8.0f, 1);
+    reaktor_spacer(ctx);
 }

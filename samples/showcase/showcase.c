@@ -179,7 +179,7 @@ hot(App *app, struct reaktor_context *ctx, unsigned char role, const char *name,
 {
     struct reaktor_rect b = reaktor_widget_bounds(ctx);
 
-    reaktor_hot(app, b, 1, 1);
+    reaktor_hot(app, b, REAKTOR_CURSOR_POINTER, 1);
     if (role == REAKTOR_A11Y_NONE) return 0;
     return reaktor_note(app, role, name, NULL, state, b);
 }

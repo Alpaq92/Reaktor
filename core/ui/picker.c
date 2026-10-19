@@ -116,7 +116,7 @@ pick_draw_wheels(App *app, struct nk_context *ctx, struct nk_rect body, float ro
         struct nk_rect col = nk_rect(x, body.y, c->w, row * PICK_ROWS);
         unsigned id;
 
-        reaktor_hot(app, col, 1, 1);
+        reaktor_hot(app, col, REAKTOR_CURSOR_POINTER, 1);
         if (!g_pick.fresh && nk_input_is_mouse_hovering_rect(&ctx->input, col) &&
             ctx->input.mouse.scroll_delta.y != 0.0f) {
             c->at = pick_wrap(c, c->at - (ctx->input.mouse.scroll_delta.y > 0.0f ? 1 : -1));

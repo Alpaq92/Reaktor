@@ -259,7 +259,7 @@ reaktor_css_button_look(App *app, struct nk_context *ctx,
     unsigned id;
     int clicked;
 
-    hot_push(app, nk_widget_bounds(ctx), 1, 1);
+    hot_push(app, nk_widget_bounds(ctx), REAKTOR_CURSOR_POINTER, 1);
     id = reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     f = push_button_look(app, ctx, k);
     reaktor_button_arm(ctx);
@@ -332,7 +332,7 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     struct nk_color label_col;
     int clicked;
 
-    hot_push(app, nk_widget_bounds(ctx), 1, 1);
+    hot_push(app, nk_widget_bounds(ctx), REAKTOR_CURSOR_POINTER, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
 
     f = push_button_style(app, ctx, selector);
@@ -391,7 +391,7 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     struct nk_rect b = nk_widget_bounds(ctx), at;
     int clicked, drawn;
 
-    hot_push(app, b, 1, 1);
+    hot_push(app, b, REAKTOR_CURSOR_POINTER, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     reaktor_button_look_of(selector, &k);
     f = push_button_look(app, ctx, &k);
@@ -444,7 +444,7 @@ reaktor_css_button_flat(App *app, struct nk_context *ctx, const char *icon,
     float px = (float)(int)(b.h * 0.6f);
     int clicked;
 
-    hot_push(app, b, 1, 1);
+    hot_push(app, b, REAKTOR_CURSOR_POINTER, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, name, 0);
     nk_style_push_style_item(ctx, &ctx->style.button.normal,
                              nk_style_item_color(nk_rgba(0, 0, 0, 0)));
@@ -466,7 +466,7 @@ reaktor_css_button_image(App *app, struct nk_context *ctx, const char *selector,
     reaktor_style_frame f;
     int clicked;
 
-    hot_push(app, b, 1, 1);
+    hot_push(app, b, REAKTOR_CURSOR_POINTER, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, name, 0);
     f = push_button_style(app, ctx, selector);
     clicked = press_blank(ctx);

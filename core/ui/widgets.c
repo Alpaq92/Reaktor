@@ -131,7 +131,7 @@ reaktor_link_label(App *app, struct nk_context *ctx, const char *label, int acti
     {
         struct nk_rect b = nk_widget_bounds(ctx);
 
-        hot_push(app, b, 1, 0);
+        hot_push(app, b, REAKTOR_CURSOR_POINTER, 0);
         reaktor_note(app, REAKTOR_A11Y_LINK, label, NULL,
                      active ? REAKTOR_A11Y_SELECTED : 0u, b);
         if (nk_input_is_mouse_click_in_rect(&ctx->input, NK_BUTTON_LEFT, b))
@@ -555,7 +555,7 @@ reaktor_css_button_color(App *app, struct nk_context *ctx, const char *name,
     char hex[10];
     int clicked;
 
-    hot_push(app, b, 1, 1);
+    hot_push(app, b, REAKTOR_CURSOR_POINTER, 1);
     reaktor_hex(fill, hex);
     reaktor_note(app, REAKTOR_A11Y_BUTTON, name, hex, 0, b);
 
@@ -752,7 +752,7 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
     struct nk_vec2 hint_pad;
 
     note_field_rect(app, ctx, bounds);
-    hot_push(app, bounds, 2, 0);
+    hot_push(app, bounds, REAKTOR_CURSOR_TEXT, 0);
 
     f = push_edit_style(ctx, &s, sel);
     reaktor_edit_edge(app, ctx, bounds, &s);

@@ -986,7 +986,7 @@ reaktor_menubar(const reaktor_menubar_spec *s)
             continue;
         r = nk_widget_bounds(ctx);
         g_menu.title[m] = r;
-        reaktor_hot(app, r, 1, 1);
+        reaktor_hot(app, r, REAKTOR_CURSOR_POINTER, 1);
         if (g_menu.open == m) { st.normal = st.active; st.text_normal = st.text_active; }
         nk_button_text_styled(ctx, &st, label, (int)strlen(label));
         if (!nk_input_is_mouse_hovering_rect(&ctx->input, r)) continue;
