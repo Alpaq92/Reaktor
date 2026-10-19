@@ -32,9 +32,10 @@ freebsd)
     sudo pkg -o ABI_FILE="$dir/bin/sh" -o IGNORE_OSVERSION=yes \
              -o PKG_DBDIR=/var/db/pkg-aarch64 -o PKG_CACHEDIR=/var/cache/pkg-aarch64 \
              fetch -y -d -o "$tmp/pkgs" $pkgs </dev/null
-    for p in "$tmp"/pkgs/All/*.pkg; do
+    find "$tmp/pkgs" -name '*.pkg' | while IFS= read -r p; do
         tar -xf "$p" -C "$dir" --exclude '+*'
     done
+    [ "$(find "$tmp/pkgs" -name '*.pkg' | wc -l)" -gt 0 ] || { echo "no packages were fetched" >&2; exit 1; }
     ;;
 netbsd)
     url="https://cdn.NetBSD.org/pub/NetBSD/NetBSD-$version/evbarm-aarch64/binary/sets"
@@ -49,10 +50,12 @@ netbsd)
     # The host's package repository, read for the same quarterly, with the architecture swapped.
     repo=""
     if [ -f /usr/pkg/etc/pkgin/repositories.conf ]; then
-        repo=$(grep -v '^#' /usr/pkg/etc/pkgin/repositories.conf | grep . | head -1 | sed 's/x86_64/aarch64/')
+        repo=$(grep -v '^#' /usr/pkg/etc/pkgin/repositories.conf | grep . | head -1 | sed -e 's/\$arch/aarch64/' -e 's/\${arch}/aarch64/' -e 's/x86_64/aarch64/')
     fi
     [ -n "$repo" ] || repo="https://cdn.NetBSD.org/pub/pkgsrc/packages/NetBSD/aarch64/$version/All"
     repo=${repo%/}
+    case "$repo" in *aarch64*) ;; *) echo "sysroot: $repo is not an aarch64 repository" >&2; exit 1 ;; esac
+    echo "sysroot: packages from $repo"
     rm -rf "$tmp/pkgs"
     mkdir -p "$tmp/pkgs"
     ftp -V -o "$tmp/pkgs/pkg_summary.gz" "$repo/pkg_summary.gz"
