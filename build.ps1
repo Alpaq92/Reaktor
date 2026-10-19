@@ -2,6 +2,9 @@ param([string]$Target = "", [ValidateSet("", "x64", "x86", "arm64")][string]$Arc
       [string]$Out = "", [string]$Source = "")
 
 $extra = @($args)
+# CMake options bind to whichever positional parameters are left.
+if ($Source -like '-*') { $extra = @($Source) + $extra; $Source = "" }
+if ($Out -like '-*') { $extra = @($Out) + $extra; $Out = "" }
 if ($Target -like '-*') { $extra = @($Target) + $extra; $Target = "" }
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
