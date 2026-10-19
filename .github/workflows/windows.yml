@@ -44,8 +44,30 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      # ccache's own release, pinned and checked; without it the build only runs uncached.
       - name: Install ccache
-        run: choco install ccache -y --no-progress
+        id: ccache-tool
+        run: |
+          $v = '4.14.1'
+          if ($env:RUNNER_ARCH -eq 'ARM64') {
+            $a = 'aarch64'; $sum = '28121851c8c2c8b76214cfc5e119d769fbc39e93d27862e4e3a556905ebd23b2'
+          } else {
+            $a = 'x86_64'; $sum = '6219f3865ca59aec41ee4b678df171d5d35855ecb2b6dbbbd20690b3a68af7b4'
+          }
+          $zip = Join-Path $env:RUNNER_TEMP "ccache.zip"
+          try {
+            Invoke-WebRequest -Uri "https://github.com/ccache/ccache/releases/download/v$v/ccache-$v-windows-$a.zip" `
+              -OutFile $zip -MaximumRetryCount 3 -RetryIntervalSec 5
+            if ((Get-FileHash -Algorithm SHA256 $zip).Hash -ne $sum) { throw "ccache-$v-windows-$a.zip: checksum mismatch" }
+            Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+            $dir = Join-Path $env:RUNNER_TEMP "ccache-$v-windows-$a"
+            & "$dir/ccache.exe" --version | Select-Object -First 1
+            Add-Content $env:GITHUB_PATH $dir
+            "use=true" >> $env:GITHUB_OUTPUT
+          } catch {
+            Write-Host "::warning::ccache unavailable, building without it: $_"
+            "use=false" >> $env:GITHUB_OUTPUT
+          }
 
       # ccache only: the build folder is rebuilt, so a stale cache cannot hide a broken one.
       - name: Restore the compiler cache
@@ -60,9 +82,13 @@ jobs:
       - name: Build
         id: build
         run: |
-          ccache -z
-          ./build.ps1 -Arch ${{ matrix.arch }} '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded' '-DCMAKE_C_COMPILER_LAUNCHER=ccache' '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache' '-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON'
-          ccache -s
+          $launch = @()
+          if ('${{ steps.ccache-tool.outputs.use }}' -eq 'true') {
+            ccache -z
+            $launch = '-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache', '-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON'
+          }
+          ./build.ps1 -Arch ${{ matrix.arch }} '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded' @launch
+          if ('${{ steps.ccache-tool.outputs.use }}' -eq 'true') { ccache -s }
 
       - name: Console tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -149,7 +175,12 @@ jobs:
       - name: Build libreaktor
         id: lib
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: ./build.ps1 -Arch ${{ matrix.arch }} -Out build-lib libreaktor '-DCMAKE_C_COMPILER_LAUNCHER=ccache' '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache' '-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON'
+        run: |
+          $launch = @()
+          if ('${{ steps.ccache-tool.outputs.use }}' -eq 'true') {
+            $launch = '-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache', '-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON'
+          }
+          ./build.ps1 -Arch ${{ matrix.arch }} -Out build-lib libreaktor @launch
 
       - name: Save the compiler cache
         if: ${{ always() && steps.build.outcome == 'success' }}
