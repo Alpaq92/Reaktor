@@ -1,8 +1,8 @@
 #!/bin/sh
-# Gathers an arm64 sysroot on a FreeBSD or NetBSD x86-64 host: the release's
+# Gathers an arm64 sysroot on a FreeBSD, OpenBSD or NetBSD x86-64 host: the release's
 # sets for headers, libraries and start files, and the packages SDL and the
 # modules link, unpacked where the toolchain files expect them.
-#   sysroot.sh <freebsd|netbsd> <version> <dir>
+#   sysroot.sh <freebsd|openbsd|netbsd> <version> <dir>
 set -eu
 
 os=$1
@@ -85,6 +85,54 @@ netbsd)
     while IFS= read -r f; do
         PKG_PATH="$tmp/pkgs" pkg_add -m aarch64 -I -P "$dir" -K "$dir/var/db/pkg" "$tmp/pkgs/$f"
     done < "$tmp/pkgs/list"
+    ;;
+openbsd)
+    v=$(echo "$version" | tr -d .)
+    url="https://cdn.openbsd.org/pub/OpenBSD/$version/arm64"
+    cd "$tmp"
+    for f in SHA256.sig base$v.tgz comp$v.tgz xbase$v.tgz xshare$v.tgz; do
+        curl -fsSLo "$f" "$url/$f"
+    done
+    signify -C -p "/etc/signify/openbsd-$v-base.pub" -x SHA256.sig \
+        base$v.tgz comp$v.tgz xbase$v.tgz xshare$v.tgz
+    tar -xzf base$v.tgz -C "$dir" ./usr/lib ./usr/libexec/ld.so
+    tar -xzf comp$v.tgz -C "$dir" ./usr/include ./usr/lib
+    tar -xzf xbase$v.tgz -C "$dir" ./usr/X11R6/lib ./usr/X11R6/include
+    tar -xzf xshare$v.tgz -C "$dir" ./usr/X11R6/include ./usr/X11R6/lib
+    # pkg_add will not install another architecture's packages, so they are
+    # unpacked by hand, their dependencies read from each +CONTENTS.
+    purl="https://cdn.openbsd.org/pub/OpenBSD/$version/packages/aarch64"
+    rm -rf "$tmp/pkgs"
+    mkdir -p "$tmp/pkgs" "$dir/usr/local"
+    cd "$tmp/pkgs"
+    curl -fsSLo SHA256.sig "$purl/SHA256.sig"
+    queue=""
+    for stem in dbus libxkbcommon wayland wayland-protocols; do
+        name=$(sed -n "s/^SHA256 (\($stem-[0-9][^)]*\)\.tgz).*/\1/p" SHA256.sig | head -1)
+        [ -n "$name" ] || { echo "sysroot: no $stem package for aarch64" >&2; exit 1; }
+        queue="$queue $name"
+    done
+    seen=" "
+    while [ -n "$(echo $queue)" ]; do
+        set -- $queue
+        p=$1
+        shift
+        queue="$*"
+        case "$seen" in *" $p "*) continue ;; esac
+        seen="$seen$p "
+        curl -fsSLo "$p.tgz" "$purl/$p.tgz"
+        signify -C -p "/etc/signify/openbsd-$v-pkg.pub" -x SHA256.sig "$p.tgz"
+        rm -rf meta
+        mkdir meta
+        tar -xzf "$p.tgz" -C meta +CONTENTS
+        for d in $(sed -n 's/^@depend [^:]*:[^:]*:\(.*\)$/\1/p' meta/+CONTENTS); do
+            queue="$queue $d"
+        done
+        tar -xzf "$p.tgz" -C "$dir/usr/local"
+        echo "sysroot: $p"
+    done
+    rm -f "$dir"/usr/local/+*
+    cd /
     ;;
 *)
     echo "sysroot.sh: unknown system $os" >&2
