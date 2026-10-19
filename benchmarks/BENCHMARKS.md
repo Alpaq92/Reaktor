@@ -28,7 +28,8 @@ the command that builds it.
 Reaktor runs three times — `reaktor-software`, its default, and
 `reaktor-d3d11` and `reaktor-opengl`, the same binary on SDL's GPU drivers
 (`run.sh` adds `reaktor-metal` on macOS). The others draw on the GPU, so those
-two are the like-for-like comparison.
+two are the like-for-like comparison. SDL's OpenGL driver is built only with
+`-DREAKTOR_SDL_GL=ON`, which the `reaktor-opengl` arm's build passes.
 
 ## What every arm draws
 

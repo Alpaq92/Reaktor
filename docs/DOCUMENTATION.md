@@ -1021,7 +1021,7 @@ Passed to CMake, through either script:
 | `REAKTOR_NOTIFY` | `ON` | System notifications |
 | `REAKTOR_PRINT` | `ON` | Printing and PDF export, through libHaru |
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
-| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Linux and the BSDs |
+| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 

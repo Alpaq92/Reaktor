@@ -620,7 +620,37 @@ reaktor_inspector_frame(App *app)
     g_frames++;
     g_why    = app->why;
     app->why = 0;
-    if (shown()) redraw_window_only();
+    if (!shown()) return;
+    /* Only the Frame tab changes with every frame; the rest follow the tree. */
+    {
+        static unsigned last;
+        const reaktor_a11y_node *n;
+        unsigned h = 2166136261u;
+        int i, count;
+
+        n = reaktor_a11y_tree(&app->a11y, &count);
+        for (i = 0; i < count; i++) {
+            unsigned v[6];
+            int k;
+
+            v[0] = n[i].id;
+            v[1] = n[i].state;
+            v[2] = (unsigned)(int)n[i].bounds.x;
+            v[3] = (unsigned)(int)n[i].bounds.y;
+            v[4] = (unsigned)(int)n[i].bounds.w;
+            v[5] = (unsigned)(int)n[i].bounds.h;
+            for (k = 0; k < 6; k++) h = (h ^ v[k]) * 16777619u;
+            if (n[i].value) {
+                const char *c;
+
+                for (c = n[i].value; *c; c++) h = (h ^ (unsigned char)*c) * 16777619u;
+            }
+        }
+        h ^= reaktor_style_loads();
+        if (h == last && g_tab != TAB_FRAME) return;
+        last = h;
+    }
+    redraw_window_only();
 }
 
 int

@@ -65,8 +65,11 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
     {
         size_t rss = 0, priv = 0;
 
-        reaktor_process_memory(&rss, &priv);
-        if (priv > g_priv_peak) g_priv_peak = priv;
+        /* On Linux and the BSDs a read walks /proc; not inside every timed frame. */
+        if (g_frames % 30 == 0) {
+            reaktor_process_memory(&rss, &priv);
+            if (priv > g_priv_peak) g_priv_peak = priv;
+        }
     }
     g_frames++;
 

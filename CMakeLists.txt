@@ -37,8 +37,8 @@ foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
 
-option(REAKTOR_SDL_GL "Build SDL's OpenGL/GLES drivers on Linux and the BSDs" OFF)
-if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT REAKTOR_SDL_GL)
+option(REAKTOR_SDL_GL "Build SDL's OpenGL/GLES drivers on Windows, Linux and the BSDs" OFF)
+if((WIN32 OR (UNIX AND NOT APPLE)) AND NOT EMSCRIPTEN AND NOT REAKTOR_SDL_GL)
     set(SDL_OPENGL   OFF CACHE BOOL "" FORCE)
     set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
 endif()
@@ -53,6 +53,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
     set(SDL_DEPS_SHARED OFF CACHE BOOL "" FORCE)
 endif()
 
+# A static program keeps only the functions it calls; MSVC's Release does this already.
+if(NOT MSVC AND NOT EMSCRIPTEN)
+    add_compile_options(-ffunction-sections -fdata-sections)
+endif()
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)
 
 set(LC       "${TP}/lcui/lib")
@@ -193,6 +197,7 @@ target_include_directories(reaktor_headers INTERFACE include "${TP}/nuklear" "${
 
 add_library(reaktor_core STATIC
     core/base/util.c
+    core/render/nk_impl.c
     core/render/svg.c
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
@@ -226,7 +231,7 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
 endif()
 
 if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
-    add_executable(animtest tests/animtest.c core/anim/anim.c core/render/nk_impl.c)
+    add_executable(animtest tests/animtest.c core/anim/anim.c)
     target_include_directories(animtest PRIVATE core/anim core/render
                                                 "${TP}/nuklear/demo/sdl3_renderer")
     target_link_libraries(animtest PRIVATE reaktor_core SDL3::SDL3-static)
@@ -421,7 +426,7 @@ else()
     message(STATUS "text: shaping by kb_text_shape; direction and line breaking by mojibake")
 
     if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
-        add_executable(texttest tests/texttest.c core/render/nk_impl.c)
+        add_executable(texttest tests/texttest.c)
         target_link_libraries(texttest PRIVATE reaktor_headers)
         target_include_directories(texttest PRIVATE core/render core/text)
         target_link_libraries(texttest PRIVATE reaktor_text reaktor_core
@@ -507,6 +512,8 @@ if(NOT REAKTOR_PRINT OR EMSCRIPTEN)
     message(STATUS "print: off")
 else()
     file(GLOB _hpdf_src CONFIGURE_DEPENDS "${TP}/libharu/src/hpdf_*.c")
+    # Pages are JPEG images in a standard font: the CJK encoders and fonts go unlinked.
+    list(FILTER _hpdf_src EXCLUDE REGEX "hpdf_(encoder|fontdef)_(cns|cnt|jp|kr)[.]c$")
     configure_file("${TP}/libharu/include/hpdf_config.h.cmake"
                    "${CMAKE_BINARY_DIR}/hpdf/hpdf_config.h")
     add_library(hpdf STATIC ${_hpdf_src})
@@ -537,7 +544,6 @@ add_library(reaktor_runtime STATIC
     core/base/metrics.c
     core/css/style.c
     core/css/cssflat.c
-    core/render/nk_impl.c
     core/render/draw.c
     core/ui/declare.c
     core/ui/controls.c
@@ -629,6 +635,10 @@ function(reaktor_add_app name)
     target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
     if(MSVC)
         target_compile_options(${name} PRIVATE /we4013)
+    elseif(APPLE)
+        target_link_options(${name} PRIVATE -Wl,-dead_strip)
+    elseif(NOT EMSCRIPTEN)
+        target_link_options(${name} PRIVATE -Wl,--gc-sections)
     endif()
     set_target_properties(${name} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

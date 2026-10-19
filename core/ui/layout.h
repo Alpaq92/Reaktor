@@ -31,8 +31,6 @@ typedef struct reaktor_layout {
     int         count;
 
     unsigned      flags[REAKTOR_LAY_MAX];
-    unsigned char dir[REAKTOR_LAY_MAX];
-    float         w[REAKTOR_LAY_MAX], h[REAKTOR_LAY_MAX];
 
     lay_id      stack[REAKTOR_LAY_DEPTH];
     int         depth;
