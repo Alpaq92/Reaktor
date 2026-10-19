@@ -31,7 +31,6 @@ typedef struct reaktor_style {
 
 void reaktor_style_get(const char *selector, reaktor_style *out);
 
-void reaktor_style_darken(unsigned char rgba[4], float amount);
 
 int reaktor_style_token(const char *name, unsigned char rgba[4]);
 

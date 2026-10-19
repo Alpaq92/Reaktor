@@ -466,6 +466,7 @@ look, with the body's size; `.title` is its accessible name. A `.modal` one dims
 earlier floaters — until it closes, and Tab stays with it and the floaters
 opened after it. `reaktor_floater_close` closes one, from its own body too,
 and runs `.closed`. `.body` and `.closed` get the main window's App.
+`reaktor_floater_is_open` answers whether an id is still open.
 
 ```c
 static void
@@ -516,7 +517,8 @@ it alone, and `reaktor_set_title` with its App retitles it. `.window.icon`
 replaces the mark for it. A `.modal` one is the system's modal window: on
 Windows and macOS the main window, close button included, takes no input
 until it closes; on Linux the window manager decides. Its own close button or
-`reaktor_window_close` runs `.closed`, with the main window's App. Closing the
+`reaktor_window_close` runs `.closed`, with the main window's App;
+`reaktor_window_is_open` answers whether an id is still open. Closing the
 main window quits, and every window goes with it. The Text module stays in the
 main window, and only UI Automation serves a window's tree to screen readers:
 NSAccessibility and AT-SPI serve the main window's.

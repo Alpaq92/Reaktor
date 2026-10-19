@@ -194,7 +194,7 @@ titlebar_button(App *app, struct reaktor_context *ctx, const char *glyph,
     float pad_x, pad_y;
     int clicked;
 
-    reaktor_hot(app, b, 1, 1);
+    reaktor_hot(app, b, REAKTOR_CURSOR_POINTER, 1);
     reaktor_note(app, REAKTOR_A11Y_BUTTON, name, NULL, 0, b);
     if (g_ctl_n < (int)(sizeof(g_ctl) / sizeof(g_ctl[0])))
         g_ctl[g_ctl_n++] = b;
@@ -487,7 +487,7 @@ sample_option(App *app, struct reaktor_context *ctx, const char *label, float w,
     }
     reaktor_layout_row_push(ctx, w);
     b = reaktor_widget_bounds(ctx);
-    reaktor_hot(app, b, 1, 1);
+    reaktor_hot(app, b, REAKTOR_CURSOR_POINTER, 1);
 
     look = push_strip_look(ctx, fg, strip_wash());
     id   = reaktor_note(app, REAKTOR_A11Y_RADIO, label, NULL,

@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 
-void        reaktor_locale_start(const char *lang);
 int         reaktor_locale_count(void);
 const char *reaktor_locale_code(int index);
 const char *reaktor_locale_name(int index);

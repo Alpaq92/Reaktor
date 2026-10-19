@@ -7,5 +7,6 @@ int  reaktor_style_init(const char *const *css_paths, int count,
                         const char *theme);
 void reaktor_style_shutdown(void);
 unsigned reaktor_style_loads(void);
+void reaktor_style_darken(unsigned char rgba[4], float amount);
 
 #endif
