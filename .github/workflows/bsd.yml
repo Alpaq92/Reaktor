@@ -159,7 +159,7 @@ jobs:
           cmake --build build-arm64 --target mkicon libreaktor </dev/null
           ccache -s
           file build-arm64/showcase
-          file build-arm64/showcase | grep -q aarch64
+          file build-arm64/showcase | grep -qi aarch64
           if readelf -d build-arm64/showcase | grep -q "$sysroot"; then
             echo "the program carries the sysroot's path"; exit 1
           fi
