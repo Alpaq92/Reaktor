@@ -39,7 +39,16 @@ jobs:
       - name: Install packages
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
-        run: brew install ninja
+        run: brew install ninja ccache
+
+      # ccache only: the build folder is rebuilt, so a stale cache cannot hide a broken one.
+      - name: Restore the compiler cache
+        id: ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-macos-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: ccache-macos-${{ matrix.arch }}-
 
       - name: Build
         id: build
@@ -48,8 +57,18 @@ jobs:
           sw_vers
           cc --version
           cmake --version
-          ./build.sh </dev/null
+          export CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=500M
+          ccache -z
+          ./build.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          ccache -s
           file build/showcase
+
+      - name: Save the compiler cache
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Console tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

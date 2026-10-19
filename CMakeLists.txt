@@ -32,6 +32,10 @@ foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER GPU OFFSCREEN)
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
 endforeach()
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
+# Linux and the BSDs keep it: their CI runs headless with --video dummy.
+if(WIN32)
+    set(SDL_DUMMYVIDEO OFF CACHE BOOL "" FORCE)
+endif()
 
 foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
@@ -256,6 +260,7 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
 
     add_executable(csstest tests/csstest.c core/css/cssflat.c)
     target_include_directories(csstest PRIVATE core/css core/base)
+    target_link_libraries(csstest PRIVATE plutovg)
     target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS)
     set_target_properties(csstest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

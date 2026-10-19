@@ -66,8 +66,17 @@ jobs:
             libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev \
             libxrandr-dev libxrender-dev libxtst-dev libxkbcommon-dev \
             libwayland-dev wayland-protocols libegl-dev libdbus-1-dev \
-            dbus xvfb xauth </dev/null
+            dbus xvfb xauth ccache </dev/null
           EOF
+
+      # ccache only: the build folder is rebuilt, so a stale cache cannot hide a broken one.
+      - name: Restore the compiler cache
+        id: ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-linux-${{ matrix.arch }}-${{ matrix.image }}-${{ github.run_id }}
+          restore-keys: ccache-linux-${{ matrix.arch }}-${{ matrix.image }}-
 
       - name: Build
         id: build
@@ -76,10 +85,20 @@ jobs:
           uname -a
           cc --version
           cmake --version
-          ./build.sh </dev/null
+          export CCACHE_DIR=/src/.ccache CCACHE_BASEDIR=/src CCACHE_MAXSIZE=500M
+          ccache -z
+          ./build.sh -- -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          ccache -s
           file build/showcase
           echo "needs $(objdump -T build/showcase | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
           EOF
+
+      - name: Save the compiler cache
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Console tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

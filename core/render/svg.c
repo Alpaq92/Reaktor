@@ -92,8 +92,9 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
     char fill_decl[32], stroke_decl[32], stroke_attr[32], svg_open[48];
     char *svg;
     const char *src;
-    char *stage0 = NULL, *stage1 = NULL, *stage2 = NULL, *stage3 = NULL;
-    size_t cap;
+    char *buf[2] = { NULL, NULL };
+    int k = 0, scale;
+    size_t cap = 0;
     plutosvg_document_t *doc = NULL;
     plutovg_surface_t *surf = NULL;
 
@@ -113,34 +114,37 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
     snprintf(svg_open,    sizeof(svg_open),    "<svg fill=\"%s\" ",
               outline_hex);
 
-    cap = strlen(svg) * 4 + 1024;
-    stage0 = (char *)malloc(cap);
-    stage1 = (char *)malloc(cap);
-    stage2 = (char *)malloc(cap);
-    stage3 = (char *)malloc(cap);
-    if (!stage0 || !stage1 || !stage2 || !stage3) { fprintf(stderr, "svg: alloc failed\n"); goto done; }
-
     src = svg;
-    if (stroke_scale > 0.0f && stroke_scale != 1.0f) {
-        if (!str_scale_stroke(src, stage0, cap, stroke_scale)) goto done;
-        src = stage0;
+    scale = stroke_scale > 0.0f && stroke_scale != 1.0f;
+    if (outline_color || inside_color || scale) {
+        cap = strlen(svg) * 4 + 1024;
+        buf[0] = (char *)malloc(cap);
+        buf[1] = (char *)malloc(cap);
+        if (!buf[0] || !buf[1]) { fprintf(stderr, "svg: alloc failed\n"); goto done; }
+    }
+    if (scale) {
+        if (!str_scale_stroke(src, buf[k], cap, stroke_scale)) goto done;
+        src = buf[k];
+        k ^= 1;
     }
     if (inside_color) {
-        if (!str_replace_all(src, stage1, cap, "fill:none", fill_decl))
-            goto done;
-        src = stage1;
+        if (!str_replace_all(src, buf[k], cap, "fill:none", fill_decl)) goto done;
+        src = buf[k];
+        k ^= 1;
     }
     if (outline_color) {
-        if (!str_replace_all(src, stage2, cap, "stroke:#000", stroke_decl))
-            goto done;
-        if (!str_replace_all(stage2, stage3, cap, "stroke=\"#000\"",
-                             stroke_attr))
-            goto done;
-        if (!str_replace_all(stage3, stage2, cap, "<svg ", svg_open)) {
-            fprintf(stderr, "svg: replace overflow\n");
-            goto done;
+        static const char *const from[3] = { "stroke:#000", "stroke=\"#000\"", "<svg " };
+        const char *to[3] = { stroke_decl, stroke_attr, svg_open };
+        int i;
+
+        for (i = 0; i < 3; i++) {
+            if (!str_replace_all(src, buf[k], cap, from[i], to[i])) {
+                fprintf(stderr, "svg: replace overflow\n");
+                goto done;
+            }
+            src = buf[k];
+            k ^= 1;
         }
-        src = stage2;
     }
 
     doc = plutosvg_document_load_from_data(src, (int)strlen(src),
@@ -153,10 +157,8 @@ plutovg_surface_t *reaktor_svg_surface_path(const char *rel_path, int size,
 
 done:
     if (doc) plutosvg_document_destroy(doc);
-    free(stage3);
-    free(stage2);
-    free(stage1);
-    free(stage0);
+    free(buf[1]);
+    free(buf[0]);
     reaktor_free(svg);
     return surf;
 }

@@ -38,6 +38,8 @@ unsigned reaktor_snap_sibling_in(reaktor_snap *s, unsigned id, int back);
 unsigned reaktor_snap_parent_in(reaktor_snap *s, unsigned id);
 unsigned reaktor_snap_hit_in(reaktor_snap *s, float x, float y);
 unsigned reaktor_snap_focus_in(reaktor_snap *s);
+void     reaktor_snap_skip_in(reaktor_snap *s);
+void     reaktor_snap_wake_in(reaktor_snap *s);
 void     reaktor_snap_request_focus_in(reaktor_snap *s, unsigned id);
 void     reaktor_snap_request_activate_in(reaktor_snap *s, unsigned id);
 void     reaktor_snap_drain_in(reaktor_snap *s);

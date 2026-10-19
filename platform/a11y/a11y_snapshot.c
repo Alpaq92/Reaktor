@@ -31,6 +31,7 @@ struct reaktor_snap {
     char       str[SNAP_POOL];
     int        str_used;
     unsigned   focus;
+    int        stale;
 
     unsigned   want_focus, want_activate;
     Uint32     window;
@@ -168,7 +169,7 @@ reaktor_snap_update_in(reaktor_snap *s, const reaktor_a11y *a, unsigned focus_id
     if (!s || !s->ready) return 0;
     reaktor_a11y_changes(a, &m);
     t = reaktor_a11y_tree(a, &n);
-    if (m == 0 && focus_id == s->focus) return 0;
+    if (m == 0 && focus_id == s->focus && !s->stale) return 0;
 
     SDL_LockMutex(s->lock);
     s->str_used = 0;
@@ -191,6 +192,7 @@ reaktor_snap_update_in(reaktor_snap *s, const reaktor_a11y *a, unsigned focus_id
     }
     link_tree(s);
     s->focus = focus_id;
+    s->stale = 0;
     SDL_UnlockMutex(s->lock);
     return 1;
 }
@@ -336,6 +338,12 @@ reaktor_snap_focusable(unsigned char role, unsigned state)
     }
 }
 
+void
+reaktor_snap_skip_in(reaktor_snap *s)
+{
+    if (s) s->stale = 1;
+}
+
 static void
 request(reaktor_snap *s, unsigned *slot, unsigned id)
 {
@@ -345,10 +353,16 @@ request(reaktor_snap *s, unsigned *slot, unsigned id)
     SDL_zero(e);
     e.type = g_wake;
     SDL_LockMutex(s->lock);
-    *slot = id;
+    if (slot) *slot = id;
     e.user.windowID = s->window;
     SDL_UnlockMutex(s->lock);
     SDL_PushEvent(&e);
+}
+
+void
+reaktor_snap_wake_in(reaktor_snap *s)
+{
+    request(s, NULL, 0);
 }
 
 void

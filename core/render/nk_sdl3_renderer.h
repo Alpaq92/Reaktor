@@ -98,6 +98,7 @@ struct nk_sdl {
     Uint64 last_render;
     bool insert_toggle;
     bool edit_was_active;
+    bool is_sw;
 };
 
 NK_API nk_handle
@@ -408,7 +409,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
     }
 
     {
-        SDL_Rect saved_clip;
+        SDL_Rect saved_clip, last_clip = {0, 0, -1, -1};
         SDL_BlendMode saved_blend;
         float saved_r, saved_g, saved_b, saved_a;
         bool clipping_enabled;
@@ -444,7 +445,7 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         nk_convert(&sdl->ctx, &sdl->ogl.cmds, &sdl->ogl.vbuf, &sdl->ogl.ebuf, &config);
 
         /* REAKTOR: software vertices on the device pixel grid. */
-        is_sw = SDL_strcmp(SDL_GetRendererName(sdl->renderer), "software") == 0;
+        is_sw = sdl->is_sw;
         if (!SDL_GetRenderScale(sdl->renderer, &sx, &sy) || sx <= 0.0f ||
             sy <= 0.0f)
             sx = sy = 1.0f;
@@ -494,7 +495,10 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                 r.y = cmd->clip_rect.y;
                 r.w = cmd->clip_rect.w;
                 r.h = cmd->clip_rect.h;
-                SDL_SetRenderClipRect(sdl->renderer, &r);
+                if (SDL_memcmp(&r, &last_clip, sizeof r) != 0) {
+                    SDL_SetRenderClipRect(sdl->renderer, &r);
+                    last_clip = r;
+                }
             }
 
             {
@@ -631,6 +635,7 @@ nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer, struct nk_allocator allocat
     sdl->allocator.free = allocator.free;
     sdl->win = win;
     sdl->renderer = renderer;
+    sdl->is_sw = SDL_strcmp(SDL_GetRendererName(renderer), "software") == 0;
     /* REAKTOR: UVs stay in [0, 1], so SDL need not scan them for wrapping. */
     SDL_SetRenderTextureAddressMode(renderer, SDL_TEXTURE_ADDRESS_CLAMP,
                                     SDL_TEXTURE_ADDRESS_CLAMP);

@@ -37,6 +37,25 @@ void  reaktor_free(void *p);
 
 void reaktor_release_free_memory(void);
 
+#define REAKTOR_FNV 2166136261u
+
+static inline unsigned
+reaktor_fnv(unsigned h, const char *s)
+{
+    if (s)
+        while (*s) h = (h ^ (unsigned char)*s++) * 16777619u;
+    return h;
+}
+
+static inline unsigned
+reaktor_fnv_n(unsigned h, const void *p, size_t n)
+{
+    const unsigned char *b = (const unsigned char *)p;
+
+    while (n--) h = (h ^ *b++) * 16777619u;
+    return h;
+}
+
 #define REAKTOR_MARK "assets/icons/reaktor-icon.svg"
 
 #endif
