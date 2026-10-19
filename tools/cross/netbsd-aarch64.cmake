@@ -19,8 +19,10 @@ if(_llvm_ranlib)
 endif()
 # X11 lives under /usr/X11R7 and packages under /usr/pkg, and NetBSD links both
 # directly, so the program carries their run paths.
-set(CMAKE_C_FLAGS_INIT "-I${REAKTOR_SYSROOT}/usr/X11R7/include -I${REAKTOR_SYSROOT}/usr/pkg/include")
-set(CMAKE_CXX_FLAGS_INIT "${CMAKE_C_FLAGS_INIT}")
+# Searched last, as pkg-config's directories are natively: SDL's own protocol
+# headers must win over the packages' older ones.
+set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES "${REAKTOR_SYSROOT}/usr/X11R7/include" "${REAKTOR_SYSROOT}/usr/pkg/include")
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES})
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-fuse-ld=lld -L${REAKTOR_SYSROOT}/usr/X11R7/lib -L${REAKTOR_SYSROOT}/usr/pkg/lib -Wl,-rpath,/usr/X11R7/lib -Wl,-rpath,/usr/pkg/lib")
 set(CMAKE_SHARED_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT}")
 set(CMAKE_FIND_ROOT_PATH "${REAKTOR_SYSROOT}" "${REAKTOR_SYSROOT}/usr/pkg" "${REAKTOR_SYSROOT}/usr/X11R7")
