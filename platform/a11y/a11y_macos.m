@@ -45,15 +45,6 @@ role_of(unsigned char role)
     }
 }
 
-static BOOL
-takes_press(unsigned char role)
-{
-    return role == REAKTOR_A11Y_BUTTON   || role == REAKTOR_A11Y_LINK ||
-           role == REAKTOR_A11Y_TAB      || role == REAKTOR_A11Y_MENUITEM ||
-           role == REAKTOR_A11Y_CHECKBOX || role == REAKTOR_A11Y_RADIO ||
-           role == REAKTOR_A11Y_LISTITEM;
-}
-
 @interface ReaktorElement : NSAccessibilityElement
 @property (nonatomic) unsigned nodeId;
 @end
@@ -203,7 +194,7 @@ static ReaktorElement *element_for(unsigned id);
     reaktor_snap_node n;
     char buf[REAKTOR_SNAP_TEXT];
 
-    if (![self node:&n buffer:buf] || !takes_press(n.role)) return NO;
+    if (![self node:&n buffer:buf] || !reaktor_snap_pressable(n.role)) return NO;
     reaktor_snap_request_activate(self.nodeId);
     return YES;
 }
@@ -278,30 +269,13 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
 }
 
 void
-reaktor_a11y_platform_drain(void)
-{
-    reaktor_snap_drain();
-}
-
-void
 reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
     static unsigned last_focus;
-    int m, i, structural = 0;
-    const reaktor_a11y_change *c;
-
     if (!reaktor_snap_update(a, focus_id)) return;
     if (!g.ready) return;
 
-    c = reaktor_a11y_changes(a, &m);
-    for (i = 0; i < m; i++)
-        if (c[i].kind == REAKTOR_A11Y_ADDED ||
-            c[i].kind == REAKTOR_A11Y_REMOVED) {
-            structural = 1;
-            break;
-        }
-
-    if (structural) {
+    if (reaktor_snap_structural(a)) {
         [g.cache removeAllObjects];
         g.cache[@0] = g.root;
         g.shape++;

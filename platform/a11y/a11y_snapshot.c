@@ -322,6 +322,32 @@ reaktor_snap_focus_in(reaktor_snap *s)
 }
 
 int
+reaktor_snap_pressable(unsigned char role)
+{
+    return role == REAKTOR_A11Y_BUTTON   || role == REAKTOR_A11Y_LINK ||
+           role == REAKTOR_A11Y_TAB      || role == REAKTOR_A11Y_MENUITEM ||
+           role == REAKTOR_A11Y_CHECKBOX || role == REAKTOR_A11Y_RADIO ||
+           role == REAKTOR_A11Y_LISTITEM;
+}
+
+int
+reaktor_snap_structural(const reaktor_a11y *a)
+{
+    int m, i;
+    const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);
+
+    for (i = 0; i < m; i++)
+        if (c[i].kind == REAKTOR_A11Y_ADDED || c[i].kind == REAKTOR_A11Y_REMOVED) return 1;
+    return 0;
+}
+
+void
+reaktor_a11y_platform_drain(void)
+{
+    reaktor_snap_drain();
+}
+
+int
 reaktor_snap_focusable(unsigned char role, unsigned state)
 {
     if (state & REAKTOR_A11Y_DISABLED) return 0;
