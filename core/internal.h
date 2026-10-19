@@ -386,6 +386,10 @@ void reaktor_window_restore(App *app);
 void reaktor_window_remember(App *app);
 const char *reaktor_asset_name(const reaktor_asset *a, const char *fallback);
 SDL_Cursor *reaktor_cursor(int kind);
+
+int  reaktor_instance_claim(int argc, char **argv);
+void reaktor_instance_listen(App *app, void (*opened)(App *app, const char *path));
+void reaktor_instance_stop(void);
 void reaktor_render(App *app);
 
 typedef void (*reaktor_page_fn)(App *app, struct nk_context *ctx, int w, int h,

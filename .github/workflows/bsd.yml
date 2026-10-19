@@ -253,6 +253,13 @@ jobs:
           esac
           sh tools/ci/shots.sh -x "$xvfb" -w "dbus-run-session -- timeout 600" build x11
 
+      - name: One copy at a time
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          sh tools/ci/instance.sh -w "dbus-run-session -- timeout 120" build
+
       - name: Build mkicon
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |

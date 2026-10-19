@@ -39,6 +39,7 @@ static const char    *g_fallbacks[REAKTOR_LAYER_MAX];
 static int            g_fallback_n;
 static const char    *g_icon_dirs[REAKTOR_LAYER_MAX], *g_cli_icons[REAKTOR_LAYER_MAX];
 static int            g_inspect_flag;
+static int            g_new_instance;
 static SDL_IOStream   *g_log;
 static SDL_LogOutputFunction g_log_next;
 static void          *g_log_next_user;
@@ -286,6 +287,7 @@ take_flags(App *app, int argc, char **argv)
         else if (v && SDL_strcmp(a, "--log") == 0)       { log_open(v); i++; }
         else if (SDL_strcmp(a, "--inspect") == 0)        g_inspect_flag = 1;
         else if (SDL_strcmp(a, "--no-inspector") == 0)   g_inspect_flag = -1;
+        else if (SDL_strcmp(a, "--new-instance") == 0)   g_new_instance = 1;
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--video") == 0)    { app->video_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--popups") == 0) {
@@ -687,6 +689,11 @@ app_init(void **appstate, int argc, char *argv[])
 
     if (g_launch.name || g_launch.version || g_launch.id)
         SDL_SetAppMetadata(g_launch.name, g_launch.version, g_launch.id);
+    /* A later launch hands its files to the running copy and is done. */
+    /* A run for a shot or a dump is a test, and always its own copy. */
+    if (g_launch.single_instance && !g_new_instance && !app->shot_path && !app->dump_path &&
+        !reaktor_instance_claim(argc, argv))
+        return SDL_APP_SUCCESS;
     reaktor_hint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
     reaktor_hint(SDL_HINT_TIMER_RESOLUTION, "0");
     reaktor_hint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
@@ -838,6 +845,7 @@ app_init(void **appstate, int argc, char *argv[])
     take_pending(app);
     load_theme(app);
     reaktor_rss_mark(REAKTOR_RSS_STYLE);
+    if (g_launch.single_instance) reaktor_instance_listen(app, g_launch.file_opened);
 
     app->dirty = 1;
 
@@ -1443,6 +1451,7 @@ app_quit(void *appstate, SDL_AppResult result)
 
     (void)result;
     SDL_SetAtomicInt(&g_running, 0);
+    reaktor_instance_stop();
     if (!app) {
         reaktor_process_end();
         return;
