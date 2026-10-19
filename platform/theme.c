@@ -129,7 +129,7 @@ int reaktor_prefers_reduced_motion(void)
     return SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &on, 0) && !on;
 #elif defined(__EMSCRIPTEN__)
     return EM_ASM_INT({
-        return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0;
+        return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0;
     });
 #elif defined(__APPLE__)
     return workspace_says("accessibilityDisplayShouldReduceMotion");
@@ -154,8 +154,8 @@ int reaktor_prefers_contrast(void)
            (hc.dwFlags & HCF_HIGHCONTRASTON);
 #elif defined(__EMSCRIPTEN__)
     return EM_ASM_INT({
-        return window.matchMedia && (matchMedia('(prefers-contrast: more)').matches ||
-                                     matchMedia('(forced-colors: active)').matches) ? 1 : 0;
+        return window.matchMedia && (window.matchMedia('(prefers-contrast: more)').matches ||
+                                     window.matchMedia('(forced-colors: active)').matches) ? 1 : 0;
     });
 #elif defined(__APPLE__)
     return workspace_says("accessibilityDisplayShouldIncreaseContrast");
