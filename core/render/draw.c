@@ -174,6 +174,8 @@ img_lookup(App *app, const char *src, int px)
     slot->px     = px;
     slot->s.tex  = NULL;
     slot->w      = slot->h = 0;
+    slot->ink_l  = 0.0f;
+    slot->ink_r  = 1.0f;
     slot->s.seen = app->ctx->seq;
 
     if (!surf) return NULL;
@@ -193,9 +195,25 @@ img_lookup(App *app, const char *src, int px)
         w /= 2;
         h /= 2;
     }
-    if (sdlsurf)
+    if (sdlsurf) {
+        int x, y, lo = w, hi = -1;
+
         reaktor_unpremultiply((unsigned char *)sdlsurf->pixels, w, h,
                               sdlsurf->pitch);
+        for (y = 0; y < h; y++) {
+            const Uint32 *row = (const Uint32 *)((const Uint8 *)sdlsurf->pixels + y * sdlsurf->pitch);
+
+            for (x = 0; x < w; x++)
+                if (row[x] >> 24 > 32) {
+                    if (x < lo) lo = x;
+                    if (x > hi) hi = x;
+                }
+        }
+        if (hi >= lo) {
+            slot->ink_l = (float)lo / (float)w;
+            slot->ink_r = (float)(hi + 1) / (float)w;
+        }
+    }
     tex = sdlsurf ? SDL_CreateTextureFromSurface(app->ren, sdlsurf) : NULL;
     if (sdlsurf) SDL_DestroySurface(sdlsurf);
     plutovg_surface_destroy(surf);
@@ -210,21 +228,41 @@ img_lookup(App *app, const char *src, int px)
     return slot;
 }
 
-struct nk_image
-icon_over(App *app, const char *src, int px, float over)
+static struct nk_image
+slot_image(App *app, const struct img_slot *slot)
 {
-    int raster = (int)(px * reaktor_scale() * over + 0.5f);
-    struct img_slot *slot = img_lookup(app, src, raster);
-
     if (!slot) return blank_image(app);
     return nk_subimage_ptr(slot->s.tex, (nk_ushort)slot->w, (nk_ushort)slot->h,
                            nk_rect(0.0f, 0.0f, (float)slot->w, (float)slot->h));
+}
+
+static struct img_slot *
+icon_slot(App *app, const char *src, int px, float over)
+{
+    return img_lookup(app, src, (int)(px * reaktor_scale() * over + 0.5f));
+}
+
+struct nk_image
+icon_over(App *app, const char *src, int px, float over)
+{
+    return slot_image(app, icon_slot(app, src, px, over));
 }
 
 struct nk_image
 icon(App *app, const char *src, int px)
 {
     return icon_over(app, src, px, 2.0f);
+}
+
+/* An icon, and where its drawn pixels start and end across its box, 0 to 1. */
+struct nk_image
+icon_ink(App *app, const char *src, int px, float *left, float *right)
+{
+    struct img_slot *slot = icon_slot(app, src, px, 2.0f);
+
+    *left  = slot ? slot->ink_l : 0.0f;
+    *right = slot ? slot->ink_r : 1.0f;
+    return slot_image(app, slot);
 }
 
 struct nk_image

@@ -66,6 +66,10 @@ typedef struct reaktor_handler {
 
 enum { REAKTOR_LEFT = 0, REAKTOR_CENTER, REAKTOR_RIGHT };
 
+typedef void (*reaktor_button_paint)(App *app, struct reaktor_command_buffer *cv,
+                                     struct reaktor_rect content,
+                                     struct reaktor_color ink, void *user);
+
 typedef struct reaktor_button_spec {
     const char     *label;
     const char     *icon;
@@ -80,6 +84,8 @@ typedef struct reaktor_button_spec {
     unsigned char   repeat;
     unsigned char   fit_content;
     unsigned char   flat;
+    reaktor_button_paint paint;
+    void           *paint_user;
 } reaktor_button_spec;
 
 int reaktor_button(const reaktor_button_spec *s);

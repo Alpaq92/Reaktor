@@ -25,8 +25,8 @@ reaktor_font(App *app, int px, int bold)
 
 #define ICON_HAIRLINE_BELOW 20
 
-static const char *
-icon_src(char out[192], const char *name, const char *hex, float sw)
+const char *
+reaktor_ionicon_src(char out[192], const char *name, const char *hex, float sw)
 {
     if (sw < 0.0f)
         SDL_snprintf(out, 192, "external/ionicons/src/svg/%s.svg?stroke=%s", name, hex);
@@ -54,7 +54,7 @@ reaktor_ionicon(App *app, const char *name, int px)
 {
     char src[192];
 
-    return icon(app, icon_src(src, name, app->icon_hex,
+    return icon(app, reaktor_ionicon_src(src, name, app->icon_hex,
                               px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : -1.0f), px);
 }
 
@@ -66,7 +66,7 @@ reaktor_ionicon_exact(App *app, const char *name, int px,
 
     if (sw <= 0.0f) sw = px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f;
     reaktor_hex(stroke, hex);
-    return icon_over(app, icon_src(src, name, hex, sw), px, 1.0f);
+    return icon_over(app, reaktor_ionicon_src(src, name, hex, sw), px, 1.0f);
 }
 
 struct nk_image
@@ -75,7 +75,8 @@ reaktor_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
     char hex[8], src[192];
 
     reaktor_hex(stroke, hex);
-    return icon(app, icon_src(src, name, hex, px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f), px);
+    return icon(app, reaktor_ionicon_src(src, name, hex,
+                                         px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f), px);
 }
 
 struct nk_color
@@ -502,11 +503,20 @@ reaktor_button_label_as(App *app, struct nk_context *ctx, const char *sel,
     return css_button(app, ctx, sel, label);
 }
 
+/* A button's icon is drawn white and tinted with its label's color. */
+const char *
+reaktor_button_src(char out[192], const char *ionicon)
+{
+    return ionicon ? reaktor_ionicon_src(out, ionicon, "#ffffff", -1.0f) : NULL;
+}
+
 int
 reaktor_button_accent_as(App *app, struct nk_context *ctx, const char *sel,
-                         const char *label)
+                         const char *ionicon, const char *label)
 {
-    return css_button_accent(app, ctx, sel, label);
+    char src[192];
+
+    return css_button_accent(app, ctx, sel, reaktor_button_src(src, ionicon), label);
 }
 
 int
@@ -515,15 +525,37 @@ reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
 {
     char src[192];
 
-    SDL_snprintf(src, sizeof(src),
-                 "external/ionicons/src/svg/%s.svg?stroke=#ffffff", ionicon);
-    return css_button_icon(app, ctx, sel, src, label);
+    return css_button_icon(app, ctx, sel, reaktor_button_src(src, ionicon), label);
 }
 
 int
 reaktor_button_accent(App *app, struct nk_context *ctx, const char *label)
 {
-    return css_button_accent(app, ctx, "button", label);
+    return css_button_accent(app, ctx, "button", NULL, label);
+}
+
+int
+reaktor_button_accent_icon(App *app, struct nk_context *ctx, const char *ionicon,
+                           const char *label)
+{
+    return reaktor_button_accent_as(app, ctx, "button", ionicon, label);
+}
+
+float
+reaktor_button_width(App *app, struct nk_context *ctx, const char *ionicon,
+                     const char *label)
+{
+    char src[192];
+
+    return SDL_ceilf(css_button_content_w(app, ctx, "button", ctx->style.font,
+                                          reaktor_button_src(src, ionicon), label));
+}
+
+int
+reaktor_button_custom(App *app, struct nk_context *ctx, const char *name,
+                      reaktor_button_paint paint, void *user)
+{
+    return reaktor_css_button_custom(app, ctx, "button", name, paint, user);
 }
 
 int
@@ -582,11 +614,7 @@ int
 reaktor_button_icon(App *app, struct nk_context *ctx, const char *ionicon,
                     const char *label)
 {
-    char src[192];
-
-    SDL_snprintf(src, sizeof(src),
-                 "external/ionicons/src/svg/%s.svg?stroke=#ffffff", ionicon);
-    return css_button_icon(app, ctx, "button", src, label);
+    return reaktor_button_icon_as(app, ctx, "button", ionicon, label);
 }
 
 static void

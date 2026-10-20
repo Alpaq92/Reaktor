@@ -9,33 +9,18 @@ fit_button(reaktor_box *box, const reaktor_button_spec *s)
 {
     const struct nk_style_button *nb = &g_frame_ctx->style.button;
     const char                   *sel = decl_rule_or(s->style, "button");
-    const struct nk_user_font    *f = decl_style_font(sel);
-    reaktor_style                 st;
-    float pad_x, pad_y, border, edge, text = 0.0f, w;
+    float least = box->w, w;
+    char  src[192];
 
     box->w = box->h = 0.0f;
     box->flags &= ~(REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y);
     decl_box_from_style(box, NULL, s->style, "button", nb->padding.x, nb->padding.y);
-
-    reaktor_style_get(sel, &st);
-    pad_x  = st.matched ? st.pad_x : nb->padding.x;
-    pad_y  = st.matched ? st.pad_y : nb->padding.y;
-    border = st.matched ? st.border : nb->border;
-    edge   = border + (st.matched ? st.rounding : nb->rounding);
-    if (s->label)
-        text = reaktor_text_w(f, s->label);
-
-    w = text + 2.0f * (pad_x + (st.matched ? border : edge));
-    if (s->icon && s->label) {
-        float room = SDL_max(box->h * 0.5f - edge, 0.0f);
-        float icon = box->h - 2.0f * SDL_min(pad_y, room)
-                   - 2.0f * nb->image_padding.x;
-
-        w = SDL_max(w, text + 2.0f * (3.0f * pad_x + nb->image_padding.x + icon));
-    } else if (s->icon) {
+    if (s->icon && !s->label)
         w = box->h;
-    }
-    box->w = SDL_ceilf(w);
+    else
+        w = css_button_content_w(g_frame_app, g_frame_ctx, sel, decl_style_font(sel),
+                                 reaktor_button_src(src, s->icon), s->label);
+    box->w = SDL_ceilf(SDL_max(w, least));
 }
 
 static float
@@ -93,7 +78,11 @@ reaktor_button(const reaktor_button_spec *s)
     }
     fitted = reaktor_fit_label(g_frame_app, g_frame_ctx, r);
     reaktor_note_mute(g_frame_app, 1);
-    if (s->flat && s->icon && !s->label) {
+    if (s->paint) {
+        hit = reaktor_css_button_custom(g_frame_app, g_frame_ctx, sel,
+                                        s->name ? s->name : s->label, s->paint,
+                                        s->paint_user);
+    } else if (s->flat && s->icon && !s->label) {
         hit = reaktor_css_button_flat(g_frame_app, g_frame_ctx, s->icon, s->name,
                                       s->accent);
     } else if (s->icon && !s->label) {
@@ -102,12 +91,10 @@ reaktor_button(const reaktor_button_spec *s)
         hit = reaktor_css_button_image(g_frame_app, g_frame_ctx, sel,
                                        reaktor_ionicon(g_frame_app, s->icon, (int)px),
                                        px, s->name);
-    } else if (s->icon)
-        hit = reaktor_button_icon_as(g_frame_app, g_frame_ctx, sel, s->icon, s->label);
-    else if (s->accent && !s->disabled)
-        hit = reaktor_button_accent_as(g_frame_app, g_frame_ctx, sel, s->label);
+    } else if (s->accent && !s->disabled)
+        hit = reaktor_button_accent_as(g_frame_app, g_frame_ctx, sel, s->icon, s->label);
     else
-        hit = reaktor_button_label_as(g_frame_app, g_frame_ctx, sel, s->label);
+        hit = reaktor_button_icon_as(g_frame_app, g_frame_ctx, sel, s->icon, s->label);
     reaktor_note_mute(g_frame_app, 0);
     reaktor_unfit_label(g_frame_ctx, fitted);
     if (s->disabled) {

@@ -323,9 +323,132 @@ reaktor_visible(struct nk_color want, struct nk_color behind,
     return contrast_ratio(a, b) < 1.12f ? fallback : want;
 }
 
+/* What the sheet's rule puts between a button's edge and its label. */
+static float
+button_inset(struct nk_context *ctx, const reaktor_style *st, int glyph)
+{
+    const struct nk_style_button *nb = &ctx->style.button;
+    float pad = st->matched ? st->pad_x : nb->padding.x;
+    float edge = st->matched ? st->border : nb->border + nb->rounding;
+
+    /* An icon tightens the sides, as GTK's image-text buttons are. */
+    return (glyph ? pad * 0.5f : pad) + edge;
+}
+
+/* A button's icon: "button .icon" in the sheet sizes it and spaces it from
+   the label; unstyled, it follows the font. ink_l and ink_r are where its
+   drawn pixels start and end, since an Ionicon sits anywhere in its square. */
+typedef struct button_glyph {
+    struct nk_image im;
+    float           px, gap, ink_l, ink_r;
+} button_glyph;
+
+static void
+glyph_of(App *app, struct nk_context *ctx, const char *selector, const char *icon_src,
+         button_glyph *g)
+{
+    reaktor_style st;
+    char q[128];
+
+    SDL_snprintf(q, sizeof q, "%s .icon", selector);
+    reaktor_style_get(q, &st);
+    g->px = st.matched && st.width > 0.0f ? st.width
+                                         : SDL_roundf(ctx->style.font->height * 1.125f);
+    g->gap = st.matched && st.margin[REAKTOR_SIDE_RIGHT] > 0.0f
+           ? st.margin[REAKTOR_SIDE_RIGHT] : REAKTOR_BUTTON_GAP;
+    g->im = icon_ink(app, icon_src, (int)g->px, &g->ink_l, &g->ink_r);
+}
+
+/* The icon and label side by side, and the button that holds them. */
+static float
+group_w(const struct nk_user_font *f, const button_glyph *g, const char *label)
+{
+    return (label ? reaktor_text_w(f, label) : 0.0f) +
+           (g ? (g->ink_r - g->ink_l) * g->px + g->gap : 0.0f);
+}
+
+static float
+content_w(struct nk_context *ctx, const char *selector, float group, int glyph)
+{
+    reaktor_style st;
+    float w;
+
+    reaktor_style_get(selector, &st);
+    w = group + 2.0f * button_inset(ctx, &st, glyph);
+    return st.matched && st.min_width > w ? st.min_width : w;
+}
+
+float
+css_button_content_w(App *app, struct nk_context *ctx, const char *selector,
+                     const struct nk_user_font *f, const char *icon_src, const char *label)
+{
+    button_glyph g;
+
+    if (icon_src) glyph_of(app, ctx, selector, icon_src, &g);
+    return content_w(ctx, selector, group_w(f, icon_src ? &g : NULL, label), icon_src != NULL);
+}
+
+static struct nk_color
+state_ink(struct nk_context *ctx)
+{
+    const struct nk_style_button *bs = &ctx->style.button;
+    nk_flags state = ctx->last_widget_state;
+    struct nk_color ink = (state & NK_WIDGET_STATE_HOVER)   ? bs->text_hover
+                        : (state & NK_WIDGET_STATE_ACTIVED) ? bs->text_active
+                                                            : bs->text_normal;
+
+    return nk_rgb_factor(ink, bs->color_factor_text);
+}
+
+/* The glyph and label centred as one, as GTK and Qt set them: the label is
+   set flush right of a padding that leaves the pair in the middle. 0 when
+   the button is too narrow for both, and the label stands alone. */
+static int
+group_push(struct nk_context *ctx, const char *selector, struct nk_rect b,
+           const button_glyph *g, const char *label, struct nk_rect *at)
+{
+    struct nk_style_button *bs = &ctx->style.button;
+    float group, side;
+
+    group = group_w(ctx->style.font, g, label);
+    if (b.w + 1.0f < content_w(ctx, selector, group, 1)) return 0;
+    side = (b.w - group) * 0.5f;
+    at->x = (float)(int)(b.x + side - g->ink_l * g->px + 0.5f);
+    at->y = (float)(int)(b.y + (b.h - g->px) * 0.5f);
+    at->w = at->h = g->px;
+    nk_style_push_flags(ctx, &bs->text_alignment, NK_TEXT_ALIGN_RIGHT | NK_TEXT_ALIGN_MIDDLE);
+    nk_style_push_vec2(ctx, &bs->padding, nk_vec2(side - bs->border - bs->rounding, bs->padding.y));
+    return 1;
+}
+
+/* Presses the button, with its icon beside the label when there is room,
+   in the label's color for the button's state. */
+static int
+group_press(App *app, struct nk_context *ctx, const char *selector, const char *icon_src,
+            const char *label)
+{
+    button_glyph g;
+    struct nk_rect at;
+    int drawn = 0, clicked;
+
+    if (icon_src) {
+        glyph_of(app, ctx, selector, icon_src, &g);
+        drawn = group_push(ctx, selector, nk_widget_bounds(ctx), &g, label, &at);
+    }
+    reaktor_button_arm(ctx);
+    clicked = nk_button_label(ctx, label);
+    reaktor_chrome_disarm();
+    if (drawn) {
+        nk_style_pop_vec2(ctx);
+        nk_style_pop_flags(ctx);
+        nk_draw_image(nk_window_get_canvas(ctx), at, &g.im, state_ink(ctx));
+    }
+    return clicked;
+}
+
 int
 css_button_accent(App *app, struct nk_context *ctx, const char *selector,
-                  const char *label)
+                  const char *icon_src, const char *label)
 {
     reaktor_style_frame f, a = { 0, 0, 0, 0, 0 };
     unsigned char c[4], hov[4];
@@ -356,30 +479,10 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     a.colors = 4;
     g_chrome.edge_hover = g_chrome.edge_active = app->accent;
 
-    reaktor_button_arm(ctx);
-    clicked = nk_button_label(ctx, label);
-    reaktor_chrome_disarm();
+    clicked = group_press(app, ctx, selector, icon_src, label);
     reaktor_style_frame_pop(ctx, a);
     reaktor_style_frame_pop(ctx, f);
     return clicked;
-}
-
-static int
-icon_place(struct nk_context *ctx, struct nk_rect b, float pad_x,
-           const char *label, struct nk_rect *at)
-{
-    const struct nk_style_button *s = &ctx->style.button;
-    const struct nk_user_font    *f = ctx->style.font;
-    float text = reaktor_text_w(f, label);
-
-    at->x = b.x + 2.0f * pad_x + s->image_padding.x;
-    at->y = b.y + s->padding.y + s->image_padding.y;
-    at->w = b.h - 2.0f * s->padding.y - 2.0f * s->image_padding.x;
-    at->h = b.h - 2.0f * s->padding.y - 2.0f * s->image_padding.y;
-    if (b.w >= text + 2.0f * (3.0f * pad_x + s->image_padding.x + at->w)) return 1;
-    /* A wide padding still leaves room once the icon moves to the edge. */
-    at->x = b.x + pad_x + s->image_padding.x;
-    return b.w >= text + 2.0f * (1.5f * pad_x + s->image_padding.x + at->w);
 }
 
 int
@@ -388,30 +491,46 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
 {
     reaktor_button_look k;
     reaktor_style_frame f;
-    struct nk_rect b = nk_widget_bounds(ctx), at;
-    int clicked, drawn;
+    int clicked;
 
-    hot_push(app, b, REAKTOR_CURSOR_POINTER, 1);
+    hot_push(app, nk_widget_bounds(ctx), REAKTOR_CURSOR_POINTER, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     reaktor_button_look_of(selector, &k);
     f = push_button_look(app, ctx, &k);
-    drawn = icon_place(ctx, b, k.s.matched ? k.s.pad_x : ctx->style.button.padding.x,
-                       label, &at);
-    reaktor_button_arm(ctx);
-    clicked = nk_button_label(ctx, label);
-    reaktor_chrome_disarm();
-    if (drawn) {
-        const struct nk_style_button *bs = &ctx->style.button;
-        nk_flags state = ctx->last_widget_state;
-        struct nk_image im = icon(app, icon_src, 18);
-        struct nk_color ink = (state & NK_WIDGET_STATE_HOVER)   ? bs->text_hover
-                            : (state & NK_WIDGET_STATE_ACTIVED) ? bs->text_active
-                                                                : bs->text_normal;
+    clicked = group_press(app, ctx, selector, icon_src, label);
+    reaktor_style_frame_pop(ctx, f);
+    return clicked;
+}
 
-        nk_draw_image(nk_window_get_canvas(ctx), at, &im,
-                      nk_rgb_factor(ink, bs->color_factor_text));
+/* The sheet's button with nothing in it; the caller paints the inside. */
+int
+reaktor_css_button_custom(App *app, struct nk_context *ctx, const char *sel,
+                          const char *name, reaktor_button_paint paint, void *user)
+{
+    reaktor_button_look k;
+    reaktor_style_frame f;
+    struct nk_rect b = nk_widget_bounds(ctx);
+    float in_x;
+    unsigned id;
+    int clicked;
+
+    hot_push(app, b, REAKTOR_CURSOR_POINTER, 1);
+    id = reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, name, 0);
+    reaktor_button_look_of(sel, &k);
+    in_x = button_inset(ctx, &k.s, 0);
+    f = push_button_look(app, ctx, &k);
+    reaktor_button_arm(ctx);
+    clicked = nk_button_text(ctx, "", 0);
+    reaktor_chrome_disarm();
+    if (paint) {
+        float in_y = k.s.matched ? k.s.pad_y : ctx->style.button.padding.y;
+        struct nk_rect c = nk_rect(b.x + in_x, b.y + in_y, b.w - 2.0f * in_x, b.h - 2.0f * in_y);
+
+        if (c.h < 0.0f) c = nk_rect(c.x, b.y, c.w, b.h);
+        if (c.w > 0.0f) paint(app, nk_window_get_canvas(ctx), c, state_ink(ctx), user);
     }
     reaktor_style_frame_pop(ctx, f);
+    if (reaktor_focus_activated(app, id)) clicked = 1;
     return clicked;
 }
 
