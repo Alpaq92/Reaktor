@@ -73,7 +73,7 @@ errors, so an internal function cannot slip back in.
 | `reaktor_lang_pref(app)` | The language `--lang` asked for, or `NULL` |
 | `reaktor_set_borderless(app, on)`, `reaktor_borderless(app)` | Switch the main window's frame off for a titlebar of your own, drawn with `.window.hit_test` |
 | `reaktor_set_visible(app, on)` | Show or hide that App's window; with `.window.hidden`, the main window waits for it |
-| `reaktor_version()` | Reaktor's version, such as `"0.7.0"` |
+| `reaktor_version()` | Reaktor's version, such as `"0.7.1"` |
 
 The `set` calls are for the main thread, take effect at the next frame, and do
 nothing when nothing changes.
