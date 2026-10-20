@@ -73,7 +73,7 @@ errors, so an internal function cannot slip back in.
 | `reaktor_lang_pref(app)` | The language `--lang` asked for, or `NULL` |
 | `reaktor_set_borderless(app, on)`, `reaktor_borderless(app)` | Switch the main window's frame off for a titlebar of your own, drawn with `.window.hit_test` |
 | `reaktor_set_visible(app, on)` | Show or hide that App's window; with `.window.hidden`, the main window waits for it |
-| `reaktor_version()` | Reaktor's version, such as `"0.7.1"` |
+| `reaktor_version()` | Reaktor's version, such as `"0.7.2"` |
 
 The `set` calls are for the main thread, take effect at the next frame, and do
 nothing when nothing changes.
@@ -228,7 +228,7 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 
 | Widget | Call | Answers 1 | Its own fields |
 | --- | --- | --- | --- |
-| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press`, `.tooltip`, `.fit_content` (exactly as large as its label and icon, whatever `.box` asks) |
+| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press`, `.tooltip`, `.fit_content` (as large as its label and icon need; a `.box.w` is then the least it takes, so short labels line up and long ones grow); `.accent` with `.icon` draws both; `.paint` and `.paint_user` draw the inside as `reaktor_button_custom` does, with `.label` measured for `.fit_content` and read as the name unless `.name` is set |
 | Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press`, or `.url` to open in the browser |
 | Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTER`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
 | Icon | `reaktor_icon` | — | `.name` (an Ionicon) and `.accent`, or `.src` (any image asset: SVG, PNG, JPEG), stretched to its box; `.tooltip` |
@@ -253,8 +253,14 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Tree | `reaktor_tree` | when another node is chosen | `.count`, `.parent(node, user)`, `.label(node, user)`, `.icon(node, user)`, `.open` (a flag per node), `.selected` (a node), `.row_h` |
 | Splitter | `reaktor_splitter` | while dragged | `.value` (the first child's share, 0 to 1), `.lo`, `.hi` (0.1 and 0.9 unset), `.vertical` |
 
+The icon is 1.125 times the button font's height, 18 px at 16 px, unless the sheet sizes `button .icon` with `width`; its `margin-right` is then the gap. A `min-width` on the button's rule is the least `.fit_content` takes.
+
 **An icon gives way to its label**: a button too narrow for both draws the
-label alone. `.fit_content` makes it as large as both need.
+label alone. `.fit_content` makes it as large as both need, as GTK and Qt size
+a button: the label, the icon's drawn width and 12 px between them, plus half
+the sheet's padding and its border on each side, since an icon tightens a
+button as it does GTK's. At any width the icon and label are centered together
+on the icon's drawn pixels, since an Ionicon sits anywhere in its square.
 
 **A field writes back** its bytes into `.buf` and its length into `*.len`, and
 reads both next frame, so the length must be the field's own: one from
@@ -821,7 +827,9 @@ out by hand inside a declared page. [`include/reaktor/ui.h`](../include/reaktor/
 | `reaktor_fill_round`, `reaktor_edge_round` | Rounded fills and borders, smooth on the software renderer |
 | `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)), with a `REAKTOR_CURSOR_*` over it: default, pointer, text, or a horizontal or vertical resize |
 | `reaktor_tip(app, rect, text)` | A tooltip over a rectangle you drew yourself, such as a bar of a chart; the text is copied, and the rectangle redraws as the pointer crosses it |
-| `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside hand-laid rows |
+| `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_button_accent_icon`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside hand-laid rows |
+| `reaktor_button_width(app, ctx, ionicon, label)` | The width `.fit_content` gives that button, for a hand-laid row; `ionicon` may be `NULL`. An icon button laid out at that width centers its icon and label together |
+| `reaktor_button_custom(app, ctx, name, paint, user)` | The sheet's button with the inside left to `paint(app, canvas, content, ink, user)`: `content` is the box inside the padding, `ink` the text color for the button's state, and `name` what a reader hears. Fill, edge, hover, focus and the click stay the runtime's |
 | `reaktor_menu_item`, `reaktor_menu_style_push`, `_pop`, `reaktor_menu_height`, `reaktor_menu_edge`, `reaktor_popup_rounding` | Menus and popups |
 | `reaktor_note`, `_push`, `_pop`, `_here`, `_keys`, `_value`, `_bounds`, `reaktor_focus_activated` | The accessibility tree, and keyboard presses |
 | `reaktor_focus_area`, `reaktor_focus_scroll` | A scrolling page body: the area and node focus moves within, and the rectangle it asks to see |

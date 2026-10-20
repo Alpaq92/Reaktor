@@ -5,6 +5,7 @@
 
 #include "reaktor/nuklear.h"
 #include "reaktor/a11y.h"
+#include "reaktor/widgets.h"
 
 #ifndef REAKTOR_APP_FWD
 #define REAKTOR_APP_FWD
@@ -68,6 +69,12 @@ int reaktor_button_label(App *app, struct reaktor_context *ctx,
                          const char *label);
 int reaktor_button_icon(App *app, struct reaktor_context *ctx,
                         const char *ionicon, const char *label);
+int reaktor_button_accent_icon(App *app, struct reaktor_context *ctx,
+                               const char *ionicon, const char *label);
+float reaktor_button_width(App *app, struct reaktor_context *ctx,
+                           const char *ionicon, const char *label);
+int reaktor_button_custom(App *app, struct reaktor_context *ctx, const char *name,
+                          reaktor_button_paint paint, void *user);
 reaktor_flags reaktor_field_text(App *app, struct reaktor_context *ctx,
                                  reaktor_flags flags,
                                  char *buf, int *len, int cap, const char *hint,

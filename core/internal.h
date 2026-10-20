@@ -63,6 +63,7 @@ struct img_slot {
     char            src[192];
     unsigned        hash;
     int             px, w, h;
+    float           ink_l, ink_r;
 };
 
 static inline float
@@ -268,6 +269,7 @@ void img_cache_clear(App *app);
 void img_cache_free(App *app);
 struct nk_image icon_over(App *app, const char *src, int px, float over);
 struct nk_image icon(App *app, const char *src, int px);
+struct nk_image icon_ink(App *app, const char *src, int px, float *left, float *right);
 const struct nk_user_font *pick_font(App *app, int px, int bold);
 const struct nk_user_font *base_font(App *app);
 void rebuild_font(App *app);
@@ -331,7 +333,14 @@ void a11y_dump_once(App *app);
 
 
 void hot_push(App *app, struct nk_rect r, int cursor, int repaint);
+#define REAKTOR_BUTTON_GAP   12.0f
+float css_button_content_w(App *app, struct nk_context *ctx, const char *selector,
+                           const struct nk_user_font *f, const char *icon_src,
+                           const char *label);
+const char *reaktor_ionicon_src(char out[192], const char *name, const char *hex, float sw);
+const char *reaktor_button_src(char out[192], const char *ionicon);
 int  css_button_accent(App *app, struct nk_context *ctx, const char *selector,
+                       const char *icon_src,
                        const char *label);
 int  reaktor_css_button_flat(App *app, struct nk_context *ctx, const char *icon,
                              const char *name, int accent);
@@ -436,8 +445,10 @@ int  reaktor_css_button_look(App *app, struct nk_context *ctx,
                              const reaktor_button_look *k, const char *label);
 int  reaktor_button_label_as(App *app, struct nk_context *ctx,
                              const char *sel, const char *label);
-int  reaktor_button_accent_as(App *app, struct nk_context *ctx,
-                              const char *sel, const char *label);
+int  reaktor_button_accent_as(App *app, struct nk_context *ctx, const char *sel,
+                              const char *ionicon, const char *label);
+int  reaktor_css_button_custom(App *app, struct nk_context *ctx, const char *sel,
+                               const char *name, reaktor_button_paint paint, void *user);
 int  reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
                             const char *ionicon, const char *label);
 void note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds);

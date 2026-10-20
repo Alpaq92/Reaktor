@@ -13,6 +13,47 @@ static const struct { const char *icon, *label; } g_icons[] = {
 };
 #define ICON_N ((int)(sizeof(g_icons) / sizeof(g_icons[0])))
 
+/* A count after the label, in a pill of the accent. */
+static void
+paint_inbox(App *app, struct reaktor_command_buffer *cv, struct reaktor_rect c,
+            struct reaktor_color ink, void *user)
+{
+    const struct reaktor_user_font *f = reaktor_style_font(app, "button", 14, 0);
+    const char *n = (const char *)user;
+    float nw = f->width(f->userdata, f->height, n, (int)SDL_strlen(n)) + 14.0f;
+    float lw = f->width(f->userdata, f->height, "Inbox", 5);
+    float x = c.x + (c.w - lw - 8.0f - nw) * 0.5f;
+    float y = c.y + (c.h - f->height) * 0.5f;
+    struct reaktor_color accent = reaktor_token("--links", reaktor_rgb(0, 118, 209));
+
+    reaktor_draw_text(cv, reaktor_rect(x, y, lw, f->height), "Inbox", 5, f,
+                      reaktor_rgba(0, 0, 0, 0), ink);
+    reaktor_fill_round(app, cv, reaktor_rect(x + lw + 8.0f, y - 2.0f, nw, f->height + 4.0f),
+                       (f->height + 4.0f) * 0.5f, accent);
+    reaktor_draw_text(cv, reaktor_rect(x + lw + 15.0f, y, nw, f->height), n,
+                      (int)SDL_strlen(n), f, reaktor_rgba(0, 0, 0, 0), reaktor_on(accent));
+}
+
+/* An icon over two lines of text, as a download list shows one. */
+static void
+paint_download(App *app, struct reaktor_command_buffer *cv, struct reaktor_rect c,
+               struct reaktor_color ink, void *user)
+{
+    const struct reaktor_user_font *f = reaktor_style_font(app, "button", 14, 1);
+    const struct reaktor_user_font *small = reaktor_style_font(app, "button", 12, 0);
+    struct reaktor_image im = reaktor_ionicon(app, "download-outline", 24);
+    float y = c.y + (c.h - f->height - small->height - 2.0f) * 0.5f;
+
+    (void)user;
+    reaktor_draw_image(cv, reaktor_rect(c.x, c.y + (c.h - 24.0f) * 0.5f, 24.0f, 24.0f), &im, ink);
+    reaktor_draw_text(cv, reaktor_rect(c.x + 36.0f, y, c.w - 36.0f, f->height),
+                      "reaktor-0.7.1-web.zip", 21, f, reaktor_rgba(0, 0, 0, 0), ink);
+    reaktor_draw_text(cv, reaktor_rect(c.x + 36.0f, y + f->height + 2.0f, c.w - 36.0f,
+                                       small->height),
+                      "4.2 MB of 9.8 MB", 16, small, reaktor_rgba(0, 0, 0, 0),
+                      reaktor_token("--text-muted", ink));
+}
+
 void
 page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 {
@@ -60,36 +101,74 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
             { "chevron-forward-outline", "Forward" },
             { "menu-outline",            "Menu" }
         };
-        int row, col;
+        REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_WRAP,
+                    .gap = ctx->style.window.spacing.x) {
+            for (i = 0; i < ICON_N; i++)
+                if (reaktor_button(&(reaktor_button_spec){
+                        .label = g_icons[i].label, .icon = g_icons[i].icon,
+                        .fit_content = 1 }))
+                    s->presses++;
+            for (i = 0; i < 3; i++)
+                if (reaktor_button(&(reaktor_button_spec){
+                        .label = nav[i].label, .icon = nav[i].icon,
+                        .fit_content = 1 }))
+                    s->presses++;
+        }
+    }
 
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
-            for (row = 0; row * 4 < ICON_N; row++) {
-                REAKTOR_ROW(.h = 38.0f, .flags = REAKTOR_LAY_FILL_X,
-                            .gap = ctx->style.window.spacing.x) {
-                    for (col = 0; col < 4; col++) {
-                        int k = row * 4 + col;
+    section(app, ctx, "Width",
+            "A button is as wide as its content with .fit_content, the way "
+            "GTK and Qt size one, and its icon and label are centered "
+            "together at any width. A .box.w with .fit_content is the least "
+            "it takes, so short labels line up while a long or translated one "
+            "still grows; .box.w alone is exact, and REAKTOR_LAY_FILL_X shares "
+            "the row out.");
+    api(app, ctx, ".fit_content  /  .box.w  /  REAKTOR_LAY_FILL_X  /  reaktor_button_width  "
+                  "/  reaktor_button_accent_icon");
+    {
+        static const char *const how[4] = { "Content", "At least 100", "Exactly 100",
+                                            "Shared" };
+        static const reaktor_box box[4] = {
+            { 0 }, { .w = 100.0f }, { .w = 100.0f }, { .flags = REAKTOR_LAY_FILL_X } };
+        int m;
 
-                        if (k >= ICON_N) break;
-                        if (reaktor_button(&(reaktor_button_spec){
-                                .label = g_icons[k].label,
-                                .icon  = g_icons[k].icon,
-                                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                                  REAKTOR_LAY_FILL_Y } }))
-                            s->presses++;
-                    }
-                }
-            }
-
+        for (m = 0; m < 4; m++) {
             REAKTOR_ROW(.h = 38.0f, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
-                for (i = 0; i < 3; i++)
-                    if (reaktor_button(&(reaktor_button_spec){
-                            .label = nav[i].label, .icon = nav[i].icon,
-                            .box = { .flags = REAKTOR_LAY_FILL_X |
-                                              REAKTOR_LAY_FILL_Y } }))
-                        s->presses++;
+                reaktor_label(&(reaktor_label_spec){ .text = how[m],
+                                                     .box = { .w = 110.0f, .flags = REAKTOR_LAY_FILL_Y } });
+                if (reaktor_button(&(reaktor_button_spec){
+                        .label = "Back", .icon = "chevron-back-outline",
+                        .fit_content = m < 2, .box = box[m] }))
+                    s->presses++;
+                if (reaktor_button(&(reaktor_button_spec){
+                        .label = "Add folder", .icon = "folder-open-outline",
+                        .fit_content = m < 2, .box = box[m] }))
+                    s->presses++;
+                if (reaktor_button(&(reaktor_button_spec){
+                        .label = "Wipe", .icon = "flame-outline", .accent = 1,
+                        .fit_content = m < 2, .box = box[m] }))
+                    s->presses++;
             }
         }
+    }
+
+    section(app, ctx, "Custom content",
+            "The sheet's button with nothing in it: its fill, edge, hover, "
+            "focus ring and click are the runtime's, and a callback paints "
+            "the inside, given the content box inside the padding and the "
+            "text color for the button's state. Its name is what a reader hears.");
+    api(app, ctx, ".paint  /  .paint_user  /  reaktor_button_custom(app, ctx, name, paint, user)");
+    REAKTOR_ROW(.h = 52.0f, .flags = REAKTOR_LAY_FILL_X,
+                .gap = ctx->style.window.spacing.x) {
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "Inbox, 12 new", .paint = paint_inbox, .paint_user = "12",
+                .box = { .w = 180.0f, .flags = REAKTOR_LAY_FILL_Y } }))
+            s->presses++;
+        if (reaktor_button(&(reaktor_button_spec){
+                .label = "reaktor-0.7.1-web.zip, 4.2 MB of 9.8 MB", .paint = paint_download,
+                .box = { .w = 280.0f, .flags = REAKTOR_LAY_FILL_Y } }))
+            s->presses++;
     }
 
     section(app, ctx, "Flat icons",
