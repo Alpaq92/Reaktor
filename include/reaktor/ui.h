@@ -62,6 +62,7 @@ struct reaktor_color reaktor_on(struct reaktor_color bg);
 void reaktor_hot(App *app, struct reaktor_rect r, int cursor, int repaint);
 void reaktor_hot_top(App *app, struct reaktor_rect r, int cursor, int repaint);
 void reaktor_hot_follow(App *app, struct reaktor_rect r, int cursor);
+void reaktor_tip(App *app, struct reaktor_rect r, const char *text);
 
 int reaktor_button_label(App *app, struct reaktor_context *ctx,
                          const char *label);

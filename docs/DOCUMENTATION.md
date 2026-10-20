@@ -820,6 +820,7 @@ out by hand inside a declared page. [`include/reaktor/ui.h`](../include/reaktor/
 | `reaktor_style_frame`, `reaktor_style_frame_pop` | Counts of style pushes, popped together |
 | `reaktor_fill_round`, `reaktor_edge_round` | Rounded fills and borders, smooth on the software renderer |
 | `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)), with a `REAKTOR_CURSOR_*` over it: default, pointer, text, or a horizontal or vertical resize |
+| `reaktor_tip(app, rect, text)` | A tooltip over a rectangle you drew yourself, such as a bar of a chart; the text is copied, and the rectangle redraws as the pointer crosses it |
 | `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside hand-laid rows |
 | `reaktor_menu_item`, `reaktor_menu_style_push`, `_pop`, `reaktor_menu_height`, `reaktor_menu_edge`, `reaktor_popup_rounding` | Menus and popups |
 | `reaktor_note`, `_push`, `_pop`, `_here`, `_keys`, `_value`, `_bounds`, `reaktor_focus_activated` | The accessibility tree, and keyboard presses |
