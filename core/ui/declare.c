@@ -384,6 +384,20 @@ decl_tip_at(const char *tip, struct nk_rect r, int cursor)
 }
 
 void
+reaktor_tip(App *app, struct nk_rect r, const char *text)
+{
+    struct nk_context *ctx = app ? app->ctx : NULL;
+
+    if (!text || !ctx || !ctx->current) return;
+    reaktor_hot_follow(app, r, 0);
+    if (nk_input_is_mouse_hovering_rect(&ctx->input, r) &&
+        nk_input_is_mouse_hovering_rect(&ctx->input, ctx->current->layout->clip)) {
+        SDL_strlcpy(app->tip_text, text, sizeof app->tip_text);
+        app->tip = app->tip_text;
+    }
+}
+
+void
 reaktor_tip_draw(App *app, struct nk_context *ctx, struct nk_command_buffer *cv)
 {
     const struct nk_user_font *f = reaktor_style_font(app, ".tooltip", 13, 0);

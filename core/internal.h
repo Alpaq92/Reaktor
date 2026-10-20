@@ -129,6 +129,7 @@ struct App {
 
     int         want_cursor, cur_shown;
     const char *tip;
+    char        tip_text[256];
 
     char render_mode[32];
     int  vsync_on, aa_mode, redraw_always;

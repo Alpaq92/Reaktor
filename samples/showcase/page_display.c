@@ -10,6 +10,64 @@ static const char *const g_grid[7][3] = {
     { "Aileron",   "CC0",    "the typeface" }
 };
 
+/* Example figures: scans and threats per hour over a day. */
+static const int g_scans[24] = { 0, 0, 0, 0, 0, 0, 0, 1, 3, 2, 0, 0,
+                                 9, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 2 };
+static const int g_threats[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                                   2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+static void
+section_trend(App *app, struct reaktor_context *ctx)
+{
+    struct reaktor_color scan_c = reaktor_token("--links", reaktor_rgb(0, 118, 209));
+    struct reaktor_color threat_c = reaktor_rgb(229, 72, 77);
+    struct reaktor_color axis = reaktor_token("--text-muted", reaktor_rgb(112, 119, 127));
+    struct reaktor_command_buffer *cv;
+    struct reaktor_rect b;
+    char  tip[64];
+    int   i, max = 1;
+    float slot, bw;
+
+    reaktor_layout_row_dynamic(ctx, 18.0f, 4);
+    reaktor_label_colored(ctx, "Scans", REAKTOR_TEXT_LEFT, scan_c);
+    reaktor_label_colored(ctx, "Threats", REAKTOR_TEXT_LEFT, threat_c);
+    reaktor_spacer(ctx);
+    reaktor_spacer(ctx);
+
+    reaktor_layout_row_dynamic(ctx, 150.0f, 1);
+    b = reaktor_widget_bounds(ctx);
+    reaktor_spacer(ctx);
+    cv = reaktor_window_get_canvas(ctx);
+    reaktor_fill_rect(cv, reaktor_rect(b.x, b.y + b.h - 1.0f, b.w, 1.0f), 0.0f, axis);
+    for (i = 0; i < 24; i++) {
+        if (g_scans[i] > max) max = g_scans[i];
+        if (g_threats[i] > max) max = g_threats[i];
+    }
+    slot = b.w / 24.0f;
+    bw = slot * 0.35f;
+    if (bw > 14.0f) bw = 14.0f;
+    for (i = 0; i < 24; i++) {
+        float x = b.x + slot * (float)i + (slot - 2.0f * bw - 2.0f) * 0.5f;
+        float hs = (b.h - 6.0f) * (float)g_scans[i] / (float)max;
+        float ht = (b.h - 6.0f) * (float)g_threats[i] / (float)max;
+
+        if (hs > 0.0f)
+            reaktor_fill_round(app, cv, reaktor_rect(x, b.y + b.h - 1.0f - hs, bw, hs), 2.0f,
+                               scan_c);
+        if (ht > 0.0f)
+            reaktor_fill_round(app, cv,
+                               reaktor_rect(x + bw + 2.0f, b.y + b.h - 1.0f - ht, bw, ht),
+                               2.0f, threat_c);
+        if (!g_scans[i] && !g_threats[i]) continue;
+        SDL_snprintf(tip, sizeof tip, "%02d:00  %d scan%s, %d threat%s", i,
+                     g_scans[i], g_scans[i] == 1 ? "" : "s",
+                     g_threats[i], g_threats[i] == 1 ? "" : "s");
+        reaktor_tip(app, reaktor_rect(b.x + slot * (float)i, b.y, slot, b.h), tip);
+    }
+    reaktor_layout_row_dynamic(ctx, 18.0f, 1);
+    reaktor_label_colored(ctx, "Per hour, oldest on the left", REAKTOR_TEXT_LEFT, axis);
+}
+
 static const char *
 grid_cell(int row, int column, void *user)
 {
@@ -224,6 +282,9 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     reaktor_layout_row_dynamic(ctx, 70.0f, 1);
     reaktor_plot(ctx, REAKTOR_CHART_LINES, s->series, SC_SERIES_N, 0);
+
+    api(app, ctx, "reaktor_fill_round  /  reaktor_tip(app, rect, text)");
+    section_trend(app, ctx);
 
     section(app, ctx, "Progress and rules",
             "A fixed progress bar reports; reaktor_rule_horizontal is the "
