@@ -892,6 +892,21 @@ a11y_dump_once(App *app)
                 REAKTOR_A11Y_POOL, app->a11y.pool_entries,
                 (int)sizeof(reaktor_a11y));
     }
+    {
+        const reaktor_a11y_node *t;
+        const char *mark;
+        unsigned id;
+        int i, k, n = 0;
+
+        t = reaktor_a11y_tree(&app->a11y, &n);
+        for (i = 0; (mark = reaktor_mark_at(i, &id)); i++)
+            for (k = 0; k < n; k++)
+                if (t[k].id == id) {
+                    fprintf(f, "# #%s: %s \"%s\"\n", mark, reaktor_a11y_role_name(t[k].role),
+                            t[k].name ? t[k].name : "");
+                    break;
+                }
+    }
     fclose(f);
 }
 

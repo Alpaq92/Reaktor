@@ -147,6 +147,10 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
         run: docker exec -i debian sh tools/ci/instance.sh -w "dbus-run-session -- timeout 120" build </dev/null
 
+      - name: Scripted UI test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
+        run: docker exec -i debian sh tools/ci/uitest.sh -w "dbus-run-session -- timeout 120" build </dev/null
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

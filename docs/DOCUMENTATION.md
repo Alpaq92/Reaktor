@@ -455,6 +455,7 @@ A container's fields, and a widget's `.box`:
 | `.ml .mt .mr .mb` | Margins |
 | `.flags` | `REAKTOR_LAY_FILL_X`, `_FILL_Y`, `_WRAP`, `_CENTER_X`, `_CENTER_Y`, `_PACK_CENTER`, `_PACK_END`, `_PACK_SPREAD` |
 | `.name` | How a container is found again; a widget uses its spec's `.name` |
+| `.mark` | A handle for a [scripted test](#testing-an-application), on a widget or a container: `"#mark"` finds it, `"#mark Delete"` finds Delete inside it, and no reader hears it. One mark may sit on many widgets, every row of a list for one; up to 63 characters are kept. Marks are kept apart from the tree, in a table made only once something sets one; `--a11y-dump` lists them after the tree |
 
 So `.w` alone is fixed, `.w` with `FILL_X` a minimum that grows, and `FILL_X`
 with `.weight` a fraction. The outermost container is as wide as the panel it
@@ -1196,11 +1197,52 @@ Built by default and run from `build/`:
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and Simple.css read through it |
+| `uitest` | The scripted UI test below, driving its own window: find by name and mark, click, type, a check box, a key hook |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
 | `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `print-pdf`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
 Beyond those, check a visual change against the framebuffer (`--shot`) and the
 dump, not against a reading of the source.
+
+### Testing an application
+
+`reaktor_test_app` launches an application with SDL's dummy video driver, so
+no window shows, and runs a script on a thread of its own once the first frame
+settles. The script acts as a person would: it finds widgets in the
+accessibility tree by their name, or by a `.box.mark` written `"#mark"`, and
+clicks and types through the same SDL events a mouse and keyboard send. Every
+call returns once the window has drawn and settled. The run exits 0 when every
+check passed, and each check is logged (`--log` writes it to a file).
+
+```c
+static void script(reaktor_test *t, void *user)
+{
+    char v[64];
+
+    reaktor_test_type(t, "Name", "Ada");
+    reaktor_test_click(t, "Greet");
+    reaktor_test_check(t, reaktor_test_value(t, "#greeting", v, sizeof v) &&
+                              SDL_strcmp(v, "Hello, Ada") == 0, "greets by name");
+}
+
+int main(int argc, char **argv)
+{
+    return reaktor_test_app(argc, argv, &my_launch, script, NULL);
+}
+```
+
+| Call | What it does |
+| --- | --- |
+| `reaktor_test_find(t, target)` | 1 once the target is in the tree, waiting a few frames for it |
+| `reaktor_test_click(t, target)` | A left click at its center; 0 if it is missing or scrolled out of view |
+| `reaktor_test_type(t, target, text)` | Clicks it, then types `text`; `NULL` types where the focus is |
+| `reaktor_test_key(t, chord)` | `"Ctrl+S"`, `"Enter"`: modifiers, then one key by SDL's name |
+| `reaktor_test_value(t, target, out, cap)`, `reaktor_test_state(t, target)` | Its value as a reader hears it, and its `REAKTOR_A11Y_*` state |
+| `reaktor_test_settle(t)` | Wait until the window has drawn and settled |
+| `reaktor_test_check(t, ok, what)` | Count and log one check |
+
+A target names a widget by what a reader hears, or by its mark as `"#mark"`; `"#rows Delete"` looks for Delete only inside the container marked `rows`, at any depth. When several widgets match, the first is used and the log says how many there were. A test reads only the main window. The video driver is dummy unless the
+command line names one, and `--new-instance` is passed for it.
 
 ## The renderer
 

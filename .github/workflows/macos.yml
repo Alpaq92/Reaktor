@@ -88,6 +88,10 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: sh tools/ci/instance.sh build
 
+      - name: Scripted UI test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: sh tools/ci/uitest.sh build
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

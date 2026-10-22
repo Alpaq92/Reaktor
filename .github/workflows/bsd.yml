@@ -54,8 +54,8 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
-          restore-keys: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
+          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
 
       # ninja rebuilds by mtime, and a checkout dates every file now. Date them
       # before the cached objects instead, and only what changed since the
@@ -200,6 +200,13 @@ jobs:
         shell: cpa.sh {0} --sync-files vm-to-runner
         run: ':'
 
+      # A cross build that stopped halfway holds objects from before the change,
+      # which the next run would take as current: it is built again in full.
+      - name: Drop an unfinished cross build
+        if: ${{ always() && steps.cross.outcome == 'failure' }}
+        shell: bash
+        run: rm -rf build-arm64
+
       - name: Note which commit the cached build is from
         if: ${{ always() && steps.build.outcome == 'success' }}
         shell: bash
@@ -213,7 +220,7 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
 
       - name: Save the package cache
         if: ${{ always() && steps.vm.outcome == 'success' }}
@@ -259,6 +266,13 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           sh tools/ci/instance.sh -w "dbus-run-session -- timeout 120" build
+
+      - name: Scripted UI test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          sh tools/ci/uitest.sh -w "dbus-run-session -- timeout 120" build
 
       - name: Build mkicon
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

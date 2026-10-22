@@ -8,6 +8,7 @@
 #include "reaktor/a11y.h"
 #include "reaktor/ui.h"
 #include "reaktor/anim.h"
+#include "reaktor/test.h"
 #include "reaktor/locale.h"
 #include "reaktor/style.h"
 #include "reaktor/text.h"

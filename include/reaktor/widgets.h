@@ -33,6 +33,7 @@ typedef struct reaktor_box {
     float         gap;
     float         ml, mt, mr, mb;
     unsigned      flags;
+    const char   *mark;
 } reaktor_box;
 
 void reaktor_box_open(unsigned char dir, const reaktor_box *b);

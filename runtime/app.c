@@ -22,6 +22,7 @@ effective_dark(const App *app)
 size_t reaktor_rss[REAKTOR_RSS_STEPS];
 size_t reaktor_priv[REAKTOR_RSS_STEPS];
 
+void (*reaktor_test_hook)(App *app);
 static reaktor_launch g_launch;
 static App           *g_app;
 static int            g_started, g_stopped;
@@ -1598,6 +1599,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     if (is_main) {
         reaktor_a11y_platform_push(&app->a11y, app->focus_id);
         a11y_dump_once(app);
+        if (reaktor_test_hook) reaktor_test_hook(app);
         reaktor_inspector_frame(app);
     } else {
         reaktor_a11y_platform_window_push(app->win, &app->a11y, app->focus_id,
