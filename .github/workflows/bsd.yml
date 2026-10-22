@@ -57,6 +57,11 @@ jobs:
           key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
           restore-keys: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
 
+      - name: Build a release from scratch, keeping only ccache
+        if: ${{ inputs.version != '' }}
+        shell: bash
+        run: rm -rf build build-arm64
+
       # ninja rebuilds by mtime, and a checkout dates every file now. Date them
       # before the cached objects instead, and only what changed since the
       # commit that build came from after them. Commit times would not do: a
