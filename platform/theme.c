@@ -184,7 +184,7 @@ int reaktor_window_set_dark(SDL_Window *win, int dark)
 
     if (!native_window) return 0;
     if (!looked_up) {
-        void *dll = (void *)LoadLibraryA("dwmapi.dll");
+        void *dll = (void *)LoadLibraryExA("dwmapi.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (dll)
             set_attr = (set_attr_fn)(void *)GetProcAddress(
                 (HMODULE)dll, "DwmSetWindowAttribute");

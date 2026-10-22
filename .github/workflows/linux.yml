@@ -100,7 +100,7 @@ jobs:
             cross="-DCMAKE_TOOLCHAIN_FILE=/src/tools/cross/linux-cross.cmake -DREAKTOR_CROSS_TRIPLE=${{ matrix.triple }}"
           fi
           version='${{ inputs.version || 'dev' }}'
-          docker exec -i -e CROSS="$cross" -e TRIPLE="${{ matrix.triple }}"             -e LIBNAME="libreaktor-${version#v}-linux-${{ matrix.arch }}" "$ctr" sh -eu <<'EOF'
+          docker exec -i -e CROSS="$cross" -e TRIPLE="${{ matrix.triple }}"             -e LIBNAME="libreaktor-${version}-linux-${{ matrix.arch }}" "$ctr" sh -eu <<'EOF'
           uname -a
           cmake --version
           export CCACHE_DIR=/src/.ccache CCACHE_BASEDIR=/src CCACHE_MAXSIZE=500M
@@ -156,7 +156,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           version='${{ inputs.version || 'dev' }}'
-          docker exec -i debian sh -eu tools/ci/check-package.sh -w "timeout 600" build "reaktor-${version#v}-linux-${{ matrix.arch }}" </dev/null
+          docker exec -i debian sh -eu tools/ci/check-package.sh -w "timeout 600" build "reaktor-${version}-linux-${{ matrix.arch }}" </dev/null
 
       - name: Upload the package
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
@@ -174,7 +174,7 @@ jobs:
           version='${{ inputs.version || 'dev' }}'
           installed=""
           if [ "${{ matrix.emulated }}" = true ]; then installed=-i; fi
-          docker exec -i debian sh -eu tools/ci/check-libreaktor.sh $installed -w "timeout 600" build "libreaktor-${version#v}-linux-${{ matrix.arch }}" </dev/null
+          docker exec -i debian sh -eu tools/ci/check-libreaktor.sh $installed -w "timeout 600" build "libreaktor-${version}-linux-${{ matrix.arch }}" </dev/null
 
       - name: Pack libreaktor as a .deb
         id: deb

@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/emsdk
-          key: emsdk-${{ env.EMSCRIPTEN_VERSION }}
+          key: emsdk-${{ env.EMSCRIPTEN_VERSION }}-tag
 
       # ccache only: the build folder is rebuilt, so a stale cache cannot hide a broken one.
       - name: Restore the compiler cache
@@ -51,7 +51,7 @@ jobs:
       - name: Install emsdk
         run: |
           if [ ! -d "$HOME/emsdk" ]; then
-            git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+            git clone --depth 1 --branch "$EMSCRIPTEN_VERSION" https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
             "$HOME/emsdk/emsdk" install "$EMSCRIPTEN_VERSION"
           fi
           "$HOME/emsdk/emsdk" activate "$EMSCRIPTEN_VERSION"
@@ -62,7 +62,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/emsdk
-          key: emsdk-${{ env.EMSCRIPTEN_VERSION }}
+          key: emsdk-${{ env.EMSCRIPTEN_VERSION }}-tag
 
       - name: Build
         id: build
@@ -82,13 +82,13 @@ jobs:
       - name: Package
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="reaktor-${version#v}-web"
+          name="reaktor-${version}-web"
           mkdir -p "dist/$name/licenses"
           for p in showcase notepad simple; do
             cp "build-wasm/$p.html" "build-wasm/$p.js" "build-wasm/$p.wasm" \
                "build-wasm/$p.data" "dist/$name/"
           done
-          cp build-wasm/keylog.js build-wasm/reaktor-icon.svg build-wasm/reaktor-icon.png \
+          cp build-wasm/shell.js build-wasm/keylog.js build-wasm/reaktor-icon.svg build-wasm/reaktor-icon.png \
              "dist/$name/"
           cp build-wasm/licenses/*.txt "dist/$name/licenses/"
           cp external/simplecss/LICENSE "dist/$name/licenses/simplecss.txt"
@@ -108,7 +108,7 @@ jobs:
       - name: Check and pack libreaktor
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version#v}-wasm"
+          name="libreaktor-${version}-wasm"
           cmake --build build-wasm --target libreaktor
           cmake --install build-wasm --prefix "dist/$name" --component libreaktor
           cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \

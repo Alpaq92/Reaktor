@@ -104,20 +104,28 @@ notify_os(App *app, const char *title, const char *body)
     const char     *name = reaktor_app_ident(), *icon = "";
     dbus_uint32_t   replaces = 0;
     dbus_int32_t    expire = -1;
-    int             ok;
+    int             ok = 0;
+    size_t          tn = SDL_strlen(title) * 3 + 1, bn = SDL_strlen(body) * 3 + 1;
+    char           *t = (char *)SDL_malloc(tn), *b = (char *)SDL_malloc(bn);
 
     (void)app;
-    if (!(c = dbus_bus_get(DBUS_BUS_SESSION, NULL))) return 0;
+    if (!t || !b) goto done;
+    reaktor_utf8_clean(t, title, tn);
+    reaktor_utf8_clean(b, body, bn);
+    if (!(c = dbus_bus_get(DBUS_BUS_SESSION, NULL))) goto done;
     m = dbus_message_new_method_call("org.freedesktop.Notifications",
                                      "/org/freedesktop/Notifications",
                                      "org.freedesktop.Notifications", "Notify");
-    if (!m) return 0;
+    if (!m) {
+        dbus_connection_unref(c);
+        goto done;
+    }
     dbus_message_iter_init_append(m, &it);
     dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &name);
     dbus_message_iter_append_basic(&it, DBUS_TYPE_UINT32, &replaces);
     dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &icon);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &title);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &body);
+    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &t);
+    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &b);
     dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "s", &sub);
     dbus_message_iter_close_container(&it, &sub);
     dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "{sv}", &sub);
@@ -127,7 +135,10 @@ notify_os(App *app, const char *title, const char *body)
     dbus_connection_flush(c);
     dbus_message_unref(m);
     dbus_connection_unref(c);
-    return ok ? 1 : 0;
+done:
+    SDL_free(t);
+    SDL_free(b);
+    return ok;
 }
 
 #elif defined(__APPLE__)

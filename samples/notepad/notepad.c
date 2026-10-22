@@ -83,7 +83,7 @@ load(const char *path)
         SDL_snprintf(g.status, sizeof(g.status), "Could not read %s", path);
         return;
     }
-    if (!room((int)n)) {
+    if (n > (size_t)SDL_MAX_SINT32 - 256 || !room((int)n)) {
         SDL_snprintf(g.status, sizeof(g.status), "%s does not fit in memory", path);
         SDL_free(body);
         return;

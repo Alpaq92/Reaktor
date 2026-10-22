@@ -57,9 +57,9 @@ intern(reaktor_a11y *a, const char *s, unsigned h)
 static reaktor_a11y_slot *
 slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 {
-    unsigned i = key & (REAKTOR_A11Y_SLOTS - 1);
+    unsigned i = key & (REAKTOR_A11Y_SLOTS - 1), n;
 
-    for (;;) {
+    for (n = 0; n < REAKTOR_A11Y_SLOTS; n++) {
         reaktor_a11y_slot *sl = &tab[i];
         if (sl->gen != gen) {
             sl->gen = gen;
@@ -70,19 +70,21 @@ slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
         if (sl->key == key) return sl;
         i = (i + 1) & (REAKTOR_A11Y_SLOTS - 1);
     }
+    return NULL;
 }
 
 static int
 slot_get(const reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 {
-    unsigned i = key & (REAKTOR_A11Y_SLOTS - 1);
+    unsigned i = key & (REAKTOR_A11Y_SLOTS - 1), n;
 
-    for (;;) {
+    for (n = 0; n < REAKTOR_A11Y_SLOTS; n++) {
         const reaktor_a11y_slot *sl = &tab[i];
         if (sl->gen != gen) return 0;
         if (sl->key == key) return sl->val;
         i = (i + 1) & (REAKTOR_A11Y_SLOTS - 1);
     }
+    return 0;
 }
 
 static int
@@ -106,15 +108,14 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
         return 0;
     }
 
-    parent = a->depth > 0 ? a->parent[a->depth - 1] : 0u;
+    parent = a->depth > 0 ? a->parent[NK_MIN(a->depth, REAKTOR_A11Y_MAX_DEPTH) - 1] : 0u;
 
     nh   = hash_str(REAKTOR_FNV, name);
     base = nh ^ ((unsigned)role * 0x9e3779b9u);
     base ^= parent + 0x9e3779b9u + (base << 6) + (base >> 2);
 
     sl = slot_of(a->bucket, a->bucket_gen, base);
-    id = base ^ ((unsigned)sl->val * 0x85ebca6bu);
-    sl->val++;
+    id = sl ? base ^ ((unsigned)sl->val++ * 0x85ebca6bu) : base;
     if (id == 0) id = 1;
 
     if (role == REAKTOR_A11Y_NONE) return id;
@@ -258,6 +259,7 @@ reaktor_a11y_end(reaktor_a11y *a)
     const reaktor_a11y_node *cur = a->node[f], *old = a->node[b];
     int ncur = a->count[f], nold = a->count[b];
     int i;
+    reaktor_a11y_slot *sl;
 
     if (!a->building) return 0;
     a->building = 0;
@@ -265,7 +267,7 @@ reaktor_a11y_end(reaktor_a11y *a)
 
     a->index_gen++;
     for (i = 0; i < ncur; i++)
-        slot_of(a->index, a->index_gen, cur[i].id)->val = i + 1;
+        if ((sl = slot_of(a->index, a->index_gen, cur[i].id))) sl->val = i + 1;
 
     for (i = 1; i < ncur; i++) {
         struct nk_rect b = cur[i].bounds;
@@ -289,7 +291,7 @@ reaktor_a11y_end(reaktor_a11y *a)
 
     a->index_gen++;
     for (i = 0; i < nold; i++)
-        slot_of(a->index, a->index_gen, old[i].id)->val = i + 1;
+        if ((sl = slot_of(a->index, a->index_gen, old[i].id))) sl->val = i + 1;
     if (nold > 0) memset(a->matched, 0, (size_t)nold);
 
     for (i = 0; i < ncur; i++) {

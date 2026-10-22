@@ -199,7 +199,7 @@ tree_first(tree_rows *t, int r, unsigned id, struct nk_color fg, float pad)
     struct nk_context *ctx = g_frame_ctx;
     const struct nk_user_font *f = ctx->style.font;
     const reaktor_tree_spec *s = t->s;
-    int node = t->node[r], branch = tree_branch(t, node), step;
+    int node = t->node[r], branch = tree_branch(t, node), step, up;
     struct nk_rect b, chev;
     const char *label = s->label(node, s->user);
     const char *icon = s->icon ? s->icon(node, s->user) : NULL;
@@ -238,7 +238,7 @@ tree_first(tree_rows *t, int r, unsigned id, struct nk_color fg, float pad)
     if (step > 0 && branch && !s->open[node]) s->open[node] = 1;
     else if (step > 0 && branch && r + 1 < t->n) t->jump = t->node[r + 1];
     else if (step < 0 && branch && s->open[node]) s->open[node] = 0;
-    else if (step < 0 && s->parent(node, s->user) >= 0) t->jump = s->parent(node, s->user);
+    else if (step < 0 && (up = s->parent(node, s->user)) >= 0 && up < s->count) t->jump = up;
     if (step) {
         g_frame_app->dirty = 1;
         reaktor_wake(g_frame_app);
@@ -320,7 +320,7 @@ reaktor_tree(const reaktor_tree_spec *s)
     t.depth = buf + s->count;
     t.row   = buf + 2 * s->count;
     t.n     = 0;
-    t.jump  = jump_in == s->name ? jump : -1;
+    t.jump  = jump_in == s->name && jump < s->count ? jump : -1;
     for (i = 0; i < s->count; i++) {
         int p = s->parent(i, s->user);
 
@@ -551,7 +551,6 @@ reaktor_splitter(const reaktor_splitter_spec *s)
 
 #define MENU_DEPTH 4
 #define MENU_COLS  (MENU_DEPTH + 1)
-#define MENU_TITLES 16
 #define MENU_ITEMS  32
 
 /* The windows that draw a column run after the frame that declared it: they draw a copy. */
@@ -570,8 +569,8 @@ static struct {
     int        path[MENU_DEPTH], hi[MENU_COLS], win[MENU_COLS];
     menu_col   col[MENU_COLS];
     int        n, inline_;
-    unsigned   tid[MENU_TITLES];
-    struct nk_rect title[MENU_TITLES];
+    unsigned   open_tid;
+    struct nk_rect open_title;
     int        picked_k, picked_i;
 } g_menu = { -1 };
 
@@ -851,7 +850,7 @@ menu_key(const reaktor_menubar_spec *s, App *app)
         return;
     case SDLK_ESCAPE:
         if (k > 0) { g_menu.depth = k - 1; g_menu.kcol = k - 1; return; }
-        reaktor_focus_take(app, g_menu.tid[g_menu.open], g_menu.title[g_menu.open]);
+        reaktor_focus_take(app, g_menu.open_tid, g_menu.open_title);
         g_menu.open = -1;
         return;
     default:
@@ -899,10 +898,10 @@ menu_build(const reaktor_menubar_spec *s)
         menu_col *c = &g_menu.col[k];
 
         menu_measure(c, ctx->style.font, pad);
-        menu_fit(c, k ? &g_menu.col[k - 1] : NULL, g_menu.title[g_menu.open], b);
+        menu_fit(c, k ? &g_menu.col[k - 1] : NULL, g_menu.open_title, b);
         if (k) {
             c->r.y = menu_entry_y(&g_menu.col[k - 1], g_menu.path[k - 1]) - pad.y;
-            menu_fit(c, &g_menu.col[k - 1], g_menu.title[g_menu.open], b);
+            menu_fit(c, &g_menu.col[k - 1], g_menu.open_title, b);
             if (c->r.y + c->r.h > b.y + b.h) c->r.y = b.y + b.h - c->r.h;
         }
     }
@@ -972,9 +971,10 @@ reaktor_menubar(const reaktor_menubar_spec *s)
     reaktor_box_open(REAKTOR_LAY_ROW, &bar);
     reaktor_note_push(app, REAKTOR_A11Y_MENUBAR, s->name ? s->name : "Menu bar",
                       NULL, 0u, reaktor_box_rect(&r) ? r : nk_rect(0, 0, 0, 0));
-    for (m = 0; m < s->count && m < MENU_TITLES; m++) {
+    for (m = 0; m < s->count; m++) {
         const char *label = s->menus[m].label;
         struct nk_style_button st = *mb;
+        unsigned tid = 0;
 
         memset(&title, 0, sizeof(title));
         title.w = (float)(int)(reaktor_text_w(f, label) +
@@ -982,20 +982,24 @@ reaktor_menubar(const reaktor_menubar_spec *s)
         title.h = h;
         if (!decl_place(REAKTOR_A11Y_MENU, label, NULL,
                         g_menu.open == m ? REAKTOR_A11Y_EXPANDED : 0u, NULL, &title,
-                        &g_menu.tid[m]))
+                        &tid))
             continue;
         r = nk_widget_bounds(ctx);
-        g_menu.title[m] = r;
         reaktor_hot(app, r, REAKTOR_CURSOR_POINTER, 1);
         if (g_menu.open == m) { st.normal = st.active; st.text_normal = st.text_active; }
         nk_button_text_styled(ctx, &st, label, (int)strlen(label));
-        if (!nk_input_is_mouse_hovering_rect(&ctx->input, r)) continue;
-        on_title = 1;
-        if (g_menu.open >= 0 && g_menu.open != m && nk_input_is_mouse_moved(&ctx->input))
-            menu_open_at(m, 0);
-        if (nk_input_is_mouse_released(&ctx->input, NK_BUTTON_LEFT)) {
-            if (g_menu.open == m) g_menu.open = -1;
-            else menu_open_at(m, app->focus_id == g_menu.tid[m] && app->focus_visible);
+        if (nk_input_is_mouse_hovering_rect(&ctx->input, r)) {
+            on_title = 1;
+            if (g_menu.open >= 0 && g_menu.open != m && nk_input_is_mouse_moved(&ctx->input))
+                menu_open_at(m, 0);
+            if (nk_input_is_mouse_released(&ctx->input, NK_BUTTON_LEFT)) {
+                if (g_menu.open == m) g_menu.open = -1;
+                else menu_open_at(m, app->focus_id == tid && app->focus_visible);
+            }
+        }
+        if (g_menu.open == m) {
+            g_menu.open_tid   = tid;
+            g_menu.open_title = r;
         }
     }
     reaktor_note_pop(app);
@@ -1032,7 +1036,8 @@ reaktor_menubar(const reaktor_menubar_spec *s)
     }
     if (g_menu.open >= 0) app->popup_open = 1;
 
-    if (g_menu.open >= 0 && g_menu.picked_k >= 0 && g_menu.picked_k < g_menu.n) {
+    if (g_menu.open >= 0 && g_menu.picked_k >= 0 && g_menu.picked_k < g_menu.n &&
+        g_menu.picked_i >= 0 && g_menu.picked_i < g_menu.col[g_menu.picked_k].count) {
         const reaktor_menu_entry *e = &g_menu.col[g_menu.picked_k].src[g_menu.picked_i];
 
         if (e->checked) *e->checked = !*e->checked;
@@ -1041,7 +1046,7 @@ reaktor_menubar(const reaktor_menubar_spec *s)
         if (s->picked_item) *s->picked_item = g_menu.picked_i;
         if (s->picked) *s->picked = e;
         if (g_menu.open >= 0 && g_menu.keyed)
-            reaktor_focus_take(app, g_menu.tid[g_menu.open], g_menu.title[g_menu.open]);
+            reaktor_focus_take(app, g_menu.open_tid, g_menu.open_title);
         g_menu.picked_k = -1;
         g_menu.open     = -1;
         app->popup_open = 0;

@@ -299,11 +299,14 @@ void reaktor_cssvars_free(reaktor_cssvars *m)
     free(m);
 }
 
+#define VAR_MAX 4096
+
 static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
                       buf *out)
 {
     size_t i = 0;
 
+    if (len > VAR_MAX) return 0;
     while (i < len) {
         const char *at;
         size_t j, depth, name_s, name_e, fb_s, fb_e;
@@ -352,6 +355,7 @@ static int subst_vars(const reaktor_cssvars *m, const char *src, size_t len,
         } else {
             return 0;
         }
+        if (out->len > VAR_MAX) return 0;
         i = j + 1;
     }
     return 1;
@@ -408,7 +412,9 @@ static void convert_units(const char *s, size_t len, float rem_px, float em_px,
 }
 
 typedef struct calc_val { double v; int px; } calc_val;
-typedef struct calc_in  { const char *s; size_t i, n; } calc_in;
+#define CALC_DEPTH 32
+
+typedef struct calc_in  { const char *s; size_t i, n; int depth, deep; } calc_in;
 
 static void calc_space(calc_in *c)
 {
@@ -420,30 +426,40 @@ static int calc_sum(calc_in *c, calc_val *out);
 static int calc_atom(calc_in *c, calc_val *out)
 {
     const char *end;
+    int neg = 0, ok;
 
     calc_space(c);
-    if (c->i < c->n && c->s[c->i] == '-') {
+    while (c->i < c->n && c->s[c->i] == '-') {
+        neg = !neg;
         c->i++;
-        if (!calc_atom(c, out)) return 0;
-        out->v = -out->v;
-        return 1;
+        calc_space(c);
     }
     if (c->i + 5 <= c->n && strncmp(c->s + c->i, "calc(", 5) == 0) c->i += 4;
     if (c->i < c->n && c->s[c->i] == '(') {
+        if (c->depth >= CALC_DEPTH) {
+            c->deep = 1;
+            return 0;
+        }
         c->i++;
-        if (!calc_sum(c, out)) return 0;
+        c->depth++;
+        ok = calc_sum(c, out);
+        c->depth--;
+        if (!ok) return 0;
         calc_space(c);
         if (c->i >= c->n || c->s[c->i] != ')') return 0;
         c->i++;
-        return 1;
+    } else {
+        if (c->i >= c->n || (!isdigit((unsigned char)c->s[c->i]) && c->s[c->i] != '.'))
+            return 0;
+        out->v = css_number(c->s + c->i, &end);
+        c->i = (size_t)(end - c->s);
+        out->px = c->i + 2 <= c->n && strncmp(c->s + c->i, "px", 2) == 0;
+        if (out->px) c->i += 2;
+        if (c->i < c->n && (isalpha((unsigned char)c->s[c->i]) || c->s[c->i] == '%'))
+            return 0;
     }
-    if (c->i >= c->n || (!isdigit((unsigned char)c->s[c->i]) && c->s[c->i] != '.'))
-        return 0;
-    out->v = css_number(c->s + c->i, &end);
-    c->i = (size_t)(end - c->s);
-    out->px = c->i + 2 <= c->n && strncmp(c->s + c->i, "px", 2) == 0;
-    if (out->px) c->i += 2;
-    return c->i >= c->n || !(isalpha((unsigned char)c->s[c->i]) || c->s[c->i] == '%');
+    if (neg) out->v = -out->v;
+    return 1;
 }
 
 static int calc_product(calc_in *c, calc_val *out)
@@ -633,7 +649,7 @@ static int expand_border(buf *out, const char *p, size_t plen, const char *v, si
     return 1;
 }
 
-static void resolve_pixel_calcs(buf *b)
+static int resolve_pixel_calcs(buf *b)
 {
     static const char fn[] = "calc(";
     size_t from = 0;
@@ -649,7 +665,12 @@ static void resolve_pixel_calcs(buf *b)
         c.s = b->p;
         c.i = s;
         c.n = b->len;
-        if (!calc_atom(&c, &v)) { from = s + 1; continue; }
+        c.depth = c.deep = 0;
+        if (!calc_atom(&c, &v)) {
+            if (c.deep) return 0;
+            from = s + 1;
+            continue;
+        }
         snprintf(out, sizeof(out), v.px ? "%gpx" : "%g", v.v);
         memset(&r, 0, sizeof(r));
         buf_add(&r, b->p, s);
@@ -659,6 +680,7 @@ static void resolve_pixel_calcs(buf *b)
         *b = r;
         from = s + strlen(out);
     }
+    return 1;
 }
 
 static void strip_comments(char *s)
@@ -924,6 +946,21 @@ static void body_one(void *c, const char *p, size_t plen,
     if (n > 0.0f) ctx->em = n;
 }
 
+/* The engine ends a token at any ';' or '}', even one inside url(), and
+   reads '//' or '/*' as a comment without ending it. */
+static int token_ok(const char *s, size_t n, size_t max)
+{
+    size_t i;
+
+    if (n >= max) return 0;
+    for (i = 0; i < n; i++) {
+        if (s[i] == ';' || s[i] == '}') return 0;
+        if (s[i] == '/' && i + 1 < n && (s[i + 1] == '/' || s[i + 1] == '*'))
+            return 0;
+    }
+    return 1;
+}
+
 typedef struct emit_ctx {
     const reaktor_cssvars *m;
     buf                 *out;
@@ -937,15 +974,16 @@ static void emit_one(void *c, const char *p, size_t plen,
 {
     emit_ctx *ctx = (emit_ctx *)c;
     buf tmp, conv;
+    int done;
 
     if (plen > 2 && p[0] == '-' && p[1] == '-') return;
 
     memset(&tmp, 0, sizeof(tmp));
-    if (!subst_vars(ctx->m, v, vlen, &tmp)) { free(tmp.p); return; }
-    mix_colors(&tmp);
-    if (!canon_colors(&tmp)) { free(tmp.p); return; }
-
     memset(&conv, 0, sizeof(conv));
+    if (!subst_vars(ctx->m, v, vlen, &tmp)) goto out;
+    mix_colors(&tmp);
+    if (!canon_colors(&tmp)) goto out;
+
     if (plen == 9 && strncmp(p, "font-size", 9) == 0 &&
         tmp.len > 1 && tmp.p[tmp.len - 1] == '%') {
         char px[64];
@@ -955,34 +993,25 @@ static void emit_one(void *c, const char *p, size_t plen,
     } else {
         convert_units(tmp.p ? tmp.p : "", tmp.len,
                       ctx->rem_px, ctx->em_px, &conv);
-        resolve_pixel_calcs(&conv);
+        if (!resolve_pixel_calcs(&conv)) goto out;
     }
     if ((plen >= 6 && strncmp(p, "border", 6) == 0) ||
         (plen >= 7 && strncmp(p, "outline", 7) == 0))
         line_width_keywords(&conv);
 
-    /* The engine ends a value at any ';', even one inside url(). */
-    if (plen >= ctx->token_max || conv.len >= ctx->token_max ||
-        (conv.p && memchr(conv.p, ';', conv.len))) {
-        free(tmp.p);
-        free(conv.p);
-        return;
+    if (!token_ok(p, plen, ctx->token_max) || !token_ok(conv.p, conv.len, ctx->token_max))
+        goto out;
+    done = expand_border(ctx->out, p, plen, conv.p ? conv.p : "", conv.len);
+    if (done >= 0) {
+        ctx->wrote |= done;
+    } else {
+        buf_add(ctx->out, p, plen);
+        buf_str(ctx->out, ": ");
+        buf_add(ctx->out, conv.p ? conv.p : "", conv.len);
+        buf_str(ctx->out, ";\n");
+        ctx->wrote = 1;
     }
-    {
-        int done = expand_border(ctx->out, p, plen, conv.p ? conv.p : "", conv.len);
-
-        if (done >= 0) {
-            ctx->wrote |= done;
-            free(tmp.p);
-            free(conv.p);
-            return;
-        }
-    }
-    buf_add(ctx->out, p, plen);
-    buf_str(ctx->out, ": ");
-    buf_add(ctx->out, conv.p ? conv.p : "", conv.len);
-    buf_str(ctx->out, ";\n");
-    ctx->wrote = 1;
+out:
     free(tmp.p);
     free(conv.p);
 }
@@ -1184,6 +1213,19 @@ static char *flatten(char *src, const char *theme, size_t token_max,
         }
         if (!changed) break;
     }
+    {
+        size_t k, kept = 0;
+
+        for (k = 0; k < m->n; k++) {
+            if (strstr(m->v[k].value, "var(")) {
+                free(m->v[k].name);
+                free(m->v[k].value);
+            } else {
+                m->v[kept++] = m->v[k];
+            }
+        }
+        m->n = kept;
+    }
 
     memset(&out, 0, sizeof(out));
     buf_str(&out, "/* Flattened by cssflat.c: custom properties resolved,\n"
@@ -1221,7 +1263,7 @@ static char *flatten(char *src, const char *theme, size_t token_max,
                         t = rw;
                         if (!tn) continue;
                     }
-                    if (tn >= token_max || selector_repeats(t, tn)) continue;
+                    if (!token_ok(t, tn, token_max) || selector_repeats(t, tn)) continue;
                     if (n_emitted) buf_str(&sel, ", ");
                     buf_add(&sel, t, tn);
                 }
@@ -1255,7 +1297,8 @@ static char *flatten(char *src, const char *theme, size_t token_max,
     return out.p;
 }
 
-#define IMPORT_DEPTH 8
+#define IMPORT_DEPTH  8
+#define IMPORT_BUDGET (4u << 20)
 
 /* `to` resolved against the folder of `from`, with "." and ".." folded away. */
 static char *import_path(const char *from, const char *to, size_t n)
@@ -1289,10 +1332,20 @@ static void (*g_seen)(const char *path);
 
 void reaktor_css_track(void (*seen)(const char *path)) { g_seen = seen; }
 
-static int load_sheet(const char *path, int depth, buf *all)
+static int in_chain(const char *const *chain, int depth, const char *path)
+{
+    int i;
+
+    for (i = 0; i <= depth; i++)
+        if (strcmp(chain[i], path) == 0) return 1;
+    return 0;
+}
+
+static int load_sheet(const char *path, int depth, const char **chain, buf *all)
 {
     char  *t;
 
+    chain[depth] = path;
     if (g_seen) g_seen(path);
     t = reaktor_asset_load(path, NULL);
     size_t i = 0, from = 0, n;
@@ -1330,15 +1383,16 @@ static int load_sheet(const char *path, int depth, buf *all)
 
         ok = buf_add(all, t + from, i - from);
         from = i = q_e < n ? q_e + 1 : n;
-        if (!ok || depth >= IMPORT_DEPTH || e == s) continue;
+        if (!ok || depth >= IMPORT_DEPTH || e == s || all->len > IMPORT_BUDGET) continue;
         if (!(to = import_path(path, t + s, e - s))) { ok = 0; continue; }
+        if (in_chain(chain, depth, to)) { free(to); continue; }
         trim(t, &q_s, &q_e);
         if (q_e > q_s) {
             ok = buf_str(all, "@media ") && buf_add(all, t + q_s, q_e - q_s) &&
-                 buf_str(all, " {\n") && load_sheet(to, depth + 1, all) &&
+                 buf_str(all, " {\n") && load_sheet(to, depth + 1, chain, all) &&
                  buf_str(all, "}\n");
         } else {
-            ok = load_sheet(to, depth + 1, all);
+            ok = load_sheet(to, depth + 1, chain, all);
         }
         free(to);
     }
@@ -1350,12 +1404,13 @@ static int load_sheet(const char *path, int depth, buf *all)
 char *reaktor_css_flatten(const char *const *paths, int count, const char *theme,
                           size_t token_max, reaktor_cssvars **out_vars)
 {
-    buf all;
-    int i;
+    const char *chain[IMPORT_DEPTH + 1];
+    buf         all;
+    int         i;
 
     memset(&all, 0, sizeof(all));
     for (i = 0; i < count; i++)
-        if (!load_sheet(paths[i], 0, &all)) {
+        if (!load_sheet(paths[i], 0, chain, &all)) {
             free(all.p);
             return NULL;
         }

@@ -175,7 +175,7 @@ struct App {
     int      ime_cursor;
     int      ime_valid;
 
-    SDL_AtomicInt file_ready, file_done;
+    SDL_AtomicInt file_ready, file_busy;
     char        **file_list;
     int           file_count;
     reaktor_file_dialog file_dialog;
@@ -392,6 +392,7 @@ void reaktor_input_start(void);
 int  reaktor_input_page_key(App *app, SDL_Event *event);
 #endif
 int  reaktor_app_alive(const App *a);
+int  reaktor_app_free(App *a);
 const char *reaktor_app_ident(void);
 void reaktor_timers_drop(App *app);
 int  reaktor_capturing(void);

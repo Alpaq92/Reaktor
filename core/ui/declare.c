@@ -435,8 +435,10 @@ decl_tip_at(const char *tip, struct nk_rect r, int cursor)
     if (!tip) return;
     reaktor_hot_follow(g_frame_app, r, cursor);
     if (nk_input_is_mouse_hovering_rect(in, r) &&
-        nk_input_is_mouse_hovering_rect(in, g_frame_ctx->current->layout->clip))
-        g_frame_app->tip = tip;
+        nk_input_is_mouse_hovering_rect(in, g_frame_ctx->current->layout->clip)) {
+        SDL_strlcpy(g_frame_app->tip_text, tip, sizeof g_frame_app->tip_text);
+        g_frame_app->tip = g_frame_app->tip_text;
+    }
 }
 
 void

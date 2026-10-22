@@ -59,13 +59,18 @@ unpark(int all)
     int i;
 
     for (i = g_parked_n - 1; i >= 0; i--)
-        if (all || SDL_GetAtomicInt(&g_parked[i]->file_done)) {
-            if (!all) {
-                SDL_free(g_parked[i]->file_list);
-                SDL_free(g_parked[i]);
-            }
+        if (all || reaktor_app_free(g_parked[i]))
             g_parked[i] = g_parked[--g_parked_n];
-        }
+}
+
+/* 0 while the picker's thread may still write into it. */
+int
+reaktor_app_free(App *a)
+{
+    if (SDL_GetAtomicInt(&a->file_busy)) return 0;
+    SDL_free(a->file_list);
+    SDL_free(a);
+    return 1;
 }
 
 int
@@ -94,8 +99,7 @@ teardown(App *a)
     a->win = NULL;
     a->ren = NULL;
     a->ctx = NULL;
-    if (a->file_pending && g_parked_n < WINDOW_MAX) g_parked[g_parked_n++] = a;
-    else if (!a->file_pending) SDL_free(a);
+    if (!reaktor_app_free(a) && g_parked_n < WINDOW_MAX) g_parked[g_parked_n++] = a;
 }
 
 static void

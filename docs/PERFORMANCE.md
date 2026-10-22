@@ -1,8 +1,10 @@
 # Performance
 
-**Every pixel is drawn by the CPU.** Nuklear turns the widgets into shapes and
-SDL's software rasterizer fills them in; no GPU is required anywhere, for the
-reasons in [the renderer](DOCUMENTATION.md#the-renderer).
+**By default, every pixel is drawn by the CPU.** Nuklear turns the widgets into
+shapes and SDL's software rasterizer fills them in; no GPU is required
+anywhere, for the reasons in [the renderer](DOCUMENTATION.md#the-renderer).
+`--renderer` hands the drawing to the GPU instead, through Direct3D, OpenGL or
+Metal; [Against the others](#against-the-others) measures both.
 
 **Nothing is drawn until something changes.** The app sleeps on the event
 queue and builds a frame only when the picture would differ. So **CPU is a
@@ -27,8 +29,9 @@ Multiplatform 667.4 MB. Steady-state CPU as a percent of one core: Reaktor
 Kotlin Multiplatform 33.5%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
-rotating at 60 fps in an 800×600 window, every arm on the same laptop, listed
-under **Windows, with a GPU** below. Each arm is its own app, built with its
+rotating at 60 fps in an 800×600 window, every arm on the same machine: a
+Lenovo laptop with a 6-core Ryzen 5 4600H, a GeForce RTX 2060 and a 1920×1080
+120 Hz display, on Windows 11 Pro. Each arm is its own app, built with its
 framework's toolchain; one script launches it and samples its whole process
 tree from outside. [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the
 projects and the runner. Reaktor appears once per `--renderer`. Shaft is not
@@ -189,8 +192,8 @@ GPU, `direct3d11` falls back to WARP and a frame goes from 4.7 ms to
 
 **No GPU**, and about **10 MB of RAM**. The default look is compiled in, so a
 program needs no files beside it until it uses other Ionicons, Simple.css, the
-catalogs or the Japanese font, found by walking up to the `.reaktor-root`
-marker. The web build packs those into its `.data` and needs an HTTP server,
+catalogs or the Japanese font, found under a `.reaktor-root` marker beside it
+or up to two folders above. The web build packs those into its `.data` and needs an HTTP server,
 since a `file://` page cannot fetch the `.wasm`.
 
 ## Where the numbers came from

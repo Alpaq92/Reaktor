@@ -229,7 +229,7 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Widget | Call | Answers 1 | Its own fields |
 | --- | --- | --- | --- |
 | Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys` (the shortcut readers announce; the `key` hook binds it, see [Keyboard](#keyboard)), `.on_press`, `.tooltip`, `.fit_content` (as large as its label and icon need; a `.box.w` is then the least it takes, so short labels line up and long ones grow); `.accent` with `.icon` draws both; `.paint` and `.paint_user` draw the inside as `reaktor_button_custom` does, with `.label` measured for `.fit_content` and read as the name unless `.name` is set |
-| Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press`, or `.url` to open in the browser |
+| Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press`, or `.url` to open in the browser: `http`, `https` or `mailto`, and the schemes `.schemes` lists, as `"file,ftp"` |
 | Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTER`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
 | Icon | `reaktor_icon` | — | `.name` (an Ionicon) and `.accent`, or `.src` (any image asset: SVG, PNG, JPEG), stretched to its box; `.tooltip` |
 | Swatch | `reaktor_swatch` | when pressed | `.fill`, `.on_press` |
@@ -895,7 +895,8 @@ in `core/` knows which application it is in.
 seven Ionicons the widgets draw (three chevrons, three discs and the toast's
 close cross), `reaktor.css` and Water.css's palettes and parts, copied byte for byte
 at configure time. `reaktor_asset_load` still tries the file under the
-`.reaktor-root` marker first, so an edited sheet shows without a rebuild.
+`.reaktor-root` marker first, so an edited sheet shows without a rebuild; the
+marker is looked for beside the program and at most two folders above it.
 Nothing is read from the working directory, and a path a user hands over is
 made absolute where it is taken. The rest of Ionicons, Simple.css and the
 catalogs are read from files; an icon that is not there is drawn as nothing,
@@ -980,7 +981,7 @@ by hand in headless Edge, as desktop, Android and iOS.
 `build-<arch>` when it is not the machine's own; ARM64 needs Visual Studio's
 ARM64 build tools.
 
-**Releases.** Pushing a `v*` tag runs `release.yml`: the four native
+**Releases.** Pushing a version tag such as `1.2.3` or `1.2.3-rc1` runs `release.yml`: the four native
 workflows again, with every job required, a web build, and a GitHub release
 of what they packed — one archive per system and architecture, the three
 WebAssembly programs, libreaktor for each ([In your own project](#in-your-own-project)),
@@ -1197,6 +1198,8 @@ Built by default and run from `build/`:
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
 | `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and Simple.css read through it |
+| `imagetest` | PNG and JPEG decode; other formats are not compiled in |
+| `basetest` | Which URL schemes a link opens, and UTF-8 cleaning |
 | `uitest` | The scripted UI test below, driving its own window: find by name and mark, click, type, a check box, a key hook |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
 | `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `print-pdf`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
@@ -1434,7 +1437,10 @@ has it:
 ./build/showcase --font-fallback C:/Windows/Fonts/segoeui.ttf --font-fallback C:/Windows/Fonts/Nirmala.ttc
 ```
 
-A collection is read at its first font. Without the module,
+Load fonts you trust, the application's own or the system's: stb_truetype
+and kb_text_shape both say they are not safe on a font file built to attack
+them, so a font a user hands over is a risk. A collection is read at its first
+font. Without the module,
 `reaktor_text_none` breaks after a space, or before the glyph that would not
 fit, keeping the glyph `nk_label_wrap` would lose. mojibake is built with only
 what is called, and kb_text_shape is one header compiled in `core/text/kb.c`;

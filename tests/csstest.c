@@ -26,7 +26,13 @@ static const char g_sheet[] =
     "a.y { border-top: 2px dotted #0d0e0f !important; }\n"
     "em { color: color-mix(in srgb, rgb(255 0 0 / 50%) 50%, red); "
     "background-color: color-mix(in srgb, hsl(120, 100%, 50%), black); "
-    "border-top-color: color-mix(in srgb, #ff000080, rgba(0, 0, 255, 1)); }\n";
+    "border-top-color: color-mix(in srgb, #ff000080, rgba(0, 0, 255, 1)); }\n"
+    ":root { --slash: /; }\n"
+    "dl { background: url(https://x/a.png); color: #111111; }\n"
+    "dt { b: x//y; color: #121212; }\n"
+    "dd { b: {}x; color: #131313; }\n"
+    "dfn { b: var(--slash)*x; color: #141414; }\n"
+    "a[href^=\"//\"], kbd { color: #151515; }\n";
 
 static const char g_media[] =
     "@media (prefers-color-scheme: dark) { h1 { color: #000001; } }\n"
@@ -38,12 +44,96 @@ static const char g_media[] =
     "@media (prefers-contrast: more) and (max-width: 720px) { ol { color: #000007; } }\n"
     "@media print { ul { color: #000008; } }\n";
 
+static char *
+repeat(char *s, const char *piece, int times)
+{
+    size_t n = strlen(s), k = strlen(piece);
+    char  *r = realloc(s, n + k * (size_t)times + 1);
+    int    i;
+
+    if (!r) return s;
+    for (i = 0; i < times; i++) memcpy(r + n + k * (size_t)i, piece, k);
+    r[n + k * (size_t)times] = 0;
+    return r;
+}
+
+static char *
+append(char *s, const char *piece)
+{
+    return repeat(s, piece, 1);
+}
+
+static char *
+generated(const char *name)
+{
+    char *s = calloc(1, 1);
+    char  piece[64];
+    int   i;
+
+    if (!s) return NULL;
+    if (strcmp(name, "calc.css") == 0) {
+        s = append(s, "dir { width: calc(");
+        s = repeat(s, "(", 40);
+        s = append(s, "1px");
+        s = repeat(s, ")", 40);
+        s = append(s, "); color: #161616; }\n");
+    } else if (strcmp(name, "self.css") == 0) {
+        s = repeat(s, "@import \"self.css\";\n", 20);
+        s = append(s, "kbd { color: #171717; }\n");
+    } else if (strncmp(name, "fan", 3) == 0 && name[3] >= '0' && name[3] <= '8') {
+        if (name[3] < '8') {
+            snprintf(piece, sizeof(piece), "@import \"fan%c.css\";\n", name[3] + 1);
+            s = repeat(s, piece, 20);
+        }
+        s = append(s, "samp { color: #181818; }\n");
+    } else if (strcmp(name, "nest.css") == 0) {
+        s = append(s, "var { color: ");
+        s = repeat(s, "var(--u, ", 1000);
+        s = append(s, "red");
+        s = repeat(s, ")", 1000);
+        s = append(s, "; background-color: var(--u, var(--v, #191919)); }\n");
+    } else if (strcmp(name, "laughs.css") == 0) {
+        s = append(s, ":root { --a0: xxxxxxxxxx;");
+        for (i = 1; i < 10; i++) {
+            snprintf(piece, sizeof(piece), " --a%d:", i);
+            s = append(s, piece);
+            snprintf(piece, sizeof(piece), " var(--a%d)", i - 1);
+            s = repeat(s, piece, 10);
+            s = append(s, ";");
+        }
+        s = append(s, " }\nabbr { color: var(--a9); background-color: #1a1a1a; }\n");
+    } else {
+        free(s);
+        return NULL;
+    }
+    return s;
+}
+
+static char *
+flat1(const char *name)
+{
+    return reaktor_css_flatten(&name, 1, "light", 511, NULL);
+}
+
+static int
+count(const char *s, const char *what)
+{
+    int n = 0;
+
+    while ((s = strstr(s, what)) != NULL) { n++; s++; }
+    return n;
+}
+
 char *
 reaktor_asset_load(const char *name, size_t *len)
 {
-    char *out = NULL;
+    char *out = generated(name);
     long  n = 0;
 
+    if (out) {
+        if (len) *len = strlen(out);
+        return out;
+    }
     if (strcmp(name, "test.css") == 0 || strcmp(name, "media.css") == 0) {
         const char *s = name[0] == 't' ? g_sheet : g_media;
 
@@ -51,9 +141,11 @@ reaktor_asset_load(const char *name, size_t *len)
         out = malloc((size_t)n + 1);
         if (out) memcpy(out, s, (size_t)n + 1);
     } else {
-        FILE *f = fopen(name, "rb");
+        char  path[1024];
+        FILE *f;
 
-        if (!f) return NULL;
+        snprintf(path, sizeof path, "%s%s", CSSTEST_SOURCE, name);
+        if (!(f = fopen(path, "rb"))) return NULL;
         fseek(f, 0, SEEK_END);
         n = ftell(f);
         fseek(f, 0, SEEK_SET);
@@ -113,6 +205,13 @@ main(void)
         ok("  and brackets", strstr(out, "margin: 8px;") != NULL);
         ok("calc() with a percentage is left", strstr(out, "width: calc(100% - 2 * 8px);") != NULL);
         ok("a value with a ';' is dropped", !strstr(out, "base64") && strstr(out, "#010203"));
+        ok("a value with '//', '/*' or '}' is dropped",
+           strstr(out, "dl {") && !strstr(strstr(out, "dl {"), "/*") &&
+           !strstr(out, "//") && !strstr(out, "{}") &&
+           strstr(out, "#111111") && strstr(out, "#121212") &&
+           strstr(out, "#131313") && strstr(out, "#141414"));
+        ok("a selector with '//' is dropped, the rest of its list kept",
+           strstr(out, "kbd {") && strstr(out, "#151515"));
         ok("a value past the token is dropped", !strstr(out, "longer") && strstr(out, "#040506"));
         ok("a selector past the token is dropped", !strstr(out, "a-selector") && strstr(out, "u {"));
         ok("border keyword widths become lengths",
@@ -160,6 +259,26 @@ main(void)
         ok("  and no compound in it holds two :not()", out != NULL && !not_twice(out));
         free(out);
     }
+
+    out = flat1("calc.css");
+    ok("calc() nested past its depth is dropped, the rest of its rule kept",
+       out && !strstr(out, "width") && strstr(out, "#161616"));
+    free(out);
+    out = flat1("self.css");
+    ok("a sheet that imports itself is read once", out && count(out, "#171717") == 1);
+    free(out);
+    out = flat1("fan0.css");
+    ok("imports that fan out stop at the budget", out && strlen(out) < (16u << 20));
+    free(out);
+    out = flat1("nest.css");
+    ok("var() fallbacks nested past the limit are dropped",
+       out && !strstr(out, "red") && strstr(out, "background-color: #191919"));
+    free(out);
+    out = flat1("laughs.css");
+    ok("var() that would grow past the limit is dropped",
+       out && strlen(out) < (1u << 20) && !strstr(out, "var(") &&
+       strstr(out, "#1a1a1a"));
+    free(out);
 
     return test_done("css");
 }

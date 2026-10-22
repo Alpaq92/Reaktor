@@ -350,7 +350,10 @@ field_room(const reaktor_field_spec *s, int *cap)
         int   room = NK_MAX(need, *s->heap_cap * 2);
         char *more = (char *)SDL_realloc(*s->heap, (size_t)room);
 
-        if (!more) return *s->heap;
+        if (!more) {
+            *cap = *s->heap_cap;
+            return *s->heap;
+        }
         if (!*s->heap) more[0] = '\0';
         *s->heap     = more;
         *s->heap_cap = room;
@@ -464,6 +467,8 @@ reaktor_link(const reaktor_link_spec *s)
 
     if (reaktor_focus_activated(g_frame_app, id)) hit = 1;
     if (hit && s->on_press.fn) s->on_press.fn(s->on_press.user);
+    else if (hit && s->url && !reaktor_url_allowed(s->url, s->schemes))
+        SDL_Log("not opening %s: its scheme is not one this link allows", s->url);
     else if (hit && s->url && !SDL_OpenURL(s->url))
         SDL_Log("could not open %s: %s", s->url, SDL_GetError());
     return hit;

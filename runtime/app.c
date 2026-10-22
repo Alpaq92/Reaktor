@@ -1765,8 +1765,7 @@ app_quit(void *appstate, SDL_AppResult result)
     if (app->win) SDL_DestroyWindow(app->win);
     reaktor_anim_destroy(app->anim);
     app->anim = NULL;
-    /* The picker's thread still writes into it. */
-    if (!app->file_pending) SDL_free(app);
+    reaktor_app_free(app);
     g_app = NULL;
     reaktor_signal_unwatch();
     reaktor_process_end();

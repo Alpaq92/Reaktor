@@ -3,6 +3,8 @@
 #include <string.h>
 #include <SDL3/SDL.h>
 
+#include "util.h"
+
 typedef struct snap_node {
     unsigned      id, parent;
     unsigned char role, level;
@@ -204,7 +206,7 @@ copy_text(const reaktor_snap *s, int at, char **buf, size_t *left)
 
     if (at < 0 || *left < 2) return NULL;
     /* libdbus aborts on invalid UTF-8. */
-    n = SDL_utf8strlcpy(*buf, s->str + at, *left);
+    n = reaktor_utf8_clean(*buf, s->str + at, *left);
     {
         const char *out = *buf;
         *buf  += n + 1;

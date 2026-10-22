@@ -126,7 +126,8 @@ endif()
 file(GLOB PLUTOVG_SRC "${TP}/plutosvg/plutovg/source/*.c")
 add_library(plutovg STATIC ${PLUTOVG_SRC})
 target_include_directories(plutovg PUBLIC "${TP}/plutosvg/plutovg/include")
-target_compile_definitions(plutovg PUBLIC PLUTOVG_BUILD_STATIC)
+target_compile_definitions(plutovg PUBLIC PLUTOVG_BUILD_STATIC
+                                   PRIVATE STBI_ONLY_PNG STBI_ONLY_JPEG)
 
 add_library(plutosvg STATIC "${TP}/plutosvg/source/plutosvg.c")
 target_include_directories(plutosvg PUBLIC "${TP}/plutosvg/source")
@@ -200,6 +201,8 @@ target_include_directories(reaktor_headers INTERFACE include "${TP}/nuklear" "${
 
 add_library(reaktor_core STATIC
     core/base/util.c
+    core/base/utf8.c
+    core/base/url.c
     core/render/nk_impl.c
     core/render/svg.c
     "${_builtins}")
@@ -225,10 +228,10 @@ endif()
 
 if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(a11ytest tests/a11ytest.c core/a11y/a11y.c
-        platform/a11y/a11y_snapshot.c)
+        platform/a11y/a11y_snapshot.c core/base/utf8.c)
     target_link_libraries(a11ytest PRIVATE reaktor_headers SDL3::SDL3-static)
     target_include_directories(a11ytest PRIVATE core/a11y core/render
-        platform/a11y)
+        platform/a11y core/base)
     set_target_properties(a11ytest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
@@ -260,8 +263,20 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(csstest tests/csstest.c core/css/cssflat.c)
     target_include_directories(csstest PRIVATE core/css core/base)
     target_link_libraries(csstest PRIVATE plutovg)
-    target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS
+                               CSSTEST_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/")
     set_target_properties(csstest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+    add_executable(basetest tests/basetest.c core/base/url.c core/base/utf8.c)
+    target_include_directories(basetest PRIVATE core/base)
+    target_link_libraries(basetest PRIVATE SDL3::SDL3-static)
+    set_target_properties(basetest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+    add_executable(imagetest tests/imagetest.c)
+    target_link_libraries(imagetest PRIVATE plutovg)
+    set_target_properties(imagetest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
@@ -806,6 +821,9 @@ if(EMSCRIPTEN)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/keylog.js"
             "${CMAKE_BINARY_DIR}/keylog.js"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.js"
+            "${CMAKE_BINARY_DIR}/shell.js"
         COMMENT "Copying page assets"
         VERBATIM)
 endif()

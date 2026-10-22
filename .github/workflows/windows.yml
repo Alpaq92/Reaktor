@@ -167,7 +167,7 @@ jobs:
         shell: bash
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="reaktor-${version#v}-windows-${{ matrix.arch }}"
+          name="reaktor-${version}-windows-${{ matrix.arch }}"
           sh tools/package.sh "${{ matrix.out }}" "dist/$name" .exe
           echo "name=$name" >>"$GITHUB_OUTPUT"
 
@@ -222,7 +222,7 @@ jobs:
         id: libcheck
         if: ${{ !cancelled() && steps.lib.outcome == 'success' }}
         run: |
-          $version = '${{ inputs.version || 'dev' }}' -replace '^v', ''
+          $version = '${{ inputs.version || 'dev' }}'
           $name = "libreaktor-$version-windows-${{ matrix.arch }}"
           cmake --install build-lib --prefix "dist/$name" --component libreaktor
           if ($LASTEXITCODE -ne 0) { throw "install failed" }

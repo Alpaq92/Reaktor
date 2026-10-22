@@ -23,8 +23,8 @@ static int   g_toast_n, g_toast_next = 1, g_toast_fresh;
 static Uint32 SDLCALL
 expire(void *userdata, SDL_TimerID id, Uint32 interval)
 {
-    (void)id; (void)interval;
-    reaktor_wake((App *)userdata);
+    (void)userdata; (void)id; (void)interval;
+    reaktor_wake(NULL);
     return 0;
 }
 
@@ -67,7 +67,7 @@ reaktor_toast(App *app, const reaktor_toast_spec *spec)
     if (ms <= 0 && spec->no_close && !spec->action) ms = 5000;
     if (ms > 0) {
         t->until = SDL_GetTicks() + (Uint64)ms;
-        t->timer = SDL_AddTimer((Uint32)ms, expire, app);
+        t->timer = SDL_AddTimer((Uint32)ms, expire, NULL);
     }
     g_toast_fresh = 1;
     app->dirty = 1;

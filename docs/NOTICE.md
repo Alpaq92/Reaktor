@@ -13,7 +13,7 @@ from the project's own license file at the pinned revision.
 | [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parse, match, cascade) and `yutil` | MIT |
 | [Onlay](https://github.com/Alpaq92/Onlay) | The rectangles — a fork of [randrew/layout](https://github.com/randrew/layout) | MIT |
 | [Water.css](https://github.com/kognise/water.css) | The stylesheet the look comes from, compiled in | MIT |
-| [Simple.css](https://github.com/kevquirk/simple.css) | The sheet the Styling page swaps in | MIT |
+| [Simple.css](https://github.com/kevquirk/simple.css) | Alternative style used in the demo app | MIT |
 | [Ionicons](https://github.com/ionic-team/ionicons) | Every icon, as SVG; the seven the widgets draw are compiled in | MIT |
 | [plutosvg](https://github.com/sammycage/plutosvg) | Rasterizing the SVGs | MIT |
 | [plutovg](https://github.com/sammycage/plutovg) | plutosvg's canvas (nested submodule) | MIT |
@@ -33,11 +33,6 @@ with a recursive checkout and is not built. kb_text_shape is one header, compile
 `core/text/kb.c`; it shapes, and the Text module rasterizes with Nuklear's
 stb_truetype.
 
-[hamza](https://github.com/saidwho12/hamza) was the first choice of shaper
-and is not used: its sources still carry the LGPL headers its MIT license file
-replaced, its tables stop short of the Indic scripts, and MSVC cannot compile
-it (an empty struct, GNU range designators).
-
 ## The one dependency that is not a submodule
 
 `libdbus`, on Linux and the BSDs, when present: the AT-SPI bridge speaks
@@ -48,10 +43,10 @@ as on a desktop with no accessibility bus.
 | --- | --- |
 | [libdbus](https://gitlab.freedesktop.org/dbus/dbus) | **AFL-2.1** or GPL-2.0-or-later — taken under AFL-2.1 |
 
-AFL-2.1 is a permissive license with an attribution requirement, which this
-table meets, and a patent-termination clause. It is not GPL-compatible, which
-matters to a GPL downstream, not to an MIT project. The alternative was ATK:
-LGPL, and being retired in favor of speaking AT-SPI directly.
+AFL-2.1 is permissive, with an attribution requirement this table meets and a
+patent-termination clause. It is not GPL-compatible, which matters to GPL
+downstreams, not to an MIT project. The alternative was ATK: LGPL, and being
+retired in favor of speaking AT-SPI directly.
 
 ## The one vendored source file
 
@@ -112,9 +107,9 @@ attribution, and the page prints it under the story.
 
 ## The mark
 
-`assets/icons/` is original work under this project's MIT license, as SVG, PNG
-and `.ico`. Its colors are USWDS system tokens, public domain as a U.S.
-Government work.
+`assets/icons/`, the Reaktor mark, is original work under this project's MIT
+license, as SVG, PNG and `.ico`. Its colors are USWDS system tokens, public
+domain as a U.S. Government work.
 
 ## Benchmarks
 
@@ -140,6 +135,7 @@ and `close-outline` (MIT); Aileron Regular and Bold (CC0); and the mark and
 `assets/css/reaktor.css` (MIT). Their licenses are in `licenses/` too.
 
 The rest of Ionicons, Simple.css, the Japanese font and the catalogs are not
-embedded (the catalogs are with `-DREAKTOR_LOCALE_EMBED=ON`); a build that uses
-them ships them beside the binary, under the `.reaktor-root` marker. The
-WebAssembly build packs the ones it uses into its `.data` bundle.
+embedded (the catalogs are with `-DREAKTOR_LOCALE_EMBED=ON`); a build that
+uses them ships them beside the binary, under the `.reaktor-root` marker,
+which `tools/package.sh` writes for releases. The WebAssembly build packs the
+ones it uses into its `.data` bundle.

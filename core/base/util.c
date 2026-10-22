@@ -74,24 +74,16 @@ static int reaktor_root(char *out, size_t cap)
         const char *base = SDL_GetBasePath();
         char        dir[REAKTOR_PATH_CAP], probe[REAKTOR_PATH_CAP];
         size_t      n;
-        int         i;
+        int         i, up;
 
-        if (base) {
-            if (!copy_out(dir, sizeof(dir), base)) return 0;
-        } else {
-            char *cwd = SDL_GetCurrentDirectory();
-            int   ok = cwd && copy_out(dir, sizeof(dir), cwd);
-
-            SDL_free(cwd);
-            if (!ok) return 0;
-        }
+        if (!base || !copy_out(dir, sizeof(dir), base)) return 0;
         for (i = 0; dir[i]; i++) if (dir[i] == '\\') dir[i] = '/';
         n = strlen(dir);
         while (n > 1 && dir[n - 1] == '/') dir[--n] = '\0';
         if (n > 19 && strcmp(dir + n - 19, "/Contents/Resources") == 0)
             return copy_out(out, cap, dir);
 
-        for (;;) {
+        for (up = 0; up <= 2; up++) {
             char *slash;
 
             if (snprintf(probe, sizeof(probe), "%s/.reaktor-root", dir) < 0)
@@ -107,6 +99,7 @@ static int reaktor_root(char *out, size_t cap)
             if (!slash) return 0;
             *slash = '\0';
         }
+        return 0;
     }
 #endif
 }
