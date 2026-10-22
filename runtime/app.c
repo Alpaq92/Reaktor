@@ -950,6 +950,7 @@ app_init(void **appstate, int argc, char *argv[])
             return SDL_APP_FAILURE;
         }
     }
+    reaktor_rss_mark(REAKTOR_RSS_START);
 
     take_pending(app);
     load_theme(app);

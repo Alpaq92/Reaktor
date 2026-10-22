@@ -89,6 +89,8 @@ function Invoke-Arm($spec, [string[]]$argv) {
     $err = [IO.Path]::GetTempFileName()
 
     $proc = Start-Process -FilePath $spec.exe -ArgumentList ($spec.args + $argv) -WorkingDirectory $spec.dir -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+    # Windows PowerShell 5.1 reports no exit code unless the handle is held.
+    $null = $proc.Handle
 
     $cpuMs = @{}
     $peakPrivate = 0L
