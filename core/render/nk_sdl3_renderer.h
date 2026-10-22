@@ -266,6 +266,22 @@ nk_sdl_geometry(SDL_Renderer *ren, SDL_Texture *tex, const void *vertices,
                           vs, v->uv, vs, n, ix, count, (int)sizeof(*ix));
 }
 
+/* REAKTOR: SDL's software renderer blends each triangle through a surface of
+ * its own, so untextured triangles that are all opaque are drawn unblended. */
+NK_INTERN void
+nk_sdl_geometry_sw(SDL_Renderer *ren, SDL_Texture *tex, const void *vertices,
+                   int n, const nk_draw_index *ix, int count)
+{
+    const struct nk_sdl_vertex *v = (const struct nk_sdl_vertex *)vertices;
+    int k, opaque = !tex;
+
+    for (k = 0; opaque && k < count; k++)
+        if (v[ix[k]].col[3] < 1.0f) opaque = 0;
+    if (opaque) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    nk_sdl_geometry(ren, tex, vertices, n, ix, count);
+    if (opaque) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+}
+
 /* REAKTOR: a rectangle among the triangles, on whole device pixels. */
 struct nk_sdl_rect {
     SDL_FRect    d, src;
@@ -496,15 +512,16 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                         }
                         /* What came before it in the list is drawn before it. */
                         if (k > from)
-                            nk_sdl_geometry(sdl->renderer, tex, vertices, n,
-                                            offset + from, (int)(k - from));
+                            nk_sdl_geometry_sw(sdl->renderer, tex, vertices, n,
+                                               offset + from, (int)(k - from));
                         nk_sdl_quad_draw(sdl->renderer, tex, &q);
                         k += 6;
                         from = k;
                     }
                     if (cmd->elem_count > from)
-                        nk_sdl_geometry(sdl->renderer, tex, vertices, n,
-                                        offset + from, (int)(cmd->elem_count - from));
+                        nk_sdl_geometry_sw(sdl->renderer, tex, vertices, n,
+                                           offset + from,
+                                           (int)(cmd->elem_count - from));
                     offset += cmd->elem_count;
                     continue;
                 }
