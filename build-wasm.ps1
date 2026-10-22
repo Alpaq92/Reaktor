@@ -14,7 +14,8 @@ if (-not (Test-Path $toolchain)) {
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found - install Visual Studio Build Tools" }
-$vsPath = & $vswhere -latest -products * -property installationPath
+$vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.CMake.Project -property installationPath
+if (-not $vsPath) { throw "no Visual Studio with the C++ CMake tools - add them in the Visual Studio Installer" }
 $cmake  = Join-Path $vsPath "Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 $ninja  = Join-Path $vsPath "Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 foreach ($t in @($cmake, $ninja)) {
