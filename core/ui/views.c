@@ -551,7 +551,7 @@ reaktor_splitter(const reaktor_splitter_spec *s)
 
 #define MENU_DEPTH 4
 #define MENU_COLS  (MENU_DEPTH + 1)
-#define MENU_TITLES 16
+#define MENU_TITLES 32
 #define MENU_ITEMS  32
 
 /* The windows that draw a column run after the frame that declared it: they draw a copy. */

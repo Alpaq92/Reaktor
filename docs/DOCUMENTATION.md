@@ -373,7 +373,7 @@ if (reaktor_sidebar(&(reaktor_sidebar_spec){
 
 ### Menu bar
 
-`reaktor_menubar` takes `.menus` and `.count`, of which it shows the first 16;
+`reaktor_menubar` takes `.menus` and `.count`, of which it shows the first 32;
 each `reaktor_menu` is a `.label` and its `.items`. An entry has a `.label`, and optionally an `.icon`
 (an Ionicon), `.keys` (the shortcut, drawn at the right and announced; the
 `key` hook still handles it), `.checked` (toggled on choice, drawn as a dot),
