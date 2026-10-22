@@ -33,11 +33,6 @@ with a recursive checkout and is not built. kb_text_shape is one header, compile
 `core/text/kb.c`; it shapes, and the Text module rasterizes with Nuklear's
 stb_truetype.
 
-[hamza](https://github.com/saidwho12/hamza) was the first choice of shaper
-and is not used: its sources still carry the LGPL headers its MIT license file
-replaced, its tables stop short of the Indic scripts, and MSVC cannot compile
-it (an empty struct, GNU range designators).
-
 ## The one dependency that is not a submodule
 
 `libdbus`, on Linux and the BSDs, when present: the AT-SPI bridge speaks
@@ -48,10 +43,10 @@ as on a desktop with no accessibility bus.
 | --- | --- |
 | [libdbus](https://gitlab.freedesktop.org/dbus/dbus) | **AFL-2.1** or GPL-2.0-or-later — taken under AFL-2.1 |
 
-AFL-2.1 is a permissive license with an attribution requirement, which this
-table meets, and a patent-termination clause. It is not GPL-compatible, which
-matters to a GPL downstream, not to an MIT project. The alternative was ATK:
-LGPL, and being retired in favor of speaking AT-SPI directly.
+AFL-2.1 is permissive, with an attribution requirement this table meets and a
+patent-termination clause. It is not GPL-compatible, which matters to GPL
+downstreams, not to an MIT project. The alternative was ATK: LGPL, and being
+retired in favor of speaking AT-SPI directly.
 
 ## The one vendored source file
 
