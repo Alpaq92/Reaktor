@@ -980,7 +980,7 @@ by hand in headless Edge, as desktop, Android and iOS.
 `build-<arch>` when it is not the machine's own; ARM64 needs Visual Studio's
 ARM64 build tools.
 
-**Releases.** Pushing a `v*` tag runs `release.yml`: the four native
+**Releases.** Pushing a version tag such as `1.2.3` or `1.2.3-rc1` runs `release.yml`: the four native
 workflows again, with every job required, a web build, and a GitHub release
 of what they packed — one archive per system and architecture, the three
 WebAssembly programs, libreaktor for each ([In your own project](#in-your-own-project)),

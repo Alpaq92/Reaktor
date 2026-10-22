@@ -82,7 +82,7 @@ jobs:
       - name: Package
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="reaktor-${version#v}-web"
+          name="reaktor-${version}-web"
           mkdir -p "dist/$name/licenses"
           for p in showcase notepad simple; do
             cp "build-wasm/$p.html" "build-wasm/$p.js" "build-wasm/$p.wasm" \
@@ -108,7 +108,7 @@ jobs:
       - name: Check and pack libreaktor
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version#v}-wasm"
+          name="libreaktor-${version}-wasm"
           cmake --build build-wasm --target libreaktor
           cmake --install build-wasm --prefix "dist/$name" --component libreaktor
           cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \

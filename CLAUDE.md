@@ -10,7 +10,7 @@ script finds MSVC's. `./build.ps1 <target>` builds one. Targets: `showcase`,
 `arm64`) builds that architecture into `build-<arch>`; ARM64 needs Visual
 Studio's ARM64 tools, which this machine lacks, so CI is its only check.
 `tools/package.sh <build> <folder> [.exe]` packs what a release ships; a
-`v*` tag publishes one through `release.yml`.
+version tag such as `1.2.3` publishes one through `release.yml`.
 
 CMake options pass straight through: `./build.ps1 -DREAKTOR_A11Y=OFF`,
 `./build.sh -- -DREAKTOR_A11Y=OFF`. The cache keeps an option, so a later build

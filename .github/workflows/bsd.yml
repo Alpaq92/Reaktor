@@ -182,7 +182,7 @@ jobs:
             echo "the program carries the sysroot's path"; exit 1
           fi
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version#v}-${{ matrix.os }}-arm64"
+          name="libreaktor-${version}-${{ matrix.os }}-arm64"
           cmake --install build-arm64 --prefix "dist/$name" --component libreaktor </dev/null
           if grep -rq "$sysroot" "dist/$name/lib/cmake" "dist/$name/lib/pkgconfig"; then
             echo "the package carries the sysroot's path"; exit 1
@@ -288,7 +288,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          sh tools/ci/check-package.sh -w "dbus-run-session --" build "reaktor-${version#v}-${{ matrix.os }}-${{ matrix.arch }}"
+          sh tools/ci/check-package.sh -w "dbus-run-session --" build "reaktor-${version}-${{ matrix.os }}-${{ matrix.arch }}"
 
       - name: Check and pack libreaktor
         id: libcheck
@@ -297,7 +297,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          sh tools/ci/check-libreaktor.sh -w "dbus-run-session --" build "libreaktor-${version#v}-${{ matrix.os }}-${{ matrix.arch }}"
+          sh tools/ci/check-libreaktor.sh -w "dbus-run-session --" build "libreaktor-${version}-${{ matrix.os }}-${{ matrix.arch }}"
 
       - name: Check the libreaktor system package
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
@@ -482,7 +482,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          sh tools/ci/check-package.sh -w "dbus-run-session --" build-arm64 "reaktor-${version#v}-${{ matrix.os }}-arm64"
+          sh tools/ci/check-package.sh -w "dbus-run-session --" build-arm64 "reaktor-${version}-${{ matrix.os }}-arm64"
 
       - name: Check and pack libreaktor
         id: libcheck
@@ -491,7 +491,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-${version#v}-${{ matrix.os }}-arm64"
+          sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-${version}-${{ matrix.os }}-arm64"
 
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}

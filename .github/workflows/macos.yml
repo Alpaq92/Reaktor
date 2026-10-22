@@ -97,7 +97,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="reaktor-${version#v}-macos-${{ matrix.arch }}"
+          name="reaktor-${version}-macos-${{ matrix.arch }}"
           sh tools/package.sh build "dist/$name"
           for p in showcase notepad simple bench; do
             codesign --force --sign - "dist/$name/$p"
@@ -137,7 +137,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version#v}-macos-${{ matrix.arch }}"
+          name="libreaktor-${version}-macos-${{ matrix.arch }}"
           cmake --build build --target libreaktor </dev/null
           cmake --install build --prefix "dist/$name" --component libreaktor </dev/null
           cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
