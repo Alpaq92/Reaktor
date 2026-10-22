@@ -455,7 +455,7 @@ A container's fields, and a widget's `.box`:
 | `.ml .mt .mr .mb` | Margins |
 | `.flags` | `REAKTOR_LAY_FILL_X`, `_FILL_Y`, `_WRAP`, `_CENTER_X`, `_CENTER_Y`, `_PACK_CENTER`, `_PACK_END`, `_PACK_SPREAD` |
 | `.name` | How a container is found again; a widget uses its spec's `.name` |
-| `.mark` | A widget's handle for a [scripted test](#testing-an-application): `"#mark"` finds it, no reader hears it, and the dump shows it as `#mark` |
+| `.mark` | A widget's handle for a [scripted test](#testing-an-application): `"#mark"` finds it, and no reader hears it. Marks are kept apart from the tree, in a table made only once a widget sets one |
 
 So `.w` alone is fixed, `.w` with `FILL_X` a minimum that grows, and `FILL_X`
 with `.weight` a fraction. The outermost container is as wide as the panel it

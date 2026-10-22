@@ -22,10 +22,44 @@ static struct nk_rect     g_boxrect[REAKTOR_LAY_DEPTH + 1];
 static unsigned char      g_boxok[REAKTOR_LAY_DEPTH + 1];
 static unsigned           g_boxid[REAKTOR_LAY_DEPTH + 1];
 
+/* Marks, for tests: kept apart from the tree, and allocated only once a widget
+   sets one, so an application that sets none pays nothing. The main window's
+   last frame is what a test reads. */
+#define MARK_MAX 64
+
+typedef struct decl_mark {
+    unsigned id;
+    char     mark[32];
+} decl_mark;
+
+static decl_mark *g_marks;
+static int        g_mark_n;
+
+static void
+mark_note(unsigned id, const char *mark)
+{
+    if (g_frame_app->secondary || g_mark_n >= MARK_MAX) return;
+    if (!g_marks && !(g_marks = (decl_mark *)SDL_malloc(MARK_MAX * sizeof *g_marks))) return;
+    g_marks[g_mark_n].id = id;
+    SDL_strlcpy(g_marks[g_mark_n].mark, mark, sizeof g_marks[g_mark_n].mark);
+    g_mark_n++;
+}
+
+unsigned
+reaktor_mark_id(const char *mark)
+{
+    int i;
+
+    for (i = 0; i < g_mark_n; i++)
+        if (SDL_strcmp(g_marks[i].mark, mark) == 0) return g_marks[i].id;
+    return 0;
+}
+
 void
 reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area)
 {
     g_frame_app   = app;
+    if (!app->secondary) g_mark_n = 0;
     g_frame_ctx   = ctx;
     g_depth     = 0;
     g_space     = 0;
@@ -195,7 +229,7 @@ decl_emit(unsigned id, const char *keys, const reaktor_box *b)
 
     reaktor_layout_leaf(&g_frame_app->lay, id, b);
     if (keys) reaktor_note_keys(g_frame_app, id, keys);
-    if (b && b->mark) reaktor_a11y_set_mark(&g_frame_app->a11y, id, b->mark);
+    if (b && b->mark) mark_note(id, b->mark);
 
     if (!g_space) { g_frame_unsettled++; return 0; }
     if (!reaktor_layout_rect(&g_frame_app->lay, id, &r)) { g_frame_unsettled++; return 0; }

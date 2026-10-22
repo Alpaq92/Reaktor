@@ -51,7 +51,7 @@ wait_main(reaktor_test *t)
 static int
 matches(const reaktor_a11y_node *n, const char *target)
 {
-    if (target[0] == '#') return n->mark && SDL_strcmp(n->mark, target + 1) == 0;
+    if (target[0] == '#') return n->id && n->id == reaktor_mark_id(target + 1);
     return n->name && SDL_strcmp(n->name, target) == 0;
 }
 

@@ -13,6 +13,7 @@ void reaktor_frame_begin(App *app, struct nk_context *ctx, struct nk_rect area);
 void reaktor_frame_end(void);
 
 int reaktor_frame_settled(const App *app);
+unsigned reaktor_mark_id(const char *mark);
 
 extern App               *g_frame_app;
 extern struct nk_context *g_frame_ctx;

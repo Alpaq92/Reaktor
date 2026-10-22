@@ -130,7 +130,6 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
     n->name   = intern(a, name, nh);
     n->value  = intern(a, value, hash_str(REAKTOR_FNV, value));
     n->keys   = NULL;
-    n->mark   = NULL;
     n->bounds = bounds;
     n->num = n->lo = n->hi = n->step = 0.0f;
     return id;
@@ -169,15 +168,6 @@ reaktor_a11y_set_keys(reaktor_a11y *a, unsigned id, const char *keys)
     reaktor_a11y_node *n = node_of(a, id);
 
     if (n) n->keys = intern_str(a, keys);
-}
-
-/* A name for tests to find a node by; no reader hears it. */
-void
-reaktor_a11y_set_mark(reaktor_a11y *a, unsigned id, const char *mark)
-{
-    reaktor_a11y_node *n = node_of(a, id);
-
-    if (n) n->mark = intern_str(a, mark);
 }
 
 void
@@ -386,7 +376,6 @@ reaktor_a11y_dump(const reaktor_a11y *a, FILE *out)
         if (t[i].name)  fprintf(out, " \"%s\"", t[i].name);
         if (t[i].value) fprintf(out, " = \"%s\"", t[i].value);
         if (t[i].keys)  fprintf(out, " keys=\"%s\"", t[i].keys);
-        if (t[i].mark)  fprintf(out, " #%s", t[i].mark);
         if (st[0])      fprintf(out, " [%s]", st + 1);
         fprintf(out, " %d,%d %dx%d\n",
                 (int)t[i].bounds.x, (int)t[i].bounds.y,

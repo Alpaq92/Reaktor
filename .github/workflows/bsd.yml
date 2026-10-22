@@ -54,8 +54,8 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
-          restore-keys: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
+          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
 
       # ninja rebuilds by mtime, and a checkout dates every file now. Date them
       # before the cached objects instead, and only what changed since the
@@ -200,8 +200,11 @@ jobs:
         shell: cpa.sh {0} --sync-files vm-to-runner
         run: ':'
 
+      # Only when every build in the job finished: a cross build that stopped
+      # halfway leaves objects from before the change, and a newer commit here
+      # would date the sources they need rebuilt as unchanged.
       - name: Note which commit the cached build is from
-        if: ${{ always() && steps.build.outcome == 'success' }}
+        if: ${{ always() && steps.build.outcome == 'success' && steps.cross.outcome != 'failure' }}
         shell: bash
         run: git rev-parse HEAD > build/.reaktor-cache-sha
 
@@ -213,7 +216,7 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
 
       - name: Save the package cache
         if: ${{ always() && steps.vm.outcome == 'success' }}
