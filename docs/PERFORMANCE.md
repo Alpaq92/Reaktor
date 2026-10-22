@@ -40,21 +40,23 @@ not plotted: it does not link on Windows.
 | Electron | 158.3 MB | 39.0% |
 | Kotlin Multiplatform | 669.8 MB | 56.1% |
 
-- **A tenth of Flutter's memory**, a seventieth of Compose's, and the
-  cheapest arm on CPU.
+- **About a tenth of Flutter's memory**, a seventieth of Kotlin
+  Multiplatform's, and the least CPU of the six.
 - **The GPU backends cost four to five more points of CPU and six to nine
   times the memory**, which is why the default stays software. On a GPU driver
   Reaktor costs what the GPU frameworks do: `opengl` is 90.1 MB against
   Flutter's 92.2, and the three GPU arms fall within 3.8 points on CPU. At
   that size the number is the GL context and its buffers, not the framework.
 
-**The top row used to read 67.3%**, and not from rasterizing. `nk_convert`
-turns every shape into triangles, so a panel background reached SDL as two
-textured, blended triangles over the window: **16.38 ms**, against **6.95 ms**
-untextured and **0.12 ms** as a fill. The renderer now fills an axis-aligned
-quad of one color, unblended when opaque. A frame of this benchmark went from
-**11.48 ms to 2.12 ms** and an empty window from 8.06 to 0.54 ms, with pixels
-within one least significant bit. Only measuring the present found it.
+**Reaktor's top row used to read 67.3%.** The cause was not the drawing
+itself but how shapes were handed over. Every shape, even a plain rectangle,
+was split into two triangles and mixed with what lay behind it. A panel
+background drawn that way took **16.38 ms**; drawn as a plain fill, it takes
+**0.12 ms**. Reaktor now draws a solid rectangle as a plain fill, and skips the
+mixing when nothing shows through. A frame of this benchmark went from
+**11.48 ms to 2.12 ms**, and an empty window from 8.06 ms to 0.54 ms. The
+picture stayed the same, to within the smallest step of one color. Only
+timing the moment the frame reaches the screen showed it.
 
 ### How it was measured
 

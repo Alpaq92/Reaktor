@@ -119,7 +119,12 @@ splash_page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
         reaktor_timer(app, 350, 0, splash_tick, NULL);
         reaktor_timer(app, 650, 0, splash_tick, NULL);
     }
-    reaktor_fill_rect(cv, reaktor_rect(0, 0, (float)w, (float)h), 0, reaktor_page_color(app));
+    /* The quieter of the two backgrounds, edged: a borderless window has no
+     * shadow to part it from the desktop. */
+    reaktor_fill_rect(cv, reaktor_rect(0, 0, (float)w, (float)h), 0,
+                      reaktor_token("--background", reaktor_page_color(app)));
+    reaktor_edge_round(app, cv, reaktor_rect(0, 0, (float)w, (float)h), 0.0f, 1.0f,
+                       reaktor_token("--border", muted));
     reaktor_draw_image(cv, reaktor_rect(((float)w - px) * 0.5f, 52.0f + (96.0f - px) * 0.5f, px, px),
                        &im, reaktor_rgba(255, 255, 255, (reaktor_byte)(255.0f * mark)));
     credit(cv, reaktor_font(app, 30, 1), "Reaktor", 164.0f, w, ink, name);
