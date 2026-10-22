@@ -20,36 +20,38 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 9.5 MB, the same binary on D3D11 59.0 MB, on D3D12 121.5 MB
-and on OpenGL 69.9 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin
-Multiplatform 669.8 MB. CPU as a percent of one core: Reaktor 8.9%, D3D11
-16.0%, D3D12 11.0%, OpenGL 11.2%, Flutter 16.6%, Electron 39.0%, Kotlin
-Multiplatform 56.1%](benchmark.svg)
+Memory: Reaktor 9.5 MB, the same binary on D3D11 59.4 MB, on D3D12 122.3 MB
+and on OpenGL 70.1 MB, Flutter 90.8 MB, Electron 157.6 MB, Kotlin
+Multiplatform 667.4 MB. Steady-state CPU as a percent of one core: Reaktor
+6.0%, D3D11 10.3%, D3D12 5.0%, OpenGL 5.0%, Flutter 15.6%, Electron 26.1%,
+Kotlin Multiplatform 33.5%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
 rotating at 60 fps in an 800×600 window, every arm on the same laptop, listed
-under **Windows, with a GPU** below;
-[`benchmarks/`](../benchmarks/BENCHMARKS.md) has the projects and the runner.
-Reaktor appears once per `--renderer`. Shaft is not plotted: it does not link
-on Windows.
+under **Windows, with a GPU** below. Each arm is its own app, built with its
+framework's toolchain; one script launches it and samples its whole process
+tree from outside. [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the
+projects and the runner. Reaktor appears once per `--renderer`. Shaft is not
+plotted: it does not link on Windows.
 
-| Arm | Memory | CPU, one core | CPU, steady state |
+| Arm | Memory | CPU, with startup | CPU, steady state |
 | --- | --- | --- | --- |
-| **Reaktor**, `software` | **9.5 MB** | **8.9%** | **7.2%** |
-| **Reaktor**, `direct3d11` | 59.0 MB | 16.0% | 12.3% |
-| **Reaktor**, `direct3d12` | 121.5 MB | 11.0% | 5.2% |
-| **Reaktor**, `opengl` | 69.9 MB | 11.2% | 6.6% |
-| Flutter | 92.2 MB | 16.6% | — |
-| Electron | 158.3 MB | 39.0% | — |
-| Kotlin Multiplatform | 669.8 MB | 56.1% | — |
+| **Reaktor**, `software` | **9.5 MB** | **8.6%** | 6.0% |
+| **Reaktor**, `direct3d11` | 59.4 MB | 14.1% | 10.3% |
+| **Reaktor**, `direct3d12` | 122.3 MB | 11.8% | **5.0%** |
+| **Reaktor**, `opengl` | 70.1 MB | 11.6% | **5.0%** |
+| Flutter | 90.8 MB | 19.3% | 15.6% |
+| Electron | 157.6 MB | 40.8% | 26.1% |
+| Kotlin Multiplatform | 667.4 MB | 59.6% | 33.5% |
 
-- **About a tenth of Flutter's memory**, a seventieth of Kotlin
-  Multiplatform's, and the least CPU of the seven.
-- **On a GPU renderer, Reaktor costs what the GPU frameworks do:** 59–122 MB,
-  most of it the graphics driver's, and within 5.6 points of Flutter on CPU.
+- **About a tenth of Flutter's memory and less than half its CPU**, with
+  startup or without, and a seventieth of Kotlin Multiplatform's memory.
+- **Every Reaktor renderer takes less CPU than every other framework.** On a
+  GPU renderer its memory is mostly the graphics driver's: 59–122 MB, around
+  Flutter's 91.
 - **Startup counts.** A run that draws for only 0.2 s takes 0.16 s of CPU on
   `software` and 0.41–0.52 s on a GPU renderer. Once running, `direct3d12` and
-  `opengl` take less CPU than `software`.
+  `opengl` take a point less than `software`.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
   program keeping it busy, `direct3d11` and `opengl` missed 60 fps and took
   16–28% of a core. These runs had the GeForce RTX 2060 idle.
@@ -64,15 +66,15 @@ from 11.48 ms to 2.12 ms, with the same pixels.
 ./benchmarks/run.ps1 -Seconds 6 -Fps 60 -Runs 10
 ```
 
-Every arm is held to 60 fps and sleeps out the rest of each frame. Each figure
-is the median of ten 6-second runs; passes differ by up to three points of
-CPU. Memory is peak private bytes across the process tree. Reaktor's rows were
-measured on 2026-10-22 with the GPU idle; the other arms come from an earlier
-pass. Steady state is CPU from 3 s to 8 s of a 9-second run, ten runs per
-renderer. The bars come from an outside sampler, because an app's own timers
-miss the driver: `bench` times 0.07 ms of work per `direct3d11` frame, where
-the sampler charged 16.0%. `vulkan` falls back to `direct3d11` in this SDL
-build.
+CPU is a percent of one core: with startup over the whole 6-second run, steady
+from 3 s to 8 s of a 9-second run. Every arm is held to 60 fps and sleeps out
+the rest of each frame; Kotlin Multiplatform held 59. Each figure is the
+median of ten runs, the steady-state ones taken in turn across arms; passes
+differ by up to three points of CPU. Memory is peak private bytes, and CPU the
+sum, across each app's process tree. Every row was measured on 2026-10-22 with
+the GPU idle. The sampler counts what an app's own timers miss: `bench` times
+0.07 ms of work per `direct3d11` frame, where the sampler charged over 10%.
+`vulkan` falls back to `direct3d11` in this SDL build.
 
 ## Size
 
