@@ -63,7 +63,7 @@ reaktor_format_pattern(char *buf, size_t cap, const struct tm *t, const char *pa
         case 'd': w = snprintf(buf + n, cap - n, run > 1 ? "%02d" : "%d", t->tm_mday); break;
         case 'L':
         case 'M': w = run >= 3 ? snprintf(buf + n, cap - n, run == 3 ? "%.3s" : "%s",
-                                          months[t->tm_mon % 12])
+                                          months[(t->tm_mon % 12 + 12) % 12])
                                : snprintf(buf + n, cap - n, run > 1 ? "%02d" : "%d",
                                           t->tm_mon + 1);
                   break;
