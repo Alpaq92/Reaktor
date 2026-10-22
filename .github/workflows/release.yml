@@ -8,34 +8,50 @@ permissions:
   contents: read
 
 jobs:
+  tag:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check the tag is a version
+        run: |
+          if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eqx 'v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.]+)?'; then
+            echo "$GITHUB_REF_NAME is not a version tag like v1.2.3 or v1.2.3-rc1"
+            exit 1
+          fi
+
   windows:
+    needs: tag
     uses: ./.github/workflows/windows.yml
     with:
       version: ${{ github.ref_name }}
 
   macos:
+    needs: tag
     uses: ./.github/workflows/macos.yml
     with:
       version: ${{ github.ref_name }}
 
   linux:
+    needs: tag
     uses: ./.github/workflows/linux.yml
     with:
       version: ${{ github.ref_name }}
       strict: true
 
   bsd:
+    needs: tag
     uses: ./.github/workflows/bsd.yml
     with:
       version: ${{ github.ref_name }}
       strict: true
 
   web:
+    needs: tag
     uses: ./.github/workflows/web.yml
     with:
       version: ${{ github.ref_name }}
 
   source:
+    needs: tag
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
