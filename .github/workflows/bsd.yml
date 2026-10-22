@@ -200,11 +200,15 @@ jobs:
         shell: cpa.sh {0} --sync-files vm-to-runner
         run: ':'
 
-      # Only when every build in the job finished: a cross build that stopped
-      # halfway leaves objects from before the change, and a newer commit here
-      # would date the sources they need rebuilt as unchanged.
+      # A cross build that stopped halfway holds objects from before the change,
+      # which the next run would take as current: it is built again in full.
+      - name: Drop an unfinished cross build
+        if: ${{ always() && steps.cross.outcome == 'failure' }}
+        shell: bash
+        run: rm -rf build-arm64
+
       - name: Note which commit the cached build is from
-        if: ${{ always() && steps.build.outcome == 'success' && steps.cross.outcome != 'failure' }}
+        if: ${{ always() && steps.build.outcome == 'success' }}
         shell: bash
         run: git rev-parse HEAD > build/.reaktor-cache-sha
 
