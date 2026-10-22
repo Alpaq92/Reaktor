@@ -104,6 +104,11 @@ static HANDLE        g_stop;
 
 typedef struct pipe_conn { HANDLE pipe, event; } pipe_conn;
 
+union token_user_buf {
+    TOKEN_USER user;
+    BYTE       raw[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+};
+
 static int
 pipe_wait(HANDLE pipe, OVERLAPPED *o, DWORD ms, DWORD *got)
 {
@@ -151,6 +156,33 @@ names(void)
     SDL_snprintf(g_pipe, sizeof g_pipe, "\\\\.\\pipe\\reaktor.%lu.%08x", (unsigned long)session, h);
 }
 
+static int
+token_user(HANDLE process, union token_user_buf *out)
+{
+    HANDLE token;
+    DWORD  len = 0;
+    int    ok;
+
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) return 0;
+    ok = GetTokenInformation(token, TokenUser, out, sizeof *out, &len);
+    CloseHandle(token);
+    return ok;
+}
+
+static int
+same_user(ULONG pid)
+{
+    union token_user_buf mine, theirs;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    int    ok;
+
+    if (!process) return 0;
+    ok = token_user(process, &theirs) && token_user(GetCurrentProcess(), &mine) &&
+         EqualSid(mine.user.User.Sid, theirs.user.User.Sid);
+    CloseHandle(process);
+    return ok;
+}
+
 int
 reaktor_instance_claim(int argc, char **argv)
 {
@@ -171,7 +203,8 @@ reaktor_instance_claim(int argc, char **argv)
 
     /* The first copy may still be starting its listener. */
     for (tries = 0; tries < 50; tries++) {
-        pipe = CreateFileA(g_pipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        pipe = CreateFileA(g_pipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                           SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
         if (pipe != INVALID_HANDLE_VALUE) break;
         if (GetLastError() == ERROR_PIPE_BUSY) WaitNamedPipeA(g_pipe, 200);
         else Sleep(100);
@@ -180,7 +213,12 @@ reaktor_instance_claim(int argc, char **argv)
         SDL_Log("single instance: the running copy did not answer; starting another");
         return 1;
     }
-    if (GetNamedPipeServerProcessId(pipe, &server)) AllowSetForegroundWindow(server);
+    if (!GetNamedPipeServerProcessId(pipe, &server) || !same_user(server)) {
+        SDL_Log("single instance: %s belongs to another user; starting another", g_pipe);
+        CloseHandle(pipe);
+        return 1;
+    }
+    AllowSetForegroundWindow(server);
     if (message(argc, argv, &msg, &len)) WriteFile(pipe, msg, len, &wrote, NULL);
     SDL_free(msg);
     CloseHandle(pipe);
@@ -200,11 +238,15 @@ listen_thread(void *data)
         DWORD      none = 0;
         int        connected;
 
-        c.pipe = CreateNamedPipeA(g_pipe, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+        c.pipe = CreateNamedPipeA(g_pipe, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED |
+                                      FILE_FLAG_FIRST_PIPE_INSTANCE,
                                   PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
                                       PIPE_REJECT_REMOTE_CLIENTS,
                                   PIPE_UNLIMITED_INSTANCES, 0, 64 * 1024, 0, NULL);
-        if (c.pipe == INVALID_HANDLE_VALUE) break;
+        if (c.pipe == INVALID_HANDLE_VALUE) {
+            SDL_Log("single instance: %s is held by another process; not listening", g_pipe);
+            break;
+        }
         SDL_zero(o);
         o.hEvent = c.event;
         ResetEvent(c.event);
