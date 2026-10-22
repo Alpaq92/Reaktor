@@ -152,6 +152,15 @@ jobs:
           }
           Write-Host "second launch handed its file over: ok"
 
+      - name: Scripted UI test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          New-Item -ItemType Directory -Force smoke | Out-Null
+          $p = Start-Process "./${{ matrix.out }}/uitest.exe" -ArgumentList '--log', 'smoke/uitest.log' -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "uitest did not finish" }
+          Select-String -Path smoke/uitest.log -Pattern 'test:' | ForEach-Object { $_.Line }
+          if ($p.ExitCode -ne 0) { throw "uitest exited with $($p.ExitCode)" }
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

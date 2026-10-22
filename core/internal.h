@@ -330,6 +330,7 @@ App  *reaktor_window_app(int id);
 extern Uint64 g_hover_gap_ms;
 
 void a11y_dump_once(App *app);
+void reaktor_test_frame(App *app);
 
 
 void hot_push(App *app, struct nk_rect r, int cursor, int repaint);

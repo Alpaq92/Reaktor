@@ -1,0 +1,8 @@
+2026-10-22 12:56:55.322 INFO     app    test: a button is found by its name                            ok
+2026-10-22 12:56:55.334 INFO     app    test:   and by its mark                                        ok
+2026-10-22 12:56:56.290 INFO     app    test:   and a missing one is not                               ok
+2026-10-22 12:56:56.633 INFO     app    test: two clicks count two                                     ok
+2026-10-22 12:56:57.096 INFO     app    test: typed text reaches the field and the click reads it      ok
+2026-10-22 12:56:57.312 INFO     app    test: a click checks a box                                     ok
+2026-10-22 12:56:57.408 INFO     app    test: a shortcut reaches the key hook                          ok
+2026-10-22 12:56:57.409 INFO     app    test: 7 of 7 checks passed

@@ -1449,6 +1449,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     if (is_main) {
         reaktor_a11y_platform_push(&app->a11y, app->focus_id);
         a11y_dump_once(app);
+        reaktor_test_frame(app);
         reaktor_inspector_frame(app);
     } else {
         reaktor_a11y_platform_window_push(app->win, &app->a11y, app->focus_id,

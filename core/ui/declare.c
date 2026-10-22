@@ -195,6 +195,7 @@ decl_emit(unsigned id, const char *keys, const reaktor_box *b)
 
     reaktor_layout_leaf(&g_frame_app->lay, id, b);
     if (keys) reaktor_note_keys(g_frame_app, id, keys);
+    if (b && b->mark) reaktor_a11y_set_mark(&g_frame_app->a11y, id, b->mark);
 
     if (!g_space) { g_frame_unsettled++; return 0; }
     if (!reaktor_layout_rect(&g_frame_app->lay, id, &r)) { g_frame_unsettled++; return 0; }

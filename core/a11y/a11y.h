@@ -14,6 +14,7 @@ typedef struct reaktor_a11y_node {
     const char    *name;
     const char    *value;
     const char    *keys;
+    const char    *mark;
     struct nk_rect bounds;
     float          num, lo, hi, step;
 } reaktor_a11y_node;
@@ -88,6 +89,7 @@ void     reaktor_a11y_pop(reaktor_a11y *a);
 
 int reaktor_a11y_end(reaktor_a11y *a);
 
+void reaktor_a11y_set_mark(reaktor_a11y *a, unsigned id, const char *mark);
 void reaktor_a11y_set_focus(reaktor_a11y *a, unsigned id);
 
 void reaktor_a11y_set_range(reaktor_a11y *a, unsigned id, float num, float lo,

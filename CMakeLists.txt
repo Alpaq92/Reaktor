@@ -559,6 +559,7 @@ add_library(reaktor_runtime STATIC
     runtime/app.c
     runtime/input.c
     runtime/instance.c
+    runtime/test.c
     runtime/services.c
     runtime/undo.c
     runtime/window.c)
@@ -696,6 +697,7 @@ reaktor_add_app(notepad MODULES settings popups print SOURCES samples/notepad/no
 if(NOT EMSCRIPTEN)
     reaktor_add_app(bench MODULES none SOURCES samples/bench/bench.c)
     reaktor_add_app(launchtest MODULES settings popups print SOURCES tests/launchtest.c)
+    reaktor_add_app(uitest MODULES none SOURCES tests/uitest.c)
     set_target_properties(launchtest PROPERTIES EXCLUDE_FROM_ALL ON)
 endif()
 

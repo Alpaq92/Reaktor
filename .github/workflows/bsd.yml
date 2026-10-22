@@ -260,6 +260,13 @@ jobs:
           export PATH
           sh tools/ci/instance.sh -w "dbus-run-session -- timeout 120" build
 
+      - name: Scripted UI test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          sh tools/ci/uitest.sh -w "dbus-run-session -- timeout 120" build
+
       - name: Build mkicon
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
