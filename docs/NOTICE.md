@@ -13,7 +13,7 @@ from the project's own license file at the pinned revision.
 | [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parse, match, cascade) and `yutil` | MIT |
 | [Onlay](https://github.com/Alpaq92/Onlay) | The rectangles — a fork of [randrew/layout](https://github.com/randrew/layout) | MIT |
 | [Water.css](https://github.com/kognise/water.css) | The stylesheet the look comes from, compiled in | MIT |
-| [Simple.css](https://github.com/kevquirk/simple.css) | The sheet the Styling page swaps in | MIT |
+| [Simple.css](https://github.com/kevquirk/simple.css) | Alternative style used in the demo app | MIT |
 | [Ionicons](https://github.com/ionic-team/ionicons) | Every icon, as SVG; the seven the widgets draw are compiled in | MIT |
 | [plutosvg](https://github.com/sammycage/plutosvg) | Rasterizing the SVGs | MIT |
 | [plutovg](https://github.com/sammycage/plutovg) | plutosvg's canvas (nested submodule) | MIT |
