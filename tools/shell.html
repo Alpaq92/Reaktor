@@ -4,6 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Reaktor</title>
 <link rel="icon" type="image/svg+xml" href="reaktor-icon.svg">
 <link rel="alternate icon" type="image/png" href="reaktor-icon.png">
@@ -105,46 +106,9 @@
     <div class="bar"><div></div></div>
     <div class="text">Loading&hellip;</div>
   </div>
-  <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()">
+  <canvas id="canvas" tabindex="-1">
   </canvas>
-  <script>
-    var statusEl = document.getElementById('status');
-    var barEl = statusEl.querySelector('.bar');
-    var textEl = statusEl.querySelector('.text');
-    var Module = {
-      canvas: document.getElementById('canvas'),
-      print: function (text) { console.log(text); },
-      printErr: function (text) { console.error(text); },
-      setStatus: function (text) {
-        if (!statusEl) return;
-        if (text) {
-          var m = /\((\d+)\/(\d+)\)/.exec(text);
-          if (m && +m[2] > 0) {
-            barEl.classList.add('known');
-            barEl.firstChild.style.width = Math.min(100, 100 * m[1] / m[2]) + '%';
-          }
-          textEl.textContent = text.replace('...', '\u2026');
-          return;
-        }
-        var el = statusEl;
-        statusEl = null;
-        el.classList.add('done');
-        setTimeout(function () { el.remove(); }, 260);
-      }
-    };
-
-    Module.canvas.addEventListener('keydown', function (e) {
-      if (e.key === 'Tab') e.preventDefault();
-    });
-
-    if (new URLSearchParams(location.search).has('keylog')) {
-      var keylog = document.createElement('script');
-      keylog.src = 'keylog.js';
-      document.head.appendChild(keylog);
-    }
-
-    Module.onRuntimeInitialized = function () { Module.setStatus(''); };
-  </script>
+  <script src="shell.js"></script>
   {{{ SCRIPT }}}
 </body>
 </html>

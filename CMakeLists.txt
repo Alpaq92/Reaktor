@@ -821,6 +821,9 @@ if(EMSCRIPTEN)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/keylog.js"
             "${CMAKE_BINARY_DIR}/keylog.js"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/shell.js"
+            "${CMAKE_BINARY_DIR}/shell.js"
         COMMENT "Copying page assets"
         VERBATIM)
 endif()

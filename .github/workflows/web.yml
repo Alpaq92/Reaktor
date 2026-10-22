@@ -88,7 +88,7 @@ jobs:
             cp "build-wasm/$p.html" "build-wasm/$p.js" "build-wasm/$p.wasm" \
                "build-wasm/$p.data" "dist/$name/"
           done
-          cp build-wasm/keylog.js build-wasm/reaktor-icon.svg build-wasm/reaktor-icon.png \
+          cp build-wasm/shell.js build-wasm/keylog.js build-wasm/reaktor-icon.svg build-wasm/reaktor-icon.png \
              "dist/$name/"
           cp build-wasm/licenses/*.txt "dist/$name/licenses/"
           cp external/simplecss/LICENSE "dist/$name/licenses/simplecss.txt"
