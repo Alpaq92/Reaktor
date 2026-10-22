@@ -262,7 +262,8 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(csstest tests/csstest.c core/css/cssflat.c)
     target_include_directories(csstest PRIVATE core/css core/base)
     target_link_libraries(csstest PRIVATE plutovg)
-    target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS
+                               CSSTEST_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/")
     set_target_properties(csstest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 

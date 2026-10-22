@@ -129,9 +129,11 @@ reaktor_asset_load(const char *name, size_t *len)
         out = malloc((size_t)n + 1);
         if (out) memcpy(out, s, (size_t)n + 1);
     } else {
-        FILE *f = fopen(name, "rb");
+        char  path[1024];
+        FILE *f;
 
-        if (!f) return NULL;
+        snprintf(path, sizeof path, "%s%s", CSSTEST_SOURCE, name);
+        if (!(f = fopen(path, "rb"))) return NULL;
         fseek(f, 0, SEEK_END);
         n = ftell(f);
         fseek(f, 0, SEEK_SET);
