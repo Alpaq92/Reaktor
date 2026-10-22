@@ -320,7 +320,7 @@ reaktor_tree(const reaktor_tree_spec *s)
     t.depth = buf + s->count;
     t.row   = buf + 2 * s->count;
     t.n     = 0;
-    t.jump  = jump_in == s->name ? jump : -1;
+    t.jump  = jump_in == s->name && jump < s->count ? jump : -1;
     for (i = 0; i < s->count; i++) {
         int p = s->parent(i, s->user);
 
@@ -460,7 +460,7 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
 
                     if (t && c == 0) {
                         if (tree_first(t, r, id, fg, pad) && s->selected) {
-                            int k = t->row[t->jump];
+                            int k = t->jump < s->count ? t->row[t->jump] : -1;
 
                             if (k >= 0 && *s->selected != k) {
                                 *s->selected = k;
@@ -819,6 +819,7 @@ static void
 menu_key(const reaktor_menubar_spec *s, App *app)
 {
     SDL_Keycode key = app->popup_key;
+    int titles = s->count < MENU_TITLES ? s->count : MENU_TITLES;
     int k = g_menu.kcol, *hi = &g_menu.hi[k];
     const menu_col *c = &g_menu.col[k];
     const reaktor_menu_entry *e = *hi >= 0 ? &c->items[*hi] : NULL;
@@ -842,12 +843,12 @@ menu_key(const reaktor_menubar_spec *s, App *app)
             g_menu.picked_k = k;
             g_menu.picked_i = *hi;
         } else if (key == SDLK_RIGHT) {
-            menu_open_at((g_menu.open + 1) % s->count, 1);
+            menu_open_at((g_menu.open + 1) % titles, 1);
         }
         return;
     case SDLK_LEFT:
         if (k > 0) { g_menu.depth = k - 1; g_menu.kcol = k - 1; }
-        else menu_open_at((g_menu.open + s->count - 1) % s->count, 1);
+        else menu_open_at((g_menu.open + titles - 1) % titles, 1);
         return;
     case SDLK_ESCAPE:
         if (k > 0) { g_menu.depth = k - 1; g_menu.kcol = k - 1; return; }
@@ -1032,7 +1033,8 @@ reaktor_menubar(const reaktor_menubar_spec *s)
     }
     if (g_menu.open >= 0) app->popup_open = 1;
 
-    if (g_menu.open >= 0 && g_menu.picked_k >= 0 && g_menu.picked_k < g_menu.n) {
+    if (g_menu.open >= 0 && g_menu.picked_k >= 0 && g_menu.picked_k < g_menu.n &&
+        g_menu.picked_i >= 0 && g_menu.picked_i < g_menu.col[g_menu.picked_k].count) {
         const reaktor_menu_entry *e = &g_menu.col[g_menu.picked_k].src[g_menu.picked_i];
 
         if (e->checked) *e->checked = !*e->checked;
