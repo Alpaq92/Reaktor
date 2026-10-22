@@ -108,17 +108,14 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
         return 0;
     }
 
-    parent = a->depth > 0
-             ? a->parent[(a->depth < REAKTOR_A11Y_MAX_DEPTH ? a->depth : REAKTOR_A11Y_MAX_DEPTH) - 1]
-             : 0u;
+    parent = a->depth > 0 ? a->parent[NK_MIN(a->depth, REAKTOR_A11Y_MAX_DEPTH) - 1] : 0u;
 
     nh   = hash_str(REAKTOR_FNV, name);
     base = nh ^ ((unsigned)role * 0x9e3779b9u);
     base ^= parent + 0x9e3779b9u + (base << 6) + (base >> 2);
 
     sl = slot_of(a->bucket, a->bucket_gen, base);
-    id = sl ? base ^ ((unsigned)sl->val * 0x85ebca6bu) : base;
-    if (sl) sl->val++;
+    id = sl ? base ^ ((unsigned)sl->val++ * 0x85ebca6bu) : base;
     if (id == 0) id = 1;
 
     if (role == REAKTOR_A11Y_NONE) return id;

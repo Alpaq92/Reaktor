@@ -787,7 +787,6 @@ app_init(void **appstate, int argc, char *argv[])
     reaktor_rss_mark(REAKTOR_RSS_ENTRY);
     app = (App *)SDL_calloc(1, sizeof(App));
     if (!app) return SDL_APP_FAILURE;
-    SDL_SetAtomicInt(&app->file_done, 1);
     *appstate = app;
     g_app = app;
 
@@ -1766,8 +1765,7 @@ app_quit(void *appstate, SDL_AppResult result)
     if (app->win) SDL_DestroyWindow(app->win);
     reaktor_anim_destroy(app->anim);
     app->anim = NULL;
-    /* The picker's thread still writes into it. */
-    if (SDL_GetAtomicInt(&app->file_done)) SDL_free(app);
+    reaktor_app_free(app);
     g_app = NULL;
     reaktor_signal_unwatch();
     reaktor_process_end();

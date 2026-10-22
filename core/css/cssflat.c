@@ -426,24 +426,20 @@ static int calc_sum(calc_in *c, calc_val *out);
 static int calc_atom(calc_in *c, calc_val *out)
 {
     const char *end;
-    int ok;
+    int neg = 0, ok;
 
-    if (c->depth >= CALC_DEPTH) {
-        c->deep = 1;
-        return 0;
-    }
     calc_space(c);
-    if (c->i < c->n && c->s[c->i] == '-') {
+    while (c->i < c->n && c->s[c->i] == '-') {
+        neg = !neg;
         c->i++;
-        c->depth++;
-        ok = calc_atom(c, out);
-        c->depth--;
-        if (!ok) return 0;
-        out->v = -out->v;
-        return 1;
+        calc_space(c);
     }
     if (c->i + 5 <= c->n && strncmp(c->s + c->i, "calc(", 5) == 0) c->i += 4;
     if (c->i < c->n && c->s[c->i] == '(') {
+        if (c->depth >= CALC_DEPTH) {
+            c->deep = 1;
+            return 0;
+        }
         c->i++;
         c->depth++;
         ok = calc_sum(c, out);
@@ -452,15 +448,18 @@ static int calc_atom(calc_in *c, calc_val *out)
         calc_space(c);
         if (c->i >= c->n || c->s[c->i] != ')') return 0;
         c->i++;
-        return 1;
+    } else {
+        if (c->i >= c->n || (!isdigit((unsigned char)c->s[c->i]) && c->s[c->i] != '.'))
+            return 0;
+        out->v = css_number(c->s + c->i, &end);
+        c->i = (size_t)(end - c->s);
+        out->px = c->i + 2 <= c->n && strncmp(c->s + c->i, "px", 2) == 0;
+        if (out->px) c->i += 2;
+        if (c->i < c->n && (isalpha((unsigned char)c->s[c->i]) || c->s[c->i] == '%'))
+            return 0;
     }
-    if (c->i >= c->n || (!isdigit((unsigned char)c->s[c->i]) && c->s[c->i] != '.'))
-        return 0;
-    out->v = css_number(c->s + c->i, &end);
-    c->i = (size_t)(end - c->s);
-    out->px = c->i + 2 <= c->n && strncmp(c->s + c->i, "px", 2) == 0;
-    if (out->px) c->i += 2;
-    return c->i >= c->n || !(isalpha((unsigned char)c->s[c->i]) || c->s[c->i] == '%');
+    if (neg) out->v = -out->v;
+    return 1;
 }
 
 static int calc_product(calc_in *c, calc_val *out)
@@ -947,16 +946,19 @@ static void body_one(void *c, const char *p, size_t plen,
     if (n > 0.0f) ctx->em = n;
 }
 
-static int breaks_token(const char *s, size_t n)
+/* The engine ends a token at any ';' or '}', even one inside url(), and
+   reads '//' or '/*' as a comment without ending it. */
+static int token_ok(const char *s, size_t n, size_t max)
 {
     size_t i;
 
+    if (n >= max) return 0;
     for (i = 0; i < n; i++) {
-        if (s[i] == ';' || s[i] == '}') return 1;
+        if (s[i] == ';' || s[i] == '}') return 0;
         if (s[i] == '/' && i + 1 < n && (s[i + 1] == '/' || s[i + 1] == '*'))
-            return 1;
+            return 0;
     }
-    return 0;
+    return 1;
 }
 
 typedef struct emit_ctx {
@@ -972,18 +974,16 @@ static void emit_one(void *c, const char *p, size_t plen,
 {
     emit_ctx *ctx = (emit_ctx *)c;
     buf tmp, conv;
+    int done;
 
     if (plen > 2 && p[0] == '-' && p[1] == '-') return;
 
     memset(&tmp, 0, sizeof(tmp));
-    if (!subst_vars(ctx->m, v, vlen, &tmp) || (tmp.p && strstr(tmp.p, "var("))) {
-        free(tmp.p);
-        return;
-    }
-    mix_colors(&tmp);
-    if (!canon_colors(&tmp)) { free(tmp.p); return; }
-
     memset(&conv, 0, sizeof(conv));
+    if (!subst_vars(ctx->m, v, vlen, &tmp)) goto out;
+    mix_colors(&tmp);
+    if (!canon_colors(&tmp)) goto out;
+
     if (plen == 9 && strncmp(p, "font-size", 9) == 0 &&
         tmp.len > 1 && tmp.p[tmp.len - 1] == '%') {
         char px[64];
@@ -993,39 +993,25 @@ static void emit_one(void *c, const char *p, size_t plen,
     } else {
         convert_units(tmp.p ? tmp.p : "", tmp.len,
                       ctx->rem_px, ctx->em_px, &conv);
-        if (!resolve_pixel_calcs(&conv)) {
-            free(tmp.p);
-            free(conv.p);
-            return;
-        }
+        if (!resolve_pixel_calcs(&conv)) goto out;
     }
     if ((plen >= 6 && strncmp(p, "border", 6) == 0) ||
         (plen >= 7 && strncmp(p, "outline", 7) == 0))
         line_width_keywords(&conv);
 
-    /* The engine ends a value at any ';' or '}', even one inside url(), and
-       reads '//' or '/*' as a comment without ending the token. */
-    if (plen >= ctx->token_max || conv.len >= ctx->token_max ||
-        memchr(p, '}', plen) || breaks_token(conv.p, conv.len)) {
-        free(tmp.p);
-        free(conv.p);
-        return;
+    if (!token_ok(p, plen, ctx->token_max) || !token_ok(conv.p, conv.len, ctx->token_max))
+        goto out;
+    done = expand_border(ctx->out, p, plen, conv.p ? conv.p : "", conv.len);
+    if (done >= 0) {
+        ctx->wrote |= done;
+    } else {
+        buf_add(ctx->out, p, plen);
+        buf_str(ctx->out, ": ");
+        buf_add(ctx->out, conv.p ? conv.p : "", conv.len);
+        buf_str(ctx->out, ";\n");
+        ctx->wrote = 1;
     }
-    {
-        int done = expand_border(ctx->out, p, plen, conv.p ? conv.p : "", conv.len);
-
-        if (done >= 0) {
-            ctx->wrote |= done;
-            free(tmp.p);
-            free(conv.p);
-            return;
-        }
-    }
-    buf_add(ctx->out, p, plen);
-    buf_str(ctx->out, ": ");
-    buf_add(ctx->out, conv.p ? conv.p : "", conv.len);
-    buf_str(ctx->out, ";\n");
-    ctx->wrote = 1;
+out:
     free(tmp.p);
     free(conv.p);
 }
@@ -1227,6 +1213,19 @@ static char *flatten(char *src, const char *theme, size_t token_max,
         }
         if (!changed) break;
     }
+    {
+        size_t k, kept = 0;
+
+        for (k = 0; k < m->n; k++) {
+            if (strstr(m->v[k].value, "var(")) {
+                free(m->v[k].name);
+                free(m->v[k].value);
+            } else {
+                m->v[kept++] = m->v[k];
+            }
+        }
+        m->n = kept;
+    }
 
     memset(&out, 0, sizeof(out));
     buf_str(&out, "/* Flattened by cssflat.c: custom properties resolved,\n"
@@ -1264,8 +1263,7 @@ static char *flatten(char *src, const char *theme, size_t token_max,
                         t = rw;
                         if (!tn) continue;
                     }
-                    if (tn >= token_max || selector_repeats(t, tn) ||
-                        breaks_token(t, tn)) continue;
+                    if (!token_ok(t, tn, token_max) || selector_repeats(t, tn)) continue;
                     if (n_emitted) buf_str(&sel, ", ");
                     buf_add(&sel, t, tn);
                 }

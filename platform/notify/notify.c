@@ -112,8 +112,6 @@ notify_os(App *app, const char *title, const char *body)
     if (!t || !b) goto done;
     reaktor_utf8_clean(t, title, tn);
     reaktor_utf8_clean(b, body, bn);
-    title = t;
-    body  = b;
     if (!(c = dbus_bus_get(DBUS_BUS_SESSION, NULL))) goto done;
     m = dbus_message_new_method_call("org.freedesktop.Notifications",
                                      "/org/freedesktop/Notifications",
@@ -126,14 +124,14 @@ notify_os(App *app, const char *title, const char *body)
     dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &name);
     dbus_message_iter_append_basic(&it, DBUS_TYPE_UINT32, &replaces);
     dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &icon);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &title);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &body);
+    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &t);
+    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &b);
     dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "s", &sub);
     dbus_message_iter_close_container(&it, &sub);
     dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "{sv}", &sub);
     dbus_message_iter_close_container(&it, &sub);
     dbus_message_iter_append_basic(&it, DBUS_TYPE_INT32, &expire);
-    ok = dbus_connection_send(c, m, NULL) ? 1 : 0;
+    ok = dbus_connection_send(c, m, NULL);
     dbus_connection_flush(c);
     dbus_message_unref(m);
     dbus_connection_unref(c);

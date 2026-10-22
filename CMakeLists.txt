@@ -268,10 +268,10 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     set_target_properties(csstest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-    add_executable(urltest tests/urltest.c core/base/url.c)
-    target_include_directories(urltest PRIVATE core/base)
-    target_link_libraries(urltest PRIVATE SDL3::SDL3-static)
-    set_target_properties(urltest PROPERTIES
+    add_executable(basetest tests/basetest.c core/base/url.c core/base/utf8.c)
+    target_include_directories(basetest PRIVATE core/base)
+    target_link_libraries(basetest PRIVATE SDL3::SDL3-static)
+    set_target_properties(basetest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     add_executable(imagetest tests/imagetest.c)

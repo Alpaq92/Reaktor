@@ -12,6 +12,29 @@ be32(const unsigned char *p)
     return (size_t)p[0] << 24 | (size_t)p[1] << 16 | (size_t)p[2] << 8 | p[3];
 }
 
+static size_t
+be16(const unsigned char *p)
+{
+    return (size_t)p[0] << 8 | p[1];
+}
+
+static int
+name_valid(const unsigned char *t, size_t len)
+{
+    size_t n, strings, i;
+
+    if (len < 6) return 0;
+    n = be16(t + 2);
+    strings = be16(t + 4);
+    if (n > (len - 6) / 12 || strings > len) return 0;
+    for (i = 0; i < n; i++) {
+        const unsigned char *r = t + 6 + 12 * i;
+
+        if (be16(r + 10) + be16(r + 8) > len - strings) return 0;
+    }
+    return 1;
+}
+
 int
 reaktor_font_valid(const void *ttf, size_t size)
 {
@@ -31,6 +54,7 @@ reaktor_font_valid(const void *ttf, size_t size)
         size_t start = be32(r + 8), len = be32(r + 12);
 
         if (start > size || len > size - start) return 0;
+        if (SDL_memcmp(r, "name", 4) == 0 && !name_valid(p + start, len)) return 0;
     }
     return stbtt_InitFont(&info, p, off);
 }

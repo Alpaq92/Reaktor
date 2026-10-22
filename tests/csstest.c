@@ -58,6 +58,12 @@ repeat(char *s, const char *piece, int times)
 }
 
 static char *
+append(char *s, const char *piece)
+{
+    return repeat(s, piece, 1);
+}
+
+static char *
 generated(const char *name)
 {
     char *s = calloc(1, 1);
@@ -66,41 +72,47 @@ generated(const char *name)
 
     if (!s) return NULL;
     if (strcmp(name, "calc.css") == 0) {
-        s = repeat(s, "dir { width: calc(", 1);
+        s = append(s, "dir { width: calc(");
         s = repeat(s, "(", 40);
-        s = repeat(s, "1px", 1);
+        s = append(s, "1px");
         s = repeat(s, ")", 40);
-        s = repeat(s, "); color: #161616; }\n", 1);
+        s = append(s, "); color: #161616; }\n");
     } else if (strcmp(name, "self.css") == 0) {
         s = repeat(s, "@import \"self.css\";\n", 20);
-        s = repeat(s, "kbd { color: #171717; }\n", 1);
+        s = append(s, "kbd { color: #171717; }\n");
     } else if (strncmp(name, "fan", 3) == 0 && name[3] >= '0' && name[3] <= '8') {
         if (name[3] < '8') {
             snprintf(piece, sizeof(piece), "@import \"fan%c.css\";\n", name[3] + 1);
             s = repeat(s, piece, 20);
         }
-        s = repeat(s, "samp { color: #181818; }\n", 1);
+        s = append(s, "samp { color: #181818; }\n");
     } else if (strcmp(name, "nest.css") == 0) {
-        s = repeat(s, "var { color: ", 1);
+        s = append(s, "var { color: ");
         s = repeat(s, "var(--u, ", 1000);
-        s = repeat(s, "red", 1);
+        s = append(s, "red");
         s = repeat(s, ")", 1000);
-        s = repeat(s, "; background-color: var(--u, var(--v, #191919)); }\n", 1);
+        s = append(s, "; background-color: var(--u, var(--v, #191919)); }\n");
     } else if (strcmp(name, "laughs.css") == 0) {
-        s = repeat(s, ":root { --a0: xxxxxxxxxx;", 1);
+        s = append(s, ":root { --a0: xxxxxxxxxx;");
         for (i = 1; i < 10; i++) {
             snprintf(piece, sizeof(piece), " --a%d:", i);
-            s = repeat(s, piece, 1);
+            s = append(s, piece);
             snprintf(piece, sizeof(piece), " var(--a%d)", i - 1);
             s = repeat(s, piece, 10);
-            s = repeat(s, ";", 1);
+            s = append(s, ";");
         }
-        s = repeat(s, " }\nabbr { color: var(--a9); background-color: #1a1a1a; }\n", 1);
+        s = append(s, " }\nabbr { color: var(--a9); background-color: #1a1a1a; }\n");
     } else {
         free(s);
         return NULL;
     }
     return s;
+}
+
+static char *
+flat1(const char *name)
+{
+    return reaktor_css_flatten(&name, 1, "light", 511, NULL);
 }
 
 static int
@@ -248,33 +260,25 @@ main(void)
         free(out);
     }
 
-    {
-        static const char *const calc[1] = { "calc.css" };
-        static const char *const self[1] = { "self.css" };
-        static const char *const fan[1] = { "fan0.css" };
-        static const char *const nest[1] = { "nest.css" };
-        static const char *const laughs[1] = { "laughs.css" };
-
-        out = reaktor_css_flatten(calc, 1, "light", 511, NULL);
-        ok("calc() nested past its depth is dropped, the rest of its rule kept",
-           out && !strstr(out, "width") && strstr(out, "#161616"));
-        free(out);
-        out = reaktor_css_flatten(self, 1, "light", 511, NULL);
-        ok("a sheet that imports itself is read once", out && count(out, "#171717") == 1);
-        free(out);
-        out = reaktor_css_flatten(fan, 1, "light", 511, NULL);
-        ok("imports that fan out stop at the budget", out && strlen(out) < (16u << 20));
-        free(out);
-        out = reaktor_css_flatten(nest, 1, "light", 511, NULL);
-        ok("var() fallbacks nested past the limit are dropped",
-           out && !strstr(out, "red") && strstr(out, "background-color: #191919"));
-        free(out);
-        out = reaktor_css_flatten(laughs, 1, "light", 511, NULL);
-        ok("var() that would grow past the limit is dropped",
-           out && strlen(out) < (1u << 20) && !strstr(out, "var(") &&
-           strstr(out, "#1a1a1a"));
-        free(out);
-    }
+    out = flat1("calc.css");
+    ok("calc() nested past its depth is dropped, the rest of its rule kept",
+       out && !strstr(out, "width") && strstr(out, "#161616"));
+    free(out);
+    out = flat1("self.css");
+    ok("a sheet that imports itself is read once", out && count(out, "#171717") == 1);
+    free(out);
+    out = flat1("fan0.css");
+    ok("imports that fan out stop at the budget", out && strlen(out) < (16u << 20));
+    free(out);
+    out = flat1("nest.css");
+    ok("var() fallbacks nested past the limit are dropped",
+       out && !strstr(out, "red") && strstr(out, "background-color: #191919"));
+    free(out);
+    out = flat1("laughs.css");
+    ok("var() that would grow past the limit is dropped",
+       out && strlen(out) < (1u << 20) && !strstr(out, "var(") &&
+       strstr(out, "#1a1a1a"));
+    free(out);
 
     return test_done("css");
 }

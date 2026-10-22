@@ -36,17 +36,16 @@ receive(App *app, instance_read rd, void *conn)
     char  *path;
 
     if (!rd(conn, &count, sizeof count)) return;
-    if (count <= INSTANCE_PATHS_MAX) {
-        for (i = 0; i < count; i++) {
-            if (!rd(conn, &len, sizeof len) || len == 0 || len >= INSTANCE_PATH_MAX) break;
-            if (!(path = (char *)SDL_malloc(len + 1))) break;
-            if (!rd(conn, path, len)) {
-                SDL_free(path);
-                break;
-            }
-            path[len] = 0;
-            reaktor_post(app, deliver_path, path);
+    if (count > INSTANCE_PATHS_MAX) count = 0;
+    for (i = 0; i < count; i++) {
+        if (!rd(conn, &len, sizeof len) || len == 0 || len >= INSTANCE_PATH_MAX) break;
+        if (!(path = (char *)SDL_malloc(len + 1))) break;
+        if (!rd(conn, path, len)) {
+            SDL_free(path);
+            break;
         }
+        path[len] = 0;
+        reaktor_post(app, deliver_path, path);
     }
     reaktor_post(app, deliver_raise, NULL);
 }
@@ -109,6 +108,14 @@ union token_user_buf {
     BYTE       raw[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
 };
 
+static void
+pipe_arm(OVERLAPPED *o, HANDLE event)
+{
+    SDL_zero(*o);
+    o->hEvent = event;
+    ResetEvent(event);
+}
+
 static int
 pipe_wait(HANDLE pipe, OVERLAPPED *o, DWORD ms, DWORD *got)
 {
@@ -134,9 +141,7 @@ pipe_read(void *conn, void *buf, Uint32 n)
         OVERLAPPED o;
         DWORD      got = 0;
 
-        SDL_zero(o);
-        o.hEvent = c->event;
-        ResetEvent(c->event);
+        pipe_arm(&o, c->event);
         if (!ReadFile(c->pipe, p, n, NULL, &o) && GetLastError() != ERROR_IO_PENDING)
             return 0;
         if (!pipe_wait(c->pipe, &o, INSTANCE_READ_MS, &got) || !got) return 0;
@@ -247,9 +252,7 @@ listen_thread(void *data)
             SDL_Log("single instance: %s is held by another process; not listening", g_pipe);
             break;
         }
-        SDL_zero(o);
-        o.hEvent = c.event;
-        ResetEvent(c.event);
+        pipe_arm(&o, c.event);
         connected = ConnectNamedPipe(c.pipe, &o) ||
                     GetLastError() == ERROR_PIPE_CONNECTED ||
                     (GetLastError() == ERROR_IO_PENDING &&
@@ -401,8 +404,11 @@ reaktor_instance_claim(int argc, char **argv)
 static int SDLCALL
 listen_thread(void *data)
 {
-    App *app = (App *)data;
+    App           *app = (App *)data;
+    struct timeval tv;
 
+    tv.tv_sec  = INSTANCE_READ_MS / 1000;
+    tv.tv_usec = (INSTANCE_READ_MS % 1000) * 1000;
     while (!SDL_GetAtomicInt(&g_stop)) {
         int c = accept(g_listen, NULL, NULL);
 
@@ -410,13 +416,7 @@ listen_thread(void *data)
             if (errno == EINTR) continue;
             break;
         }
-        {
-            struct timeval tv;
-
-            tv.tv_sec  = INSTANCE_READ_MS / 1000;
-            tv.tv_usec = (INSTANCE_READ_MS % 1000) * 1000;
-            setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
-        }
+        setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
         if (!SDL_GetAtomicInt(&g_stop)) receive(app, sock_read, &c);
         close(c);
     }

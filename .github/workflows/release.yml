@@ -62,8 +62,7 @@ jobs:
 
       - name: Version
         run: |
-          v=$GITHUB_REF_NAME
-          v=${v%%-*}
+          v=${GITHUB_REF_NAME%%-*}
           if ! grep -qF "project(reaktor VERSION $v " src/CMakeLists.txt; then
             echo "$GITHUB_REF_NAME, but CMakeLists.txt is not at $v"
             exit 1

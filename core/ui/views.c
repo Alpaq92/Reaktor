@@ -199,7 +199,7 @@ tree_first(tree_rows *t, int r, unsigned id, struct nk_color fg, float pad)
     struct nk_context *ctx = g_frame_ctx;
     const struct nk_user_font *f = ctx->style.font;
     const reaktor_tree_spec *s = t->s;
-    int node = t->node[r], branch = tree_branch(t, node), step;
+    int node = t->node[r], branch = tree_branch(t, node), step, up;
     struct nk_rect b, chev;
     const char *label = s->label(node, s->user);
     const char *icon = s->icon ? s->icon(node, s->user) : NULL;
@@ -238,7 +238,7 @@ tree_first(tree_rows *t, int r, unsigned id, struct nk_color fg, float pad)
     if (step > 0 && branch && !s->open[node]) s->open[node] = 1;
     else if (step > 0 && branch && r + 1 < t->n) t->jump = t->node[r + 1];
     else if (step < 0 && branch && s->open[node]) s->open[node] = 0;
-    else if (step < 0 && s->parent(node, s->user) >= 0) t->jump = s->parent(node, s->user);
+    else if (step < 0 && (up = s->parent(node, s->user)) >= 0 && up < s->count) t->jump = up;
     if (step) {
         g_frame_app->dirty = 1;
         reaktor_wake(g_frame_app);
@@ -460,7 +460,7 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
 
                     if (t && c == 0) {
                         if (tree_first(t, r, id, fg, pad) && s->selected) {
-                            int k = t->jump < s->count ? t->row[t->jump] : -1;
+                            int k = t->row[t->jump];
 
                             if (k >= 0 && *s->selected != k) {
                                 *s->selected = k;

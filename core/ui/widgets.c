@@ -836,7 +836,7 @@ file_chosen(void *userdata, const char * const *filelist, int filter)
     SDL_SetAtomicInt(&app->file_ready, 1);
     reaktor_wake(app);
     /* The last touch: a closed window's App may be freed after it. */
-    SDL_SetAtomicInt(&app->file_done, 1);
+    SDL_SetAtomicInt(&app->file_busy, 0);
 }
 
 int
@@ -845,7 +845,7 @@ reaktor_file_dialog_open(App *app, const reaktor_file_dialog *d)
     if (!d || app->file_pending) return 0;
     app->file_pending = 1;
     app->file_dialog  = *d;
-    SDL_SetAtomicInt(&app->file_done, 0);
+    SDL_SetAtomicInt(&app->file_busy, 1);
     if (d->kind == REAKTOR_FILE_SAVE)
         SDL_ShowSaveFileDialog(file_chosen, app, app->win, d->filters,
                                d->filter_count, d->location);

@@ -59,13 +59,18 @@ unpark(int all)
     int i;
 
     for (i = g_parked_n - 1; i >= 0; i--)
-        if (all || SDL_GetAtomicInt(&g_parked[i]->file_done)) {
-            if (!all) {
-                SDL_free(g_parked[i]->file_list);
-                SDL_free(g_parked[i]);
-            }
+        if (all || reaktor_app_free(g_parked[i]))
             g_parked[i] = g_parked[--g_parked_n];
-        }
+}
+
+/* 0 while the picker's thread may still write into it. */
+int
+reaktor_app_free(App *a)
+{
+    if (SDL_GetAtomicInt(&a->file_busy)) return 0;
+    SDL_free(a->file_list);
+    SDL_free(a);
+    return 1;
 }
 
 int
@@ -94,12 +99,7 @@ teardown(App *a)
     a->win = NULL;
     a->ren = NULL;
     a->ctx = NULL;
-    if (SDL_GetAtomicInt(&a->file_done)) {
-        SDL_free(a->file_list);
-        SDL_free(a);
-    } else if (g_parked_n < WINDOW_MAX) {
-        g_parked[g_parked_n++] = a;
-    }
+    if (!reaktor_app_free(a) && g_parked_n < WINDOW_MAX) g_parked[g_parked_n++] = a;
 }
 
 static void
@@ -149,7 +149,6 @@ open_window(const reaktor_window *spec, const struct nk_rect *popup)
     if (!(a = (App *)SDL_calloc(1, sizeof *a))) return 0;
     a->secondary      = 1;
     a->hot_last       = -1;
-    SDL_SetAtomicInt(&a->file_done, 1);
     a->queue.moved_ok = 1;
     if (popup) {
         float k = to_points(m);
