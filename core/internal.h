@@ -330,7 +330,8 @@ App  *reaktor_window_app(int id);
 extern Uint64 g_hover_gap_ms;
 
 void a11y_dump_once(App *app);
-void reaktor_test_frame(App *app);
+/* Set by reaktor_test_app alone, so an application that runs no test links no test code. */
+extern void (*reaktor_test_hook)(App *app);
 
 
 void hot_push(App *app, struct nk_rect r, int cursor, int repaint);

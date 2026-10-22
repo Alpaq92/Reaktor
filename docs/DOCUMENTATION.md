@@ -455,7 +455,7 @@ A container's fields, and a widget's `.box`:
 | `.ml .mt .mr .mb` | Margins |
 | `.flags` | `REAKTOR_LAY_FILL_X`, `_FILL_Y`, `_WRAP`, `_CENTER_X`, `_CENTER_Y`, `_PACK_CENTER`, `_PACK_END`, `_PACK_SPREAD` |
 | `.name` | How a container is found again; a widget uses its spec's `.name` |
-| `.mark` | A widget's handle for a [scripted test](#testing-an-application): `"#mark"` finds it, and no reader hears it. Marks are kept apart from the tree, in a table made only once a widget sets one |
+| `.mark` | A handle for a [scripted test](#testing-an-application), on a widget or a container: `"#mark"` finds it, `"#mark Delete"` finds Delete inside it, and no reader hears it. One mark may sit on many widgets, every row of a list for one; up to 63 characters are kept. Marks are kept apart from the tree, in a table made only once something sets one; `--a11y-dump` lists them after the tree |
 
 So `.w` alone is fixed, `.w` with `FILL_X` a minimum that grows, and `FILL_X`
 with `.weight` a fraction. The outermost container is as wide as the panel it
@@ -1231,7 +1231,7 @@ int main(int argc, char **argv)
 | `reaktor_test_settle(t)` | Wait until the window has drawn and settled |
 | `reaktor_test_check(t, ok, what)` | Count and log one check |
 
-A test reads only the main window. The video driver is dummy unless the
+A target names a widget by what a reader hears, or by its mark as `"#mark"`; `"#rows Delete"` looks for Delete only inside the container marked `rows`, at any depth. When several widgets match, the first is used and the log says how many there were. A test reads only the main window. The video driver is dummy unless the
 command line names one, and `--new-instance` is passed for it.
 
 ## The renderer

@@ -51,8 +51,23 @@ wait_main(reaktor_test *t)
 static int
 matches(const reaktor_a11y_node *n, const char *target)
 {
-    if (target[0] == '#') return n->id && n->id == reaktor_mark_id(target + 1);
+    if (target[0] == '#') return n->id && reaktor_mark_has(n->id, target + 1);
     return n->name && SDL_strcmp(n->name, target) == 0;
+}
+
+/* Whether the node at i sits, at any depth, inside a node marked scope. */
+static int
+within(const reaktor_a11y_node *tree, int i, const char *scope)
+{
+    int hops, k;
+
+    for (hops = 0; hops < REAKTOR_A11Y_MAX_DEPTH && tree[i].parent; hops++) {
+        if (reaktor_mark_has(tree[i].parent, scope)) return 1;
+        for (k = i - 1; k >= 0 && tree[k].id != tree[i].parent; k--) {}
+        if (k < 0) return 0;
+        i = k;
+    }
+    return 0;
 }
 
 static void
@@ -61,16 +76,34 @@ look_main(App *app, void *user)
     test_ask *q = (test_ask *)user;
     const reaktor_a11y_node *tree;
     int n = 0, i;
+    char        scope[64];
+    const char *target = q->target, *space;
+    int         scoped = 0;
 
+    /* "#list Delete": a mark, then what to find inside it. A whole target
+       that is itself a mark, spaces and all, is taken as one. */
+    if (target[0] == '#' && !reaktor_mark_has(0, target + 1) &&
+        (space = SDL_strchr(target, ' ')) && (size_t)(space - target) < sizeof scope) {
+        SDL_strlcpy(scope, target + 1, (size_t)(space - target));
+        target = space + 1;
+        scoped = 1;
+    }
     tree = reaktor_a11y_tree(&app->a11y, &n);
     q->found = 0;
+    if (scoped && !reaktor_mark_has(0, scope)) {
+        SDL_SignalSemaphore(q->t->done);
+        return;
+    }
     for (i = 0; i < n; i++)
-        if (matches(&tree[i], q->target)) {
-            q->node = tree[i];
-            SDL_strlcpy(q->value, tree[i].value ? tree[i].value : "", sizeof q->value);
-            q->found = 1;
-            break;
+        if (matches(&tree[i], target) && (!scoped || within(tree, i, scope))) {
+            if (!q->found) {
+                q->node = tree[i];
+                SDL_strlcpy(q->value, tree[i].value ? tree[i].value : "", sizeof q->value);
+            }
+            q->found++;
         }
+    if (q->found > 1)
+        SDL_Log("test: %d widgets match \"%s\"; the first is used", q->found, q->target);
     SDL_SignalSemaphore(q->t->done);
 }
 
@@ -269,8 +302,8 @@ script_thread(void *data)
 }
 
 /* From the main window's frame: the script starts once the first frame settles. */
-void
-reaktor_test_frame(App *app)
+static void
+test_frame(App *app)
 {
     test_ask *q = (test_ask *)SDL_GetAtomicPointer(&g_settle);
 
@@ -321,6 +354,7 @@ reaktor_test_app(int argc, char **argv, const reaktor_launch *launch,
     for (i = 1; i < argc; i++) args[n++] = argv[i];
     g_script = script;
     g_user = user;
+    reaktor_test_hook = test_frame;
     rc = reaktor_launch_app(n, args, launch);
     if (g_thread) SDL_WaitThread(g_thread, NULL);
     if (g_test.done) SDL_DestroySemaphore(g_test.done);

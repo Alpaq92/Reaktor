@@ -6,6 +6,7 @@ static int          g_name_len;
 static int          g_count;
 static reaktor_bool g_loud;
 static char         g_greeting[96] = "Nobody greeted yet";
+static int          g_rows[3] = { 1, 1, 1 };
 
 static void
 greet(void)
@@ -27,7 +28,8 @@ page(App *app, struct reaktor_context *ctx, int win_w, int win_h)
             .box = { .w = 240.0f } });
         reaktor_check(&(reaktor_check_spec){ .label = "Loud", .on = &g_loud });
         if (reaktor_button(&(reaktor_button_spec){
-                .label = "Greet", .keys = "Ctrl+G", .fit_content = 1 }))
+                .label = "Greet", .keys = "Ctrl+G", .fit_content = 1,
+                .box = { .mark = "greet button" } }))
             greet();
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "Add one", .icon = "add-outline", .fit_content = 1,
@@ -37,6 +39,24 @@ page(App *app, struct reaktor_context *ctx, int win_w, int win_h)
                                              .value = g_greeting });
         reaktor_label(&(reaktor_label_spec){ .text = count, .name = "Count", .value = count,
                                              .box = { .mark = "count" } });
+        {
+            static const char *const fruit[3] = { "Apple", "Banana", "Cherry" };
+            static const char *const marks[3] = { "row0", "row1", "row2" };
+            int i;
+
+            for (i = 0; i < 3; i++) {
+                if (!g_rows[i]) continue;
+                REAKTOR_ROW(.h = 30.0f, .gap = 8.0f, .mark = marks[i]) {
+                    reaktor_label(&(reaktor_label_spec){ .text = fruit[i],
+                                                         .box = { .w = 80.0f } });
+                    if (reaktor_button(&(reaktor_button_spec){ .label = "Delete",
+                                                               .name = "Delete",
+                                                               .fit_content = 1,
+                                                               .box = { .mark = "del" } }))
+                        g_rows[i] = 0;
+                }
+            }
+        }
     }
 }
 
@@ -77,6 +97,19 @@ script(reaktor_test *t, void *user)
     reaktor_test_check(t, reaktor_test_value(t, "Greeting", v, sizeof v) &&
                               SDL_strcmp(v, "HELLO, Ada!") == 0,
                        "a shortcut reaches the key hook");
+
+    reaktor_test_check(t, reaktor_test_find(t, "Delete"), "a name three rows share is found, and the log says so");
+    reaktor_test_check(t, reaktor_test_find(t, "#row1 Delete"), "a mark on a row scopes a lookup");
+    reaktor_test_check(t, reaktor_test_find(t, "#greet button"), "a mark with a space is found whole");
+    reaktor_test_check(t, reaktor_test_find(t, "#del"), "a mark three buttons share is found, and the log says so");
+    reaktor_test_click(t, "#row1 #del");
+    reaktor_test_check(t, !reaktor_test_find(t, "Banana") && reaktor_test_find(t, "Apple") &&
+                              reaktor_test_find(t, "Cherry"),
+                       "  and the click reaches that row's button, not the first");
+    reaktor_test_check(t, !reaktor_test_find(t, "#row1 Delete"), "  and an absent scope finds nothing");
+    reaktor_test_click(t, "#row2 #del");
+    reaktor_test_check(t, !reaktor_test_find(t, "Cherry") && reaktor_test_find(t, "Apple"),
+                       "a shared mark inside a scope reaches that row's widget");
 }
 
 int

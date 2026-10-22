@@ -24,34 +24,54 @@ static unsigned           g_boxid[REAKTOR_LAY_DEPTH + 1];
 
 /* Marks, for tests: kept apart from the tree, and allocated only once a widget
    sets one, so an application that sets none pays nothing. The main window's
-   last frame is what a test reads. */
-#define MARK_MAX 64
+   last frame is what a test reads. One mark may sit on many widgets. */
+#define MARK_LEN 64
 
 typedef struct decl_mark {
     unsigned id;
-    char     mark[32];
+    char     mark[MARK_LEN];
 } decl_mark;
 
 static decl_mark *g_marks;
-static int        g_mark_n;
+static int        g_mark_n, g_mark_cap;
 
 static void
 mark_note(unsigned id, const char *mark)
 {
-    if (g_frame_app->secondary || g_mark_n >= MARK_MAX) return;
-    if (!g_marks && !(g_marks = (decl_mark *)SDL_malloc(MARK_MAX * sizeof *g_marks))) return;
+    static int told;
+
+    if (g_frame_app->secondary) return;
+    if (g_mark_n == g_mark_cap) {
+        int cap = g_mark_cap ? 2 * g_mark_cap : 32;
+        decl_mark *m = (decl_mark *)SDL_realloc(g_marks, (size_t)cap * sizeof *m);
+
+        if (!m) return;
+        g_marks = m;
+        g_mark_cap = cap;
+    }
+    if (SDL_strlen(mark) >= MARK_LEN && !told++)
+        SDL_Log("reaktor: mark \"%s\" is cut to %d characters", mark, MARK_LEN - 1);
     g_marks[g_mark_n].id = id;
     SDL_strlcpy(g_marks[g_mark_n].mark, mark, sizeof g_marks[g_mark_n].mark);
     g_mark_n++;
 }
 
-unsigned
-reaktor_mark_id(const char *mark)
+const char *
+reaktor_mark_at(int i, unsigned *id)
+{
+    if (i < 0 || i >= g_mark_n) return NULL;
+    *id = g_marks[i].id;
+    return g_marks[i].mark;
+}
+
+/* Whether a node carries a mark; with id 0, whether anything does. */
+int
+reaktor_mark_has(unsigned id, const char *mark)
 {
     int i;
 
     for (i = 0; i < g_mark_n; i++)
-        if (SDL_strcmp(g_marks[i].mark, mark) == 0) return g_marks[i].id;
+        if ((!id || g_marks[i].id == id) && SDL_strcmp(g_marks[i].mark, mark) == 0) return 1;
     return 0;
 }
 
@@ -152,6 +172,7 @@ reaktor_box_open(unsigned char dir, const reaktor_box *b)
 
     id = reaktor_note_push(g_frame_app, REAKTOR_A11Y_GROUP, box.name, NULL, 0u,
                            nk_rect(0, 0, 0, 0));
+    if (box.mark) mark_note(id, box.mark);
     reaktor_layout_open(&g_frame_app->lay, id, &box);
     if (g_depth < REAKTOR_LAY_DEPTH) g_boxid[g_depth + 1] = id;
 
