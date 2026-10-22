@@ -814,6 +814,7 @@ main(int argc, char **argv)
         .font_fallbacks = { { .path = "assets/fonts/MPLUS1p-Regular.ttf" } },
         .confirm_close  = SC_CLOSE_QUESTION,
         .single_instance = 1,
+        .skip_same_frames = 1,
         .inspector      = { .attach = 1 },
         .page           = page_shell,
         .key            = sample_key,

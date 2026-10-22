@@ -138,6 +138,9 @@ struct App {
     char frame_rate[16];
     char drag_rate[16];
     int  first_frame_done;
+    unsigned frame_hash;
+    unsigned long frames_drawn, frames_skipped;
+    int      must_draw;
     int  dragging;
     int  drag_mouse;
 
