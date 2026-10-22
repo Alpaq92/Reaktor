@@ -9,8 +9,8 @@ queue and builds a frame only when the picture would differ. So **CPU is a
 count of frames, not a load**, and **memory is a floor, not a curve**: once the
 atlas and icons are baked, nothing grows.
 
-On Windows today, `showcase.exe` is 3,473,408 bytes, `notepad.exe` 2,491,392,
-`simple.exe` 2,456,064 and `bench.exe` 2,447,360. The showcase links all three
+On Windows today, `showcase.exe` is 3,671,040 bytes, `notepad.exe` 2,610,176,
+`simple.exe` 2,476,544 and `bench.exe` 2,466,304. The showcase links all three
 optional modules and the others none; each carries the default look —
 Aileron, the mark, the sheets and seven icons, 67,829 bytes — compiled in. The
 four-platform figures below come from an older build that shipped one
@@ -20,53 +20,43 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 9.5 MB, the same binary on D3D11 59.0 MB and on OpenGL
-69.9 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB.
-CPU as a percent of one core: Reaktor 8.9%, D3D11 16.0%, OpenGL 11.2%,
-Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%](benchmark.svg)
+Memory: Reaktor 9.5 MB, the same binary on D3D11 59.0 MB, on D3D12 121.5 MB
+and on OpenGL 69.9 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin
+Multiplatform 669.8 MB. CPU as a percent of one core: Reaktor 8.9%, D3D11
+16.0%, D3D12 11.0%, OpenGL 11.2%, Flutter 16.6%, Electron 39.0%, Kotlin
+Multiplatform 56.1%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
-rotating at 60 fps in an 800×600 window, run on one machine (a 4-core
-Ryzen 5 4600H VirtualBox VM) by one procedure;
+rotating at 60 fps in an 800×600 window, every arm on the same laptop, listed
+under **Windows, with a GPU** below;
 [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the projects and the runner.
-Reaktor appears three times because `--renderer` changes what it is. Shaft is
-not plotted: it does not link on Windows.
+Reaktor appears once per `--renderer`. Shaft is not plotted: it does not link
+on Windows.
 
 | Arm | Memory | CPU, one core | CPU, steady state |
 | --- | --- | --- | --- |
 | **Reaktor**, `software` | **9.5 MB** | **8.9%** | **7.2%** |
 | **Reaktor**, `direct3d11` | 59.0 MB | 16.0% | 12.3% |
+| **Reaktor**, `direct3d12` | 121.5 MB | 11.0% | 5.2% |
 | **Reaktor**, `opengl` | 69.9 MB | 11.2% | 6.6% |
 | Flutter | 92.2 MB | 16.6% | — |
 | Electron | 158.3 MB | 39.0% | — |
 | Kotlin Multiplatform | 669.8 MB | 56.1% | — |
 
 - **About a tenth of Flutter's memory**, a seventieth of Kotlin
-  Multiplatform's, and the least CPU of the six.
-- **The GPU backends cost six to seven times the memory and more CPU**,
-  which is why the default stays software. On a GPU driver Reaktor costs what
-  the GPU frameworks do: `opengl` is 69.9 MB against Flutter's 92.2, and the
-  three GPU arms fall within 5.4 points on CPU. At that size the number is the
-  GL context and its buffers, not the framework.
-- **Starting up costs more on a GPU driver, and the 6-second run counts it.**
-  A run that draws for only 0.2 s takes 0.16 s of CPU on `software`, 0.41 s
-  on `direct3d11` and 0.44 s on `opengl`. Once running (the steady-state
-  column), `opengl` takes less CPU than `software`, and `direct3d11` still
-  takes more.
+  Multiplatform's, and the least CPU of the seven.
+- **On a GPU renderer, Reaktor costs what the GPU frameworks do:** 59–122 MB,
+  most of it the graphics driver's, and within 5.6 points of Flutter on CPU.
+- **Startup counts.** A run that draws for only 0.2 s takes 0.16 s of CPU on
+  `software` and 0.41–0.52 s on a GPU renderer. Once running, `direct3d12` and
+  `opengl` take less CPU than `software`.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
-  program keeping the GPU busy, `direct3d11` and `opengl` missed 60 fps and
-  their main thread took 16–28% of a core, nearly all of it waiting to hand
-  frames to Windows. These runs had the VM's virtual GPU idle.
+  program keeping it busy, `direct3d11` and `opengl` missed 60 fps and took
+  16–28% of a core. These runs had the GeForce RTX 2060 idle.
 
-**Reaktor's top row used to read 67.3%.** The cause was not the drawing
-itself but how shapes were handed over. Every shape, even a plain rectangle,
-was split into two triangles and mixed with what lay behind it. A panel
-background drawn that way took **16.38 ms**; drawn as a plain fill, it takes
-**0.12 ms**. Reaktor now draws a solid rectangle as a plain fill, and skips the
-mixing when nothing shows through. A frame of this benchmark went from
-**11.48 ms to 2.12 ms**, and an empty window from 8.06 ms to 0.54 ms. The
-picture stayed the same, to within the smallest step of one color. Only
-timing the moment the frame reaches the screen showed it.
+`software` used to read 67.3% here, because every rectangle reached SDL as
+two blended triangles. Drawing solid rectangles as plain fills cut a frame
+from 11.48 ms to 2.12 ms, with the same pixels.
 
 ### How it was measured
 
@@ -74,22 +64,15 @@ timing the moment the frame reaches the screen showed it.
 ./benchmarks/run.ps1 -Seconds 6 -Fps 60 -Runs 10
 ```
 
-Every arm is held to 60 fps and sleeps out each frame, so it is charged for
-drawing, not waiting. Each figure is the median of ten 6-second runs; across
-three passes CPU moved by up to three points and memory by under a megabyte.
-Reaktor's three rows were measured again on 2026-10-22, from a fresh Release
-build with the submodules at their pinned commits, with
-`-Targets reaktor-software,reaktor-d3d11,reaktor-opengl` and the GPU idle
-(power state P8, 8–21% use before each phase); the others are from the
-earlier pass. The steady-state column is each process's CPU from 3 s to 8 s
-of a 9-second run, the median of ten runs per renderer taken in turn; every
-run held 60 fps.
-Memory is peak summed private bytes across the process tree; the JVM has no
-heap flags. The sampler, not the apps' own counters, sets the bars: those miss
-driver threads and presentation — for `direct3d11`, `bench --fps 0` times
-0.07 ms of building and rendering a frame, 0.4% of a core at 60 fps, where the
-sampler charged 16.0%. `direct3d12` and `vulkan` fall back to D3D11 in this
-SDL build.
+Every arm is held to 60 fps and sleeps out the rest of each frame. Each figure
+is the median of ten 6-second runs; passes differ by up to three points of
+CPU. Memory is peak private bytes across the process tree. Reaktor's rows were
+measured on 2026-10-22 with the GPU idle; the other arms come from an earlier
+pass. Steady state is CPU from 3 s to 8 s of a 9-second run, ten runs per
+renderer. The bars come from an outside sampler, because an app's own timers
+miss the driver: `bench` times 0.07 ms of work per `direct3d11` frame, where
+the sampler charged 16.0%. `vulkan` falls back to `direct3d11` in this SDL
+build.
 
 ## Size
 
@@ -165,9 +148,9 @@ in RAM, shared library pages included.
   Compiling SDL's GL drivers out brought it to 4.3 MB; `-DREAKTOR_SDL_GL=ON`
   puts them back.
 - **GhostBSD lands beside Linux.** Of its 5.1 MB, 2.5 MB is SDL's framebuffer
-  (960×680×4) in one SysV segment shared with the X server. Its figures are
-  swap-backed resident from `ps` and `procstat -v`, macOS's from `vmmap`;
-  `reaktor_process_memory` reads only Windows and Linux.
+  (960×680×4), shared with the X server. Its figures come from `ps` and
+  `procstat -v`, macOS's from `vmmap`; `reaktor_process_memory` reads only
+  Windows and Linux.
 - **macOS is ~7× Linux, outside this code.** `vmmap` splits the ~30 MB into
   ~15 MB of Cocoa floor and ~12 MB of heap, mostly three ~2.5 MB bitmaps: SDL's
   render target, its staging copy and the atlas. Without a renderer rewrite
@@ -190,15 +173,15 @@ Redrawing continuously at 960×680, p10–p90 of 31 samples:
 | Login | 6.8–6.9 ms/frame | 6.2–6.7 ms/frame | 17.5–20.5 ms/frame | 6.2–8.3 ms/frame |
 | Buttons (the busiest) | 11.5–12.2 ms/frame | 11.7–13.0 ms/frame | 29.6–30.2 ms/frame | 13.4–15.3 ms/frame |
 
-The same rasterizer runs on all four. macOS pays an extra pass, uploading the
-software bitmap to a Metal texture to present it. On GhostBSD most of a frame
-is the present — 6.7 ms of Login's 7.1 ms median, 11.1 ms of Buttons' 14.8 —
-a software blit into VMware's SVGA II framebuffer.
+The same rasterizer runs on all four. macOS also uploads the bitmap to a
+Metal texture to present it. On GhostBSD most of a frame is the present, a
+software blit into VMware's framebuffer: 6.7 ms of Login's 7.1 ms, 11.1 ms of
+Buttons' 14.8.
 
-The accessibility tree adds **4.2 µs** to a drawn frame (82 nodes). And the
-number that made software the default: on the GPU-less VM, `direct3d11` falls
-back to WARP and a frame goes from 4.7 ms to **20.3 ms** (before the fill
-fix). With a real GPU that reverses — see **Against the others**.
+The accessibility tree adds **4.2 µs** to a drawn frame (82 nodes). Without a
+GPU, `direct3d11` falls back to WARP and a frame goes from 4.7 ms to
+**20.3 ms**, which made software the default. With a GPU, `direct3d12` and
+`opengl` take less CPU; see **Against the others**.
 
 ## What it needs to run
 

@@ -42,6 +42,7 @@
 **Debugging**
 
 - [How do I capture a screenshot or accessibility dump for a bug report?](#how-do-i-capture-a-screenshot-or-accessibility-dump-for-a-bug-report)
+- [Should my app use a GPU renderer?](#should-my-app-use-a-gpu-renderer)
 - [Why is the frame time high on a machine with no GPU?](#why-is-the-frame-time-high-on-a-machine-with-no-gpu)
 - [Why does Japanese or Arabic text draw differently from Latin?](#why-does-japanese-or-arabic-text-draw-differently-from-latin)
 - [How do I report a bug?](#how-do-i-report-a-bug)
@@ -77,7 +78,7 @@ directly. See [An application](DOCUMENTATION.md#an-application).
 
 ### Why C99 and an immediate-mode core instead of a retained toolkit like GTK or Qt?
 
-To stay small: a 2.3 MB binary, about 10 MB of RAM, no GPU, and nothing to
+To stay small: a 2.4 MB binary, about 10 MB of RAM, no GPU, and nothing to
 install beside it. A frame is drawn only when something changes, so the app
 idles at 0% of a core. See [The frame loop](DOCUMENTATION.md#the-frame-loop)
 and [PERFORMANCE.md](PERFORMANCE.md).
@@ -235,6 +236,15 @@ window or an off-screen pane never fires. It draws once it is visible.
 Any app takes `--shot` and `--a11y-dump`; the dump lists every node with its
 bounds, so two dumps diff to the pixel. Settings are not read under either.
 See [Command-line flags](DOCUMENTATION.md#command-line-flags).
+
+### Should my app use a GPU renderer?
+
+Usually not. `software`, the default, needs no GPU, uses about a tenth of the
+memory and starts fastest. A GPU
+renderer pays off in long, continuous animation: `--renderer directx` takes
+Direct3D 12 on Windows where it starts, else 11, and `opengl` needs a build
+with `-DREAKTOR_SDL_GL=ON`. Expect six to thirteen times the memory. See
+[The renderer](DOCUMENTATION.md#the-renderer).
 
 ### Why is the frame time high on a machine with no GPU?
 

@@ -1142,7 +1142,7 @@ removes them from `argv` before the application sees it:
 | `--theme <system\|light\|dark>` | Open in that scheme; on OpenBSD `system` reads as light |
 | `--lang <code>` | Open in that catalog: `en`, `pl`, `ja` |
 | `--font-fallback <path>` | A font for the Text module, before the application's; repeatable |
-| `--renderer <name>` | `software` (default), `auto`, or a driver name |
+| `--renderer <name>` | `software` (default), `auto`, `directx`, or a driver name; see [The renderer](#the-renderer) |
 | `--aa <auto\|on\|off>` | Override `.anti_aliasing` |
 | `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
 | `--popups inline` | Menus inside the window, not in windows of their own |
@@ -1246,11 +1246,36 @@ command line names one, and `--new-instance` is passed for it.
 
 ## The renderer
 
-`software` is the default on every platform. The app draws nothing at rest,
-so a GPU buys it nothing measurable, and costs a great deal on a machine
-without one: SDL's software renderer took 13.1 ms of CPU a frame where
-Direct3D on WARP took 78.7. One rasterizer is also one set of pixels to reason
-about. `--renderer auto` lets SDL choose; a driver name pins one.
+`software` is the default on every platform:
+
+- **It needs no GPU.** Without one, Direct3D falls back to Microsoft's WARP
+  emulation: SDL's software renderer took 13.1 ms of CPU a frame where
+  Direct3D on WARP took 78.7.
+- **It uses the least memory**, 9.5 MB in `bench` against 59–122 MB on a GPU
+  renderer, most of that the graphics driver's.
+- **It starts fastest, and its cost does not depend on other programs** using
+  the GPU.
+- **An app at rest draws nothing**, so a GPU has little to speed up, and one
+  rasterizer is one set of pixels to reason about.
+
+`--renderer` picks another:
+
+| Name | Where | For | Against |
+| --- | --- | --- | --- |
+| `directx` | Windows | Direct3D 12 where it starts, else 11 | As below |
+| `direct3d12` | Windows 10 and later | Least CPU once running | Most memory, slowest start |
+| `direct3d11` | Windows | Any Windows GPU | Most CPU of the GPU renderers measured |
+| `opengl` | Windows, Linux, BSDs | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`; on Linux without a GPU it loads Mesa and LLVM |
+| `opengles2` | Where the driver offers it | | Built only with `-DREAKTOR_SDL_GL=ON`; not measured |
+| `metal` | macOS | | |
+| `auto` | Everywhere | SDL chooses | |
+
+A GPU renderer smooths the edges of fills unless `.anti_aliasing` says
+otherwise, and keeps the CPU free during long animations. It costs six to
+thirteen times the memory and more CPU to start, and it shares the GPU: with
+another program keeping the GPU busy, frames missed 60 fps and took 16–28% of
+a core. A renderer that would not start falls back to SDL's choice and logs
+why. The figures are in [PERFORMANCE.md](PERFORMANCE.md#against-the-others).
 
 - **Every vertex is snapped to the pixel grid**, so a sub-pixel correction is
   discarded, and abutting rectangles can round apart into a seam.
