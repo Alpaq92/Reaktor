@@ -924,6 +924,18 @@ static void body_one(void *c, const char *p, size_t plen,
     if (n > 0.0f) ctx->em = n;
 }
 
+static int breaks_token(const char *s, size_t n)
+{
+    size_t i;
+
+    for (i = 0; i < n; i++) {
+        if (s[i] == ';' || s[i] == '}') return 1;
+        if (s[i] == '/' && i + 1 < n && (s[i + 1] == '/' || s[i + 1] == '*'))
+            return 1;
+    }
+    return 0;
+}
+
 typedef struct emit_ctx {
     const reaktor_cssvars *m;
     buf                 *out;
@@ -961,9 +973,10 @@ static void emit_one(void *c, const char *p, size_t plen,
         (plen >= 7 && strncmp(p, "outline", 7) == 0))
         line_width_keywords(&conv);
 
-    /* The engine ends a value at any ';', even one inside url(). */
+    /* The engine ends a value at any ';' or '}', even one inside url(), and
+       reads '//' or '/*' as a comment without ending the token. */
     if (plen >= ctx->token_max || conv.len >= ctx->token_max ||
-        (conv.p && memchr(conv.p, ';', conv.len))) {
+        memchr(p, '}', plen) || breaks_token(conv.p, conv.len)) {
         free(tmp.p);
         free(conv.p);
         return;
@@ -1221,7 +1234,8 @@ static char *flatten(char *src, const char *theme, size_t token_max,
                         t = rw;
                         if (!tn) continue;
                     }
-                    if (tn >= token_max || selector_repeats(t, tn)) continue;
+                    if (tn >= token_max || selector_repeats(t, tn) ||
+                        breaks_token(t, tn)) continue;
                     if (n_emitted) buf_str(&sel, ", ");
                     buf_add(&sel, t, tn);
                 }

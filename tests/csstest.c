@@ -26,7 +26,13 @@ static const char g_sheet[] =
     "a.y { border-top: 2px dotted #0d0e0f !important; }\n"
     "em { color: color-mix(in srgb, rgb(255 0 0 / 50%) 50%, red); "
     "background-color: color-mix(in srgb, hsl(120, 100%, 50%), black); "
-    "border-top-color: color-mix(in srgb, #ff000080, rgba(0, 0, 255, 1)); }\n";
+    "border-top-color: color-mix(in srgb, #ff000080, rgba(0, 0, 255, 1)); }\n"
+    ":root { --slash: /; }\n"
+    "dl { background: url(https://x/a.png); color: #111111; }\n"
+    "dt { b: x//y; color: #121212; }\n"
+    "dd { b: {}x; color: #131313; }\n"
+    "dfn { b: var(--slash)*x; color: #141414; }\n"
+    "a[href^=\"//\"], kbd { color: #151515; }\n";
 
 static const char g_media[] =
     "@media (prefers-color-scheme: dark) { h1 { color: #000001; } }\n"
@@ -113,6 +119,13 @@ main(void)
         ok("  and brackets", strstr(out, "margin: 8px;") != NULL);
         ok("calc() with a percentage is left", strstr(out, "width: calc(100% - 2 * 8px);") != NULL);
         ok("a value with a ';' is dropped", !strstr(out, "base64") && strstr(out, "#010203"));
+        ok("a value with '//', '/*' or '}' is dropped",
+           strstr(out, "dl {") && !strstr(strstr(out, "dl {"), "/*") &&
+           !strstr(out, "//") && !strstr(out, "{}") &&
+           strstr(out, "#111111") && strstr(out, "#121212") &&
+           strstr(out, "#131313") && strstr(out, "#141414"));
+        ok("a selector with '//' is dropped, the rest of its list kept",
+           strstr(out, "kbd {") && strstr(out, "#151515"));
         ok("a value past the token is dropped", !strstr(out, "longer") && strstr(out, "#040506"));
         ok("a selector past the token is dropped", !strstr(out, "a-selector") && strstr(out, "u {"));
         ok("border keyword widths become lengths",
