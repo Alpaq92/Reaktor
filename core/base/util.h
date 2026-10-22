@@ -33,6 +33,7 @@ extern const int             reaktor_builtin_count;
 void reaktor_process_memory(size_t *rss, size_t *priv);
 double reaktor_process_cpu_ms(void);
 void  reaktor_free(void *p);
+size_t reaktor_utf8_clean(char *dst, const char *src, size_t cap);
 
 void reaktor_release_free_memory(void);
 

@@ -201,6 +201,7 @@ target_include_directories(reaktor_headers INTERFACE include "${TP}/nuklear" "${
 
 add_library(reaktor_core STATIC
     core/base/util.c
+    core/base/utf8.c
     core/render/nk_impl.c
     core/render/svg.c
     "${_builtins}")
@@ -226,10 +227,10 @@ endif()
 
 if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(a11ytest tests/a11ytest.c core/a11y/a11y.c
-        platform/a11y/a11y_snapshot.c)
+        platform/a11y/a11y_snapshot.c core/base/utf8.c)
     target_link_libraries(a11ytest PRIVATE reaktor_headers SDL3::SDL3-static)
     target_include_directories(a11ytest PRIVATE core/a11y core/render
-        platform/a11y)
+        platform/a11y core/base)
     set_target_properties(a11ytest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()

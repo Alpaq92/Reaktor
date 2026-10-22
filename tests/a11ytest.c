@@ -5,6 +5,7 @@
 
 #include "a11y.h"
 #include "a11y_snapshot.h"
+#include "util.h"
 #include "test.h"
 
 #define check test_eq
@@ -401,6 +402,27 @@ int main(int argc, char **argv)
     reaktor_a11y_end(&a);
     reaktor_a11y_tree(&a, &n);
     check("a full slot table still ends the frame", n >= 1, 1);
+
+    {
+        static const char *const cases[][2] = {
+            { "h\xC3\xA9llo \xE6\x97\xA5 \xF0\x9F\x98\x80", "h\xC3\xA9llo \xE6\x97\xA5 \xF0\x9F\x98\x80" },
+            { "a\x80" "b", "a\xEF\xBF\xBD" "b" },
+            { "a\xE2\x82", "a\xEF\xBF\xBD\xEF\xBF\xBD" },
+            { "\xC0\xAF", "\xEF\xBF\xBD\xEF\xBF\xBD" },
+            { "\xED\xA0\x80", "\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD" },
+            { "\xF4\x90\x80\x80", "\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD" },
+        };
+        char out[64];
+        int  k, bad = 0;
+
+        for (k = 0; k < (int)(sizeof cases / sizeof cases[0]); k++) {
+            reaktor_utf8_clean(out, cases[k][0], sizeof out);
+            if (strcmp(out, cases[k][1]) != 0) bad++;
+        }
+        check("invalid UTF-8 becomes U+FFFD, valid text is kept", bad, 0);
+        reaktor_utf8_clean(out, "ab\xE6\x97\xA5", 4);
+        check("a short buffer cuts at a whole character", (long)strlen(out), 2);
+    }
 
     return test_done("a11y");
 }
