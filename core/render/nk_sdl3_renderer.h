@@ -266,8 +266,7 @@ nk_sdl_geometry(SDL_Renderer *ren, SDL_Texture *tex, const void *vertices,
                           vs, v->uv, vs, n, ix, count, (int)sizeof(*ix));
 }
 
-/* REAKTOR: SDL's software renderer blends each triangle through a surface of
- * its own, so untextured triangles that are all opaque are drawn unblended. */
+/* REAKTOR: opaque triangles unblended on software. */
 NK_INTERN void
 nk_sdl_geometry_sw(SDL_Renderer *ren, SDL_Texture *tex, const void *vertices,
                    int n, const nk_draw_index *ix, int count)
