@@ -33,12 +33,14 @@ foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER GPU OFFSCREEN)
 endforeach()
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
 
-foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
+foreach(drv RENDER_D3D RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
+if(WIN32)
+    set(SDL_RENDER_D3D12 ON CACHE BOOL "" FORCE)
+endif()
 
 option(REAKTOR_SDL_GL "Build SDL's OpenGL/GLES drivers on Windows, Linux and the BSDs" OFF)
-# Set both ways: forced off once, the cache would keep them off after =ON.
 if((WIN32 OR (UNIX AND NOT APPLE)) AND NOT EMSCRIPTEN)
     set(SDL_OPENGL   ${REAKTOR_SDL_GL} CACHE BOOL "" FORCE)
     set(SDL_OPENGLES ${REAKTOR_SDL_GL} CACHE BOOL "" FORCE)
