@@ -202,6 +202,7 @@ target_include_directories(reaktor_headers INTERFACE include "${TP}/nuklear" "${
 add_library(reaktor_core STATIC
     core/base/util.c
     core/base/utf8.c
+    core/base/url.c
     core/render/nk_impl.c
     core/render/svg.c
     "${_builtins}")
@@ -265,6 +266,12 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS
                                CSSTEST_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/")
     set_target_properties(csstest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+    add_executable(urltest tests/urltest.c core/base/url.c)
+    target_include_directories(urltest PRIVATE core/base)
+    target_link_libraries(urltest PRIVATE SDL3::SDL3-static)
+    set_target_properties(urltest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     add_executable(imagetest tests/imagetest.c)

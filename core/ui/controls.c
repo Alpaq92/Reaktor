@@ -467,6 +467,8 @@ reaktor_link(const reaktor_link_spec *s)
 
     if (reaktor_focus_activated(g_frame_app, id)) hit = 1;
     if (hit && s->on_press.fn) s->on_press.fn(s->on_press.user);
+    else if (hit && s->url && !reaktor_url_allowed(s->url, s->schemes))
+        SDL_Log("not opening %s: its scheme is not one this link allows", s->url);
     else if (hit && s->url && !SDL_OpenURL(s->url))
         SDL_Log("could not open %s: %s", s->url, SDL_GetError());
     return hit;

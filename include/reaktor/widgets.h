@@ -293,6 +293,7 @@ void reaktor_color_pick(const reaktor_color_spec *s);
 typedef struct reaktor_link_spec {
     const char     *text;
     const char     *url;
+    const char     *schemes;
     const char     *name;
     const char     *style;
     reaktor_box     box;
