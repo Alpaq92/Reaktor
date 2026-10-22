@@ -44,12 +44,84 @@ static const char g_media[] =
     "@media (prefers-contrast: more) and (max-width: 720px) { ol { color: #000007; } }\n"
     "@media print { ul { color: #000008; } }\n";
 
+static char *
+repeat(char *s, const char *piece, int times)
+{
+    size_t n = strlen(s), k = strlen(piece);
+    char  *r = realloc(s, n + k * (size_t)times + 1);
+    int    i;
+
+    if (!r) return s;
+    for (i = 0; i < times; i++) memcpy(r + n + k * (size_t)i, piece, k);
+    r[n + k * (size_t)times] = 0;
+    return r;
+}
+
+static char *
+generated(const char *name)
+{
+    char *s = calloc(1, 1);
+    char  piece[64];
+    int   i;
+
+    if (!s) return NULL;
+    if (strcmp(name, "calc.css") == 0) {
+        s = repeat(s, "dir { width: calc(", 1);
+        s = repeat(s, "(", 40);
+        s = repeat(s, "1px", 1);
+        s = repeat(s, ")", 40);
+        s = repeat(s, "); color: #161616; }\n", 1);
+    } else if (strcmp(name, "self.css") == 0) {
+        s = repeat(s, "@import \"self.css\";\n", 20);
+        s = repeat(s, "kbd { color: #171717; }\n", 1);
+    } else if (strncmp(name, "fan", 3) == 0 && name[3] >= '0' && name[3] <= '8') {
+        if (name[3] < '8') {
+            snprintf(piece, sizeof(piece), "@import \"fan%c.css\";\n", name[3] + 1);
+            s = repeat(s, piece, 20);
+        }
+        s = repeat(s, "samp { color: #181818; }\n", 1);
+    } else if (strcmp(name, "nest.css") == 0) {
+        s = repeat(s, "var { color: ", 1);
+        s = repeat(s, "var(--u, ", 1000);
+        s = repeat(s, "red", 1);
+        s = repeat(s, ")", 1000);
+        s = repeat(s, "; background-color: var(--u, var(--v, #191919)); }\n", 1);
+    } else if (strcmp(name, "laughs.css") == 0) {
+        s = repeat(s, ":root { --a0: xxxxxxxxxx;", 1);
+        for (i = 1; i < 10; i++) {
+            snprintf(piece, sizeof(piece), " --a%d:", i);
+            s = repeat(s, piece, 1);
+            snprintf(piece, sizeof(piece), " var(--a%d)", i - 1);
+            s = repeat(s, piece, 10);
+            s = repeat(s, ";", 1);
+        }
+        s = repeat(s, " }\nabbr { color: var(--a9); background-color: #1a1a1a; }\n", 1);
+    } else {
+        free(s);
+        return NULL;
+    }
+    return s;
+}
+
+static int
+count(const char *s, const char *what)
+{
+    int n = 0;
+
+    while ((s = strstr(s, what)) != NULL) { n++; s++; }
+    return n;
+}
+
 char *
 reaktor_asset_load(const char *name, size_t *len)
 {
-    char *out = NULL;
+    char *out = generated(name);
     long  n = 0;
 
+    if (out) {
+        if (len) *len = strlen(out);
+        return out;
+    }
     if (strcmp(name, "test.css") == 0 || strcmp(name, "media.css") == 0) {
         const char *s = name[0] == 't' ? g_sheet : g_media;
 
@@ -171,6 +243,34 @@ main(void)
         ok(i ? "Simple.css flattens, dark" : "Simple.css flattens, light",
            out != NULL && strstr(out, "button") != NULL);
         ok("  and no compound in it holds two :not()", out != NULL && !not_twice(out));
+        free(out);
+    }
+
+    {
+        static const char *const calc[1] = { "calc.css" };
+        static const char *const self[1] = { "self.css" };
+        static const char *const fan[1] = { "fan0.css" };
+        static const char *const nest[1] = { "nest.css" };
+        static const char *const laughs[1] = { "laughs.css" };
+
+        out = reaktor_css_flatten(calc, 1, "light", 511, NULL);
+        ok("calc() nested past its depth is dropped, the rest of its rule kept",
+           out && !strstr(out, "width") && strstr(out, "#161616"));
+        free(out);
+        out = reaktor_css_flatten(self, 1, "light", 511, NULL);
+        ok("a sheet that imports itself is read once", out && count(out, "#171717") == 1);
+        free(out);
+        out = reaktor_css_flatten(fan, 1, "light", 511, NULL);
+        ok("imports that fan out stop at the budget", out && strlen(out) < (16u << 20));
+        free(out);
+        out = reaktor_css_flatten(nest, 1, "light", 511, NULL);
+        ok("var() fallbacks nested past the limit are dropped",
+           out && !strstr(out, "red") && strstr(out, "background-color: #191919"));
+        free(out);
+        out = reaktor_css_flatten(laughs, 1, "light", 511, NULL);
+        ok("var() that would grow past the limit is dropped",
+           out && strlen(out) < (1u << 20) && !strstr(out, "var(") &&
+           strstr(out, "#1a1a1a"));
         free(out);
     }
 
