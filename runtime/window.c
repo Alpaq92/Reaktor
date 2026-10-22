@@ -94,8 +94,12 @@ teardown(App *a)
     a->win = NULL;
     a->ren = NULL;
     a->ctx = NULL;
-    if (a->file_pending && g_parked_n < WINDOW_MAX) g_parked[g_parked_n++] = a;
-    else if (!a->file_pending) SDL_free(a);
+    if (SDL_GetAtomicInt(&a->file_done)) {
+        SDL_free(a->file_list);
+        SDL_free(a);
+    } else if (g_parked_n < WINDOW_MAX) {
+        g_parked[g_parked_n++] = a;
+    }
 }
 
 static void
@@ -145,6 +149,7 @@ open_window(const reaktor_window *spec, const struct nk_rect *popup)
     if (!(a = (App *)SDL_calloc(1, sizeof *a))) return 0;
     a->secondary      = 1;
     a->hot_last       = -1;
+    SDL_SetAtomicInt(&a->file_done, 1);
     a->queue.moved_ok = 1;
     if (popup) {
         float k = to_points(m);
