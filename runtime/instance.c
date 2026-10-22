@@ -293,6 +293,7 @@ reaktor_instance_stop(void)
 #elif !defined(__EMSCRIPTEN__)
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -318,18 +319,29 @@ sock_read(void *conn, void *buf, Uint32 n)
     return 1;
 }
 
-/* Beside the app's settings when that fits a socket's path, in /tmp by user otherwise. */
+/* Beside the app's settings when that fits a socket's path, else in a /tmp
+   folder only this user can reach. */
 static int
 sock_path(void)
 {
-    char *dir = SDL_GetPrefPath(NULL, reaktor_app_ident());
-    int   n = -1;
+    char       *dir = SDL_GetPrefPath(NULL, reaktor_app_ident());
+    char        own[64];
+    struct stat st;
+    int         n = -1;
 
     if (dir) n = SDL_snprintf(g_sock, sizeof g_sock, "%sinstance.sock", dir);
     SDL_free(dir);
-    if (n < 0 || (size_t)n >= sizeof g_sock)
-        n = SDL_snprintf(g_sock, sizeof g_sock, "/tmp/reaktor.%lu.%08x.sock",
-                         (unsigned long)getuid(), reaktor_fnv(REAKTOR_FNV, reaktor_app_ident()));
+    if (n > 0 && (size_t)n < sizeof g_sock) return 1;
+
+    SDL_snprintf(own, sizeof own, "/tmp/reaktor-%lu", (unsigned long)getuid());
+    if (mkdir(own, 0700) != 0 && errno != EEXIST) return 0;
+    if (lstat(own, &st) != 0 || !S_ISDIR(st.st_mode) || st.st_uid != getuid() ||
+        (st.st_mode & 077)) {
+        SDL_Log("single instance: %s is not this user's own; not listening", own);
+        return 0;
+    }
+    n = SDL_snprintf(g_sock, sizeof g_sock, "%s/%08x.sock", own,
+                     reaktor_fnv(REAKTOR_FNV, reaktor_app_ident()));
     return n > 0 && (size_t)n < sizeof g_sock;
 }
 
