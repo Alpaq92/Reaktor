@@ -1,7 +1,7 @@
 param(
     [string[]] $Targets = @("reaktor-software", "reaktor-d3d11",
-                            "reaktor-opengl", "shaft", "flutter", "electron",
-                            "kmp"),
+                            "reaktor-d3d12", "reaktor-opengl", "shaft",
+                            "flutter", "electron", "kmp"),
     [double]   $Seconds = 6,
     [double]   $Fps = 60,
     [int]      $Boxes = 64,
@@ -25,6 +25,12 @@ function Get-Arm([string]$name) {
         "reaktor-d3d11" {
             @{ exe  = Join-Path $root "build\bench.exe"
                args = @("--renderer", "direct3d11")
+               dir  = $root
+               make = "./build.ps1 bench" }
+        }
+        "reaktor-d3d12" {
+            @{ exe  = Join-Path $root "build\bench.exe"
+               args = @("--renderer", "direct3d12")
                dir  = $root
                make = "./build.ps1 bench" }
         }
@@ -173,6 +179,10 @@ foreach ($name in $Targets) {
 
         if ($r.exit -ne 0) {
             Write-Host ("{0,-18} exited {1}: {2}" -f $name, $r.exit, $r.stderr.Trim())
+            break
+        }
+        if ($r.stderr -match "would not start") {
+            Write-Host ("{0,-18} skipped - its renderer would not start: {1}" -f $name, $r.stderr.Trim())
             break
         }
 

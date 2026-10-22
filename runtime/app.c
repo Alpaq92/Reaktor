@@ -826,7 +826,9 @@ app_init(void **appstate, int argc, char *argv[])
     if (app->renderer_pref && SDL_strcmp(app->renderer_pref, "software") != 0) {
         SDL_strlcpy(app->render_mode, app->renderer_pref,
                     sizeof(app->render_mode));
-        if (SDL_strcmp(app->renderer_pref, "auto") != 0)
+        if (SDL_strcasecmp(app->renderer_pref, "directx") == 0)
+            reaktor_hint(SDL_HINT_RENDER_DRIVER, "direct3d12,direct3d11");
+        else if (SDL_strcmp(app->renderer_pref, "auto") != 0)
             reaktor_hint(SDL_HINT_RENDER_DRIVER, app->renderer_pref);
     } else {
         SDL_strlcpy(app->render_mode, "auto: software",

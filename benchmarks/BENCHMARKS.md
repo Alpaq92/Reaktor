@@ -25,11 +25,13 @@ macOS, Linux and the BSDs (`--targets`, `--runs`, `--seconds`, `--fps`,
 `--boxes`, `--csv`). Nothing is built for you: a missing arm is skipped, with
 the command that builds it.
 
-Reaktor runs three times — `reaktor-software`, its default, and
-`reaktor-d3d11` and `reaktor-opengl`, the same binary on SDL's GPU drivers
-(`run.sh` adds `reaktor-metal` on macOS). The others draw on the GPU, so those
-two are the like-for-like comparison. SDL's OpenGL driver is built only with
-`-DREAKTOR_SDL_GL=ON`, which the `reaktor-opengl` arm's build passes.
+Reaktor runs four times — `reaktor-software`, its default, and
+`reaktor-d3d11`, `reaktor-d3d12` and `reaktor-opengl`, the same binary on
+SDL's GPU drivers (`run.sh` adds `reaktor-metal` on macOS). The others draw on
+the GPU, so those three are the like-for-like comparison. SDL's OpenGL driver
+is built only with `-DREAKTOR_SDL_GL=ON`, which the `reaktor-opengl` arm's
+build passes. An arm whose renderer would not start is skipped, not measured
+under another renderer's name.
 
 ## What every arm draws
 

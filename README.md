@@ -11,7 +11,7 @@ Tired of C having no cross-platform GUI — nothing like
 [Shaft](https://github.com/ShaftUI/Shaft) or
 [Freya](https://github.com/marc2332/freya) — and of toolkits that want hundreds
 of megabytes to put a dialog on screen? No? But I was, so I wrote Reaktor:
-complete without being big. A 2.3 MB binary, about 10 MB of RAM, and no GPU
+complete without being big. A 2.4 MB binary, about 10 MB of RAM, and no GPU
 required.
 
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
@@ -23,7 +23,7 @@ yourself.
 > ⚠️ **Reaktor is in active development**, and breaking changes might occur.
 
 <p align="center">
-  <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 9.5 MB, the same binary on D3D11 59.0 MB and on OpenGL 69.9 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB. CPU as a percent of one core: Reaktor 8.9%, D3D11 16.0%, OpenGL 11.2%, Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%"></a>
+  <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 9.5 MB, the same binary on D3D11 59.0 MB, on D3D12 121.5 MB and on OpenGL 69.9 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB. CPU as a percent of one core: Reaktor 8.9%, D3D11 16.0%, D3D12 11.0%, OpenGL 11.2%, Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%"></a>
 </p>
 
 How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
