@@ -107,9 +107,9 @@ attribution, and the page prints it under the story.
 
 ## The mark
 
-`assets/icons/` is original work under this project's MIT license, as SVG, PNG
-and `.ico`. Its colors are USWDS system tokens, public domain as a U.S.
-Government work.
+`assets/icons/`, the Reaktor mark, is original work under this project's MIT
+license, as SVG, PNG and `.ico`. Its colors are USWDS system tokens, public
+domain as a U.S. Government work.
 
 ## Benchmarks
 
