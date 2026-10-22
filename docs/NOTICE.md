@@ -19,7 +19,7 @@ from the project's own license file at the pinned revision.
 | [plutovg](https://github.com/sammycage/plutovg) | plutosvg's canvas (nested submodule) | MIT |
 | [mojibake](https://github.com/zaerl/mojibake) | Bidirectional text (UAX #9) and line breaking (UAX #14), for the Text module | MIT |
 | [kb_text_shape](https://github.com/JimmyLefevre/kb) | OpenType shaping, script segmentation and font coverage, for the Text module | zlib |
-| [ini.h](https://github.com/mattiasgustavsson/libs) | Reading and writing `settings.conf` | MIT or public domain |
+| [ini.h](https://github.com/mattiasgustavsson/libs) | Reading and writing `settings.conf` | MIT **or** public domain |
 | [PDFGen](https://github.com/AndreRenaud/PDFGen) | Writing PDFs, for the print module | Unlicense |
 
 Only LCUI's `libcss` and `yutil` are built, not the toolkit. SDL is built

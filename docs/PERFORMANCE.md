@@ -39,10 +39,10 @@ plotted: it does not link on Windows.
 
 | Arm | Memory | CPU, with startup | CPU, steady state |
 | --- | --- | --- | --- |
-| **Reaktor**, `software` | **9.5 MB** | **8.6%** | 6.0% |
+| **Reaktor**, `software` | 9.5 MB | 8.6% | 6.0% |
 | **Reaktor**, `direct3d11` | 59.4 MB | 14.1% | 10.3% |
-| **Reaktor**, `direct3d12` | 122.3 MB | 11.8% | **5.0%** |
-| **Reaktor**, `opengl` | 70.1 MB | 11.6% | **5.0%** |
+| **Reaktor**, `direct3d12` | 122.3 MB | 11.8% | 5.0% |
+| **Reaktor**, `opengl` | 70.1 MB | 11.6% | 5.0% |
 | Flutter | 90.8 MB | 19.3% | 15.6% |
 | Electron | 157.6 MB | 40.8% | 26.1% |
 | Kotlin Multiplatform | 667.4 MB | 59.6% | 33.5% |
