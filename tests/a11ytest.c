@@ -390,5 +390,17 @@ int main(int argc, char **argv)
     check("overflow clamps at the arena size", n, REAKTOR_A11Y_MAX_NODES);
     check("overflow is counted", a.overflow_nodes > 0, 1);
 
+    reaktor_a11y_begin(&a, "w", r(0, 0, 10, 10));
+    for (i = 0; i < REAKTOR_A11Y_SLOTS * 2; i++) {
+        char name[16];
+
+        snprintf(name, sizeof(name), "n%d", i);
+        reaktor_a11y_add(&a, REAKTOR_A11Y_NONE, name, NULL, 0, r(0, 0, 1, 1));
+    }
+    reaktor_a11y_add(&a, REAKTOR_A11Y_BUTTON, "after", NULL, 0, r(0, 0, 1, 1));
+    reaktor_a11y_end(&a);
+    reaktor_a11y_tree(&a, &n);
+    check("a full slot table still ends the frame", n >= 1, 1);
+
     return test_done("a11y");
 }
