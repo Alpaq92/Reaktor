@@ -103,6 +103,7 @@ typedef struct reaktor_launch {
     void  *user;
     int    remember_window;
     int    single_instance;
+    int    skip_same_frames;
     reaktor_save save_settings;
     int    save_ms;
 } reaktor_launch;

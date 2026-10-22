@@ -917,6 +917,16 @@ While a mouse button is held, frames follow the display's refresh, with two
 more after the release. A turn of the wheel takes two frames, because Nuklear
 scrolls a panel after drawing it.
 
+**A frame that draws what is already on screen** is still rendered and
+presented, unless the launch sets `.skip_same_frames`. Then each frame's draw
+commands are hashed field by field, and one that matches the last presented
+frame is neither rendered nor presented. A key nothing takes, or a focus
+change that moves no ring, then costs the build and nothing more. A window
+uncovered, shown, resized, restored or moved to another scale is always drawn,
+and so is a frame a `--shot` or a capture waits for. It is off by default; the
+showcase turns it on, and its Diagnostics page counts the frames drawn and
+skipped.
+
 A finger that moves mostly up or down, by more than 8 pixels, scrolls the
 panel under it: the runtime releases what the finger pressed away from every
 widget, so nothing is clicked, and turns its movement into wheel steps sized

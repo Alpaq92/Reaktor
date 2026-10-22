@@ -1304,6 +1304,8 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     out->frame_gap_ms = app->frame_gap_ms;
     out->cpu_ms_per_frame = app->cpu_ms_per_frame;
     out->hover_gap_ms     = (int)g_hover_gap_ms;
+    out->frames_drawn     = app->frames_drawn;
+    out->frames_skipped   = app->frames_skipped;
 
     out->nk_bytes = (unsigned long)app->ctx->memory.size;
     out->nk_used  = (unsigned long)app->ctx->memory.allocated;

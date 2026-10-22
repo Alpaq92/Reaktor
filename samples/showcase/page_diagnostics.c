@@ -159,6 +159,9 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
         SDL_snprintf(v, sizeof(v), "one per %d ms while the pointer moves",
                      d.hover_gap_ms);
         diag_row(app, ctx, "hover redraws", v);
+        SDL_snprintf(v, sizeof(v), "%lu drawn, %lu the same as the last and skipped",
+                     d.frames_drawn, d.frames_skipped);
+        diag_row(app, ctx, "frames", v);
     }
 
     section(app, ctx, "Where a frame goes",
