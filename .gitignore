@@ -32,3 +32,4 @@ benchmarks/flutter-bench/*.iml
 build-pkg/
 build-pkg-consumer/
 dist/
+smoke/
