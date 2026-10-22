@@ -26,7 +26,8 @@ CPU as a percent of one core: Reaktor 8.9%, D3D11 16.0%, OpenGL 11.2%,
 Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
-rotating at 60 fps in an 800×600 window, run on one machine by one procedure;
+rotating at 60 fps in an 800×600 window, run on one machine (a 4-core
+Ryzen 5 4600H VirtualBox VM) by one procedure;
 [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the projects and the runner.
 Reaktor appears three times because `--renderer` changes what it is. Shaft is
 not plotted: it does not link on Windows.
@@ -55,7 +56,7 @@ not plotted: it does not link on Windows.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
   program keeping the GPU busy, `direct3d11` and `opengl` missed 60 fps and
   their main thread took 16–28% of a core, nearly all of it waiting to hand
-  frames to Windows. These runs had the GPU idle.
+  frames to Windows. These runs had the VM's virtual GPU idle.
 
 **Reaktor's top row used to read 67.3%.** The cause was not the drawing
 itself but how shapes were handed over. Every shape, even a plain rectangle,
