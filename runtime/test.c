@@ -19,7 +19,7 @@ struct reaktor_test {
 
 typedef struct test_ask {
     reaktor_test  *t;
-    const char    *target;
+    char           target[256];
     reaktor_a11y_node node;
     char           value[256];
     int            found;
@@ -31,6 +31,7 @@ static void               *g_user;
 static reaktor_test        g_test;
 static SDL_Thread         *g_thread;
 static void               *g_settle;
+static test_ask            g_ask, g_settle_ask;
 
 App *
 reaktor_test_app_of(reaktor_test *t)
@@ -110,14 +111,12 @@ look_main(App *app, void *user)
 void
 reaktor_test_settle(reaktor_test *t)
 {
-    test_ask q;
-
-    SDL_zero(q);
-    q.t = t;
-    SDL_SetAtomicPointer(&g_settle, &q);
+    if (t->stuck) return;
+    SDL_zero(g_settle_ask);
+    g_settle_ask.t = t;
+    SDL_SetAtomicPointer(&g_settle, &g_settle_ask);
     reaktor_wake(t->app);
-    wait_main(t);
-    SDL_SetAtomicPointer(&g_settle, NULL);
+    if (wait_main(t)) SDL_SetAtomicPointer(&g_settle, NULL);
 }
 
 static int
@@ -126,13 +125,17 @@ look(reaktor_test *t, const char *target, test_ask *q)
     int tries;
 
     SDL_zero(*q);
-    q->t = t;
-    q->target = target;
+    if (t->stuck) return 0;
     for (tries = 0; tries < TEST_FIND_TRIES; tries++) {
-        reaktor_post(t->app, look_main, q);
+        SDL_zero(g_ask);
+        g_ask.t = t;
+        SDL_strlcpy(g_ask.target, target, sizeof g_ask.target);
+        reaktor_post(t->app, look_main, &g_ask);
         if (!wait_main(t)) return 0;
+        *q = g_ask;
         if (q->found) return 1;
         reaktor_test_settle(t);
+        if (t->stuck) return 0;
     }
     return 0;
 }
