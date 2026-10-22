@@ -135,6 +135,7 @@ and `close-outline` (MIT); Aileron Regular and Bold (CC0); and the mark and
 `assets/css/reaktor.css` (MIT). Their licenses are in `licenses/` too.
 
 The rest of Ionicons, Simple.css, the Japanese font and the catalogs are not
-embedded (the catalogs are with `-DREAKTOR_LOCALE_EMBED=ON`); a build that uses
-them ships them beside the binary, under the `.reaktor-root` marker. The
-WebAssembly build packs the ones it uses into its `.data` bundle.
+embedded (the catalogs are with `-DREAKTOR_LOCALE_EMBED=ON`); a build that
+uses them ships them beside the binary, under the `.reaktor-root` marker,
+which `tools/package.sh` writes for releases. The WebAssembly build packs the
+ones it uses into its `.data` bundle.
