@@ -5,6 +5,7 @@
    the window has drawn and settled. */
 #include "internal.h"
 #include "reaktor/test.h"
+#include "declare.h"
 
 #define TEST_WAIT_MS     5000
 #define TEST_FIND_TRIES  20
