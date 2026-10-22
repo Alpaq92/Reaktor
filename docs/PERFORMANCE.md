@@ -20,9 +20,9 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 10.0 MB, the same binary on D3D11 60.7 MB and on OpenGL
-90.2 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB.
-CPU as a percent of one core: Reaktor 16.4%, D3D11 14.4%, OpenGL 14.1%,
+Memory: Reaktor 9.5 MB, the same binary on D3D11 60.0 MB and on OpenGL
+90.1 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB.
+CPU as a percent of one core: Reaktor 8.9%, D3D11 13.9%, OpenGL 12.8%,
 Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
@@ -33,20 +33,20 @@ not plotted: it does not link on Windows.
 
 | Arm | Memory | CPU, one core |
 | --- | --- | --- |
-| **Reaktor**, `software` | **10.0 MB** | **16.4%** |
-| **Reaktor**, `direct3d11` | 60.7 MB | 14.4% |
-| **Reaktor**, `opengl` | 90.2 MB | 14.1% |
+| **Reaktor**, `software` | **9.5 MB** | **8.9%** |
+| **Reaktor**, `direct3d11` | 60.0 MB | 13.9% |
+| **Reaktor**, `opengl` | 90.1 MB | 12.8% |
 | Flutter | 92.2 MB | 16.6% |
 | Electron | 158.3 MB | 39.0% |
 | Kotlin Multiplatform | 669.8 MB | 56.1% |
 
-- **A ninth of Flutter's memory**, a sixty-seventh of Compose's, and the
-  cheapest arm on CPU after Reaktor's own GPU backends.
-- **The GPU backends buy about two points of CPU for six to nine times the
-  memory**, which is why the default stays software. On a GPU driver Reaktor
-  costs what the GPU frameworks do: `opengl` is 90.2 MB against Flutter's
-  92.2, and the three GPU arms fall within 2.5 points on CPU. At that size the
-  number is the GL context and its buffers, not the framework.
+- **A tenth of Flutter's memory**, a seventieth of Compose's, and the
+  cheapest arm on CPU.
+- **The GPU backends cost four to five more points of CPU and six to nine
+  times the memory**, which is why the default stays software. On a GPU driver
+  Reaktor costs what the GPU frameworks do: `opengl` is 90.1 MB against
+  Flutter's 92.2, and the three GPU arms fall within 3.8 points on CPU. At
+  that size the number is the GL context and its buffers, not the framework.
 
 **The top row used to read 67.3%**, and not from rasterizing. `nk_convert`
 turns every shape into triangles, so a panel background reached SDL as two
@@ -65,11 +65,16 @@ within one least significant bit. Only measuring the present found it.
 Every arm is held to 60 fps and sleeps out each frame, so it is charged for
 drawing, not waiting. Each figure is the median of ten 6-second runs; across
 three passes CPU moved by up to three points and memory by under a megabyte.
+Reaktor's three rows were measured again on 2026-10-22, from a fresh Release
+build with the submodules at their pinned commits, with
+`-Targets reaktor-software,reaktor-d3d11,reaktor-opengl`; the others are
+from the earlier pass.
 Memory is peak summed private bytes across the process tree; the JVM has no
 heap flags. The sampler, not the apps' own counters, sets the bars: those miss
-driver threads and presentation — for `direct3d11`, `bench` extrapolated 2.5%
-of a core where the sampler charged 16.5%. `direct3d12` and `vulkan` fall back
-to D3D11 in this SDL build.
+driver threads and presentation — for `direct3d11`, `bench --fps 0` times
+0.07 ms of building and rendering a frame, 0.4% of a core at 60 fps, where the
+sampler charged 13.9%. `direct3d12` and `vulkan` fall back to D3D11 in this
+SDL build.
 
 ## Size
 
