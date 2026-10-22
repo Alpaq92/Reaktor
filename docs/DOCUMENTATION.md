@@ -228,7 +228,7 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 
 | Widget | Call | Answers 1 | Its own fields |
 | --- | --- | --- | --- |
-| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys`, `.on_press`, `.tooltip`, `.fit_content` (as large as its label and icon need; a `.box.w` is then the least it takes, so short labels line up and long ones grow); `.accent` with `.icon` draws both; `.paint` and `.paint_user` draw the inside as `reaktor_button_custom` does, with `.label` measured for `.fit_content` and read as the name unless `.name` is set |
+| Button | `reaktor_button` | when pressed | `.label`, `.icon`, `.accent`, `.disabled`, `.repeat` (fires while held), `.keys` (the shortcut readers announce; the `key` hook binds it, see [Keyboard](#keyboard)), `.on_press`, `.tooltip`, `.fit_content` (as large as its label and icon need; a `.box.w` is then the least it takes, so short labels line up and long ones grow); `.accent` with `.icon` draws both; `.paint` and `.paint_user` draw the inside as `reaktor_button_custom` does, with `.label` measured for `.fit_content` and read as the name unless `.name` is set |
 | Link | `reaktor_link` | when pressed | `.text`, `.active`, `.on_press`, or `.url` to open in the browser |
 | Label | `reaktor_label` | — | `.text`, `.wrap`, `.align` (`REAKTOR_LEFT`, `_CENTER`, `_RIGHT`), `.color` (a token), `.value`, `.silent` (left out of the tree) |
 | Icon | `reaktor_icon` | — | `.name` (an Ionicon) and `.accent`, or `.src` (any image asset: SVG, PNG, JPEG), stretched to its box; `.tooltip` |

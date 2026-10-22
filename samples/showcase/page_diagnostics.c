@@ -2,7 +2,8 @@
 
 static const char *const rss_names[REAKTOR_RSS_STEPS] = {
     "before any of it", "SDL_Init(VIDEO)", "window and renderer",
-    "window icon", "Nuklear context", "font atlas", "stylesheets"
+    "window icon", "Nuklear context", "font atlas", "the application's start",
+    "stylesheets"
 };
 
 static void

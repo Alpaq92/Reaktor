@@ -806,6 +806,10 @@ if(EMSCRIPTEN)
 endif()
 
 if(MSVC)
+    # Nuklear's NK_ALIGNOF takes the offset of a member of an unnamed struct.
+    set_source_files_properties(core/render/nk_impl.c PROPERTIES COMPILE_OPTIONS /wd4116)
+    # nuklear.h combines constants of different enums in its own declarations.
+    target_compile_options(reaktor_core PRIVATE /wd5287)
     target_compile_options(showcase PRIVATE /wd5287 /wd4101)
     target_compile_definitions(showcase PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
