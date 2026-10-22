@@ -108,7 +108,9 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
         return 0;
     }
 
-    parent = a->depth > 0 ? a->parent[a->depth - 1] : 0u;
+    parent = a->depth > 0
+             ? a->parent[(a->depth < REAKTOR_A11Y_MAX_DEPTH ? a->depth : REAKTOR_A11Y_MAX_DEPTH) - 1]
+             : 0u;
 
     nh   = hash_str(REAKTOR_FNV, name);
     base = nh ^ ((unsigned)role * 0x9e3779b9u);
