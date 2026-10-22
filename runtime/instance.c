@@ -6,6 +6,7 @@
 #ifndef __EMSCRIPTEN__
 #define INSTANCE_PATH_MAX 4096
 #define INSTANCE_PATHS_MAX 64
+#define INSTANCE_READ_MS   2000
 
 static void (*g_opened)(App *app, const char *path);
 
@@ -34,7 +35,8 @@ receive(App *app, instance_read rd, void *conn)
     Uint32 count = 0, i, len;
     char  *path;
 
-    if (rd(conn, &count, sizeof count) && count <= INSTANCE_PATHS_MAX) {
+    if (!rd(conn, &count, sizeof count)) return;
+    if (count <= INSTANCE_PATHS_MAX) {
         for (i = 0; i < count; i++) {
             if (!rd(conn, &len, sizeof len) || len == 0 || len >= INSTANCE_PATH_MAX) break;
             if (!(path = (char *)SDL_malloc(len + 1))) break;
@@ -98,16 +100,41 @@ message(int argc, char **argv, char **out, Uint32 *out_len)
 static HANDLE        g_mutex;
 static char          g_pipe[256];
 static SDL_Thread   *g_thread;
-static SDL_AtomicInt g_stop;
+static HANDLE        g_stop;
+
+typedef struct pipe_conn { HANDLE pipe, event; } pipe_conn;
+
+static int
+pipe_wait(HANDLE pipe, OVERLAPPED *o, DWORD ms, DWORD *got)
+{
+    HANDLE wait[2];
+
+    wait[0] = o->hEvent;
+    wait[1] = g_stop;
+    if (WaitForMultipleObjects(2, wait, FALSE, ms) == WAIT_OBJECT_0 &&
+        GetOverlappedResult(pipe, o, got, FALSE))
+        return 1;
+    CancelIoEx(pipe, o);
+    GetOverlappedResult(pipe, o, got, TRUE);
+    return 0;
+}
 
 static int
 pipe_read(void *conn, void *buf, Uint32 n)
 {
-    DWORD got = 0;
-    char *p = (char *)buf;
+    pipe_conn *c = (pipe_conn *)conn;
+    char      *p = (char *)buf;
 
     while (n) {
-        if (!ReadFile((HANDLE)conn, p, n, &got, NULL) || !got) return 0;
+        OVERLAPPED o;
+        DWORD      got = 0;
+
+        SDL_zero(o);
+        o.hEvent = c->event;
+        ResetEvent(c->event);
+        if (!ReadFile(c->pipe, p, n, NULL, &o) && GetLastError() != ERROR_IO_PENDING)
+            return 0;
+        if (!pipe_wait(c->pipe, &o, INSTANCE_READ_MS, &got) || !got) return 0;
         p += got;
         n -= got;
     }
@@ -163,21 +190,33 @@ reaktor_instance_claim(int argc, char **argv)
 static int SDLCALL
 listen_thread(void *data)
 {
-    App *app = (App *)data;
+    App      *app = (App *)data;
+    pipe_conn c;
 
-    while (!SDL_GetAtomicInt(&g_stop)) {
-        HANDLE p = CreateNamedPipeA(g_pipe, PIPE_ACCESS_INBOUND,
-                                    PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
-                                        PIPE_REJECT_REMOTE_CLIENTS,
-                                    PIPE_UNLIMITED_INSTANCES, 0, 64 * 1024, 0, NULL);
+    c.event = CreateEventA(NULL, TRUE, FALSE, NULL);
+    if (!c.event) return 0;
+    while (WaitForSingleObject(g_stop, 0) != WAIT_OBJECT_0) {
+        OVERLAPPED o;
+        DWORD      none = 0;
+        int        connected;
 
-        if (p == INVALID_HANDLE_VALUE) return 0;
-        if (ConnectNamedPipe(p, NULL) || GetLastError() == ERROR_PIPE_CONNECTED) {
-            if (!SDL_GetAtomicInt(&g_stop)) receive(app, pipe_read, p);
-        }
-        DisconnectNamedPipe(p);
-        CloseHandle(p);
+        c.pipe = CreateNamedPipeA(g_pipe, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                                  PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
+                                      PIPE_REJECT_REMOTE_CLIENTS,
+                                  PIPE_UNLIMITED_INSTANCES, 0, 64 * 1024, 0, NULL);
+        if (c.pipe == INVALID_HANDLE_VALUE) break;
+        SDL_zero(o);
+        o.hEvent = c.event;
+        ResetEvent(c.event);
+        connected = ConnectNamedPipe(c.pipe, &o) ||
+                    GetLastError() == ERROR_PIPE_CONNECTED ||
+                    (GetLastError() == ERROR_IO_PENDING &&
+                     pipe_wait(c.pipe, &o, INFINITE, &none));
+        if (connected) receive(app, pipe_read, &c);
+        DisconnectNamedPipe(c.pipe);
+        CloseHandle(c.pipe);
     }
+    CloseHandle(c.event);
     return 0;
 }
 
@@ -186,6 +225,7 @@ reaktor_instance_listen(App *app, void (*opened)(App *app, const char *path))
 {
     g_opened = opened;
     if (!g_mutex || g_thread) return;
+    if (!g_stop && !(g_stop = CreateEventA(NULL, TRUE, FALSE, NULL))) return;
     g_thread = SDL_CreateThread(listen_thread, "reaktor-instance", app);
 }
 
@@ -193,14 +233,13 @@ void
 reaktor_instance_stop(void)
 {
     if (g_thread) {
-        HANDLE p;
-
-        SDL_SetAtomicInt(&g_stop, 1);
-        /* The listener waits in ConnectNamedPipe; one connection releases it. */
-        p = CreateFileA(g_pipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-        if (p != INVALID_HANDLE_VALUE) CloseHandle(p);
+        SetEvent(g_stop);
         SDL_WaitThread(g_thread, NULL);
         g_thread = NULL;
+    }
+    if (g_stop) {
+        CloseHandle(g_stop);
+        g_stop = NULL;
     }
     if (g_mutex) {
         ReleaseMutex(g_mutex);
@@ -212,6 +251,7 @@ reaktor_instance_stop(void)
 #elif !defined(__EMSCRIPTEN__)
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -315,6 +355,13 @@ listen_thread(void *data)
         if (c < 0) {
             if (errno == EINTR) continue;
             break;
+        }
+        {
+            struct timeval tv;
+
+            tv.tv_sec  = INSTANCE_READ_MS / 1000;
+            tv.tv_usec = (INSTANCE_READ_MS % 1000) * 1000;
+            setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
         }
         if (!SDL_GetAtomicInt(&g_stop)) receive(app, sock_read, &c);
         close(c);
