@@ -126,7 +126,8 @@ endif()
 file(GLOB PLUTOVG_SRC "${TP}/plutosvg/plutovg/source/*.c")
 add_library(plutovg STATIC ${PLUTOVG_SRC})
 target_include_directories(plutovg PUBLIC "${TP}/plutosvg/plutovg/include")
-target_compile_definitions(plutovg PUBLIC PLUTOVG_BUILD_STATIC)
+target_compile_definitions(plutovg PUBLIC PLUTOVG_BUILD_STATIC
+                                   PRIVATE STBI_ONLY_PNG STBI_ONLY_JPEG)
 
 add_library(plutosvg STATIC "${TP}/plutosvg/source/plutosvg.c")
 target_include_directories(plutosvg PUBLIC "${TP}/plutosvg/source")
@@ -262,6 +263,11 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(csstest PRIVATE plutovg)
     target_compile_definitions(csstest PRIVATE _CRT_SECURE_NO_WARNINGS)
     set_target_properties(csstest PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+    add_executable(imagetest tests/imagetest.c)
+    target_link_libraries(imagetest PRIVATE plutovg)
+    set_target_properties(imagetest PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
