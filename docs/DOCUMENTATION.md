@@ -895,7 +895,8 @@ in `core/` knows which application it is in.
 seven Ionicons the widgets draw (three chevrons, three discs and the toast's
 close cross), `reaktor.css` and Water.css's palettes and parts, copied byte for byte
 at configure time. `reaktor_asset_load` still tries the file under the
-`.reaktor-root` marker first, so an edited sheet shows without a rebuild.
+`.reaktor-root` marker first, so an edited sheet shows without a rebuild; the
+marker is looked for beside the program and at most two folders above it.
 Nothing is read from the working directory, and a path a user hands over is
 made absolute where it is taken. The rest of Ionicons, Simple.css and the
 catalogs are read from files; an icon that is not there is drawn as nothing,

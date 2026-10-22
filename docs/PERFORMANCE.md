@@ -190,8 +190,8 @@ GPU, `direct3d11` falls back to WARP and a frame goes from 4.7 ms to
 
 **No GPU**, and about **10 MB of RAM**. The default look is compiled in, so a
 program needs no files beside it until it uses other Ionicons, Simple.css, the
-catalogs or the Japanese font, found by walking up to the `.reaktor-root`
-marker. The web build packs those into its `.data` and needs an HTTP server,
+catalogs or the Japanese font, found under a `.reaktor-root` marker beside it
+or up to two folders above. The web build packs those into its `.data` and needs an HTTP server,
 since a `file://` page cannot fetch the `.wasm`.
 
 ## Where the numbers came from
