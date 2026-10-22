@@ -1,8 +1,10 @@
 # Performance
 
-**Every pixel is drawn by the CPU.** Nuklear turns the widgets into shapes and
-SDL's software rasterizer fills them in; no GPU is required anywhere, for the
-reasons in [the renderer](DOCUMENTATION.md#the-renderer).
+**By default, every pixel is drawn by the CPU.** Nuklear turns the widgets into
+shapes and SDL's software rasterizer fills them in; no GPU is required
+anywhere, for the reasons in [the renderer](DOCUMENTATION.md#the-renderer).
+`--renderer` hands the drawing to the GPU instead, through Direct3D, OpenGL or
+Metal; [Against the others](#against-the-others) measures both.
 
 **Nothing is drawn until something changes.** The app sleeps on the event
 queue and builds a frame only when the picture would differ. So **CPU is a
