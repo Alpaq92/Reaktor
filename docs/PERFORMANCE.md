@@ -20,9 +20,9 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 9.5 MB, the same binary on D3D11 60.0 MB and on OpenGL
-90.1 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB.
-CPU as a percent of one core: Reaktor 8.9%, D3D11 13.9%, OpenGL 12.8%,
+Memory: Reaktor 9.5 MB, the same binary on D3D11 59.0 MB and on OpenGL
+69.9 MB, Flutter 92.2 MB, Electron 158.3 MB, Kotlin Multiplatform 669.8 MB.
+CPU as a percent of one core: Reaktor 8.9%, D3D11 16.0%, OpenGL 11.2%,
 Flutter 16.6%, Electron 39.0%, Kotlin Multiplatform 56.1%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
@@ -31,22 +31,31 @@ rotating at 60 fps in an 800×600 window, run on one machine by one procedure;
 Reaktor appears three times because `--renderer` changes what it is. Shaft is
 not plotted: it does not link on Windows.
 
-| Arm | Memory | CPU, one core |
-| --- | --- | --- |
-| **Reaktor**, `software` | **9.5 MB** | **8.9%** |
-| **Reaktor**, `direct3d11` | 60.0 MB | 13.9% |
-| **Reaktor**, `opengl` | 90.1 MB | 12.8% |
-| Flutter | 92.2 MB | 16.6% |
-| Electron | 158.3 MB | 39.0% |
-| Kotlin Multiplatform | 669.8 MB | 56.1% |
+| Arm | Memory | CPU, one core | CPU, steady state |
+| --- | --- | --- | --- |
+| **Reaktor**, `software` | **9.5 MB** | **8.9%** | **7.2%** |
+| **Reaktor**, `direct3d11` | 59.0 MB | 16.0% | 12.3% |
+| **Reaktor**, `opengl` | 69.9 MB | 11.2% | 6.6% |
+| Flutter | 92.2 MB | 16.6% | — |
+| Electron | 158.3 MB | 39.0% | — |
+| Kotlin Multiplatform | 669.8 MB | 56.1% | — |
 
 - **About a tenth of Flutter's memory**, a seventieth of Kotlin
   Multiplatform's, and the least CPU of the six.
-- **The GPU backends cost four to five more points of CPU and six to nine
-  times the memory**, which is why the default stays software. On a GPU driver
-  Reaktor costs what the GPU frameworks do: `opengl` is 90.1 MB against
-  Flutter's 92.2, and the three GPU arms fall within 3.8 points on CPU. At
-  that size the number is the GL context and its buffers, not the framework.
+- **The GPU backends cost six to seven times the memory and more CPU**,
+  which is why the default stays software. On a GPU driver Reaktor costs what
+  the GPU frameworks do: `opengl` is 69.9 MB against Flutter's 92.2, and the
+  three GPU arms fall within 5.4 points on CPU. At that size the number is the
+  GL context and its buffers, not the framework.
+- **Starting up costs more on a GPU driver, and the 6-second run counts it.**
+  A run that draws for only 0.2 s takes 0.16 s of CPU on `software`, 0.41 s
+  on `direct3d11` and 0.44 s on `opengl`. Once running (the steady-state
+  column), `opengl` takes less CPU than `software`, and `direct3d11` still
+  takes more.
+- **A GPU renderer's CPU depends on what else uses the GPU.** With another
+  program keeping the GPU busy, `direct3d11` and `opengl` missed 60 fps and
+  their main thread took 16–28% of a core, nearly all of it waiting to hand
+  frames to Windows. These runs had the GPU idle.
 
 **Reaktor's top row used to read 67.3%.** The cause was not the drawing
 itself but how shapes were handed over. Every shape, even a plain rectangle,
@@ -69,13 +78,16 @@ drawing, not waiting. Each figure is the median of ten 6-second runs; across
 three passes CPU moved by up to three points and memory by under a megabyte.
 Reaktor's three rows were measured again on 2026-10-22, from a fresh Release
 build with the submodules at their pinned commits, with
-`-Targets reaktor-software,reaktor-d3d11,reaktor-opengl`; the others are
-from the earlier pass.
+`-Targets reaktor-software,reaktor-d3d11,reaktor-opengl` and the GPU idle
+(power state P8, 8–21% use before each phase); the others are from the
+earlier pass. The steady-state column is each process's CPU from 3 s to 8 s
+of a 9-second run, the median of ten runs per renderer taken in turn; every
+run held 60 fps.
 Memory is peak summed private bytes across the process tree; the JVM has no
 heap flags. The sampler, not the apps' own counters, sets the bars: those miss
 driver threads and presentation — for `direct3d11`, `bench --fps 0` times
 0.07 ms of building and rendering a frame, 0.4% of a core at 60 fps, where the
-sampler charged 13.9%. `direct3d12` and `vulkan` fall back to D3D11 in this
+sampler charged 16.0%. `direct3d12` and `vulkan` fall back to D3D11 in this
 SDL build.
 
 ## Size

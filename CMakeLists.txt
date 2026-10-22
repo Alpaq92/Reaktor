@@ -38,9 +38,10 @@ foreach(drv RENDER_D3D RENDER_D3D12 RENDER_VULKAN VULKAN)
 endforeach()
 
 option(REAKTOR_SDL_GL "Build SDL's OpenGL/GLES drivers on Windows, Linux and the BSDs" OFF)
-if((WIN32 OR (UNIX AND NOT APPLE)) AND NOT EMSCRIPTEN AND NOT REAKTOR_SDL_GL)
-    set(SDL_OPENGL   OFF CACHE BOOL "" FORCE)
-    set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
+# Set both ways: forced off once, the cache would keep them off after =ON.
+if((WIN32 OR (UNIX AND NOT APPLE)) AND NOT EMSCRIPTEN)
+    set(SDL_OPENGL   ${REAKTOR_SDL_GL} CACHE BOOL "" FORCE)
+    set(SDL_OPENGLES ${REAKTOR_SDL_GL} CACHE BOOL "" FORCE)
 endif()
 
 set(SDL_X11_XSCRNSAVER OFF CACHE BOOL "" FORCE)

@@ -6,11 +6,11 @@
   <rect x="99.5" y="448.624" width="46" height="3.37563" fill="#56c7ff"/>
   <text x="122.5" y="418.624" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">9.5 MB</text>
   <text x="122.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">Software</text>
-  <path d="M205.5 452 v-15.302 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v15.302 z" fill="#56c7ff"/>
-  <text x="228.5" y="400.698" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">60.0 MB</text>
+  <path d="M205.5 452 v-14.9467 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v14.9467 z" fill="#56c7ff"/>
+  <text x="228.5" y="401.053" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">59.0 MB</text>
   <text x="228.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">D3D11</text>
-  <path d="M311.5 452 v-25.9975 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v25.9975 z" fill="#56c7ff"/>
-  <text x="334.5" y="390.003" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">90.1 MB</text>
+  <path d="M311.5 452 v-18.8376 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v18.8376 z" fill="#56c7ff"/>
+  <text x="334.5" y="397.162" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">69.9 MB</text>
   <text x="334.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">OpenGL</text>
   <path d="M417.5 452 v-26.7461 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v26.7461 z" fill="#6e7a82"/>
   <text x="440.5" y="389.254" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">92.2 MB</text>
@@ -28,11 +28,11 @@
   <path d="M824.5 452 v-31.5455 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v31.5455 z" fill="#56c7ff"/>
   <text x="847.5" y="384.455" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">8.9%</text>
   <text x="847.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">Software</text>
-  <path d="M930.5 452 v-52.9697 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v52.9697 z" fill="#56c7ff"/>
-  <text x="953.5" y="363.03" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">13.9%</text>
+  <path d="M930.5 452 v-61.8788 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v61.8788 z" fill="#56c7ff"/>
+  <text x="953.5" y="354.121" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">16.0%</text>
   <text x="953.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">D3D11</text>
-  <path d="M1036.5 452 v-48.0909 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v48.0909 z" fill="#56c7ff"/>
-  <text x="1059.5" y="367.909" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">12.8%</text>
+  <path d="M1036.5 452 v-41.5152 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v41.5152 z" fill="#56c7ff"/>
+  <text x="1059.5" y="374.485" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">11.2%</text>
   <text x="1059.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">OpenGL</text>
   <path d="M1142.5 452 v-64.2121 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v64.2121 z" fill="#6e7a82"/>
   <text x="1165.5" y="351.788" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#ffffff">16.6%</text>
