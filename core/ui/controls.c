@@ -350,7 +350,10 @@ field_room(const reaktor_field_spec *s, int *cap)
         int   room = NK_MAX(need, *s->heap_cap * 2);
         char *more = (char *)SDL_realloc(*s->heap, (size_t)room);
 
-        if (!more) return *s->heap;
+        if (!more) {
+            *cap = *s->heap_cap;
+            return *s->heap;
+        }
         if (!*s->heap) more[0] = '\0';
         *s->heap     = more;
         *s->heap_cap = room;

@@ -372,6 +372,7 @@ splice_fill(App *app, nk_size at, struct nk_rect clip)
     run.clip         = clip;
     run.begin = run.end = run.last = ctx->memory.allocated;
     nk_push_scissor(&run, clip);
+    if (run.end == run.begin) return at;
     first = run.last;
     reaktor_fill_round(app, &run, nk_rect(f.x, f.y, f.w, f.h), f.rounding, f.color);
     base = (nk_byte *)ctx->memory.memory.ptr;
