@@ -28,6 +28,7 @@ typedef struct text_font {
     char           path[1024];
     char           name[64];
     unsigned char *data;
+    size_t         size;
     int            state;
     stbtt_fontinfo info;
     kbts_font      kb;
@@ -173,6 +174,9 @@ font_name(text_font *f)
 
     s = stbtt_GetFontNameString(&f->info, &len, STBTT_PLATFORM_ID_MICROSOFT,
                                 STBTT_MS_EID_UNICODE_BMP, STBTT_MS_LANG_ENGLISH, 1);
+    if (s && (len < 0 || (const unsigned char *)s < f->data ||
+              (size_t)((const unsigned char *)s - f->data) + (size_t)len > f->size))
+        s = NULL;
     for (i = 0; s && i + 1 < len && at + 1 < (int)sizeof f->name; i += 2)
         if (s[i] == 0 && s[i + 1] >= 0x20 && s[i + 1] < 0x7F)
             f->name[at++] = s[i + 1];
@@ -194,6 +198,7 @@ font_open(int i)
     if (f->state) return f->state > 0;
     f->state = -1;
     f->data  = (unsigned char *)reaktor_asset_load(f->path, &size);
+    f->size  = size;
     if (f->data && reaktor_font_valid(f->data, size)) {
         at = stbtt_GetFontOffsetForIndex(f->data, 0);
         if (stbtt_InitFont(&f->info, f->data, at)) {

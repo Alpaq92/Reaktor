@@ -1437,7 +1437,10 @@ has it:
 ./build/showcase --font-fallback C:/Windows/Fonts/segoeui.ttf --font-fallback C:/Windows/Fonts/Nirmala.ttc
 ```
 
-A collection is read at its first font. Without the module,
+Load fonts you trust, the application's own or the system's: stb_truetype
+and kb_text_shape both say they are not safe on a font file built to attack
+them, so a font a user hands over is a risk. A collection is read at its first
+font. Without the module,
 `reaktor_text_none` breaks after a space, or before the glyph that would not
 fit, keeping the glyph `nk_label_wrap` would lose. mojibake is built with only
 what is called, and kb_text_shape is one header compiled in `core/text/kb.c`;
