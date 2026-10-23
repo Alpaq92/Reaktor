@@ -93,7 +93,7 @@ teardown(App *a)
     if (a->ctx) nk_sdl_shutdown(a->ctx);
     if (a->ren) SDL_DestroyRenderer(a->ren);
     if (a->win) SDL_DestroyWindow(a->win);
-    SDL_free(a->glyphs);
+    reaktor_fontset_free(&a->fonts);
     reaktor_anim_destroy(a->anim);
     a->anim = NULL;
     a->win = NULL;

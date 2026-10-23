@@ -38,6 +38,8 @@ NK_API struct nk_context*   nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer,
 NK_API struct nk_font_atlas* nk_sdl_font_stash_begin(struct nk_context* ctx);
 NK_API void                 nk_sdl_font_stash_end(struct nk_context* ctx);
 #endif
+/* REAKTOR: an atlas Reaktor bakes itself, alpha8. */
+NK_API nk_handle            nk_sdl_font_upload(struct nk_context* ctx, const void *image, int width, int height);
 NK_API int                  nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt);
 /* REAKTOR: fill and stroke feathering apart. */
 NK_API void                 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA);
@@ -179,13 +181,15 @@ nk_sdl_device_upload_atlas(struct nk_context* ctx, const void *image, int width,
     if (sdl->ogl.font_tex) {
         SDL_UpdateTexture(sdl->ogl.font_tex, NULL, image, width);
     } else {
-        size_t n = (size_t)width * (size_t)height;
-        void *rgba = SDL_malloc(n * 4);
+        size_t n = (size_t)width * (size_t)height, i;
+        Uint32 *rgba = (Uint32 *)SDL_malloc(n * 4);
 
         SDL_Log("nk_sdl: indexed font atlas unavailable (%s); using RGBA32",
                 SDL_GetError());
         if (rgba) {
-            nk_font_bake_convert(rgba, width, height, image);
+            /* REAKTOR: Nuklear's converter is part of its font baking. */
+            for (i = 0; i < n; i++)
+                rgba[i] = (Uint32)((const Uint8 *)image)[i] << 24 | 0x00FFFFFFu;
             sdl->ogl.font_tex = SDL_CreateTexture(sdl->renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, width, height);
             if (sdl->ogl.font_tex)
                 SDL_UpdateTexture(sdl->ogl.font_tex, NULL, rgba, 4 * width);
@@ -668,8 +672,22 @@ nk_sdl_font_stash_end(struct nk_context* ctx)
     /* REAKTOR: alpha8. */
     image = nk_font_atlas_bake(&sdl->atlas, &w, &h, NK_FONT_ATLAS_ALPHA8);
     NK_ASSERT(image);
-    nk_sdl_device_upload_atlas(&sdl->ctx, image, w, h);
-    nk_font_atlas_end(&sdl->atlas, nk_handle_ptr(sdl->ogl.font_tex), &sdl->ogl.tex_null);
+    nk_font_atlas_end(&sdl->atlas, nk_sdl_font_upload(&sdl->ctx, image, w, h), &sdl->ogl.tex_null);
+    if (sdl->atlas.default_font) {
+        nk_style_set_font(&sdl->ctx, &sdl->atlas.default_font->handle);
+    }
+}
+#endif
+
+/* REAKTOR */
+NK_API nk_handle
+nk_sdl_font_upload(struct nk_context* ctx, const void *image, int width, int height)
+{
+    struct nk_sdl* sdl;
+    NK_ASSERT(ctx);
+    sdl = (struct nk_sdl*)ctx->userdata.ptr;
+    NK_ASSERT(sdl);
+    nk_sdl_device_upload_atlas(&sdl->ctx, image, width, height);
     /* REAKTOR: see white_tex. */
     if (!sdl->ogl.white_tex) {
         Uint32 px = 0xFFFFFFFFu;
@@ -685,11 +703,8 @@ nk_sdl_font_stash_end(struct nk_context* ctx)
         sdl->ogl.tex_null.texture = nk_handle_ptr(sdl->ogl.white_tex);
         sdl->ogl.tex_null.uv = nk_vec2(0.5f, 0.5f);
     }
-    if (sdl->atlas.default_font) {
-        nk_style_set_font(&sdl->ctx, &sdl->atlas.default_font->handle);
-    }
+    return nk_handle_ptr(sdl->ogl.font_tex);
 }
-#endif
 
 /* REAKTOR: Nuklear counts an up for a key that is not down as a press. */
 NK_INTERN void

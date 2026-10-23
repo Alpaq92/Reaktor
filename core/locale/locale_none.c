@@ -20,9 +20,8 @@ reaktor_trn(const char *key, unsigned long n, char *buf, size_t cap)
 }
 
 unsigned *
-reaktor_locale_glyphs(const unsigned char *ttf)
+reaktor_locale_glyphs(void)
 {
-    (void)ttf;
     return NULL;
 }
 

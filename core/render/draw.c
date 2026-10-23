@@ -583,41 +583,36 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
 
 
 static void
-center_glyphs_optically(struct nk_font *f)
+center_glyphs_optically(struct reaktor_font *f)
 {
-    const struct nk_font_glyph *ex;
+    const struct reaktor_glyph *ex = reaktor_font_glyph(f, 'x');
     float shift;
-    nk_rune i;
+    int i;
 
-    if (!f || !f->glyphs || f->info.glyph_count == 0) return;
-    ex = nk_font_find_glyph(f, 'x');
     if (!ex) return;
-
-    shift = f->info.height * 0.5f - (ex->y0 + ex->y1) * 0.5f;
+    shift = f->height * 0.5f - (ex->y0 + ex->y1) * 0.5f;
     if (shift > -0.01f && shift < 0.01f) return;
 
-    for (i = 0; i < f->info.glyph_count; i++) {
+    for (i = 0; i < f->glyph_count; i++) {
         f->glyphs[i].y0 += shift;
         f->glyphs[i].y1 += shift;
     }
+    f->baseline += shift;
 }
 
 static void
-nbsp_as_space(struct nk_font *f)
+nbsp_as_space(struct reaktor_font *f)
 {
-    const struct nk_font_glyph *sp;
-    struct nk_font_glyph       *nbsp;
+    const struct reaktor_glyph *sp   = reaktor_font_glyph(f, 0x20);
+    struct reaktor_glyph       *nbsp = (struct reaktor_glyph *)reaktor_font_glyph(f, 0xA0);
 
-    if (!f || !f->glyphs) return;
-    sp   = nk_font_find_glyph(f, 0x20);
-    nbsp = (struct nk_font_glyph *)nk_font_find_glyph(f, 0xA0);
-    if (!sp || !nbsp || nbsp == sp || nbsp == f->fallback) return;
+    if (!sp || !nbsp) return;
     *nbsp = *sp;
     nbsp->codepoint = 0xA0;
 }
 
 static void
-finish_face(struct nk_font *f, float height, const char *path)
+finish_face(struct reaktor_font *f, float height, const char *path)
 {
     if (!f) return;
     f->handle.height = height;
@@ -685,72 +680,57 @@ load_face(const char **name, const char *stand_in, size_t *size)
 void
 rebuild_font(App *app)
 {
-    struct nk_font_atlas *atlas;
-    struct nk_font *font = NULL;
+    static const nk_rune latin[] = { 0x0020, 0x00FF, 0 };
+    struct reaktor_face_src src[2 * FONT_STEPS];
+    struct reaktor_fontset  set;
+    struct reaktor_font    *font = NULL;
     size_t size = 0, bsize = 0;
     char *ttf, *bttf = NULL;
-    int is_default = 0, i;
+    unsigned *ranges;
+    int n = 0, bold, ok, i;
 
     ttf = load_face(&app->font_face, FONT_FILE, &size);
-    if (app->atlas && !ttf) {
-        SDL_Log("could not load %s; keeping the font already baked",
-                app->font_face);
-        return;
-    }
     if (ttf) bttf = load_face(&app->font_face_bold, FONT_BOLD_FILE, &bsize);
-
-    if (!app->secondary) reaktor_text_attach_font(NULL, NULL);
-    if (app->atlas) {
-        nk_font_atlas_clear(app->atlas);
-        SDL_memset(app->faces, 0, sizeof(app->faces));
-        SDL_memset(app->bolds, 0, sizeof(app->bolds));
+    for (i = 0; ttf && i < FONT_STEPS; i++) {
+        src[n].ttf = ttf;
+        src[n].size = size;
+        src[n++].px = (float)reaktor_px(g_font_px[i]);
     }
-    SDL_free(app->glyphs);
-    app->glyphs = NULL;
-
-    atlas = nk_sdl_font_stash_begin(app->ctx);
-    app->atlas = atlas;
-
-    if (ttf) {
-        struct nk_font_config cfg = nk_font_config(0);
-
-        app->glyphs = reaktor_locale_glyphs((const unsigned char *)ttf);
-
-        cfg.oversample_h = 1;
-        cfg.oversample_v = 1;
-        cfg.pixel_snap   = 1;
-        if (app->glyphs) cfg.range = app->glyphs;
-        for (i = 0; i < FONT_STEPS; i++) {
-            app->faces[i] = nk_font_atlas_add_from_memory(
-                atlas, ttf, size, (float)reaktor_px(g_font_px[i]), &cfg);
-            if (g_font_px[i] == FONT_SIZE) font = app->faces[i];
-            if (!font) font = app->faces[i];
-        }
-        for (i = 0; bttf && i < FONT_STEPS; i++)
-            app->bolds[i] = nk_font_atlas_add_from_memory(
-                atlas, bttf, bsize, (float)reaktor_px(g_font_px[i]), &cfg);
-        if (!font)
-            SDL_snprintf(app->font_status, sizeof(app->font_status),
-                         "FALLBACK (ProggyClean) - could not load %s",
-                         app->font_face);
-    } else {
-        SDL_snprintf(app->font_status, sizeof(app->font_status),
-                     "FALLBACK - could not load %s", app->font_face);
+    for (i = 0; bttf && i < FONT_STEPS; i++) {
+        src[n].ttf = bttf;
+        src[n].size = bsize;
+        src[n++].px = (float)reaktor_px(g_font_px[i]);
     }
+    bold   = bttf != NULL;
+    ranges = reaktor_locale_glyphs();
+    ok     = n > 0 && reaktor_fontset_bake(&set, src, n, ranges ? ranges : latin);
+    SDL_free(ranges);
     reaktor_free(ttf);
     reaktor_free(bttf);
-
-    if (!font) {
-        font = nk_font_atlas_add_default(atlas, (float)reaktor_px(FONT_SIZE), NULL);
-        is_default = 1;
-    } else {
-        SDL_snprintf(app->font_status, sizeof(app->font_status),
-                     "%s, %d sizes %d-%dpx%s", face_label(app->font_face), FONT_STEPS,
-                     reaktor_px(g_font_px[0]), reaktor_px(g_font_px[FONT_STEPS - 1]),
-                     app->bolds[0] ? ", bold at each" : "");
+    if (!ok) {
+        SDL_Log("could not bake %s; keeping the font already baked", app->font_face);
+        if (!app->fonts.count)
+            SDL_snprintf(app->font_status, sizeof(app->font_status),
+                         "FALLBACK - could not load %s", app->font_face);
+        return;
     }
 
-    nk_sdl_font_stash_end(app->ctx);
+    if (!app->secondary) reaktor_text_attach_font(NULL, NULL);
+    reaktor_fontset_free(&app->fonts);
+    app->fonts = set;
+    reaktor_fontset_bind(&app->fonts, nk_sdl_font_upload(app->ctx, set.pixels, set.w, set.h));
+    SDL_free(app->fonts.pixels);
+    app->fonts.pixels = NULL;
+    for (i = 0; i < FONT_STEPS; i++) {
+        app->faces[i] = &app->fonts.fonts[i];
+        app->bolds[i] = bold ? &app->fonts.fonts[FONT_STEPS + i] : NULL;
+        if (g_font_px[i] == FONT_SIZE) font = app->faces[i];
+    }
+    if (!font) font = app->faces[0];
+    SDL_snprintf(app->font_status, sizeof(app->font_status),
+                 "%s, %d sizes %d-%dpx%s", face_label(app->font_face), FONT_STEPS,
+                 reaktor_px(g_font_px[0]), reaktor_px(g_font_px[FONT_STEPS - 1]),
+                 bold ? ", bold at each" : "");
 
     for (i = 0; i < FONT_STEPS; i++) {
         finish_face(app->faces[i], (float)g_font_px[i],
@@ -758,13 +738,10 @@ rebuild_font(App *app)
         finish_face(app->bolds[i], (float)g_font_px[i],
                     app->secondary ? NULL : app->font_face_bold);
     }
-    if (is_default) finish_face(font, (float)FONT_SIZE, NULL);
-
-    nk_font_atlas_cleanup(atlas);
 
     app->atlas_w = app->atlas_h = app->atlas_bpp = 0;
-    if (font && font->texture.ptr) {
-        SDL_Texture *tex = (SDL_Texture *)font->texture.ptr;
+    if (font->handle.texture.ptr) {
+        SDL_Texture *tex = (SDL_Texture *)font->handle.texture.ptr;
         float tw = 0.0f, th = 0.0f;
         if (SDL_GetTextureSize(tex, &tw, &th)) {
             app->atlas_w = (int)tw;
@@ -772,7 +749,7 @@ rebuild_font(App *app)
         }
         app->atlas_bpp = SDL_BYTESPERPIXEL(tex->format);
     }
-    if (font) nk_style_set_font(app->ctx, is_default ? &font->handle : base_font(app));
+    nk_style_set_font(app->ctx, base_font(app));
 }
 
 void

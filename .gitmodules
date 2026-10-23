@@ -37,3 +37,6 @@
 [submodule "external/pdfgen"]
 	path = external/pdfgen
 	url = https://github.com/AndreRenaud/PDFGen
+[submodule "external/freetype"]
+	path = external/freetype
+	url = https://github.com/freetype/freetype
