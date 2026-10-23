@@ -24,7 +24,8 @@ from the project's own license file at the pinned revision.
 
 Only LCUI's `libcss` and `yutil` are built, not the toolkit. SDL is built
 static, without audio, joystick, haptic, HID, sensor, camera, power, GPU,
-offscreen or the render backends Reaktor never selects. Its tray is built: on
+offscreen, the render backends Reaktor never selects, or its dynamic API (see
+below). Its tray is built: on
 Linux and the BSDs it loads AppIndicator and GTK 3 when a tray opens, and
 nothing links them. mojibake is built without its collation, IDNA, security
 and character-name tables. NukAnim is one header, compiled in
@@ -68,6 +69,19 @@ wrapping.
 It cannot stay an include because the changes sit inside its functions, and
 submodules are not edited. The cost: when
 Nuklear's backend changes, it is re-vendored and the hunks re-applied.
+
+## The one change to how a submodule builds
+
+SDL's dynamic API keeps every SDL function in the program and, at startup,
+loads whichever SDL library the `SDL3_DYNAMIC_API` environment variable names.
+It exists so a statically linked game can take a newer SDL; Reaktor's
+programs are rebuilt against one instead, and read no environment. Without it
+`simple` is 20% smaller and `showcase` 12%.
+
+SDL refuses a command-line switch for it, so `core/sdl/no_dynapi.h` is forced
+into SDL's sources and defines `SDL_dynapi_h_`, the guard of SDL's own
+`src/dynapi/SDL_dynapi.h`, with `SDL_DYNAMIC_API` 0. No SDL file is edited.
+CMake stops if that header ever opens with another guard.
 
 ## Fonts
 
