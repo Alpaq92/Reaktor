@@ -29,18 +29,27 @@ reaktor_locale_system_code(void)
 }
 
 unsigned *
-reaktor_locale_glyphs(const unsigned char *ttf)
+reaktor_locale_glyphs(void)
 {
-    unsigned *cp, *ranges = NULL;
-    int       n = reaktor_locale_codepoints(NULL, 0);
+    unsigned *cp, *out;
+    int       n = reaktor_locale_codepoints(NULL, 0), i, at = 0;
 
-    if (n <= 0 || !ttf) return NULL;
-
-    cp = SDL_malloc((size_t)n * sizeof *cp);
-    if (cp) {
+    if (n <= 0 || !(cp = SDL_malloc((size_t)n * sizeof *cp))) return NULL;
+    out = SDL_malloc(((size_t)n * 2 + 3) * sizeof *out);
+    if (out) {
         reaktor_locale_codepoints(cp, n);
-        ranges = reaktor_font_ranges(ttf, cp, n);
+        out[at++] = 0x0020;
+        out[at++] = 0x00FF;
+        for (i = 0; i < n; i++) {
+            if (cp[i] == out[at - 1] + 1) {
+                out[at - 1] = cp[i];
+            } else if (cp[i] > out[at - 1]) {
+                out[at++] = cp[i];
+                out[at++] = cp[i];
+            }
+        }
+        out[at] = 0;
     }
     SDL_free(cp);
-    return ranges;
+    return out;
 }

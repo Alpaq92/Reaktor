@@ -407,11 +407,11 @@ stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
 static float
 reaktor_cap_offset(const struct nk_user_font *f)
 {
-    const struct nk_font *nf = f ? (const struct nk_font *)f->userdata.ptr : NULL;
-    const struct nk_font_glyph *g = nf ? nk_font_find_glyph((struct nk_font *)nf, 'H') : NULL;
+    const struct reaktor_font  *rf = f ? (const struct reaktor_font *)f->userdata.ptr : NULL;
+    const struct reaktor_glyph *g  = rf ? reaktor_font_glyph(rf, 'H') : NULL;
 
-    if (!g || nf->info.height <= 0.0f) return 0.0f;
-    return ((g->y0 + g->y1) * 0.5f - nf->info.height * 0.5f) * f->height / nf->info.height;
+    if (!g || rf->height <= 0.0f) return 0.0f;
+    return ((g->y0 + g->y1) * 0.5f - rf->height * 0.5f) * f->height / rf->height;
 }
 
 void

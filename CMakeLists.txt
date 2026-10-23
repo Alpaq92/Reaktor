@@ -134,6 +134,16 @@ target_include_directories(plutosvg PUBLIC "${TP}/plutosvg/source")
 target_compile_definitions(plutosvg PUBLIC PLUTOSVG_BUILD_STATIC)
 target_link_libraries(plutosvg PUBLIC plutovg)
 
+set(FT "${TP}/freetype/src")
+add_library(freetype STATIC
+    ${FT}/base/ftsystem.c ${FT}/base/ftinit.c ${FT}/base/ftdebug.c ${FT}/base/ftbase.c
+    ${FT}/autofit/autofit.c ${FT}/cff/cff.c ${FT}/psaux/psaux.c ${FT}/pshinter/pshinter.c
+    ${FT}/psnames/psnames.c ${FT}/sfnt/sfnt.c ${FT}/smooth/smooth.c ${FT}/truetype/truetype.c)
+target_include_directories(freetype PUBLIC "${TP}/freetype/include" core/render/ft)
+target_compile_definitions(freetype
+    PUBLIC "FT_CONFIG_OPTIONS_H=<reaktor_ftoption.h>"
+    PRIVATE FT2_BUILD_LIBRARY "FT_CONFIG_MODULES_H=<reaktor_ftmodule.h>")
+
 add_library(onlay STATIC ${TP}/onlay/onlay.c)
 target_include_directories(onlay PUBLIC ${TP}/onlay)
 target_compile_definitions(onlay PUBLIC LAY_FLOAT=1)
@@ -203,11 +213,12 @@ add_library(reaktor_core STATIC
     core/base/util.c
     core/base/utf8.c
     core/base/url.c
+    core/render/font.c
     core/render/nk_impl.c
     core/render/svg.c
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
-target_link_libraries(reaktor_core PUBLIC plutosvg reaktor_headers SDL3::SDL3-static)
+target_link_libraries(reaktor_core PUBLIC plutosvg freetype reaktor_headers SDL3::SDL3-static)
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")
@@ -617,6 +628,8 @@ foreach(_lic SDL/LICENSE.txt lcui/LICENSE.TXT plutosvg/LICENSE nuklear/LICENSE
 endforeach()
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/plutosvg/plutovg/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/plutovg.txt" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/freetype/docs/FTL.TXT"
+               "${CMAKE_BINARY_DIR}/licenses/freetype.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/mglibs/ini.h"
                "${CMAKE_BINARY_DIR}/licenses/ini.h.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
@@ -715,6 +728,7 @@ if(EMSCRIPTEN)
     target_compile_options(lcui PRIVATE -Oz)
     target_compile_options(plutovg PRIVATE -Oz)
     target_compile_options(plutosvg PRIVATE -Oz)
+    target_compile_options(freetype PRIVATE -Oz)
     target_compile_options(reaktor_core PRIVATE -Oz)
     if(TARGET mojibake_lib)
         target_compile_options(mojibake_lib PRIVATE -Oz)
@@ -823,8 +837,8 @@ if(MSVC)
     # Nuklear's NK_ALIGNOF takes the offset of a member of an unnamed struct.
     set_source_files_properties(core/render/nk_impl.c PROPERTIES COMPILE_OPTIONS /wd4116)
     # nuklear.h combines constants of different enums in its own declarations.
-    target_compile_options(reaktor_core PRIVATE /wd5287)
-    target_compile_options(showcase PRIVATE /wd5287 /wd4101)
+    target_compile_options(reaktor_headers INTERFACE /wd5287)
+    target_compile_options(showcase PRIVATE /wd4101)
     target_compile_definitions(showcase PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
@@ -855,7 +869,8 @@ target_link_libraries(reaktor_modules PRIVATE reaktor_runtime reaktor_a11y reakt
                       reaktor_inspector)
 set_target_properties(reaktor_modules PROPERTIES EXCLUDE_FROM_ALL ON)
 
-set(_parts reaktor_runtime reaktor_core reaktor_modules plutosvg plutovg lcui onlay SDL3-static)
+set(_parts reaktor_runtime reaktor_core reaktor_modules plutosvg plutovg freetype lcui onlay
+           SDL3-static)
 foreach(_t mojibake_lib kb_text_shape)
     if(TARGET ${_t})
         list(APPEND _parts ${_t})

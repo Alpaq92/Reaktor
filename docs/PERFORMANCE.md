@@ -198,15 +198,12 @@ since a `file://` page cannot fetch the `.wasm`.
 
 ## Where the numbers came from
 
-- **Windows** — 11 Pro (26200), x64, MSVC Release, in a VirtualBox VM with no
-  Direct3D 11 adapter. Everything from **Size** down, and today's sizes, with
-  MSVC 14.44 (Visual Studio 2022 Build Tools) and emscripten 6.0.9 for those
-  and **Modules**.
-- **Windows, with a GPU** — 11 Pro (26200), x64, MSVC Release, Ryzen 5 4600H
-  (6 cores, 12 threads), GeForce RTX 2060, 1920×1080 at 120 Hz, no scaling.
-  Everything in **Against the others**, in the 800×600 window every arm asks
-  for, with Electron 44.3.0 on Node 22, Flutter 3.38.0, and Compose
-  Multiplatform 1.12.0 on Kotlin 2.4.20 and Temurin JDK 21.
+- **Windows** — 11 Pro (26200), x64, MSVC Release, Ryzen 5 4600H (6 cores,
+  12 threads), GeForce RTX 2060, 1920×1080 at 120 Hz, no scaling. Sizes and
+  **Modules** with MSVC 14.44 (Visual Studio 2022 Build Tools) and emscripten
+  6.0.9; **Against the others** in the 800×600 window every arm asks for, with
+  Electron 44.3.0 on Node 22, Flutter 3.38.0, and Compose Multiplatform 1.12.0
+  on Kotlin 2.4.20 and Temurin JDK 21.
 - **Linux** — Debian 13, x86_64, GCC Release, X11, no GPU.
 - **macOS** — 11.7 Big Sur, Intel iMac, Apple Clang 12, 1024×768 non-Retina,
   built with `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk`.

@@ -1761,6 +1761,7 @@ app_quit(void *appstate, SDL_AppResult result)
     }
     if (app->ren) img_cache_free(app);
     if (app->ctx) nk_sdl_shutdown(app->ctx);
+    reaktor_fontset_free(&app->fonts);
     if (app->ren) SDL_DestroyRenderer(app->ren);
     if (app->win) SDL_DestroyWindow(app->win);
     reaktor_anim_destroy(app->anim);

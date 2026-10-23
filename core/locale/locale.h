@@ -3,7 +3,7 @@
 
 #include "reaktor/locale.h"
 
-unsigned *reaktor_locale_glyphs(const unsigned char *ttf);
+unsigned *reaktor_locale_glyphs(void);
 void      reaktor_locale_start(const char *lang);
 
 #endif

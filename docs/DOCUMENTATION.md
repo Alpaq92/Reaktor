@@ -1293,11 +1293,11 @@ why. The figures are in [PERFORMANCE.md](PERFORMANCE.md#against-the-others).
   masks before the frame is drawn.
 
 `core/render/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, vendored because
-one change sits inside `nk_sdl_font_stash_end`. Every deviation is marked
+its changes sit inside its functions. Every deviation is marked
 `REAKTOR`: an 8-bit indexed atlas, a 1×1 white texture for untextured
 geometry, pixel snapping, fills and strokes feathered apart, the atlas palette
-shared with the Text module, rectangles from device pixels, `tex_null`
-repointed after every bake, a key-up dropped for a key Nuklear does not hold,
+shared with the Text module, rectangles from device pixels, an upload for the
+atlas Reaktor bakes itself, `tex_null` repointed after every bake, a key-up dropped for a key Nuklear does not hold,
 text input of any length fed one rune at a time, and textures clamped rather
 than tested for wrapping.
 
@@ -1437,9 +1437,10 @@ has it:
 ./build/showcase --font-fallback C:/Windows/Fonts/segoeui.ttf --font-fallback C:/Windows/Fonts/Nirmala.ttc
 ```
 
-Load fonts you trust, the application's own or the system's: stb_truetype
-and kb_text_shape both say they are not safe on a font file built to attack
-them, so a font a user hands over is a risk. A collection is read at its first
+Load fonts you trust, the application's own or the system's: kb_text_shape
+says it is not safe on a font file built to attack it, so a font a user hands
+over is a risk. FreeType, which reads and draws every font, is fuzzed
+continuously by OSS-Fuzz. A collection is read at its first
 font. Without the module,
 `reaktor_text_none` breaks after a space, or before the glyph that would not
 fit, keeping the glyph `nk_label_wrap` would lose. mojibake is built with only
@@ -1484,12 +1485,8 @@ None is a bug, and each cost an afternoon.
 - **`reaktor_layout_space_begin` does not nest.**
 - **`reaktor_image` stretches to its slot**, whatever its raster size.
 - **`reaktor_rule_horizontal` fills its widget rect**: the row height is the line.
-- **`nk_sdl_font_stash_begin` leaks the atlas it replaces.**
 - **`nk_label_wrap` breaks at spaces only**, losing the glyph that overflowed a
   line without one; `reaktor_label` breaks its own lines.
-- **A merged font joins the atlas's first font**, whichever the call meant.
-- **`cfg.range` is read on every glyph lookup**, so the ranges live as long as
-  the fonts; `App` holds them.
 - **Edit state lives on the window**, so the page's window misses every field
   inside a group; `app->editing` is what navigation asks.
 - **`nk_edit_string` leaves the bytes past the length alone**, so a field's

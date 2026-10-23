@@ -947,7 +947,7 @@ static void body_one(void *c, const char *p, size_t plen,
 }
 
 /* The engine ends a token at any ';' or '}', even one inside url(), and
-   reads '//' or '/*' as a comment without ending it. */
+   reads two slashes, or a slash and a star, as a comment without ending it. */
 static int token_ok(const char *s, size_t n, size_t max)
 {
     size_t i;
