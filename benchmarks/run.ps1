@@ -6,7 +6,10 @@ param(
     [double]   $Fps = 60,
     [int]      $Boxes = 64,
     [int]      $Runs = 10,
-    [string]   $Csv = ""
+    [string]   $Csv = "",
+    [switch]   $Steady,
+    [switch]   $FlatOut,
+    [switch]   $PinClock
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,12 +71,16 @@ function Get-Arm([string]$name) {
     }
 }
 
+# Windows reuses process ids, and a process outlives its parent keeping the
+# parent's id: one started before the app is never its child.
 function Get-ProcessTree([int]$rootId) {
     $byParent = @{}
-    foreach ($p in Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId) {
+    $started = @{}
+    foreach ($p in Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, CreationDate) {
         $parent = [int]$p.ParentProcessId
         if (-not $byParent.ContainsKey($parent)) { $byParent[$parent] = @() }
         $byParent[$parent] += [int]$p.ProcessId
+        $started[[int]$p.ProcessId] = $p.CreationDate
     }
 
     $seen = @{}
@@ -84,7 +91,9 @@ function Get-ProcessTree([int]$rootId) {
         if ($seen.ContainsKey($id)) { continue }
         $seen[$id] = $true
         if ($byParent.ContainsKey($id)) {
-            foreach ($child in $byParent[$id]) { $stack.Push($child) }
+            foreach ($child in $byParent[$id]) {
+                if ($started[$child] -ge $started[$id]) { $stack.Push($child) }
+            }
         }
     }
     return @($seen.Keys)
@@ -99,6 +108,7 @@ function Invoke-Arm($spec, [string[]]$argv) {
     $null = $proc.Handle
 
     $cpuMs = @{}
+    $samples = New-Object System.Collections.ArrayList
     $peakPrivate = 0L
     $tree = @($proc.Id)
     $treeAt = -1000
@@ -119,6 +129,9 @@ function Invoke-Arm($spec, [string[]]$argv) {
             } catch { }
         }
         if ($private -gt $peakPrivate) { $peakPrivate = $private }
+        $sum = 0.0
+        foreach ($value in $cpuMs.Values) { $sum += $value }
+        $null = $samples.Add(@($clock.ElapsedMilliseconds, $sum))
 
         Start-Sleep -Milliseconds 100
     }
@@ -137,8 +150,17 @@ function Invoke-Arm($spec, [string[]]$argv) {
         if ($line -match '^\s*([a-z_0-9]+)\s+(\S+)\s*$') { $keys[$matches[1]] = $matches[2] }
     }
 
+    # Steady state: from 3 s to 8 s, past startup and before the last frame.
+    $steady = $null
+    $from = $samples | Where-Object { $_[0] -ge 3000 } | Select-Object -First 1
+    $to = $samples | Where-Object { $_[0] -le 8000 } | Select-Object -Last 1
+    if ($wallMs -ge 8500 -and $from -and $to -and $to[0] -gt $from[0]) {
+        $steady = [math]::Round(100.0 * ($to[1] - $from[1]) / ($to[0] - $from[0]), 1)
+    }
+
     return @{
         keys        = $keys
+        cpu_steady  = $steady
         stderr      = $stderr
         exit        = $proc.ExitCode
         private_mb  = [math]::Round($peakPrivate / 1MB, 1)
@@ -156,8 +178,23 @@ function Get-Median([double[]]$values) {
     return ($sorted[$mid - 1] + $sorted[$mid]) / 2
 }
 
+if ($Steady) { $Seconds = 9 }
 $argv = @("--bench-seconds", "$Seconds", "--fps", "$Fps", "--boxes", "$Boxes")
 $rows = @()
+
+# A copy of the active plan with the processor held at full speed, so a light
+# load is not measured at whatever clock the processor idled down to.
+$restorePlan = $null
+$pinnedPlan = $null
+if ($PinClock) {
+    $restorePlan = [regex]::Match((powercfg /getactivescheme), '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}').Value
+    $pinnedPlan = [regex]::Match((powercfg /duplicatescheme $restorePlan), '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}').Value
+    powercfg /changename $pinnedPlan "Reaktor benchmark" | Out-Null
+    powercfg /setacvalueindex $pinnedPlan SUB_PROCESSOR PROCTHROTTLEMIN 100 | Out-Null
+    powercfg /setdcvalueindex $pinnedPlan SUB_PROCESSOR PROCTHROTTLEMIN 100 | Out-Null
+    powercfg /setactive $pinnedPlan | Out-Null
+}
+try {
 
 Write-Host ""
 Write-Host "$Boxes boxes, $Seconds s, $Fps fps, $Runs runs, $cores logical processors"
@@ -171,7 +208,7 @@ foreach ($name in $Targets) {
         continue
     }
 
-    $private = @(); $cpuCore = @(); $cpuMachine = @(); $frames = @(); $perFrame = @()
+    $private = @(); $cpuCore = @(); $cpuMachine = @(); $cpuSteady = @(); $frames = @(); $perFrame = @()
     $size = ""
 
     for ($i = 0; $i -lt $Runs; $i++) {
@@ -190,7 +227,11 @@ foreach ($name in $Targets) {
         $cpuCore += $r.cpu_core
         $cpuMachine += $r.cpu_machine
         if ($r.keys.ContainsKey("frames")) { $frames += [double]$r.keys["frames"] }
-        if ($r.keys.ContainsKey("ms_per_frame")) { $perFrame += [double]$r.keys["ms_per_frame"] }
+        if ($null -ne $r.cpu_steady) { $cpuSteady += $r.cpu_steady }
+        if ($FlatOut -and $name -like "reaktor-*") {
+            $flat = Invoke-Arm $spec @("--bench-seconds", "4", "--boxes", "$Boxes", "--no-vsync")
+            if ($flat.keys.ContainsKey("ms_per_frame")) { $perFrame += [double]$flat.keys["ms_per_frame"] }
+        }
         if ($r.keys.ContainsKey("size")) { $size = $r.keys["size"] }
 
         $shown = if ($r.keys.ContainsKey("frames")) { $r.keys["frames"] } else { "?" }
@@ -205,14 +246,22 @@ foreach ($name in $Targets) {
         MemoryMB   = Get-Median $private
         CpuCore    = Get-Median $cpuCore
         CpuMachine = Get-Median $cpuMachine
+        CpuSteady  = $(if ($cpuSteady.Count) { Get-Median $cpuSteady } else { $null })
         Frames     = Get-Median $frames
         MsPerFrame = $(if ($perFrame.Count) { Get-Median $perFrame } else { $null })
         Runs       = $private.Count
     }
 }
 
+} finally {
+    if ($pinnedPlan) {
+        powercfg /setactive $restorePlan | Out-Null
+        powercfg /delete $pinnedPlan | Out-Null
+    }
+}
+
 Write-Host ""
-$rows | Format-Table -AutoSize
+$rows | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
 
 foreach ($row in $rows) {
     if ($row.Size -ne "800x600" -and $row.Size -ne "?") {

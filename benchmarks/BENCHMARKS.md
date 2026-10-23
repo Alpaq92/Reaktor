@@ -20,10 +20,13 @@ outside its process. The results are the chart in
 ./benchmarks/run.ps1 -Csv bars.csv
 ```
 
-`run.ps1` also takes `-Seconds`, `-Fps` and `-Boxes`; `run.sh` is the same for
-macOS, Linux and the BSDs (`--targets`, `--runs`, `--seconds`, `--fps`,
-`--boxes`, `--csv`). Nothing is built for you: a missing arm is skipped, with
-the command that builds it.
+`run.ps1` also takes `-Seconds`, `-Fps` and `-Boxes`, and three switches:
+`-Steady` adds the CPU from 3 s to 8 s of a 9-second run, `-FlatOut` the time
+a Reaktor frame takes drawn without vsync, and `-PinClock` holds the processor
+at full speed for the run, through a copy of the power plan it removes after.
+`run.sh` is the same for macOS, Linux and the BSDs (`--targets`, `--runs`,
+`--seconds`, `--fps`, `--boxes`, `--csv`). Nothing is built for you: a missing
+arm is skipped, with the command that builds it.
 
 Reaktor runs four times — `reaktor-software`, its default, and
 `reaktor-d3d11`, `reaktor-d3d12` and `reaktor-opengl`, the same binary on
