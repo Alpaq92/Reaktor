@@ -56,8 +56,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
     set(SDL_DEPS_SHARED OFF CACHE BOOL "" FORCE)
 endif()
 
-# A static program keeps only the functions it calls; MSVC's Release does this already.
-if(NOT MSVC AND NOT EMSCRIPTEN)
+# A static program keeps only the functions and data it uses. MSVC's Release
+# already splits functions; /Gw splits data.
+if(MSVC)
+    add_compile_options(/Gw)
+elseif(NOT EMSCRIPTEN)
     add_compile_options(-ffunction-sections -fdata-sections)
 endif()
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)
