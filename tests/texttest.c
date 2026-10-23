@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "nk_common.h"
+#include "font.h"
 #include "util.h"
 #include "text.h"
 #include "test.h"
@@ -58,7 +59,7 @@ directions(void)
 }
 
 static float
-width(const struct nk_font *font, const char *s)
+width(const struct reaktor_font *font, const char *s)
 {
     return font->handle.width(font->handle.userdata, font->handle.height, s,
                               (int)strlen(s));
@@ -114,16 +115,17 @@ same_vertices(struct nk_buffer *a, struct nk_buffer *b)
 static void
 drawing(void)
 {
-    struct nk_font_atlas  atlas;
-    struct nk_font_config cfg = nk_font_config(16.0f);
-    struct nk_context     ctx;
-    struct nk_buffer      rtl, ltr, wrong;
-    struct nk_font       *font;
-    nk_text_width_f       atlas_width;
-    SDL_Surface          *surface;
-    SDL_Renderer         *ren;
-    char                  path[1024], japanese[1024], line[200];
-    int                   w, h;
+    static const nk_rune    latin[] = { 0x0020, 0x00FF, 0 };
+    struct reaktor_fontset  set;
+    struct reaktor_face_src src;
+    struct nk_context       ctx;
+    struct nk_buffer        rtl, ltr, wrong;
+    struct reaktor_font    *font;
+    nk_text_width_f         atlas_width;
+    SDL_Surface            *surface;
+    SDL_Renderer           *ren;
+    char                    path[1024], japanese[1024], line[200];
+    int                     baked;
 
     if (!reaktor_path(path, sizeof path, FONT_FILE) ||
         !reaktor_path(japanese, sizeof japanese, JAPANESE_FILE)) {
@@ -140,25 +142,17 @@ drawing(void)
         return;
     }
 
-    cfg.oversample_h = cfg.oversample_v = 1;
-    cfg.pixel_snap   = 1;
-    nk_font_atlas_init_default(&atlas);
-    nk_font_atlas_begin(&atlas);
-    {
-        size_t len = 0;
-        char  *ttf = reaktor_read_file(path, &len);
-
-        /* The atlas copies bytes it does not own. */
-        font = ttf ? nk_font_atlas_add_from_memory(&atlas, ttf, len, 16.0f, &cfg)
-                   : NULL;
-        reaktor_free(ttf);
-    }
-    if (!font || !nk_font_atlas_bake(&atlas, &w, &h, NK_FONT_ATLAS_ALPHA8)) {
+    src.ttf = reaktor_read_file(path, &src.size);
+    src.px  = 16.0f;
+    baked   = src.ttf && reaktor_fontset_bake(&set, &src, 1, latin);
+    reaktor_free((void *)src.ttf);
+    if (!baked || !set.fonts[0].glyph_count) {
         printf("FAIL could not bake %s\n", path);
         failures++;
         return;
     }
-    nk_font_atlas_end(&atlas, nk_handle_id(0), NULL);
+    reaktor_fontset_bind(&set, nk_handle_id(0));
+    font = &set.fonts[0];
     nk_init_default(&ctx, &font->handle);
 
     atlas_width = font->handle.width;
@@ -190,7 +184,7 @@ drawing(void)
 
     reaktor_text_attach_font(NULL, NULL);
     nk_free(&ctx);
-    nk_font_atlas_clear(&atlas);
+    reaktor_fontset_free(&set);
     SDL_DestroyRenderer(ren);
     SDL_DestroySurface(surface);
 }

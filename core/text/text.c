@@ -4,10 +4,10 @@
 
 #include "nk_common.h"
 #include "nk_sdl3_renderer.h"
+#include "font.h"
 #include "text.h"
 #include "util.h"
 
-#include "../../external/nuklear/src/stb_truetype.h"
 #include "kb_text_shape.h"
 #include "mojibake.h"
 
@@ -29,7 +29,8 @@ typedef struct text_font {
     char           name[64];
     unsigned char *data;
     int            state;
-    stbtt_fontinfo info;
+    FT_Face        face;
+    float          px;
     kbts_font      kb;
     float          unit;
     Uint8         *drawn;
@@ -37,11 +38,9 @@ typedef struct text_font {
 } text_font;
 
 typedef struct text_face {
-    struct nk_font *font;
-    int             file;
-    int             baseline_known;
-    float           baseline;
-    nk_text_width_f atlas_width;
+    struct reaktor_font *font;
+    int                  file;
+    nk_text_width_f      atlas_width;
 } text_face;
 
 typedef struct shaped {
@@ -103,7 +102,6 @@ static text_font g_font[FONTS_MAX];
 static int       g_fonts;
 static int       g_fallback[FONTS_MAX];
 static int       g_fallbacks;
-static struct nk_allocator g_raster;
 
 static text_face g_face[FACES_MAX];
 static int       g_faces;
@@ -168,14 +166,11 @@ font_add(const char *path)
 static void
 font_name(text_font *f)
 {
-    const char *s, *base, *dot;
-    int         len = 0, i, at = 0;
+    const char *s = f->face->family_name, *base, *dot;
+    int         at = 0;
 
-    s = stbtt_GetFontNameString(&f->info, &len, STBTT_PLATFORM_ID_MICROSOFT,
-                                STBTT_MS_EID_UNICODE_BMP, STBTT_MS_LANG_ENGLISH, 1);
-    for (i = 0; s && i + 1 < len && at + 1 < (int)sizeof f->name; i += 2)
-        if (s[i] == 0 && s[i + 1] >= 0x20 && s[i + 1] < 0x7F)
-            f->name[at++] = s[i + 1];
+    for (; s && *s && at + 1 < (int)sizeof f->name; s++)
+        if (*s >= 0x20 && *s < 0x7F) f->name[at++] = *s;
     f->name[at] = 0;
     if (at > 0) return;
     base = reaktor_path_leaf(f->path);
@@ -189,26 +184,22 @@ font_open(int i)
 {
     text_font *f = &g_font[i];
     size_t     size = 0;
-    int        at;
 
     if (f->state) return f->state > 0;
     f->state = -1;
     f->data  = (unsigned char *)reaktor_asset_load(f->path, &size);
-    if (f->data && reaktor_font_valid(f->data, size)) {
-        at = stbtt_GetFontOffsetForIndex(f->data, 0);
-        if (stbtt_InitFont(&f->info, f->data, at)) {
-            /* Nuklear's stb_truetype allocates through userdata. */
-            if (!g_raster.alloc) g_raster = nk_sdl_allocator();
-            f->info.userdata = &g_raster;
-            f->kb = kbts_FontFromMemory(f->data, (int)size, 0, NULL, NULL);
-            if (kbts_FontIsValid(&f->kb)) {
-                f->unit  = stbtt_ScaleForPixelHeight(&f->info, 1.0f);
-                f->state = 1;
-                font_name(f);
-                return 1;
-            }
-            kbts_FreeFont(&f->kb);
+    if (f->data && reaktor_font_valid(f->data, size) &&
+        (f->face = reaktor_ft_open(f->data, size))) {
+        f->kb = kbts_FontFromMemory(f->data, (int)size, 0, NULL, NULL);
+        if (kbts_FontIsValid(&f->kb)) {
+            f->unit  = 1.0f / (float)(f->face->ascender - f->face->descender);
+            f->state = 1;
+            font_name(f);
+            return 1;
         }
+        kbts_FreeFont(&f->kb);
+        FT_Done_Face(f->face);
+        f->face = NULL;
     }
     SDL_Log("text: could not open the font %s", f->path);
     reaktor_free(f->data);
@@ -226,7 +217,7 @@ reaktor_text_add_fallback(const char *path)
 }
 
 static int
-face_of(const struct nk_font *font)
+face_of(const struct reaktor_font *font)
 {
     static int last;
     int        i;
@@ -238,14 +229,13 @@ face_of(const struct nk_font *font)
 }
 
 static int
-atlas_draws(const struct nk_font *font, const char *s, int len)
+atlas_draws(const struct reaktor_font *font, const char *s, int len)
 {
     int i = 0;
 
     while (i < len) {
-        const struct nk_font_glyph *g;
-        nk_rune                     cp;
-        int                         n;
+        nk_rune cp;
+        int     n;
 
         if (!((unsigned char)s[i] & 0x80)) {
             i++;
@@ -253,31 +243,10 @@ atlas_draws(const struct nk_font *font, const char *s, int len)
         }
         n = nk_utf_decode(s + i, &cp, len - i);
         if (n <= 0) return 1;
-        g = nk_font_find_glyph(font, cp);
-        if (g == font->fallback && cp != font->fallback_codepoint) return 0;
+        if (!reaktor_font_glyph(font, cp)) return 0;
         i += n;
     }
     return 1;
-}
-
-static float
-baseline(text_face *f)
-{
-    const struct nk_font_glyph *x;
-    text_font                  *t = &g_font[f->file];
-    float                       scale;
-    int                         x0, y0, x1, y1;
-
-    if (f->baseline_known) return f->baseline;
-    f->baseline_known = 1;
-    f->baseline = f->font->info.ascent + 0.5f;
-    x = nk_font_find_glyph(f->font, 'x');
-    if (x && x != f->font->fallback && font_open(f->file)) {
-        scale = stbtt_ScaleForPixelHeight(&t->info, f->font->info.height);
-        stbtt_GetCodepointBitmapBox(&t->info, 'x', scale, scale, &x0, &y0, &x1, &y1);
-        f->baseline = x->y1 - (float)y1;
-    }
-    return f->baseline;
 }
 
 static int
@@ -651,16 +620,17 @@ pack(int w, int h, int *x, int *y)
 }
 
 static int
-upload(int page, int x, int y, int w, int h, text_font *f, int id, float scale)
+upload(int page, int x, int y, const FT_Bitmap *bm)
 {
     SDL_Rect r;
     void    *p;
-    int      bw = w + 2, bh = h + 2, i;
+    int      w = (int)bm->width, h = (int)bm->rows, bw = w + 2, bh = h + 2, i;
 
     if (!(p = grow(g_bitmap, &g_bitmap_cap, bw * bh, 1))) return 0;
     g_bitmap = p;
     SDL_memset(g_bitmap, 0, (size_t)(bw * bh));
-    stbtt_MakeGlyphBitmap(&f->info, g_bitmap + bw + 1, w, h, bw, scale, scale, id);
+    for (i = 0; i < h; i++)
+        SDL_memcpy(g_bitmap + (i + 1) * bw + 1, bm->buffer + i * bm->pitch, (size_t)w);
     r.x = x - 1;
     r.y = y - 1;
     r.w = bw;
@@ -703,8 +673,8 @@ glyph_get(int font, int id, int px)
 {
     text_font  *f = &g_font[font];
     glyph_slot *s;
+    FT_Bitmap  *bm;
     Uint32      key;
-    float       scale;
     int         x0, y0, x1, y1, x = 0, y = 0, page = 0;
 
     if (px < 1) px = 1;
@@ -721,15 +691,23 @@ glyph_get(int font, int id, int px)
         s = slot_at(g_slot, g_slot_cap, key);
     }
 
-    scale = stbtt_ScaleForPixelHeight(&f->info, (float)px);
-    stbtt_GetGlyphBitmapBox(&f->info, id, scale, scale, &x0, &y0, &x1, &y1);
+    if (f->px != (float)px) {
+        reaktor_ft_size(f->face, (float)px);
+        f->px = (float)px;
+    }
+    if (FT_Load_Glyph(f->face, (FT_UInt)id, REAKTOR_FT_LOAD)) return NULL;
+    bm = &f->face->glyph->bitmap;
+    x0 = f->face->glyph->bitmap_left;
+    y0 = -f->face->glyph->bitmap_top;
+    x1 = x0 + (int)bm->width;
+    y1 = y0 + (int)bm->rows;
     if (x1 > x0 && y1 > y0) {
         page = pack(x1 - x0, y1 - y0, &x, &y);
         if (page < 0) {
             g_full = 1;
             return NULL;
         }
-        if (!upload(page, x, y, x1 - x0, y1 - y0, f, id, scale)) return NULL;
+        if (!upload(page, x, y, bm)) return NULL;
     } else {
         x1 = x0;
         y1 = y0;
@@ -768,8 +746,8 @@ mark_drawn(int font, int id)
 static float
 measure(nk_handle handle, float height, const char *s, int len)
 {
-    const struct nk_font *font = (const struct nk_font *)handle.ptr;
-    int                   face = face_of(font), e = -1;
+    const struct reaktor_font *font = (const struct reaktor_font *)handle.ptr;
+    int                        face = face_of(font), e = -1;
 
     if (face < 0) return 0.0f;
     if (!atlas_draws(font, s, len)) {
@@ -781,7 +759,7 @@ measure(nk_handle handle, float height, const char *s, int len)
 }
 
 void
-reaktor_text_attach_font(struct nk_font *font, const char *path)
+reaktor_text_attach_font(struct reaktor_font *font, const char *path)
 {
     text_face *f;
     int        file;
@@ -796,7 +774,6 @@ reaktor_text_attach_font(struct nk_font *font, const char *path)
     f = &g_face[g_faces++];
     f->font           = font;
     f->file           = file;
-    f->baseline_known = 0;
     f->atlas_width    = font->handle.width;
     font->handle.width = measure;
 }
@@ -819,9 +796,9 @@ draw(void *canvas, short x, short y, unsigned short w, unsigned short h,
     d = &g_draw[data.id];
     f = &g_face[d->face];
     if ((e = shape(f->file, d->text, d->len)) < 0) return;
-    px   = f->font->info.height * d->height / f->font->handle.height;
+    px   = f->font->height * d->height / f->font->handle.height;
     k    = d->height / px;
-    top  = baseline(f) * px / f->font->info.height;
+    top  = f->font->baseline * px / f->font->height;
     fg   = d->fg;
     fg.a = (nk_byte)((float)fg.a * list->config.global_alpha);
     for (i = 0; i < g_entry[e].glyphs; i++) {
@@ -863,7 +840,7 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
     nk_foreach(cmd, ctx) {
         struct nk_command_text   *t = (struct nk_command_text *)cmd;
         struct nk_command_custom *c = (struct nk_command_custom *)cmd;
-        const struct nk_font     *font;
+        const struct reaktor_font *font;
         text_draw                 d;
         void                     *p;
         short                     x, y;
@@ -871,7 +848,7 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
         int                       face;
 
         if (cmd->type != NK_COMMAND_TEXT || t->font->width != measure) continue;
-        font = (const struct nk_font *)t->font->userdata.ptr;
+        font = (const struct reaktor_font *)t->font->userdata.ptr;
         face = face_of(font);
         if (face < 0 || atlas_draws(font, t->string, t->length) ||
             !font_open(g_face[face].file))

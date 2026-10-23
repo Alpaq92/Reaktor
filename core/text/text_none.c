@@ -3,7 +3,7 @@
 void reaktor_text_add_fallback(const char *path) { (void)path; }
 
 void
-reaktor_text_attach_font(struct nk_font *font, const char *path)
+reaktor_text_attach_font(struct reaktor_font *font, const char *path)
 {
     (void)font; (void)path;
 }

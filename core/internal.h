@@ -9,6 +9,7 @@
 
 #include "nk_common.h"
 #include "nk_sdl3_renderer.h"
+#include "font.h"
 #include "svg.h"
 #include "theme.h"
 #include "metrics.h"
@@ -120,13 +121,11 @@ struct App {
     struct round_slot round[ROUND_CACHE_MAX];
     int round_count;
 
-    struct nk_font *faces[FONT_STEPS];
-    struct nk_font *bolds[FONT_STEPS];
-    char            font_status[160];
-    struct nk_font_atlas *atlas;
-    int             atlas_w, atlas_h, atlas_bpp;
-    /* Nuklear reads these until the next bake. */
-    unsigned       *glyphs;
+    struct reaktor_font   *faces[FONT_STEPS];
+    struct reaktor_font   *bolds[FONT_STEPS];
+    char                   font_status[160];
+    struct reaktor_fontset fonts;
+    int                    atlas_w, atlas_h, atlas_bpp;
 
     int         want_cursor, cur_shown;
     const char *tip;

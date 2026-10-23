@@ -8,13 +8,14 @@ from the project's own license file at the pinned revision.
 | Component | Used for | License |
 | --- | --- | --- |
 | [SDL](https://github.com/libsdl-org/SDL) | Window, input, renderer, system theme, file dialog, tray | zlib |
-| [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) | Widgets, font baking, the SDL3 backend, and the stb_truetype the Text module rasterizes with | MIT **or** public domain |
+| [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) | Widgets and the SDL3 backend | MIT **or** public domain |
 | [NukAnim](https://github.com/Alpaq92/NukAnim) | Every animation, and `nukanim.h` for applications — a port of [ImAnim](https://github.com/soufianekhiat/ImAnim) with [ImAnimate](https://github.com/RaidcoreGG/ImAnimate)'s `animate` | MIT |
 | [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parse, match, cascade) and `yutil` | MIT |
 | [Onlay](https://github.com/Alpaq92/Onlay) | The rectangles — a fork of [randrew/layout](https://github.com/randrew/layout) | MIT |
 | [Water.css](https://github.com/kognise/water.css) | The stylesheet the look comes from, compiled in | MIT |
 | [Simple.css](https://github.com/kevquirk/simple.css) | Alternative style used in the demo app | MIT |
 | [Ionicons](https://github.com/ionic-team/ionicons) | Every icon, as SVG; the seven the widgets draw are compiled in | MIT |
+| [FreeType](https://freetype.org) | Reading fonts and drawing their glyphs, for the atlas and the Text module | FreeType License **or** GPL-2.0 — taken under the FreeType License |
 | [plutosvg](https://github.com/sammycage/plutosvg) | Rasterizing the SVGs | MIT |
 | [plutovg](https://github.com/sammycage/plutovg) | plutosvg's canvas (nested submodule) | MIT |
 | [mojibake](https://github.com/zaerl/mojibake) | Bidirectional text (UAX #9) and line breaking (UAX #14), for the Text module | MIT |
@@ -30,8 +31,13 @@ nothing links them. mojibake is built without its collation, IDNA, security
 and character-name tables. NukAnim is one header, compiled in
 `core/anim/anim.c`; its own Nuklear submodule, which only its tests use, comes
 with a recursive checkout and is not built. kb_text_shape is one header, compiled in
-`core/text/kb.c`; it shapes, and the Text module rasterizes with Nuklear's
-stb_truetype.
+`core/text/kb.c`; it shapes, and FreeType draws. FreeType is built with only
+its TrueType, CFF, auto-hinter and anti-aliasing modules, and
+`core/render/ft/reaktor_ftoption.h` turns off what Reaktor never reads, its
+environment override among them.
+
+Portions of this software are copyright © 2026 The FreeType Project
+(https://freetype.org). All rights reserved.
 
 ## The one dependency that is not a submodule
 
@@ -55,13 +61,13 @@ retired in favor of speaking AT-SPI directly.
 is marked `REAKTOR`: an 8-bit indexed atlas, a 1×1 white texture for
 untextured geometry, pixel snapping, fills and strokes feathered apart, the
 atlas palette shared with the Text module, rectangles drawn from device pixels
-by `nk_sdl_quad` on the software renderer, `tex_null` repointed after every
-bake, a key-up dropped for a key Nuklear does not hold, text input of any
+by `nk_sdl_quad` on the software renderer, an upload for the atlas Reaktor
+bakes itself, `tex_null` repointed after every bake, a key-up dropped for a key Nuklear does not hold, text input of any
 length fed one rune at a time, and textures clamped rather than tested for
 wrapping.
 
-It cannot stay an include because the first change is inside
-`nk_sdl_font_stash_end`, and submodules are not edited. The cost: when
+It cannot stay an include because the changes sit inside its functions, and
+submodules are not edited. The cost: when
 Nuklear's backend changes, it is re-vendored and the hunks re-applied.
 
 ## Fonts
@@ -79,7 +85,7 @@ the terms were traced: the font's own `name` table says `copyright: No Rights
 Reserved.`, and dotcolon.net/font/aileron links CC0 beside it.
 `Aileron-Notice.txt` records both, says this project assembled it, and
 reproduces the CC0 legal code. It is an OTF with CFF outlines, which
-stb_truetype reads.
+FreeType reads.
 
 M PLUS 1p is by The M+ Project Authors. `MPLUS1p-Regular.ttf` is the file as
 Google Fonts ships it; `MPLUS1p-Notice.txt` names its commit and SHA-256 and
@@ -119,10 +125,10 @@ each toolchain fetches its own framework, and none is part of a Reaktor build.
 
 ## What is redistributed
 
-A native build links SDL, libcss, yutil, plutosvg and plutovg statically, plus
-mojibake and kb_text_shape with the Text module, and compiles in Nuklear,
-NukAnim, Onlay and ini.h, and PDFGen with the print module, so it carries the
-zlib, MIT and Unlicense terms above. Each license
+A native build links SDL, libcss, yutil, plutosvg, plutovg and FreeType
+statically, plus mojibake and kb_text_shape with the Text module, and compiles
+in Nuklear, NukAnim, Onlay and ini.h, and PDFGen with the print module, so it
+carries the zlib, MIT, FreeType License and Unlicense terms above. Each license
 is copied unchanged into `licenses/` beside the programs (ini.h's sits at the
 end of the header, so the header itself is `licenses/ini.h.txt`): ship that folder,
 and this file, with a binary.
