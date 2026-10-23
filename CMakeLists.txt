@@ -533,7 +533,7 @@ else()
     endif()
 endif()
 
-option(REAKTOR_PRINT "Printing and PDF export, through PDFGen" ON)
+option(REAKTOR_PRINT "Printing and PDF export" ON)
 
 add_library(reaktor_print_none INTERFACE)
 target_sources(reaktor_print_none INTERFACE
@@ -543,17 +543,8 @@ if(NOT REAKTOR_PRINT OR EMSCRIPTEN)
     target_link_libraries(reaktor_print INTERFACE reaktor_print_none)
     message(STATUS "print: off")
 else()
-    add_library(pdfgen STATIC "${CMAKE_CURRENT_SOURCE_DIR}/runtime/pdfgen_unit.c")
-    target_include_directories(pdfgen PUBLIC "${TP}/pdfgen")
-    if(MSVC)
-        target_compile_options(pdfgen PRIVATE /w)
-        target_compile_definitions(pdfgen PRIVATE _CRT_SECURE_NO_WARNINGS)
-    else()
-        target_compile_options(pdfgen PRIVATE -w)
-        target_link_libraries(pdfgen PUBLIC m)
-    endif()
     target_sources(reaktor_print INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/print.c")
-    target_link_libraries(reaktor_print INTERFACE pdfgen plutovg)
+    target_link_libraries(reaktor_print INTERFACE plutovg)
     if(WIN32)
         target_link_libraries(reaktor_print INTERFACE comdlg32 gdi32)
     elseif(APPLE)
@@ -630,7 +621,7 @@ set(REAKTOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
 
 foreach(_lic SDL/LICENSE.txt lcui/LICENSE.TXT plutosvg/LICENSE nuklear/LICENSE
              nukanim/LICENSE onlay/LICENSE watercss/LICENSE.md ionicons/LICENSE mojibake/LICENSE
-             kb/LICENSE pdfgen/LICENSE)
+             kb/LICENSE)
     string(REGEX REPLACE "/.*" "" _who "${_lic}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/${_lic}"
                    "${CMAKE_BINARY_DIR}/licenses/${_who}.txt" COPYONLY)
@@ -880,7 +871,7 @@ set_target_properties(reaktor_modules PROPERTIES EXCLUDE_FROM_ALL ON)
 
 set(_parts reaktor_runtime reaktor_core reaktor_modules plutosvg plutovg freetype lcui onlay
            SDL3-static)
-foreach(_t mojibake_lib kb_text_shape pdfgen)
+foreach(_t mojibake_lib kb_text_shape)
     if(TARGET ${_t})
         list(APPEND _parts ${_t})
     endif()
