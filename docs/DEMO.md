@@ -71,7 +71,7 @@ item lands when its popup is a pixel short; this does.
 
 Sixty-four rotating boxes, at the display's rate or flat out with
 `--no-vsync`, for `--bench-seconds`, then what the run cost on stdout. Six
-seconds flat out, on the Windows VM that
+seconds flat out, on the Windows machine that
 [PERFORMANCE.md](PERFORMANCE.md#where-the-numbers-came-from) names:
 
 ```
