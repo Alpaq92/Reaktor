@@ -1427,7 +1427,7 @@ so Nuklear measures as it will draw. Before the frame becomes vertices,
 custom command in the same place, whose callback adds the glyph quads.
 Shaping is cached by string and font, glyphs by font, glyph and size; each
 cache starts over when full. Its bidi levels match mojibake's by order, since
-mojibake 0.4.1 records `byte_offset` at a character's last byte.
+mojibake 0.5.0 records `byte_offset` at a character's last byte.
 
 **Fonts are the application's.** The showcase ships M PLUS 1p for Japanese, as
 a `.font_fallbacks` entry; Arabic, Hebrew or an Indic script needs a font that

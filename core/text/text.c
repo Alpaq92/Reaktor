@@ -271,14 +271,15 @@ static void
 levels(const char *s, int len, int n)
 {
     mjb_bidi_paragraph p;
+    mjb_text           text = mjb_text_utf8(s, (size_t)len);
     int                i, k = 0;
 
     for (i = 0; i < n && g_ch[i].cp < 0x0590; i++) {}
     if (i == n ||
-        mjb_bidi_resolve(s, (size_t)len, MJB_ENC_UTF_8, MJB_DIRECTION_AUTO, &p)
+        mjb_bidi_resolve(&text, MJB_DIRECTION_AUTO, &p)
             != MJB_STATUS_OK)
         return;
-    /* mojibake 0.4.1 puts byte_offset at a character's last byte. */
+    /* mojibake 0.5.0 puts byte_offset at a character's last byte. */
     for (i = 0; i < n; i++) {
         if (k < (int)p.count && (int)p.chars[k].codepoint == g_ch[i].cp)
             g_ch[i].level = p.chars[k++].level;
@@ -878,25 +879,16 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
 int
 reaktor_text_break(const char *s, int len, int limit)
 {
-    mjb_next_line_state st;
-    mjb_break_type      t;
-    int                 best = 0;
+    mjb_text             text = mjb_text_utf8(s, (size_t)len);
+    mjb_line_break_state st;
+    mjb_break_type       t;
+    int                  best = 0;
 
     if (len <= 0 || limit <= 0) return 0;
-    st.index = 0;
-    while ((t = mjb_next_line_break(s, (size_t)len, MJB_ENC_UTF_8, &st))
-           != MJB_BT_NOT_SET) {
-        /* The boundary is before the character ending at st.index. */
-        int at = (int)st.index;
-
-        if (at > len) {
-            at = len;
-        } else {
-            at--;
-            while (at > 0 && ((unsigned char)s[at] & 0xC0) == 0x80) at--;
-        }
-        if (at > limit) break;
-        if (t == MJB_BT_ALLOWED || t == MJB_BT_MANDATORY) best = at;
+    SDL_zero(st);
+    while ((t = mjb_line_break_next(&text, &st)) != MJB_BT_NOT_SET) {
+        if ((int)st.position > limit) break;
+        if (t == MJB_BT_ALLOWED || t == MJB_BT_MANDATORY) best = (int)st.position;
     }
     return best;
 }
