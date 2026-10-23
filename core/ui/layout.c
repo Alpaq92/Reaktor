@@ -51,14 +51,25 @@ behave_of(const reaktor_box *b)
     return f;
 }
 
-static lay_id
-parent_of(const reaktor_layout *l)
+static void
+attach(reaktor_layout *l, lay_id it)
 {
-    int d = l->depth;
+    int d = l->depth > REAKTOR_LAY_DEPTH ? REAKTOR_LAY_DEPTH : l->depth;
 
-    if (d <= 0) return LAY_INVALID_ID;
-    if (d > REAKTOR_LAY_DEPTH) d = REAKTOR_LAY_DEPTH;
-    return l->stack[d - 1];
+    if (d <= 0 || l->stack[d - 1] == LAY_INVALID_ID) return;
+    if (l->last[d - 1] == LAY_INVALID_ID) lay_insert(&l->ctx, l->stack[d - 1], it);
+    else lay_append(&l->ctx, l->last[d - 1], it);
+    l->last[d - 1] = it;
+}
+
+static void
+push(reaktor_layout *l, lay_id it)
+{
+    if (l->depth < REAKTOR_LAY_DEPTH) {
+        l->stack[l->depth] = it;
+        l->last[l->depth]  = LAY_INVALID_ID;
+    }
+    l->depth++;
 }
 
 static lay_id
@@ -81,10 +92,7 @@ declare(reaktor_layout *l, unsigned id, const reaktor_box *b)
         lay_set_margins_ltrb(&l->ctx, it, (lay_scalar)b->ml, (lay_scalar)b->mt,
                              (lay_scalar)b->mr, (lay_scalar)b->mb);
 
-    {
-        lay_id parent = parent_of(l);
-        if (parent != LAY_INVALID_ID) lay_insert(&l->ctx, parent, it);
-    }
+    attach(l, it);
 
     l->id[l->count]   = id;
     l->item[l->count] = it;
@@ -117,16 +125,13 @@ reaktor_layout_begin(reaktor_layout *l, struct nk_rect root)
     rb.dir = REAKTOR_LAY_FREE;
 
     it = declare(l, 0u, &rb);
-    if (it != LAY_INVALID_ID) l->stack[l->depth++] = it;
+    if (it != LAY_INVALID_ID) push(l, it);
 }
 
 void
 reaktor_layout_open(reaktor_layout *l, unsigned id, const reaktor_box *b)
 {
-    lay_id it = declare(l, id, b);
-
-    if (l->depth < REAKTOR_LAY_DEPTH) l->stack[l->depth] = it;
-    l->depth++;
+    push(l, declare(l, id, b));
 }
 
 void

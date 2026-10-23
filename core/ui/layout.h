@@ -33,6 +33,7 @@ typedef struct reaktor_layout {
     unsigned      flags[REAKTOR_LAY_MAX];
 
     lay_id      stack[REAKTOR_LAY_DEPTH];
+    lay_id      last[REAKTOR_LAY_DEPTH];
     int         depth;
 
     reaktor_lay_slot slot[REAKTOR_LAY_SLOTS];
