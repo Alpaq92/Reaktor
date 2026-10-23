@@ -37,15 +37,15 @@ tree from outside. [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the
 projects and the runner. Reaktor appears once per `--renderer`. Shaft is not
 plotted: it does not link on Windows.
 
-| Arm | Memory | CPU, with startup | CPU, steady state | Work per frame, flat out |
-| --- | --- | --- | --- | --- |
-| **Reaktor**, `software` | 8.9 MB | 8.2% | 7.0% | 0.73 ms |
-| **Reaktor**, `direct3d11` | 58.2 MB | 14.2% | 13.0% | 0.28 ms |
-| **Reaktor**, `direct3d12` | 121.3 MB | 11.7% | 6.0% | 0.38 ms |
-| **Reaktor**, `opengl` | 69.3 MB | 11.8% | 6.4% | 0.21 ms |
-| Flutter | 90.8 MB | 19.3% | 15.6% | |
-| Electron | 157.6 MB | 40.8% | 26.1% | |
-| Kotlin Multiplatform | 667.4 MB | 59.6% | 33.5% | |
+| Arm | Memory | CPU, with startup | CPU, steady state |
+| --- | --- | --- | --- |
+| **Reaktor**, `software` | 8.9 MB | 8.2% | 7.0% |
+| **Reaktor**, `direct3d11` | 58.2 MB | 14.2% | 13.0% |
+| **Reaktor**, `direct3d12` | 121.3 MB | 11.7% | 6.0% |
+| **Reaktor**, `opengl` | 69.3 MB | 11.8% | 6.4% |
+| Flutter | 90.8 MB | 19.3% | 15.6% |
+| Electron | 157.6 MB | 40.8% | 26.1% |
+| Kotlin Multiplatform | 667.4 MB | 59.6% | 33.5% |
 
 - **About a tenth of Flutter's memory and less than half its CPU**, with
   startup or without, and a seventieth of Kotlin Multiplatform's memory.
@@ -55,10 +55,6 @@ plotted: it does not link on Windows.
 - **Startup counts.** A run that draws for only 0.2 s takes 0.14 s of CPU on
   `software` and 0.38–0.50 s on a GPU renderer. Once running, `direct3d12` and
   `opengl` take up to a point less than `software`.
-- **Per frame is the steady figure.** The percentages move by a point or two
-  between sessions on the same build, with the processor's clock; the time a
-  frame's build, render and present take, drawn flat out, does not, so it is
-  what to compare across builds.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
   program keeping it busy, `direct3d11` and `opengl` missed 60 fps and took
   16–28% of a core. These runs had the GeForce RTX 2060 idle.
@@ -71,7 +67,7 @@ from 11.48 ms to 2.12 ms, with the same pixels.
 
 ```bash
 ./benchmarks/run.ps1 -Seconds 6 -Fps 60 -Runs 10 -PinClock
-./benchmarks/run.ps1 -Fps 60 -Runs 10 -Steady -FlatOut -PinClock
+./benchmarks/run.ps1 -Fps 60 -Runs 10 -Steady -PinClock
 ```
 
 CPU is a percent of one core: with startup over the whole 6-second run, steady
@@ -80,10 +76,9 @@ the rest of each frame; Kotlin Multiplatform held 59. Each figure is the
 median of ten runs, the steady-state ones taken in turn across arms; passes
 differ by up to three points of CPU. Memory is peak private bytes, and CPU the
 sum, across each app's process tree. `-PinClock` runs on a copy of the power
-plan that holds the processor at full speed, and restores the plan after;
-`-FlatOut` adds a 4-second run without vsync to each Reaktor run. The Reaktor
-rows were measured on 2026-10-23, the others on 2026-10-22, with the GPU idle.
-The sampler counts what an app's own timers miss: `bench` times
+plan that holds the processor at full speed, and restores the plan after.
+The Reaktor rows were measured on 2026-10-23, the others on 2026-10-22, with
+the GPU idle. The sampler counts what an app's own timers miss: `bench` times
 0.07 ms of work per `direct3d11` frame, where the sampler charged over 10%.
 `vulkan` falls back to `direct3d11` in this SDL build.
 
