@@ -154,8 +154,8 @@ when unset. Each page is laid out and drawn as on screen, in a hidden window
 at `.dpi` (200 unset), so it carries the window's look: a page that should be
 white paints itself white. Both calls answer 1 when the job is queued; it runs
 between frames, and `.done(app, ok, user)` says how it went. A page is an
-image in the PDF, through [PDFGen](https://github.com/AndreRenaud/PDFGen) and
-plutovg's JPEG writer, so its text is not selectable. To print, Windows shows
+image in the PDF, a JPEG from plutovg's writer that `runtime/print.c` wraps
+in the file itself, so its text is not selectable. To print, Windows shows
 its print dialog and draws the pages to the printer; macOS opens its print
 dialog on the PDF; Linux and the BSDs open the PDF in the user's viewer, which
 prints it. The web build does not print.
@@ -1080,7 +1080,7 @@ Passed to CMake, through either script:
 | `REAKTOR_TRAY` | `ON` | The tray icon |
 | `REAKTOR_POPUP_WINDOWS` | `ON` | Menus in windows of their own |
 | `REAKTOR_NOTIFY` | `ON` | System notifications |
-| `REAKTOR_PRINT` | `ON` | Printing and PDF export, through PDFGen |
+| `REAKTOR_PRINT` | `ON` | Printing and PDF export |
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
@@ -1122,7 +1122,7 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
   `.remember_window` is ignored.
 - **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, so AppIndicator
   and GTK 3 are never loaded on Linux and the BSDs.
-- **`REAKTOR_PRINT=OFF`** leaves PDFGen out; `reaktor_print` and
+- **`REAKTOR_PRINT=OFF`** leaves the print module out; `reaktor_print` and
   `reaktor_print_pdf` answer 0.
 - **`REAKTOR_INSPECTOR=OFF`** answers 0 from `reaktor_inspector_open` and
   ignores `.inspector`, its shortcut and its flags.

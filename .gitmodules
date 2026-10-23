@@ -34,6 +34,3 @@
 [submodule "external/simplecss"]
 	path = external/simplecss
 	url = https://github.com/kevquirk/simple.css
-[submodule "external/pdfgen"]
-	path = external/pdfgen
-	url = https://github.com/AndreRenaud/PDFGen

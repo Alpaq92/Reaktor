@@ -1,7 +1,6 @@
 #include "internal.h"
 #include "reaktor/launch.h"
 #include "declare.h"
-#include "pdfgen.h"
 #include "plutovg.h"
 
 #define REAKTOR_PRINT_PAGES 64
@@ -17,10 +16,11 @@ typedef struct print_job {
     int                index, to_printer;
 } print_job;
 
-typedef struct jpeg_buf {
+typedef struct buffer {
     unsigned char *bytes;
     size_t         len, cap;
-} jpeg_buf;
+    int            failed;
+} buffer;
 
 static void
 print_page(App *app, struct nk_context *ctx, int w, int h, void *user)
@@ -31,20 +31,136 @@ print_page(App *app, struct nk_context *ctx, int w, int h, void *user)
 }
 
 static void
-jpeg_put(void *closure, void *data, int size)
+put_bytes(void *closure, void *data, int size)
 {
-    jpeg_buf *b = (jpeg_buf *)closure;
+    buffer *b = (buffer *)closure;
 
+    if (b->failed || size <= 0) return;
     if (b->len + (size_t)size > b->cap) {
         size_t         cap  = (b->len + (size_t)size) * 2;
         unsigned char *more = (unsigned char *)SDL_realloc(b->bytes, cap);
 
-        if (!more) return;
+        if (!more) {
+            b->failed = 1;
+            return;
+        }
         b->bytes = more;
         b->cap   = cap;
     }
     SDL_memcpy(b->bytes + b->len, data, (size_t)size);
     b->len += (size_t)size;
+}
+
+static void
+put(buffer *b, const char *fmt, ...)
+{
+    char    line[256];
+    va_list ap;
+    int     n;
+
+    va_start(ap, fmt);
+    n = SDL_vsnprintf(line, sizeof line, fmt, ap);
+    va_end(ap);
+    if (n < 0 || n >= (int)sizeof line) b->failed = 1;
+    else put_bytes(b, line, n);
+}
+
+/* A PDF text string: as it is when it is plain ASCII, else UTF-16BE. */
+static void
+put_text(buffer *b, const char *s)
+{
+    size_t      left = SDL_strlen(s);
+    const char *p;
+
+    for (p = s; *p; p++)
+        if ((unsigned char)*p < 0x20 || (unsigned char)*p > 0x7E ||
+            *p == '(' || *p == ')' || *p == '\\')
+            break;
+    if (!*p) {
+        put(b, "(");
+        put_bytes(b, (void *)s, (int)left);
+        put(b, ")");
+        return;
+    }
+    put(b, "<FEFF");
+    while (left) {
+        Uint32 c = SDL_StepUTF8(&s, &left);
+
+        if (c > 0xFFFF) put(b, "%04X%04X", 0xD800 + ((c - 0x10000) >> 10), 0xDC00 + (c & 0x3FF));
+        else if (c) put(b, "%04X", c);
+    }
+    put(b, ">");
+}
+
+/* Each page a JPEG drawn over the whole of it. */
+static int
+pdf_write(const char *path, const char *title, SDL_Surface *const *page, int n,
+          float pt_w, float pt_h)
+{
+    buffer       pdf = { NULL, 0, 0, 0 };
+    size_t       at[4 + 3 * REAKTOR_PRINT_PAGES], xref, k;
+    SDL_Time     now;
+    SDL_DateTime t;
+    Uint64       id = 0xcbf29ce484222325u;
+    int          objects = 3 + 3 * n, i, ok;
+
+    put(&pdf, "%%PDF-1.3\n%%\xE2\xE3\xCF\xD3\n");
+    at[1] = pdf.len;
+    put(&pdf, "1 0 obj\n<< /Creator (Reaktor)");
+    if (title && *title) {
+        put(&pdf, " /Title ");
+        put_text(&pdf, title);
+    }
+    if (SDL_GetCurrentTime(&now) && SDL_TimeToDateTime(now, &t, false))
+        put(&pdf, " /CreationDate (D:%04d%02d%02d%02d%02d%02dZ)", t.year, t.month, t.day,
+            t.hour, t.minute, t.second);
+    put(&pdf, " >>\nendobj\n");
+    at[2] = pdf.len;
+    put(&pdf, "2 0 obj\n<< /Type /Pages /Count %d /Kids [", n);
+    for (i = 0; i < n; i++) put(&pdf, " %d 0 R", 4 + 3 * i);
+    put(&pdf, " ] >>\nendobj\n");
+    at[3] = pdf.len;
+    put(&pdf, "3 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+    for (i = 0; i < n && !pdf.failed; i++) {
+        plutovg_surface_t *s = plutovg_surface_create_for_data(page[i]->pixels, page[i]->w,
+                                                               page[i]->h, page[i]->pitch);
+        buffer             jpg = { NULL, 0, 0, 0 };
+        char               draw[96];
+        int                o = 4 + 3 * i, len;
+
+        if (s) plutovg_surface_write_to_jpg_stream(s, put_bytes, &jpg, 90);
+        plutovg_surface_destroy(s);
+        len = SDL_snprintf(draw, sizeof draw, "q %.4f 0 0 %.4f 0 0 cm /Im Do Q",
+                           (double)pt_w, (double)pt_h);
+        if (!jpg.len || jpg.failed) pdf.failed = 1;
+        at[o] = pdf.len;
+        put(&pdf, "%d 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.4f %.4f]", o,
+            (double)pt_w, (double)pt_h);
+        put(&pdf, " /Resources << /XObject << /Im %d 0 R >> >> /Contents %d 0 R >>\nendobj\n",
+            o + 1, o + 2);
+        at[o + 1] = pdf.len;
+        put(&pdf, "%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d", o + 1,
+            page[i]->w, page[i]->h);
+        put(&pdf, " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode"
+                  " /Length %zu >>\nstream\n", jpg.len);
+        put_bytes(&pdf, jpg.bytes, (int)jpg.len);
+        put(&pdf, "\nendstream\nendobj\n");
+        at[o + 2] = pdf.len;
+        put(&pdf, "%d 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n", o + 2, len, draw);
+        SDL_free(jpg.bytes);
+    }
+
+    xref = pdf.len;
+    put(&pdf, "xref\n0 %d\n0000000000 65535 f \n", objects + 1);
+    for (i = 1; i <= objects; i++) put(&pdf, "%010zu 00000 n \n", at[i]);
+    for (k = 0; k < pdf.len; k++) id = (id ^ pdf.bytes[k]) * 0x100000001b3u;
+    put(&pdf, "trailer\n<< /Size %d /Root 3 0 R /Info 1 0 R", objects + 1);
+    put(&pdf, " /ID [<%016" SDL_PRIx64 "> <%016" SDL_PRIx64 ">] >>\n", id, id);
+    put(&pdf, "startxref\n%zu\n%%%%EOF\n", xref);
+    ok = !pdf.failed && SDL_SaveFile(path, pdf.bytes, pdf.len);
+    SDL_free(pdf.bytes);
+    return ok;
 }
 
 #ifdef _WIN32
@@ -105,7 +221,6 @@ print_run(App *app, void *user)
     print_job   *job = (print_job *)user;
     float        keep = reaktor_scale(), pt_w = job->spec.w, pt_h = job->spec.h;
     SDL_Surface *page[REAKTOR_PRINT_PAGES];
-    struct pdf_doc *doc = NULL;
     App         *pa = NULL;
     int          id, i, n = 0, ok = 1;
 
@@ -138,32 +253,11 @@ print_run(App *app, void *user)
         ok = print_win32(app, page, n, job->spec.title ? job->spec.title : "Reaktor");
     else
 #endif
-    if (ok) {
-        struct pdf_info info;
-
-        SDL_zero(info);
-        SDL_strlcpy(info.creator, "Reaktor", sizeof info.creator);
-        if (job->spec.title) SDL_strlcpy(info.title, job->spec.title, sizeof info.title);
-        doc = pdf_create(pt_w, pt_h, &info);
-    }
-    for (i = 0; doc && ok && i < n; i++) {
-        plutovg_surface_t *s = plutovg_surface_create_for_data(page[i]->pixels, page[i]->w,
-                                                               page[i]->h, page[i]->pitch);
-        jpeg_buf           b = { NULL, 0, 0 };
-        struct pdf_object *p = pdf_append_page(doc);
-
-        if (s) plutovg_surface_write_to_jpg_stream(s, jpeg_put, &b, 90);
-        plutovg_surface_destroy(s);
-        if (!p || !b.len ||
-            pdf_add_image_data(doc, p, 0, 0, pt_w, pt_h, b.bytes, b.len) < 0) ok = 0;
-        SDL_free(b.bytes);
-    }
-    if (doc && ok) ok = pdf_save(doc, job->path) >= 0;
-    if (doc) pdf_destroy(doc);
+    if (ok) ok = pdf_write(job->path, job->spec.title, page, n, pt_w, pt_h);
 #if defined(__APPLE__)
-    if (doc && ok && job->to_printer) ok = reaktor_print_macos(job->path);
+    if (ok && job->to_printer) ok = reaktor_print_macos(job->path);
 #elif !defined(_WIN32)
-    if (doc && ok && job->to_printer) {
+    if (ok && job->to_printer) {
         char *url = NULL;
 
         SDL_asprintf(&url, "file://%s", job->path);
