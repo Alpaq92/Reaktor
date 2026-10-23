@@ -62,6 +62,22 @@ if(NOT MSVC AND NOT EMSCRIPTEN)
 endif()
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)
 
+# SDL's dynamic API keeps every SDL function linked and loads whichever SDL
+# library the SDL3_DYNAMIC_API environment variable names. Reaktor links SDL
+# statically and reads no environment, so it is compiled out.
+file(STRINGS "${TP}/SDL/src/dynapi/SDL_dynapi.h" _dynapi_guard REGEX "^#ifndef SDL_dynapi_h_")
+if(NOT _dynapi_guard)
+    message(FATAL_ERROR "SDL_dynapi.h no longer opens with #ifndef SDL_dynapi_h_; "
+                        "core/sdl/no_dynapi.h needs its new guard")
+endif()
+if(MSVC)
+    target_compile_options(SDL3-static PRIVATE
+        "/FI${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
+else()
+    target_compile_options(SDL3-static PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
+endif()
+
 set(LC       "${TP}/lcui/lib")
 set(LCUI_CFG "${CMAKE_BINARY_DIR}/gen/lcui")
 file(MAKE_DIRECTORY "${LCUI_CFG}")
