@@ -78,7 +78,7 @@ directly. See [An application](DOCUMENTATION.md#an-application).
 
 ### Why C99 and an immediate-mode core instead of a retained toolkit like GTK or Qt?
 
-To stay small: a 2.4 MB binary, about 10 MB of RAM, no GPU, and nothing to
+To stay small: a 2.2 MB binary, 7–13 MB of RAM, no GPU, and nothing to
 install beside it. A frame is drawn only when something changes, so the app
 idles at 0% of a core. See [The frame loop](DOCUMENTATION.md#the-frame-loop)
 and [PERFORMANCE.md](PERFORMANCE.md).

@@ -1252,9 +1252,9 @@ command line names one, and `--new-instance` is passed for it.
 `software` is the default on every platform:
 
 - **It needs no GPU.** Without one, Direct3D falls back to Microsoft's WARP
-  emulation: SDL's software renderer took 13.1 ms of CPU a frame where
-  Direct3D on WARP took 78.7.
-- **It uses the least memory**, 9.5 MB in `bench` against 59–122 MB on a GPU
+  emulation: drawing `bench` flat out, SDL's software renderer took 0.72 ms
+  of CPU a frame where Direct3D on WARP took 1.65.
+- **It uses the least memory**, 8.9 MB in `bench` against 58–121 MB on a GPU
   renderer, most of that the graphics driver's.
 - **It starts fastest, and its cost does not depend on other programs** using
   the GPU.

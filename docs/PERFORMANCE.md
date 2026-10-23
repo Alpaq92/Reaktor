@@ -11,10 +11,10 @@ queue and builds a frame only when the picture would differ. So **CPU is a
 count of frames, not a load**, and **memory is a floor, not a curve**: once the
 atlas and icons are baked, nothing grows.
 
-On Windows today, `showcase.exe` is 3,671,040 bytes, `notepad.exe` 2,610,176,
-`simple.exe` 2,476,544 and `bench.exe` 2,466,304. The showcase links all three
+On Windows today, `showcase.exe` is 3,392,512 bytes, `notepad.exe` 2,351,616,
+`simple.exe` 2,238,464 and `bench.exe` 2,228,224. The showcase links all three
 optional modules and the others none; each carries the default look —
-Aileron, the mark, the sheets and seven icons, 67,829 bytes — compiled in. The
+Aileron, the mark, the sheets and seven icons, 73,123 bytes — compiled in. The
 four-platform figures below come from an older build that shipped one
 executable, at 1.00× scale in a 960×680 window; the runtime they measure is
 the one all four programs share.
@@ -22,10 +22,10 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 9.5 MB, the same binary on D3D11 59.4 MB, on D3D12 122.3 MB
-and on OpenGL 70.1 MB, Flutter 90.8 MB, Electron 157.6 MB, Kotlin
+Memory: Reaktor 8.9 MB, the same binary on D3D11 58.2 MB, on D3D12 121.3 MB
+and on OpenGL 69.3 MB, Flutter 90.8 MB, Electron 157.6 MB, Kotlin
 Multiplatform 667.4 MB. Steady-state CPU as a percent of one core: Reaktor
-6.0%, D3D11 10.3%, D3D12 5.0%, OpenGL 5.0%, Flutter 15.6%, Electron 26.1%,
+7.0%, D3D11 13.0%, D3D12 6.0%, OpenGL 6.4%, Flutter 15.6%, Electron 26.1%,
 Kotlin Multiplatform 33.5%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
@@ -37,24 +37,28 @@ tree from outside. [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the
 projects and the runner. Reaktor appears once per `--renderer`. Shaft is not
 plotted: it does not link on Windows.
 
-| Arm | Memory | CPU, with startup | CPU, steady state |
-| --- | --- | --- | --- |
-| **Reaktor**, `software` | 9.5 MB | 8.6% | 6.0% |
-| **Reaktor**, `direct3d11` | 59.4 MB | 14.1% | 10.3% |
-| **Reaktor**, `direct3d12` | 122.3 MB | 11.8% | 5.0% |
-| **Reaktor**, `opengl` | 70.1 MB | 11.6% | 5.0% |
-| Flutter | 90.8 MB | 19.3% | 15.6% |
-| Electron | 157.6 MB | 40.8% | 26.1% |
-| Kotlin Multiplatform | 667.4 MB | 59.6% | 33.5% |
+| Arm | Memory | CPU, with startup | CPU, steady state | Work per frame, flat out |
+| --- | --- | --- | --- | --- |
+| **Reaktor**, `software` | 8.9 MB | 8.2% | 7.0% | 0.73 ms |
+| **Reaktor**, `direct3d11` | 58.2 MB | 14.2% | 13.0% | 0.28 ms |
+| **Reaktor**, `direct3d12` | 121.3 MB | 11.7% | 6.0% | 0.38 ms |
+| **Reaktor**, `opengl` | 69.3 MB | 11.8% | 6.4% | 0.21 ms |
+| Flutter | 90.8 MB | 19.3% | 15.6% | |
+| Electron | 157.6 MB | 40.8% | 26.1% | |
+| Kotlin Multiplatform | 667.4 MB | 59.6% | 33.5% | |
 
 - **About a tenth of Flutter's memory and less than half its CPU**, with
   startup or without, and a seventieth of Kotlin Multiplatform's memory.
 - **Every Reaktor renderer takes less CPU than every other framework.** On a
-  GPU renderer its memory is mostly the graphics driver's: 59–122 MB, around
+  GPU renderer its memory is mostly the graphics driver's: 58–121 MB, around
   Flutter's 91.
-- **Startup counts.** A run that draws for only 0.2 s takes 0.16 s of CPU on
-  `software` and 0.41–0.52 s on a GPU renderer. Once running, `direct3d12` and
-  `opengl` take a point less than `software`.
+- **Startup counts.** A run that draws for only 0.2 s takes 0.14 s of CPU on
+  `software` and 0.38–0.50 s on a GPU renderer. Once running, `direct3d12` and
+  `opengl` take up to a point less than `software`.
+- **Per frame is the steady figure.** The percentages move by a point or two
+  between sessions on the same build, with the processor's clock; the time a
+  frame's build, render and present take, drawn flat out, does not, so it is
+  what to compare across builds.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
   program keeping it busy, `direct3d11` and `opengl` missed 60 fps and took
   16–28% of a core. These runs had the GeForce RTX 2060 idle.
@@ -66,7 +70,8 @@ from 11.48 ms to 2.12 ms, with the same pixels.
 ### How it was measured
 
 ```bash
-./benchmarks/run.ps1 -Seconds 6 -Fps 60 -Runs 10
+./benchmarks/run.ps1 -Seconds 6 -Fps 60 -Runs 10 -PinClock
+./benchmarks/run.ps1 -Fps 60 -Runs 10 -Steady -FlatOut -PinClock
 ```
 
 CPU is a percent of one core: with startup over the whole 6-second run, steady
@@ -74,8 +79,11 @@ from 3 s to 8 s of a 9-second run. Every arm is held to 60 fps and sleeps out
 the rest of each frame; Kotlin Multiplatform held 59. Each figure is the
 median of ten runs, the steady-state ones taken in turn across arms; passes
 differ by up to three points of CPU. Memory is peak private bytes, and CPU the
-sum, across each app's process tree. Every row was measured on 2026-10-22 with
-the GPU idle. The sampler counts what an app's own timers miss: `bench` times
+sum, across each app's process tree. `-PinClock` runs on a copy of the power
+plan that holds the processor at full speed, and restores the plan after;
+`-FlatOut` adds a 4-second run without vsync to each Reaktor run. The Reaktor
+rows were measured on 2026-10-23, the others on 2026-10-22, with the GPU idle.
+The sampler counts what an app's own timers miss: `bench` times
 0.07 ms of work per `direct3d11` frame, where the sampler charged over 10%.
 `vulkan` falls back to `direct3d11` in this SDL build.
 
@@ -97,7 +105,8 @@ statically — SDL, libcss, plutosvg, plutovg, Nuklear, Onlay, and mojibake and
 kb_text_shape with Text — so only the C runtime loads from outside. The web
 bundles agree within 211 bytes on Windows, Linux and macOS (emscripten 6.0.9),
 and 380 with GhostBSD's emscripten 6.0.3; the Linux one is 1,221,689 bytes of
-`.wasm`, 86,001 of assets, 80,045 of `.js` and 1,451 of `.html`. The Windows
+`.wasm`, 86,001 of assets, 80,045 of `.js` and 1,451 of `.html`. Today's
+build also links FreeType, which bakes the glyph atlas. The Windows
 binary's icon is a 125 KB resource of nine sizes, built from the SVG by
 `tools/mkicon.c`.
 
@@ -108,32 +117,32 @@ on Windows emsdk 6.0.9.
 
 | `showcase` | Default | Module off | Saved |
 | --- | --- | --- | --- |
-| `.exe`, accessibility bridges | 3,480,576 | 3,465,216 | 15,360 (0.44%) |
-| `.exe`, Locale | 3,480,576 | 3,466,240 | 14,336 (0.41%) |
-| `.exe`, Text | 3,480,576 | 2,692,608 | 787,968 (22.6%) |
-| `.wasm` + `.js`, accessibility bridges | 1,968,979 | 1,966,141 | 2,838 (0.14%) |
-| `.wasm` + `.js`, Locale | 1,968,979 | 1,953,842 | 15,137 (0.77%) |
-| `.wasm` + `.js`, Text | 1,968,979 | 1,464,437 | 504,542 (25.6%) |
-| `.data`, Locale | 1,810,099 | 44,478 | 1,765,621 (97.5%) |
-| `.data`, Text | 1,810,099 | 51,411 | 1,758,688 (97.2%) |
+| `.exe`, accessibility bridges | 3,392,512 | 3,375,616 | 16,896 (0.50%) |
+| `.exe`, Locale | 3,392,512 | 3,377,152 | 15,360 (0.45%) |
+| `.exe`, Text | 3,392,512 | 2,684,928 | 707,584 (20.9%) |
+| `.wasm` + `.js`, accessibility bridges | 2,308,781 | 2,305,843 | 2,938 (0.13%) |
+| `.wasm` + `.js`, Locale | 2,308,781 | 2,295,269 | 13,512 (0.59%) |
+| `.wasm` + `.js`, Text | 2,308,781 | 1,824,708 | 484,073 (21.0%) |
+| `.data`, Locale | 1,910,136 | 143,867 | 1,766,269 (92.5%) |
+| `.data`, Text | 1,910,136 | 151,448 | 1,758,688 (92.1%) |
 
 **The bridges are small**; turned off, they drop libraries more than bytes.
 Pixels and `--a11y-dump` stay byte-identical, and only a screen reader
 notices: UI Automation finds 99 elements on the Buttons page, none without
 them.
 
-**Text is mostly tables and a font.** kb_text_shape is 113 KB of code and
-443 KB of tables, and mojibake adds its line-breaking and bidirectional data;
-the `.data` it saves is M PLUS 1p, 1,758,688 bytes. Locale is 14 KB of code
-and 6,933 bytes of catalogs; compiled in (`-DREAKTOR_LOCALE_EMBED=ON`),
-`showcase.exe` is 3,487,232 bytes.
+**Text is mostly tables and a font.** kb_text_shape is 95 KB of code and
+391 KB of tables, and mojibake 19 KB of code and 180 KB of line-breaking and
+bidirectional data; the `.data` it saves is M PLUS 1p, 1,758,688 bytes.
+Locale is 15 KB of the executable and 7,581 bytes of catalogs; compiled in
+(`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,399,680 bytes.
 
 **Text costs memory once it draws.** Medians of private bytes over ten
-launches: Diagnostics is 8.0 MB with every module, 7.6 MB without Text and
-8.2 MB without Locale — Text's 0.4 MB is kb_text_shape's tables, which are not
-`const` and so are committed untouched. Translations is 10.8 MB against 7.7 MB
-without Text: M PLUS 1p held open, what kb_text_shape parses from it, the
-glyph texture and the caches.
+launches: Diagnostics is 12.9 MB with every module and 12.6 MB without Text or
+without Locale — kb_text_shape's tables are not `const`, so they are committed
+untouched. Translations is 15.5 MB against 12.6 MB without Text: M PLUS 1p
+held open, what kb_text_shape parses from it, the glyph texture and the
+caches.
 
 ## Memory
 
@@ -141,11 +150,19 @@ Idle on the Login page.
 
 | | Windows | Linux | macOS | GhostBSD |
 | --- | --- | --- | --- | --- |
-| Committed / private / footprint | **9.0 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
-| Resident / working set | **29–34 MB** | **11.4 MB** | **33–36 MB** | **11.9 MB** |
+| Committed / private / footprint | **12.6 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
+| Resident / working set | **29.4 MB** | **11.4 MB** | **33–36 MB** | **11.9 MB** |
 
 Committed is what the process asked the system to back; resident is what is
-in RAM, shared library pages included.
+in RAM, shared library pages included. Windows is today's `showcase`, with
+every module; the others are the older single-executable build. Idle on
+Windows, `notepad` is 9.3 MB and `simple`, which links no module, 7.4 MB.
+
+- **Windows is mostly the system's.** Of the showcase's 12.6 MB, 1.7 MB is
+  Reaktor's own allocations, the largest the glyph atlas (548 KB) and its
+  table (281 KB) for eight sizes in two weights. Most of the rest is the heaps
+  of the Windows components it loads: UI Automation, the shell, the input
+  method.
 
 - **Linux started at 123.6 MB, almost none of it Reaktor's.** SDL's X11 driver
   set up OpenGL whatever the renderer, and with no GPU that loads Mesa's
@@ -161,7 +178,8 @@ in RAM, shared library pages included.
   render target, its staging copy and the atlas. Without a renderer rewrite
   the floor is 26–28 MB, and Retina pushes committed toward 50 MB.
 
-Windows varies by about 2 MB between identical runs, so compare ten launches.
+Windows varies by about half a megabyte between identical runs, so compare ten
+launches.
 `tools/vmwalk.c` (`cmake --build build --target vmwalk`) splits another
 process's private bytes into named buckets.
 
@@ -183,15 +201,20 @@ Metal texture to present it. On GhostBSD most of a frame is the present, a
 software blit into VMware's framebuffer: 6.7 ms of Login's 7.1 ms, 11.1 ms of
 Buttons' 14.8.
 
-The accessibility tree adds **4.2 µs** to a drawn frame (82 nodes). Without a
-GPU, `direct3d11` falls back to WARP and a frame goes from 4.7 ms to
-**20.3 ms**, which made software the default. With a GPU, `direct3d12` and
-`opengl` take less CPU; see **Against the others**.
+Today's Windows build, at its default 1100×680: Login takes **1.2–1.4 ms** a
+frame and Buttons **2.7–3.3 ms**; `direct3d11` takes 0.3–0.6 ms and 0.7–1.1 ms.
+Without a GPU, `direct3d11` falls back to WARP, which rasterizes on threads of
+its own: drawing `bench` flat out, the process spends **1.65 ms** of CPU a
+frame on WARP against 0.72 ms on `software`, which made software the
+default.
+
+The accessibility tree adds **3.3 µs** to a drawn frame (82 nodes). With a
+GPU, `direct3d12` and `opengl` take less CPU; see **Against the others**.
 
 ## What it needs to run
 
-**No GPU**, and about **10 MB of RAM**. The default look is compiled in, so a
-program needs no files beside it until it uses other Ionicons, Simple.css, the
+**No GPU**, and **7–13 MB of RAM** on Windows. The default look is compiled
+in, so a program needs no files beside it until it uses other Ionicons, Simple.css, the
 catalogs or the Japanese font, found under a `.reaktor-root` marker beside it
 or up to two folders above. The web build packs those into its `.data` and needs an HTTP server,
 since a `file://` page cannot fetch the `.wasm`.
