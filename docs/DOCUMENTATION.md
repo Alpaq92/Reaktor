@@ -1029,7 +1029,7 @@ mojibake and kb_text_shape, merged with `lib.exe`, Apple's `libtool` or an
 and SDL's, a CMake package, a pkg-config file and `share/reaktor/licenses`:
 
 ```cmake
-find_package(reaktor 0.7 REQUIRED)
+find_package(reaktor 0.8 REQUIRED)
 add_executable(app WIN32 main.c)
 target_link_libraries(app PRIVATE reaktor::reaktor)
 ```
