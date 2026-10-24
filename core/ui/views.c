@@ -194,14 +194,13 @@ list_follow(const reaktor_list_spec *s, int focused, struct nk_rect area, float 
 
 /* Row r's first column in a tree; 1 when the selection should move to t->jump. */
 static int
-tree_first(tree_rows *t, int r, unsigned id, struct nk_color fg, float pad)
+tree_first(tree_rows *t, int r, const char *label, unsigned id, struct nk_color fg, float pad)
 {
     struct nk_context *ctx = g_frame_ctx;
     const struct nk_user_font *f = ctx->style.font;
     const reaktor_tree_spec *s = t->s;
     int node = t->node[r], branch = tree_branch(t, node), step, up;
     struct nk_rect b, chev;
-    const char *label = s->label(node, s->user);
     const char *icon = s->icon ? s->icon(node, s->user) : NULL;
     float x;
 
@@ -433,6 +432,7 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
                 struct nk_color fg = g_frame_ctx->style.text.color;
                 int             on = s->selected && *s->selected == r;
                 struct nk_rect  row;
+                const char     *first = s->cell(r, 0, s->user);
                 unsigned        id;
 
                 nk_layout_row(g_frame_ctx, NK_DYNAMIC, row_h, cols, ratio);
@@ -442,7 +442,7 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
                 if (s->selected) reaktor_hot(g_frame_app, row, REAKTOR_CURSOR_DEFAULT, 1);
                 id = reaktor_note(g_frame_app,
                                   t ? REAKTOR_A11Y_TREEITEM : REAKTOR_A11Y_LISTITEM,
-                                  s->cell(r, 0, s->user), NULL,
+                                  first, NULL,
                                   (on ? REAKTOR_A11Y_SELECTED : 0u) |
                                   (t && tree_branch(t, t->node[r]) && t->s->open[t->node[r]]
                                    ? REAKTOR_A11Y_EXPANDED : 0u), row);
@@ -456,10 +456,10 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
                                  reaktor_token("--background-hover", nk_rgba(128, 128, 128, 60)));
                 }
                 for (c = 0; c < cols; c++) {
-                    const char *cell = s->cell(r, c, s->user);
+                    const char *cell = c ? s->cell(r, c, s->user) : first;
 
                     if (t && c == 0) {
-                        if (tree_first(t, r, id, fg, pad) && s->selected) {
+                        if (tree_first(t, r, cell, id, fg, pad) && s->selected) {
                             int k = t->row[t->jump];
 
                             if (k >= 0 && *s->selected != k) {

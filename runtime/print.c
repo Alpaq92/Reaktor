@@ -235,8 +235,10 @@ print_run(App *app, void *user)
 
         job->index = i;
         reaktor_app_size(pa, &w, &h);
+        pa->build_only = 1;
         for (k = 0; k < 3 || (!reaktor_frame_settled(pa) && k < 24); k++)
             reaktor_app_frame(pa, w, h, "", print_page, job);
+        pa->build_only   = 0;
         pa->want_capture = 1;
         reaktor_app_frame(pa, w, h, "", print_page, job);
         page[i] = pa->capture ? SDL_ConvertSurface(pa->capture, SDL_PIXELFORMAT_ARGB8888) : NULL;
