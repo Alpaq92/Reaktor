@@ -484,11 +484,8 @@ load_theme(App *app)
     if (!reaktor_style_init(sheets, n, app->dark ? "dark" : "light"))
         SDL_Log("stylesheets failed to load; Nuklear defaults apply");
     read_roles(app);
-    if (n > base && n < SHEET_MAX && !roles_hold(app)) {
-        sheets[n] = role_sheet(app);
-        if (reaktor_style_init(sheets, n + 1, app->dark ? "dark" : "light"))
-            read_roles(app);
-    }
+    if (n > base && !roles_hold(app) && reaktor_style_add(role_sheet(app)))
+        read_roles(app);
     t1 = SDL_GetPerformanceCounter();
     app->style_ms_x100 = ms_x100(t0, t1);
     app->card_bg = reaktor_style_token("--background", c)
@@ -765,6 +762,7 @@ app_init(void **appstate, int argc, char *argv[])
     reaktor_rss_mark(REAKTOR_RSS_ENTRY);
     app = (App *)SDL_calloc(1, sizeof(App));
     if (!app) return SDL_APP_FAILURE;
+    app->started = SDL_GetPerformanceCounter();
     *appstate = app;
     g_app = app;
 
@@ -836,6 +834,8 @@ app_init(void **appstate, int argc, char *argv[])
                                 (g_launch.window.skip_taskbar ? SDL_WINDOW_UTILITY : 0) |
                                 (placed(app) || starts_hidden(app) ? SDL_WINDOW_HIDDEN : 0);
 
+        Uint64 t0 = SDL_GetPerformanceCounter();
+
         if (!SDL_CreateWindowAndRenderer(launch_title(), win_w, win_h, flags,
                                          &app->win, &app->ren)) {
             SDL_Log("renderer '%s' would not start (%s); falling back",
@@ -869,6 +869,7 @@ app_init(void **appstate, int argc, char *argv[])
         }
         app->renderer_is_sw =
             SDL_strcmp(SDL_GetRendererName(app->ren), "software") == 0;
+        app->window_ms_x100 = ms_x100(t0, SDL_GetPerformanceCounter());
 #ifndef __EMSCRIPTEN__
         if (g_launch.window.min_w > 0 || g_launch.window.min_h > 0)
             SDL_SetWindowMinimumSize(app->win,
@@ -1687,6 +1688,7 @@ app_iterate(void *appstate)
 
     if (!app->first_frame_done) {
         app->first_frame_done = 1;
+        app->first_ms_x100 = ms_x100(app->started, SDL_GetPerformanceCounter());
         reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->frame_rate);
         reaktor_release_free_memory();
     }

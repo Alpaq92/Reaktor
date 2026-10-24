@@ -688,9 +688,10 @@ and the accent. An icon on a button takes its label's color.
   row of buttons starts and ends where the field below it does, and each line
   of a row that wraps starts at the edge. A margin set in code always counts,
   and a `REAKTOR_FREE` box keeps all four.
-- **The engine is Reaktor's own, and small.** `core/css/css.c` reads the
-  sheets once into typed values; [What the engine reads](#what-the-engine-reads)
-  lists all of it. reaktor.css uses the scheme branch to strengthen light
+- **The engine is Reaktor's own, and small.** `core/css/css.c` parses every
+  selector when the sheets load and a rule's declarations the first time a
+  widget's query matches it, so rules nothing asks for cost almost nothing.
+  [What the engine reads](#what-the-engine-reads) lists all of it. reaktor.css uses the scheme branch to strengthen light
   hovers and tint the current sidebar entry from `--links`.
 
 **The system's settings.** Reduced motion and high contrast are read from the
@@ -1128,6 +1129,7 @@ Passed to CMake, through either script:
 | `REAKTOR_NOTIFY` | `ON` | System notifications |
 | `REAKTOR_PRINT` | `ON` | Printing and PDF export |
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
+| `REAKTOR_SDL_D3D` | `ON` | Build SDL's Direct3D 11 and 12 renderers on Windows; off, a program is 105 KB smaller and draws in software only |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
@@ -1298,9 +1300,9 @@ command line names one, and `--new-instance` is passed for it.
 `software` is the default on every platform:
 
 - **It needs no GPU.** Without one, Direct3D falls back to Microsoft's WARP
-  emulation: drawing `bench` flat out, SDL's software renderer took 0.72 ms
-  of CPU a frame where Direct3D on WARP took 1.65.
-- **It uses the least memory**, 8.9 MB in `bench` against 58–121 MB on a GPU
+  emulation: drawing `bench` flat out, SDL's software renderer took 0.74 ms
+  of CPU a frame where Direct3D on WARP took 1.70.
+- **It uses the least memory**, 8.5 MB in `bench` against 58–121 MB on a GPU
   renderer, most of that the graphics driver's.
 - **It starts fastest, and its cost does not depend on other programs** using
   the GPU.
@@ -1313,11 +1315,17 @@ command line names one, and `--new-instance` is passed for it.
 | --- | --- | --- | --- |
 | `directx` | Windows | Direct3D 12 where it starts, else 11 | As below |
 | `direct3d12` | Windows 10 and later | Least CPU once running | Most memory, slowest start |
-| `direct3d11` | Windows | Any Windows GPU | Most CPU of the GPU renderers measured |
+| `direct3d11` | Windows | Any Windows GPU | Most CPU of the GPU renderers measured; neither Direct3D renderer is built with `-DREAKTOR_SDL_D3D=OFF` |
 | `opengl` | Windows, Linux, BSDs | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`; on Linux without a GPU it loads Mesa and LLVM |
 | `opengles2` | Where the driver offers it | | Built only with `-DREAKTOR_SDL_GL=ON`; not measured |
 | `metal` | macOS | | |
 | `auto` | Everywhere | SDL chooses | |
+
+**Prefer `directx` or `direct3d12` to `direct3d11`.** Once running,
+`direct3d11` took 13.4% of a core where `direct3d12` and `opengl` took 5.6%,
+and turning vsync off did not change it: the cost is in SDL's Direct3D 11
+renderer or the driver, not in Reaktor's frame. Pick it only where Direct3D 12
+will not start; `directx` does that by itself.
 
 A GPU renderer smooths the edges of fills unless `.anti_aliasing` says
 otherwise, and keeps the CPU free during long animations. It costs six to

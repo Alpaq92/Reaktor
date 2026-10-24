@@ -58,7 +58,7 @@ typedef struct decl {
 } decl;
 
 typedef struct rule {
-    unsigned      c0, d0, nd, order, spec, next;
+    unsigned      c0, spec, next, blk;
     unsigned char n;
 } rule;
 
@@ -67,7 +67,13 @@ typedef struct bucket { unsigned key, first; } bucket;
 
 typedef struct var { char *name, *value; size_t n; unsigned h; } var;
 
-typedef struct raw { size_t ss, se, bs, be; } raw;
+/* A rule's selector list and body in the sheet's text; the body is read into
+   declarations when a query first matches one of its selectors. */
+typedef struct block {
+    size_t        ss, se, bs, be;
+    unsigned      d0, nd;
+    unsigned char read;
+} block;
 
 struct reaktor_sheet {
     rule     *rule;  unsigned nrule, caprule;
@@ -78,17 +84,15 @@ struct reaktor_sheet {
     var      *var;   unsigned nvar, capvar;
     unsigned *slot;  unsigned capslot;
     bucket   *bucket; unsigned capbucket, any;
+    block    *blk;   unsigned nblk, capblk;
+    buf       src, tmp;
+    char      theme[16];
     float     rem, em;
 };
 
 typedef struct ctx {
     reaktor_sheet *s;
-    const char    *src, *theme;
-    raw           *raw;
-    unsigned       nraw, capraw;
-    struct item   *item;
-    unsigned       nitem, capitem;
-    buf            tmp;
+    buf           *tmp;
     unsigned char  flags;
     uint64_t       key, best;
     float          rel, size;
@@ -874,7 +878,7 @@ static void declare(ctx *x, const char *p, size_t pn, const char *v, size_t vn, 
 
     if (!(prop = prop_of(p, pn))) return;
     x->flags = important ? F_IMPORTANT : 0;
-    if (resolve_vars(x->s, &v, &vn, &x->tmp)) apply(x, prop, v, vn);
+    if (resolve_vars(x->s, &v, &vn, x->tmp)) apply(x, prop, v, vn);
     else apply(x, prop, "unset", 5);
     x->flags = 0;
 }
@@ -893,7 +897,7 @@ static void font_size(ctx *x, const char *p, size_t pn, const char *v, size_t vn
     int      pct;
 
     if (!word(p, pn, "font-size") || key < x->best) return;
-    if (resolve_vars(x->s, &v, &vn, &x->tmp) &&
+    if (resolve_vars(x->s, &v, &vn, x->tmp) &&
         ((number_of(v, vn, &f, &pct) && pct && (f *= x->rel / 100.0f, 1)) ||
          length_em(x->s, v, vn, x->rel, &f)) &&
         f > 0.0f) {
@@ -1149,22 +1153,19 @@ static int matches(const selector *r, const selector *q)
     return chain(&p, r->c, (int)r->n - 1, q, (int)q->n - 1);
 }
 
-static void add_rule(ctx *x, const selector *q, unsigned d0, unsigned nd, unsigned order)
+static void add_rule(reaktor_sheet *s, const selector *q, unsigned blk)
 {
-    reaktor_sheet *s = x->s;
-    unsigned       k;
+    unsigned k;
     rule          *r;
 
     if (!ROOM(s, rule, nrule, caprule, 1) || !ROOM(s, cmp, ncmp, capcmp, q->n) ||
         !ROOM(s, neg, nneg, capneg, q->nneg) || !ROOM(s, nm, nnm, capnm, q->nnm))
         return;
     r = &s->rule[s->nrule++];
-    r->c0 = s->ncmp;
-    r->n  = (unsigned char)q->n;
-    r->d0 = d0;
-    r->nd = nd;
-    r->order = order;
-    r->spec  = q->spec;
+    r->c0   = s->ncmp;
+    r->n    = (unsigned char)q->n;
+    r->blk  = blk;
+    r->spec = q->spec;
     for (k = 0; k < q->n; k++) {
         compound c = q->c[k];
 
@@ -1238,7 +1239,7 @@ static int media_matches(const char *q, size_t n, const char *theme)
     return 0;
 }
 
-static void blocks(ctx *x, const char *s, size_t i, size_t n, int depth)
+static void blocks(reaktor_sheet *sh, const char *s, size_t i, size_t n, int depth)
 {
     while (i < n) {
         size_t a, open, close;
@@ -1252,16 +1253,17 @@ static void blocks(ctx *x, const char *s, size_t i, size_t n, int depth)
         close = block_end(s, open + 1, n);
         if (s[a] == '@') {
             if (depth < BLOCK_DEPTH && open - a > 6 && word(s + a, 6, "@media") &&
-                media_matches(s + a + 6, open - a - 6, x->theme))
-                blocks(x, s, open + 1, close, depth + 1);
-        } else if (ROOM(x, raw, nraw, capraw, 1)) {
-            raw *r = &x->raw[x->nraw++];
+                media_matches(s + a + 6, open - a - 6, sh->theme))
+                blocks(sh, s, open + 1, close, depth + 1);
+        } else if (ROOM(sh, blk, nblk, capblk, 1)) {
+            block *b = &sh->blk[sh->nblk++];
 
-            r->ss = a;
-            r->se = open;
-            r->bs = open + 1;
-            r->be = close;
-            trim(s, &r->ss, &r->se);
+            memset(b, 0, sizeof *b);
+            b->ss = a;
+            b->se = open;
+            b->bs = open + 1;
+            b->be = close;
+            trim(s, &b->ss, &b->se);
         }
         i = close + 1;
     }
@@ -1298,7 +1300,7 @@ static char *import_path(const char *from, const char *to, size_t n)
 typedef struct loader {
     const char *chain[IMPORT_DEPTH + 1];
     int         loads;
-    buf         all;
+    buf        *all;
 } loader;
 
 static int in_chain(const loader *l, int depth, const char *path)
@@ -1384,69 +1386,57 @@ static int load_sheet(loader *l, const char *path, int depth)
             if (t[q_s] == ')') q_s++;
         }
         q_e = i = scan(t, q_s, n, ";");
-        if (depth >= IMPORT_DEPTH || e == s || l->all.len > IMPORT_BUDGET ||
+        if (depth >= IMPORT_DEPTH || e == s || l->all->len > IMPORT_BUDGET ||
             ++l->loads > IMPORT_LOADS)
             continue;
         if (!(to = import_path(path, t + s, e - s))) { ok = 0; break; }
         if (!in_chain(l, depth, to)) {
             trim(t, &q_s, &q_e);
             if (q_e > q_s)
-                ok = buf_str(&l->all, "@media ") && buf_add(&l->all, t + q_s, q_e - q_s) &&
-                     buf_str(&l->all, " {\n") && load_sheet(l, to, depth + 1) &&
-                     buf_str(&l->all, "}\n");
+                ok = buf_str(l->all, "@media ") && buf_add(l->all, t + q_s, q_e - q_s) &&
+                     buf_str(l->all, " {\n") && load_sheet(l, to, depth + 1) &&
+                     buf_str(l->all, "}\n");
             else
                 ok = load_sheet(l, to, depth + 1);
         }
         free(to);
         if (!ok) break;
     }
-    ok = ok && add_closed(&l->all, t, i, n);
+    ok = ok && add_closed(l->all, t, i, n);
     reaktor_free(t);
     return ok;
 }
 
-/* One selector of a rule's list, parsed once for every pass. */
-typedef struct item {
-    selector      q;
-    unsigned      raw;
-    unsigned char ok, backdrop;
-} item;
-
-static void parse_items(ctx *x)
+static ctx context(reaktor_sheet *s)
 {
-    unsigned k;
-    size_t   a, ps, pe;
+    ctx x;
 
-    for (k = 0; k < x->nraw; k++) {
-        a = x->raw[k].ss;
-        while (next_item(x->src, &a, x->raw[k].se, &ps, &pe) && ROOM(x, item, nitem, capitem, 1)) {
-            item *it = &x->item[x->nitem++];
-
-            it->raw      = k;
-            it->backdrop = (unsigned char)holds(x->src + ps, pe - ps, "::backdrop");
-            it->ok       = (unsigned char)parse_selector(&it->q, x->src + ps, pe - ps);
-        }
-    }
+    memset(&x, 0, sizeof x);
+    x.s   = s;
+    x.tmp = &s->tmp;
+    return x;
 }
 
 /* The font size of the element `who` names, against `rel`, or `fallback`. */
-static float root_font(ctx *x, const char *who, float rel, float fallback)
+static float root_font(reaktor_sheet *s, const char *who, float rel, float fallback)
 {
+    ctx      x = context(s);
+    pool     p = { s->cmp, s->neg, s->nm };
     selector q;
     unsigned k;
 
     parse_selector(&q, who, strlen(who));
-    x->best = 0;
-    x->size = fallback;
-    x->rel  = rel;
-    for (k = 0; k < x->nitem; k++) {
-        const item *it = &x->item[k];
+    x.size = fallback;
+    x.rel  = rel;
+    for (k = 0; k < s->nrule; k++) {
+        const rule  *r = &s->rule[k];
+        const block *b = &s->blk[r->blk];
 
-        if (!it->ok || !matches(&it->q, &q)) continue;
-        x->key = (uint64_t)it->q.spec << 32 | it->raw;
-        each_decl(x, x->src, x->raw[it->raw].bs, x->raw[it->raw].be, font_size);
+        if (!chain(&p, s->cmp + r->c0, r->n - 1, &q, (int)q.n - 1)) continue;
+        x.key = (uint64_t)r->spec << 32 | r->blk;
+        each_decl(&x, s->src.p, b->bs, b->be, font_size);
     }
-    return x->size;
+    return x.size;
 }
 
 static bucket *bucket_of(const reaktor_sheet *s, unsigned key)
@@ -1462,6 +1452,9 @@ static void index_rules(reaktor_sheet *s)
 {
     unsigned cap = 16, i;
 
+    free(s->bucket);
+    s->bucket    = NULL;
+    s->capbucket = s->any = 0;
     while (cap < 2 * s->nrule) cap *= 2;
     if ((s->bucket = (bucket *)calloc(cap, sizeof *s->bucket)) != NULL) s->capbucket = cap;
     for (i = s->nrule; i-- > 0;) {
@@ -1480,72 +1473,77 @@ static void index_rules(reaktor_sheet *s)
     }
 }
 
-static void build(ctx *x)
+/* One more sheet read into s: its blocks, its rules, and the custom
+   properties of the root. */
+static int ingest(reaktor_sheet *s, const char *path)
 {
-    const char *s = x->src;
-    char        who[96];
-    selector    root;
-    unsigned    k, j, last = UINT_MAX;
+    loader   l;
+    ctx      x = context(s);
+    selector q, root;
+    char     who[96];
+    unsigned k, first = s->nblk;
+    size_t   a, ps, pe, from = s->src.len;
 
-    parse_items(x);
-    snprintf(who, sizeof who, "html:root.data-theme-%s", x->theme);
+    memset(&l, 0, sizeof l);
+    l.all = &s->src;
+    if (!load_sheet(&l, path, 0)) return 0;
+    if (!s->src.p) return 1;
+    blocks(s, s->src.p, from, s->src.len, 0);
+    snprintf(who, sizeof who, "html:root.data-theme-%s", s->theme);
     parse_selector(&root, who, strlen(who));
-    for (k = 0; k < x->nitem; k++) {
-        const item *it = &x->item[k];
+    for (k = first; k < s->nblk; k++) {
+        int vars = 0;
 
-        if (it->raw != last && (it->backdrop || (it->ok && matches(&it->q, &root)))) {
-            last = it->raw;
-            each_decl(x, s, x->raw[it->raw].bs, x->raw[it->raw].be, collect_var);
+        a = s->blk[k].ss;
+        while (next_item(s->src.p, &a, s->blk[k].se, &ps, &pe)) {
+            if (holds(s->src.p + ps, pe - ps, "::backdrop")) vars = 1;
+            if (!parse_selector(&q, s->src.p + ps, pe - ps)) continue;
+            if (matches(&q, &root)) vars = 1;
+            add_rule(s, &q, k);
         }
+        if (vars) each_decl(&x, s->src.p, s->blk[k].bs, s->blk[k].be, collect_var);
     }
-    x->s->rem = root_font(x, who, 16.0f, 16.0f);
-    snprintf(who, sizeof who, "html:root.data-theme-%s body", x->theme);
-    x->s->em = root_font(x, who, x->s->rem, x->s->rem);
-    for (k = j = 0; k < x->nraw; k++) {
-        unsigned d0 = x->s->ndecl, nd;
+    return 1;
+}
 
-        each_decl(x, s, x->raw[k].bs, x->raw[k].be, declare);
-        nd = x->s->ndecl - d0;
-        for (; j < x->nitem && x->item[j].raw == k; j++)
-            if (nd && x->item[j].ok) add_rule(x, &x->item[j].q, d0, nd, k);
-    }
-    index_rules(x->s);
+/* After a sheet is read: the root's sizes, the index, and every body to be
+   read again, since a custom property may have changed under it. */
+static void settle(reaktor_sheet *s)
+{
+    char     who[96];
+    unsigned k;
+
+    for (k = 0; k < s->nblk; k++) s->blk[k].read = 0;
+    s->ndecl = 0;
+    s->rem = s->em = 16.0f;
+    snprintf(who, sizeof who, "html:root.data-theme-%s", s->theme);
+    s->rem = root_font(s, who, 16.0f, 16.0f);
+    snprintf(who, sizeof who, "html:root.data-theme-%s body", s->theme);
+    s->em = root_font(s, who, s->rem, s->rem);
+    index_rules(s);
 }
 
 reaktor_sheet *reaktor_sheet_load(const char *const *paths, int count, const char *theme)
 {
     reaktor_sheet *s = (reaktor_sheet *)calloc(1, sizeof *s);
-    loader        *l = (loader *)calloc(1, sizeof *l);
-    ctx            x;
     int            i;
 
-    if (!s || !l) {
-        free(l);
-        free(s);
-        return NULL;
-    }
-    s->rem = s->em = 16.0f;
+    if (!s) return NULL;
+    snprintf(s->theme, sizeof s->theme, "%s", theme && *theme ? theme : "light");
     for (i = 0; i < count; i++)
-        if (!load_sheet(l, paths[i], 0)) {
-            free(l->all.p);
-            free(l);
+        if (!ingest(s, paths[i])) {
             reaktor_sheet_free(s);
             return NULL;
         }
-    if (l->all.p) {
-        memset(&x, 0, sizeof x);
-        x.s     = s;
-        x.src   = l->all.p;
-        x.theme = theme && *theme ? theme : "light";
-        blocks(&x, l->all.p, 0, l->all.len, 0);
-        build(&x);
-        free(x.item);
-        free(x.raw);
-        free(x.tmp.p);
-        free(l->all.p);
-    }
-    free(l);
+    settle(s);
     return s;
+}
+
+int reaktor_sheet_add(reaktor_sheet *s, const char *path)
+{
+    if (!s || !path || !ingest(s, path)) return 0;
+    settle(s);
+    return 1;
 }
 
 void reaktor_sheet_free(reaktor_sheet *s)
@@ -1565,6 +1563,9 @@ void reaktor_sheet_free(reaktor_sheet *s)
     free(s->neg);
     free(s->nm);
     free(s->decl);
+    free(s->blk);
+    free(s->src.p);
+    free(s->tmp.p);
     free(s);
 }
 
@@ -1615,38 +1616,56 @@ static void resolve(const reaktor_sheet *s, const decl *const *w, reaktor_style 
         o->line_height *= fs > 0.0f ? fs : s->em;
 }
 
-/* The rules chained from `first` that match q, cascaded into win. */
-static void cascade(const reaktor_sheet *s, unsigned first, const selector *q,
-                    const decl **win, uint64_t *key, reaktor_style *out)
+static const block *read_block(reaktor_sheet *s, unsigned k)
+{
+    block *b = &s->blk[k];
+
+    if (!b->read) {
+        ctx x = context(s);
+
+        b->read = 1;
+        b->d0   = s->ndecl;
+        each_decl(&x, s->src.p, b->bs, b->be, declare);
+        b->nd = s->ndecl - b->d0;
+    }
+    return b;
+}
+
+/* The rules chained from `first` that match q, cascaded into win as indices,
+   since reading a body may move the declarations. */
+static void cascade(reaktor_sheet *s, unsigned first, const selector *q,
+                    unsigned *win, uint64_t *key, reaktor_style *out)
 {
     pool     p = { s->cmp, s->neg, s->nm };
     unsigned i, k;
 
     for (i = first; i; i = s->rule[i - 1].next) {
-        const rule *r = &s->rule[i - 1];
+        const rule  *r = &s->rule[i - 1];
+        const block *b;
 
         if (!chain(&p, s->cmp + r->c0, r->n - 1, q, (int)q->n - 1)) continue;
-        out->matched = 1;
-        for (k = r->d0; k < r->d0 + r->nd; k++) {
+        b = read_block(s, r->blk);
+        if (b->nd) out->matched = 1;
+        for (k = b->d0; k < b->d0 + b->nd; k++) {
             const decl *d = &s->decl[k];
             uint64_t    w = (uint64_t)(d->flags & F_IMPORTANT) << 63 |
-                            (uint64_t)r->spec << 32 | r->order;
+                            (uint64_t)r->spec << 32 | r->blk;
 
             if (!win[d->prop] || w >= key[d->prop]) {
-                win[d->prop] = d;
+                win[d->prop] = k + 1;
                 key[d->prop] = w;
             }
         }
     }
 }
 
-void reaktor_sheet_style(const reaktor_sheet *s, const char *sel, reaktor_style *out)
+void reaktor_sheet_style(reaktor_sheet *s, const char *sel, reaktor_style *out)
 {
-    const decl     *win[P_COUNT] = { 0 };
+    unsigned        win[P_COUNT] = { 0 }, k;
     uint64_t        key[P_COUNT];
+    const decl     *w[P_COUNT];
     const compound *c;
     selector        q;
-    unsigned        k;
 
     memset(out, 0, sizeof *out);
     out->opacity = 1.0f;
@@ -1658,7 +1677,8 @@ void reaktor_sheet_style(const reaktor_sheet *s, const char *sel, reaktor_style 
         for (k = 0; k < c->n; k++)
             cascade(s, bucket_of(s, q.nm[c->name + k])->first, &q, win, key, out);
     }
-    resolve(s, win, out);
+    for (k = 0; k < P_COUNT; k++) w[k] = win[k] ? &s->decl[win[k] - 1] : NULL;
+    resolve(s, w, out);
 }
 
 int reaktor_sheet_color(const reaktor_sheet *s, const char *name, unsigned char rgba[4])

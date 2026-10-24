@@ -132,6 +132,8 @@ generated(const char *name)
                       "u { border-top-left-radius: 4px 8px; }\n"
                       "a { color: #ff0000; } a { color: var(--missing); }\n"
                       "s { color: color-mix(in oklch, red, blue); }\n");
+    } else if (strcmp(name, "roles.css") == 0) {
+        s = append(s, ":root { --c: #123123; }\n");
     } else if (strcmp(name, "star.css") == 0) {
         s = append(s, "* { line-height: 1.5; } h1 { font-size: 30px; }\n");
     } else if (strcmp(name, "self.css") == 0) {
@@ -412,6 +414,8 @@ main(void)
     g = load1("themes.css", "light");
     check("the theme's own variables apply", fg("h1"), 0x00ff00);
     ok("  and :not() of the other theme", reaktor_sheet_color(g, "--d", c) && rgb(c) == 0x0000ff);
+    ok("a sheet added later reaches a var() read before it",
+       reaktor_sheet_add(g, "roles.css") && fg("h1") == 0x123123);
     reaktor_sheet_free(g);
     g = load1("themes.css", "dark");
     check("  the other theme's", fg("h1"), 0xff0000);

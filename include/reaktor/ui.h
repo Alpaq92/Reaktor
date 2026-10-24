@@ -238,6 +238,7 @@ typedef struct reaktor_diag {
     int   vsync, dark, sheets;
     const char *aa;
     float scale, style_ms, build_ms, render_ms, present_ms;
+    float window_ms, atlas_ms, first_frame_ms;
     float frame_gap_ms;
     float cpu_ms_per_frame;
     int   hover_gap_ms;

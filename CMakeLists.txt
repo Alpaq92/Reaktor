@@ -36,8 +36,10 @@ set(SDL_TRAY ON CACHE BOOL "" FORCE)
 foreach(drv RENDER_D3D RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
+option(REAKTOR_SDL_D3D "Build SDL's Direct3D 11 and 12 renderers on Windows" ON)
 if(WIN32)
-    set(SDL_RENDER_D3D12 ON CACHE BOOL "" FORCE)
+    set(SDL_RENDER_D3D11 ${REAKTOR_SDL_D3D} CACHE BOOL "" FORCE)
+    set(SDL_RENDER_D3D12 ${REAKTOR_SDL_D3D} CACHE BOOL "" FORCE)
 endif()
 
 option(REAKTOR_SDL_GL "Build SDL's OpenGL/GLES drivers on Windows, Linux and the BSDs" OFF)
@@ -56,8 +58,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
     set(SDL_DEPS_SHARED OFF CACHE BOOL "" FORCE)
 endif()
 
-# A static program keeps only the functions it calls; MSVC's Release does this already.
-if(NOT MSVC AND NOT EMSCRIPTEN)
+# A static program keeps only the functions and data it uses. MSVC's Release
+# already splits functions; /Gw splits data.
+if(MSVC)
+    add_compile_options(/Gw)
+elseif(NOT EMSCRIPTEN)
     add_compile_options(-ffunction-sections -fdata-sections)
 endif()
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)

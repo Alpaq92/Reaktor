@@ -687,6 +687,7 @@ rebuild_font(App *app)
     size_t size = 0, bsize = 0;
     char *ttf, *bttf = NULL;
     unsigned *ranges;
+    Uint64 t0;
     int n = 0, bold, ok, i;
 
     ttf = load_face(&app->font_face, FONT_FILE, &size);
@@ -703,7 +704,10 @@ rebuild_font(App *app)
     }
     bold   = bttf != NULL;
     ranges = reaktor_locale_glyphs();
+    t0     = SDL_GetPerformanceCounter();
     ok     = n > 0 && reaktor_fontset_bake(&set, src, n, ranges ? ranges : latin);
+    app->atlas_ms_x100 = (int)(100000.0 * (double)(SDL_GetPerformanceCounter() - t0) /
+                               (double)SDL_GetPerformanceFrequency());
     SDL_free(ranges);
     reaktor_free(ttf);
     reaktor_free(bttf);

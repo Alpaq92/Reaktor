@@ -7,7 +7,10 @@ typedef struct reaktor_sheet reaktor_sheet;
 
 reaktor_sheet *reaktor_sheet_load(const char *const *paths, int count, const char *theme);
 void reaktor_sheet_free(reaktor_sheet *s);
-void reaktor_sheet_style(const reaktor_sheet *s, const char *selector, reaktor_style *out);
+void reaktor_sheet_style(reaktor_sheet *s, const char *selector, reaktor_style *out);
+
+/* One more sheet read after the others, as if it had been listed last. */
+int  reaktor_sheet_add(reaktor_sheet *s, const char *path);
 int  reaktor_sheet_color(const reaktor_sheet *s, const char *name, unsigned char rgba[4]);
 
 /* What @media (prefers-reduced-motion) and (prefers-contrast) answer. */

@@ -150,14 +150,14 @@ MSVC 14.44 Release, the C runtime linked in:
 
 | Program | Bytes |
 | --- | --- |
-| `bench.exe` | 2,395,136 |
-| `simple.exe` | 2,404,864 |
-| `notepad.exe` | 2,518,016 |
-| `showcase.exe` | 3,585,536 |
+| `bench.exe` | 2,370,560 |
+| `simple.exe` | 2,380,288 |
+| `notepad.exe` | 2,499,584 |
+| `showcase.exe` | 3,486,720 |
 
 The C runtime is 220–260 KB of each; a default `./build.ps1` links its DLL
 instead. Only the showcase links the three optional modules, and Text is
-0.7 MB of the difference ([Modules](../docs/PERFORMANCE.md#modules)).
+0.6 MB of the difference ([Modules](../docs/PERFORMANCE.md#modules)).
 
 The v0.2.0 downloads, as GitHub Actions built and published them:
 
