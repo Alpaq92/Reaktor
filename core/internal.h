@@ -301,6 +301,9 @@ enum {
     REAKTOR_WHY_STYLE  = 1u << 3
 };
 
+/* The Tray module, or its _none twin. */
+void reaktor_tray_event(App *app, const SDL_Event *e);
+
 /* The Inspector module, or its _none twin. */
 struct reaktor_inspector_spec;
 void reaktor_inspector_early(void);

@@ -6,7 +6,7 @@
 static SDL_Tray          *g_tray;
 static SDL_TrayEntry     *g_entry[TRAY_ITEMS];
 static reaktor_tray_item  g_item[TRAY_ITEMS];
-static int                g_n;
+static int                g_n, g_hide_on_minimize;
 
 static void SDLCALL
 chosen(void *userdata, SDL_TrayEntry *entry)
@@ -82,4 +82,18 @@ reaktor_tray_close(App *app)
     if (g_tray) SDL_DestroyTray(g_tray);
     g_tray = NULL;
     g_n    = 0;
+}
+
+void
+reaktor_tray_hide_on_minimize(App *app, int on)
+{
+    (void)app;
+    g_hide_on_minimize = on != 0;
+}
+
+void
+reaktor_tray_event(App *app, const SDL_Event *e)
+{
+    if (e->type == SDL_EVENT_WINDOW_MINIMIZED && g_hide_on_minimize && g_tray)
+        reaktor_set_visible(app, 0);
 }

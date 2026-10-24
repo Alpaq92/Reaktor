@@ -1207,6 +1207,7 @@ app_event(void *appstate, SDL_Event *event)
         }
         if (!(to = app)) return SDL_APP_CONTINUE;
     }
+    if (!to->secondary) reaktor_tray_event(to, event);
     reaktor_input_event(to, event);
     return SDL_APP_CONTINUE;
 }
@@ -2027,6 +2028,8 @@ reaktor_set_visible(App *app, int on)
     if (!app || !app->win) return;
     if (on) {
         SDL_ShowWindow(app->win);
+        if (SDL_GetWindowFlags(app->win) & SDL_WINDOW_MINIMIZED)
+            SDL_RestoreWindow(app->win);
         SDL_RaiseWindow(app->win);
     } else {
         SDL_HideWindow(app->win);

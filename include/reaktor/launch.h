@@ -174,6 +174,7 @@ int   reaktor_floater_is_open(App *app, int id);
 int   reaktor_tray_open(App *app, const reaktor_tray *tray);
 void  reaktor_tray_check(App *app, int item, int checked);
 void  reaktor_tray_close(App *app);
+void  reaktor_tray_hide_on_minimize(App *app, int on);
 
 int   reaktor_inspector_open(App *app);
 void  reaktor_inspector_close(App *app);
