@@ -133,6 +133,30 @@ int reaktor_path_absolute(const char *path)
     return 0;
 }
 
+int reaktor_grow(void **p, int *cap, int need, size_t size)
+{
+    int   n = *cap > 0 ? *cap : 64;
+    void *q;
+
+    if (need <= *cap) return 1;
+    while (n < need) n *= 2;
+    if (!(q = SDL_realloc(*p, (size_t)n * size))) return 0;
+    *p   = q;
+    *cap = n;
+    return 1;
+}
+
+char *reaktor_path_from_cwd(const char *path)
+{
+    char *cwd, *out = NULL;
+
+    if (reaktor_path_absolute(path)) return SDL_strdup(path);
+    if (!(cwd = SDL_GetCurrentDirectory())) return NULL;
+    if (SDL_asprintf(&out, "%s%s", cwd, path) < 0) out = NULL;
+    SDL_free(cwd);
+    return out;
+}
+
 const char *reaktor_path_leaf(const char *path)
 {
     const char *p, *leaf = path;

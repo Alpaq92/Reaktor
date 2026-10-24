@@ -73,16 +73,13 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
                     .gap = ctx->style.window.spacing.x) {
             if (reaktor_button(&(reaktor_button_spec){
                     .label = "Default",
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } })) s->presses++;
+                    .box = { .flags = REAKTOR_LAY_FILL } })) s->presses++;
             if (reaktor_button(&(reaktor_button_spec){
                     .label = "Primary", .accent = 1,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } })) s->presses++;
+                    .box = { .flags = REAKTOR_LAY_FILL } })) s->presses++;
             if (reaktor_button(&(reaktor_button_spec){
                     .label = "With icon", .icon = "key-outline",
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } })) s->presses++;
+                    .box = { .flags = REAKTOR_LAY_FILL } })) s->presses++;
         }
     }
 
@@ -227,13 +224,11 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 
             if (reaktor_button(&(reaktor_button_spec){
                     .label = "Hold me", .repeat = 1,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } }))
+                    .box = { .flags = REAKTOR_LAY_FILL } }))
                 s->repeats++;
             reaktor_button(&(reaktor_button_spec){
                 .label = "Disabled", .disabled = 1,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL } });
         }
     }
 

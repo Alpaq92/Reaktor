@@ -24,7 +24,7 @@ frame(reaktor_layout *l, float gap)
 
     root.dir   = REAKTOR_LAY_ROW;
     root.gap   = gap;
-    root.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y;
+    root.flags = REAKTOR_LAY_FILL;
 
     fixed.w = 100.0f;
     fixed.h = 30.0f;
@@ -87,7 +87,7 @@ test_centring(reaktor_layout *l)
     puts("");
     puts("centering is asked for, never assumed");
     row.dir   = REAKTOR_LAY_ROW;
-    row.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y;
+    row.flags = REAKTOR_LAY_FILL;
     top.w = mid.w = 40.0f;
     top.h = mid.h = 20.0f;
     mid.flags = REAKTOR_LAY_CENTER_Y;
@@ -191,7 +191,7 @@ test_nesting(reaktor_layout *l)
     puts("");
     puts("a box inside a box");
     col.dir   = REAKTOR_LAY_COLUMN;
-    col.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y;
+    col.flags = REAKTOR_LAY_FILL;
     row.dir   = REAKTOR_LAY_ROW;
     row.h     = 40.0f;
     row.flags = REAKTOR_LAY_FILL_X;

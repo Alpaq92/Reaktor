@@ -5,7 +5,7 @@ C99. Widgets are declared; the look comes from CSS read at runtime.
 ## Build and run
 
 `./build.ps1` on Windows, `./build.sh` elsewhere — `cmake` is not on PATH, the
-script finds MSVC's. `./build.ps1 <target>` builds one. Targets: `showcase`,
+script finds MSVC's. `./build.ps1 <target>` or `./build.sh <target>` builds one. Targets: `showcase`,
 `notepad`, `simple`, `bench`, plus the tests in `tests/`. `-Arch x86` (or
 `arm64`) builds that architecture into `build-<arch>`; ARM64 needs Visual
 Studio's ARM64 tools, which this machine lacks, so CI is its only check.
@@ -44,9 +44,10 @@ regression oracle for every layout or style change.
   only when it crosses a rectangle `hot_push` registered the frame before, so a
   widget that looks different under the pointer and registers none keeps its
   old look until some other input.
-- **libcss has no `em`/`rem`** — its units are px, %, dip, sp, pt. `cssflat.c`
-  converts before the engine sees the text, along with `var()`, `color-mix()`,
-  `@media` and attribute selectors.
+- **A percentage is not a length to the CSS engine.** `core/css/css.c` has no
+  box to resolve one against, so `width: 100%` is dropped and a lower rule's
+  value shows through. An attribute selector reads as a class: `[type=range]`
+  answers `input.type-range`.
 - **The renderer snaps every vertex to whole pixels.** Sub-pixel corrections
   are discarded, and rects that abut can round apart into a visible seam.
 - **SDL redraws a software rectangle its own way.** Its software renderer

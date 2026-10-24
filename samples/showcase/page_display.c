@@ -3,7 +3,7 @@
 static const char *const g_grid[7][3] = {
     { "SDL3",      "Zlib",   "window, input, renderer, main loop" },
     { "Nuklear",   "MIT/PD", "the widgets and their layout" },
-    { "LCUI css",  "MIT",    "parses the stylesheet, computes values" },
+    { "FreeType",  "FTL",    "draws the glyphs" },
     { "Water.css", "MIT",    "the stylesheet itself" },
     { "plutosvg",  "MIT",    "rasterises the icons" },
     { "Ionicons",  "MIT",    "the icons" },
@@ -195,8 +195,7 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
                 for (i = 0; i < 3; i++)
                     reaktor_label(&(reaktor_label_spec){
                         .text = edges[i], .align = (unsigned char)i,
-                        .box = { .flags = REAKTOR_LAY_FILL_X |
-                                          REAKTOR_LAY_FILL_Y } });
+                        .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
@@ -204,8 +203,7 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
                     reaktor_label(&(reaktor_label_spec){
                         .text = tokens[i], .color = tokens[i],
                         .align = (unsigned char)i,
-                        .box = { .flags = REAKTOR_LAY_FILL_X |
-                                          REAKTOR_LAY_FILL_Y } });
+                        .box = { .flags = REAKTOR_LAY_FILL } });
             }
             reaktor_label(&(reaktor_label_spec){
                 .text = "A wrapped label breaks between words inside the row "
@@ -335,11 +333,11 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
         reaktor_list(&(reaktor_list_spec){
             .name = "To do", .count = g_lane_n[0], .cell = lane_cell, .user = (void *)0,
             .drag = "task", .dropped = lane_dropped, .columns = (const char *const[]){ "To do" },
-            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+            .box = { .flags = REAKTOR_LAY_FILL } });
         reaktor_list(&(reaktor_list_spec){
             .name = "Done", .count = g_lane_n[1], .cell = lane_cell, .user = (void *)1,
             .drag = "task", .dropped = lane_dropped, .columns = (const char *const[]){ "Done" },
-            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+            .box = { .flags = REAKTOR_LAY_FILL } });
     }
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         char undo[48], redo[48];
@@ -348,11 +346,11 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
         SDL_snprintf(redo, sizeof redo, "Redo %s", reaktor_redo_label(app) ? reaktor_redo_label(app) : "");
         if (reaktor_button(&(reaktor_button_spec){ .label = undo, .name = "Undo",
                                                    .disabled = !reaktor_undo_label(app),
-                                                   .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } }))
+                                                   .box = { .flags = REAKTOR_LAY_FILL } }))
             reaktor_undo(app);
         if (reaktor_button(&(reaktor_button_spec){ .label = redo, .name = "Redo",
                                                    .disabled = !reaktor_redo_label(app),
-                                                   .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } }))
+                                                   .box = { .flags = REAKTOR_LAY_FILL } }))
             reaktor_redo(app);
     }
 

@@ -11,8 +11,8 @@ queue and builds a frame only when the picture would differ. So **CPU is a
 count of frames, not a load**, and **memory is a floor, not a curve**: once the
 atlas and icons are baked, nothing grows.
 
-On Windows today, `showcase.exe` is 3,392,512 bytes, `notepad.exe` 2,351,616,
-`simple.exe` 2,238,464 and `bench.exe` 2,228,224. The showcase links all three
+On Windows today, `showcase.exe` is 3,327,488 bytes, `notepad.exe` 2,294,784,
+`simple.exe` 2,181,632 and `bench.exe` 2,171,904. The showcase links all three
 optional modules and the others none; each carries the default look —
 Aileron, the mark, the sheets and seven icons, 73,123 bytes — compiled in. The
 four-platform figures below come from an older build that shipped one
@@ -22,11 +22,11 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 8.9 MB, the same binary on D3D11 58.2 MB, on D3D12 121.3 MB
-and on OpenGL 69.3 MB, Flutter 90.8 MB, Electron 157.6 MB, Kotlin
-Multiplatform 667.4 MB. Steady-state CPU as a percent of one core: Reaktor
-7.0%, D3D11 13.0%, D3D12 6.0%, OpenGL 6.4%, Flutter 15.6%, Electron 26.1%,
-Kotlin Multiplatform 33.5%](benchmark.svg)
+Memory: Reaktor 8.5 MB, the same binary on D3D11 57.6 MB, on D3D12 121.4 MB
+and on OpenGL 69.7 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin
+Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor
+6.7%, D3D11 13.4%, D3D12 5.6%, OpenGL 5.6%, Flutter 15.3%, Electron 19.6%,
+Kotlin Multiplatform 29.4%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
 rotating at 60 fps in an 800×600 window, every arm on the same machine: a
@@ -39,22 +39,23 @@ plotted: it does not link on Windows.
 
 | Arm | Memory | CPU, with startup | CPU, steady state |
 | --- | --- | --- | --- |
-| **Reaktor**, `software` | 8.9 MB | 8.2% | 7.0% |
-| **Reaktor**, `direct3d11` | 58.2 MB | 14.2% | 13.0% |
-| **Reaktor**, `direct3d12` | 121.3 MB | 11.7% | 6.0% |
-| **Reaktor**, `opengl` | 69.3 MB | 11.8% | 6.4% |
-| Flutter | 90.8 MB | 19.3% | 15.6% |
-| Electron | 157.6 MB | 40.8% | 26.1% |
-| Kotlin Multiplatform | 667.4 MB | 59.6% | 33.5% |
+| **Reaktor**, `software` | 8.5 MB | 8.0% | 6.7% |
+| **Reaktor**, `direct3d11` | 57.6 MB | 14.4% | 13.4% |
+| **Reaktor**, `direct3d12` | 121.4 MB | 10.8% | 5.6% |
+| **Reaktor**, `opengl` | 69.7 MB | 11.0% | 5.6% |
+| Flutter | 132.7 MB | 38.8% | 15.3% |
+| Electron | 156.3 MB | 36.5% | 19.6% |
+| Kotlin Multiplatform | 668.7 MB | 51.5% | 29.4% |
 
-- **About a tenth of Flutter's memory and less than half its CPU**, with
-  startup or without, and a seventieth of Kotlin Multiplatform's memory.
+- **About a fifteenth of Flutter's memory and less than half its CPU**, with
+  startup or without, and nearly an eightieth of Kotlin Multiplatform's
+  memory.
 - **Every Reaktor renderer takes less CPU than every other framework.** On a
-  GPU renderer its memory is mostly the graphics driver's: 58–121 MB, around
-  Flutter's 91.
+  GPU renderer its memory is mostly the graphics driver's: 58–121 MB, below
+  Flutter's 133.
 - **Startup counts.** A run that draws for only 0.2 s takes 0.14 s of CPU on
   `software` and 0.38–0.50 s on a GPU renderer. Once running, `direct3d12` and
-  `opengl` take up to a point less than `software`.
+  `opengl` take about a point less than `software`.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
   program keeping it busy, `direct3d11` and `opengl` missed 60 fps and took
   16–28% of a core. These runs had the GeForce RTX 2060 idle.
@@ -77,8 +78,10 @@ median of ten runs, the steady-state ones taken in turn across arms; passes
 differ by up to three points of CPU. Memory is peak private bytes, and CPU the
 sum, across each app's process tree. `-PinClock` runs on a copy of the power
 plan that holds the processor at full speed, and restores the plan after.
-The Reaktor rows were measured on 2026-10-23, the others on 2026-10-22, with
-the GPU idle. The sampler counts what an app's own timers miss: `bench` times
+Every row was measured on 2026-10-24 in one pass, with the GPU idle: Flutter
+3.47.8, Electron 44.3.0, and Kotlin 2.4.20 with Compose 1.12.0 on JDK 21. The
+Flutter arm took 91 MB and 19% of a core with startup on the Flutter release
+used before; 3.47.8 takes more of both. The sampler counts what an app's own timers miss: `bench` times
 0.07 ms of work per `direct3d11` frame, where the sampler charged over 10%.
 `vulkan` falls back to `direct3d11` in this SDL build.
 
@@ -101,20 +104,22 @@ kb_text_shape with Text — so only the C runtime loads from outside. The web
 bundles agree within 211 bytes on Windows, Linux and macOS (emscripten 6.0.9),
 and 380 with GhostBSD's emscripten 6.0.3; the Linux one is 1,221,689 bytes of
 `.wasm`, 86,001 of assets, 80,045 of `.js` and 1,451 of `.html`. Today's
-build also links FreeType, which bakes the glyph atlas. The Windows
+build also links FreeType, which bakes the glyph atlas, and reads the
+stylesheets with its own engine in place of libcss. The Windows
 binary's icon is a 125 KB resource of nine sizes, built from the SVG by
 `tools/mkicon.c`.
 
 ### Modules
 
 `showcase`, each module off in turn; native on the Windows machine below, web
-on Windows emsdk 6.0.9.
+on Windows emsdk 6.0.9. The web rows are from the build before the CSS engine
+replaced libcss.
 
 | `showcase` | Default | Module off | Saved |
 | --- | --- | --- | --- |
-| `.exe`, accessibility bridges | 3,392,512 | 3,375,616 | 16,896 (0.50%) |
-| `.exe`, Locale | 3,392,512 | 3,377,152 | 15,360 (0.45%) |
-| `.exe`, Text | 3,392,512 | 2,684,928 | 707,584 (20.9%) |
+| `.exe`, accessibility bridges | 3,327,488 | 3,311,104 | 16,384 (0.49%) |
+| `.exe`, Locale | 3,327,488 | 3,312,640 | 14,848 (0.45%) |
+| `.exe`, Text | 3,327,488 | 2,620,928 | 706,560 (21.2%) |
 | `.wasm` + `.js`, accessibility bridges | 2,308,781 | 2,305,843 | 2,938 (0.13%) |
 | `.wasm` + `.js`, Locale | 2,308,781 | 2,295,269 | 13,512 (0.59%) |
 | `.wasm` + `.js`, Text | 2,308,781 | 1,824,708 | 484,073 (21.0%) |
@@ -130,12 +135,12 @@ them.
 391 KB of tables, and mojibake 19 KB of code and 180 KB of line-breaking and
 bidirectional data; the `.data` it saves is M PLUS 1p, 1,758,688 bytes.
 Locale is 15 KB of the executable and 7,581 bytes of catalogs; compiled in
-(`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,399,680 bytes.
+(`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,335,168 bytes.
 
 **Text costs memory once it draws.** Medians of private bytes over ten
-launches: Diagnostics is 12.9 MB with every module and 12.6 MB without Text or
-without Locale — kb_text_shape's tables are not `const`, so they are committed
-untouched. Translations is 15.5 MB against 12.6 MB without Text: M PLUS 1p
+launches: Diagnostics is 12.5 MB with every module, 12.3 MB without Locale and
+12.1 MB without Text — kb_text_shape's tables are not `const`, so they are
+committed untouched. Translations is 14.9 MB against 12.3 MB without Text: M PLUS 1p
 held open, what kb_text_shape parses from it, the glyph texture and the
 caches.
 
@@ -145,16 +150,16 @@ Idle on the Login page.
 
 | | Windows | Linux | macOS | GhostBSD |
 | --- | --- | --- | --- | --- |
-| Committed / private / footprint | **12.6 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
+| Committed / private / footprint | **12.2 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
 | Resident / working set | **29.4 MB** | **11.4 MB** | **33–36 MB** | **11.9 MB** |
 
 Committed is what the process asked the system to back; resident is what is
 in RAM, shared library pages included. Windows is today's `showcase`, with
 every module; the others are the older single-executable build. Idle on
-Windows, `notepad` is 9.3 MB and `simple`, which links no module, 7.4 MB.
+Windows, `notepad` is 9.0 MB and `simple`, which links no module, 6.9 MB.
 
-- **Windows is mostly the system's.** Of the showcase's 12.6 MB, 1.7 MB is
-  Reaktor's own allocations, the largest the glyph atlas (548 KB) and its
+- **Windows is mostly the system's.** Split before the CSS engine replaced
+  libcss, 1.7 MB of the showcase's 12.6 MB was Reaktor's own allocations, the largest the glyph atlas (548 KB) and its
   table (281 KB) for eight sizes in two weights. Most of the rest is the heaps
   of the Windows components it loads: UI Automation, the shell, the input
   method.

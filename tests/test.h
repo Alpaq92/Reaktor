@@ -2,6 +2,7 @@
 #define REAKTOR_TEST_H
 
 #include <stdio.h>
+#include <string.h>
 
 static int failures;
 
@@ -21,6 +22,18 @@ test_eq(const char *what, long got, long want)
     }
     failures++;
     printf("  %-56s got %ld, wanted %ld   FAILED\n", what, got, want);
+}
+
+static void
+test_str(const char *what, const char *got, const char *want)
+{
+    if (got && want && strcmp(got, want) == 0) {
+        printf("  %-56s \"%s\"\n", what, got);
+        return;
+    }
+    failures++;
+    printf("  %-56s got \"%s\", wanted \"%s\"   FAILED\n", what, got ? got : "(null)",
+           want ? want : "(null)");
 }
 
 static int

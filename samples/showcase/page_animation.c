@@ -377,7 +377,7 @@ fx_demo(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     REAKTOR_COLUMN(.gap = 6.0f) REAKTOR_ROW(.h = 120.0f, .gap = 12.0f, .flags = REAKTOR_LAY_FILL_X) {
         for (i = 0; i < 3; i++)
-            REAKTOR_ROW(.name = what[i], .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+            REAKTOR_ROW(.name = what[i], .flags = REAKTOR_LAY_FILL) {
                 struct reaktor_rect r;
 
                 if (reaktor_box_rect(&r)) {
@@ -439,7 +439,7 @@ fx_demo(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     REAKTOR_COLUMN(.gap = 6.0f) REAKTOR_ROW(.h = 40.0f, .gap = ctx->style.window.spacing.x,
                                             .flags = REAKTOR_LAY_FILL_X) {
-        REAKTOR_ROW(.name = "Password", .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+        REAKTOR_ROW(.name = "Password", .flags = REAKTOR_LAY_FILL) {
             float dx = reaktor_anim_shake(a, shake, 26.0f, 22.0f, 0.6f);
             struct reaktor_rect r;
 
@@ -507,7 +507,7 @@ color_demo(App *app, struct reaktor_context *ctx, showcase_state *s)
                 reaktor_label(&(reaktor_label_spec){
                     .text = name[i], .color = "--text-bright",
                     .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
-                REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+                REAKTOR_ROW(.flags = REAKTOR_LAY_FILL) {
                     if (reaktor_box_rect(&r)) {
                         struct reaktor_command_buffer *cv = reaktor_window_get_canvas(ctx);
                         int n = (int)(r.w / 4.0f), j;
@@ -566,7 +566,7 @@ text_demo(App *app, struct reaktor_context *ctx, showcase_state *s)
                 reaktor_label(&(reaktor_label_spec){
                     .text = name[i], .color = "--text-bright",
                     .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
-                REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+                REAKTOR_ROW(.flags = REAKTOR_LAY_FILL) {
                     struct reaktor_anim_text_stagger_opts o = reaktor_anim_text_stagger_opts_default();
                     float t = 1.0f;
                     struct reaktor_rect r;
@@ -635,8 +635,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
             if (reaktor_button(&(reaktor_button_spec){
                     .label = stop_name[i],
                     .accent = (unsigned char)(s->anim_slot == i),
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } }))
+                    .box = { .flags = REAKTOR_LAY_FILL } }))
                 s->anim_slot = i;
     }
 
@@ -645,7 +644,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
             reaktor_label(&(reaktor_label_spec){
                 .text = "instant", .color = "--text-muted",
                 .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
-            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL) {
                 struct reaktor_rect r;
                 if (reaktor_box_rect(&r))
                     track_at(app, ctx, r, stop[s->anim_slot], 0);
@@ -656,7 +655,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
             reaktor_label(&(reaktor_label_spec){
                 .text = "eased", .color = "--text-bright",
                 .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
-            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL) {
                 unsigned id = reaktor_box_id();
                 float where = reaktor_animate(id, 0, stop[s->anim_slot],
                                               ms, curve);
@@ -672,7 +671,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
                 reaktor_label(&(reaktor_label_spec){
                     .text = kind[i], .color = "--text-bright",
                     .box = { .w = 74.0f, .flags = REAKTOR_LAY_CENTER_Y } });
-                REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+                REAKTOR_ROW(.flags = REAKTOR_LAY_FILL) {
                     unsigned id = reaktor_box_id();
                     float to = stop[s->anim_slot];
                     float where = reaktor_anim_tween_float(reaktor_anim(app), id, 0, to, 0.6f,
@@ -738,8 +737,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
                         .fill = reaktor_token(on ? "--background-hover"
                                                  : "--background-alt",
                                               reaktor_rgb(48, 48, 48)),
-                        .box = { .flags = REAKTOR_LAY_FILL_X |
-                                          REAKTOR_LAY_FILL_Y } }))
+                        .box = { .flags = REAKTOR_LAY_FILL } }))
                     s->anim_curve = i;
 
                 if (reaktor_box_rect(&r))
@@ -768,7 +766,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
         struct reaktor_colorf lit = reaktor_color_cf(reaktor_accent_color(app));
 
         for (i = 0; i < 4; i++)
-            REAKTOR_ROW(.name = word[i], .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+            REAKTOR_ROW(.name = word[i], .flags = REAKTOR_LAY_FILL) {
                 struct reaktor_rect r;
 
                 if (reaktor_box_rect(&r)) {

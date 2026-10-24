@@ -6,6 +6,7 @@
 #include FT_MODULE_H
 
 #include "font.h"
+#include "util.h"
 
 typedef struct baked {
     int    w, h, left, top, at;
@@ -237,20 +238,6 @@ pack(baked *b, int n, int *w, int *h)
     return 1;
 }
 
-static int
-grow(void **p, int *cap, int need, size_t size)
-{
-    int   n = *cap > 0 ? *cap : 256;
-    void *q;
-
-    if (need <= *cap) return 1;
-    while (n < need) n *= 2;
-    if (!(q = SDL_realloc(*p, (size_t)n * size))) return 0;
-    *p   = q;
-    *cap = n;
-    return 1;
-}
-
 int
 reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src *src,
                      int n, const nk_rune *ranges)
@@ -290,8 +277,8 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
                 FT_Get_Advance(face, id, FT_LOAD_NO_SCALE, &adv))
                 continue;
             bm = &face->glyph->bitmap;
-            if (!grow((void **)&b, &cap_b, nb + 1, sizeof *b) ||
-                !grow((void **)&bits, &cap_bits, used + (int)(bm->width * bm->rows), 1)) {
+            if (!reaktor_grow((void **)&b, &cap_b, nb + 1, sizeof *b) ||
+                !reaktor_grow((void **)&bits, &cap_bits, used + (int)(bm->width * bm->rows), 1)) {
                 FT_Done_Face(face);
                 goto done;
             }

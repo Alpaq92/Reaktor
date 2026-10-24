@@ -13,7 +13,7 @@ fit_button(reaktor_box *box, const reaktor_button_spec *s)
     char  src[192];
 
     box->w = box->h = 0.0f;
-    box->flags &= ~(REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y);
+    box->flags &= ~(REAKTOR_LAY_FILL);
     decl_box_from_style(box, NULL, s->style, "button", nb->padding.x, nb->padding.y);
     if (s->icon && !s->label)
         w = box->h;
@@ -491,9 +491,7 @@ reaktor_swatch(const reaktor_swatch_spec *s)
     if (!decl_place(REAKTOR_A11Y_BUTTON, s->name, hex, 0u, NULL, &box, &id))
         return 0;
 
-    reaktor_note_mute(g_frame_app, 1);
-    hit = reaktor_css_button_color(g_frame_app, g_frame_ctx, s->name, s->fill);
-    reaktor_note_mute(g_frame_app, 0);
+    hit = reaktor_css_button_color(g_frame_app, g_frame_ctx, s->fill);
 
     if (reaktor_focus_activated(g_frame_app, id)) hit = 1;
     if (hit && s->on_press.fn) s->on_press.fn(s->on_press.user);
@@ -657,8 +655,6 @@ reaktor_slider(const reaktor_slider_spec *s)
 
     if (!decl_place(REAKTOR_A11Y_SLIDER, s->name, text, 0u, NULL, &box, &id))
         return;
-
-    reaktor_note_range(g_frame_app, id, now, s->lo, s->hi, s->step);
 
     reaktor_note_mute(g_frame_app, 1);
     if (s->value)
@@ -854,7 +850,7 @@ reaktor_combo_open(const reaktor_combo_spec *s)
 
     if (open) nk_push_scissor(nk_window_get_canvas(g_frame_ctx), clip);
     if (s->disc) {
-        struct nk_rect im = reaktor_combo_content(g_frame_ctx, h);
+        struct nk_rect im;
 
         im.w = im.h = h.h - 2.0f * g_frame_ctx->style.combo.content_padding.y;
         im.x = h.x + g_frame_ctx->style.combo.content_padding.x;

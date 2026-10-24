@@ -138,7 +138,7 @@ jobs:
           systems and architectures, \`libreaktor-$v-<system>-<arch>\`, and
           \`libreaktor-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
           on Windows, built against the DLL C runtime; \`libreaktor.a\` elsewhere)
-          with SDL, FreeType, libcss, plutosvg, Onlay, NukAnim, mojibake and kb_text_shape
+          with SDL, FreeType, plutosvg, Onlay, NukAnim, mojibake and kb_text_shape
           inside it, the public headers (\`#include "reaktor/reaktor.h"\`, with
           Nuklear's, NukAnim's and SDL's), a CMake package and a pkg-config file,
           and the licenses.

@@ -489,16 +489,25 @@ int
 css_button_icon(App *app, struct nk_context *ctx, const char *selector,
                 const char *icon_src, const char *label)
 {
-    reaktor_button_look k;
     reaktor_style_frame f;
     int clicked;
 
     hot_push(app, nk_widget_bounds(ctx), REAKTOR_CURSOR_POINTER, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
-    reaktor_button_look_of(selector, &k);
-    f = push_button_look(app, ctx, &k);
+    f = push_button_style(app, ctx, selector);
     clicked = group_press(app, ctx, selector, icon_src, label);
     reaktor_style_frame_pop(ctx, f);
+    return clicked;
+}
+
+static int
+press_blank(struct nk_context *ctx)
+{
+    int clicked;
+
+    reaktor_button_arm(ctx);
+    clicked = nk_button_text(ctx, "", 0);
+    reaktor_chrome_disarm();
     return clicked;
 }
 
@@ -519,9 +528,7 @@ reaktor_css_button_custom(App *app, struct nk_context *ctx, const char *sel,
     reaktor_button_look_of(sel, &k);
     in_x = button_inset(ctx, &k.s, 0);
     f = push_button_look(app, ctx, &k);
-    reaktor_button_arm(ctx);
-    clicked = nk_button_text(ctx, "", 0);
-    reaktor_chrome_disarm();
+    clicked = press_blank(ctx);
     if (paint) {
         float in_y = k.s.matched ? k.s.pad_y : ctx->style.button.padding.y;
         struct nk_rect c = nk_rect(b.x + in_x, b.y + in_y, b.w - 2.0f * in_x, b.h - 2.0f * in_y);
@@ -531,17 +538,6 @@ reaktor_css_button_custom(App *app, struct nk_context *ctx, const char *sel,
     }
     reaktor_style_frame_pop(ctx, f);
     if (reaktor_focus_activated(app, id)) clicked = 1;
-    return clicked;
-}
-
-static int
-press_blank(struct nk_context *ctx)
-{
-    int clicked;
-
-    reaktor_button_arm(ctx);
-    clicked = nk_button_text(ctx, "", 0);
-    reaktor_chrome_disarm();
     return clicked;
 }
 

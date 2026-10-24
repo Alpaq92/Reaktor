@@ -6,7 +6,7 @@
 #include "locale.h"
 #include "reaktor/launch.h"
 #include "lifecycle.h"
-#include "cssflat.h"
+#include "css.h"
 #ifdef __EMSCRIPTEN__
 #include "keyboard_web.h"
 #endif
@@ -16,7 +16,7 @@ effective_dark(const App *app)
 {
     if (app->theme_mode == REAKTOR_THEME_LIGHT) return 0;
     if (app->theme_mode == REAKTOR_THEME_DARK)  return 1;
-    return reaktor_prefers_dark() > 0;
+    return reaktor_prefers_dark();
 }
 
 size_t reaktor_rss[REAKTOR_RSS_STEPS];
@@ -91,21 +91,34 @@ reaktor_asset_name(const reaktor_asset *a, const char *fallback)
     return name;
 }
 
+#ifdef __EMSCRIPTEN__
+#define ON_WEB 1
+#else
+#define ON_WEB 0
+#endif
+
+static int
+capturing(const App *app)
+{
+    return app->shot_path || app->dump_path;
+}
+
 static int
 remembers(const App *app)
 {
-#ifdef __EMSCRIPTEN__
-    (void)app;
-    return 0;
-#else
-    return g_launch.remember_window && !app->shot_path && !app->dump_path;
-#endif
+    return !ON_WEB && g_launch.remember_window && !capturing(app);
+}
+
+static int
+ms_x100(Uint64 from, Uint64 to)
+{
+    return (int)(100000.0 * (double)(to - from) / (double)SDL_GetPerformanceFrequency());
 }
 
 int
 reaktor_capturing(void)
 {
-    return g_app && (g_app->shot_path || g_app->dump_path);
+    return g_app && capturing(g_app);
 }
 
 reaktor_save
@@ -124,23 +137,13 @@ reaktor_key_hook(App *app, const SDL_Event *event)
 static int
 starts_hidden(const App *app)
 {
-#ifdef __EMSCRIPTEN__
-    (void)app;
-    return 0;
-#else
-    return g_launch.window.hidden && !app->shot_path && !app->dump_path;
-#endif
+    return !ON_WEB && g_launch.window.hidden && !capturing(app);
 }
 
 static int
 placed(const App *app)
 {
-#ifdef __EMSCRIPTEN__
-    (void)app;
-    return 0;
-#else
-    return g_launch.window.centered || remembers(app);
-#endif
+    return !ON_WEB && (g_launch.window.centered || remembers(app));
 }
 
 const char *
@@ -170,23 +173,10 @@ reaktor_rss_mark(int step)
     reaktor_process_memory(&reaktor_rss[step], &reaktor_priv[step]);
 }
 
-static char *
-from_here(const char *path)
-{
-    char *cwd, *out = NULL;
-
-    if (reaktor_path_absolute(path)) return SDL_strdup(path);
-    cwd = SDL_GetCurrentDirectory();
-    if (!cwd) return NULL;
-    if (SDL_asprintf(&out, "%s%s", cwd, path) < 0) out = NULL;
-    SDL_free(cwd);
-    return out;
-}
-
 static void
 add_fallback(const char *path)
 {
-    char *full = from_here(path);
+    char *full = reaktor_path_from_cwd(path);
 
     reaktor_text_add_fallback(full ? full : path);
     SDL_free(full);
@@ -195,7 +185,7 @@ add_fallback(const char *path)
 static const char *
 own_here(const char *path)
 {
-    char *full = from_here(path);
+    char *full = reaktor_path_from_cwd(path);
     const char *owned = own(full ? full : path);
 
     SDL_free(full);
@@ -251,6 +241,19 @@ log_close(void)
 }
 
 static int
+pick(const char *v, const char *a, int va, const char *b, int vb, int other)
+{
+    return SDL_strcmp(v, a) == 0 ? va : SDL_strcmp(v, b) == 0 ? vb : other;
+}
+
+static void
+push_layer(const char **layers, int *n, const char *flag, const char *v)
+{
+    if (*n < REAKTOR_LAYER_MAX) layers[(*n)++] = own_here(v);
+    else SDL_Log("%s: four at most; %s is not read", flag, v);
+}
+
+static int
 take_flags(App *app, int argc, char **argv)
 {
     int i, n = 0;
@@ -263,27 +266,17 @@ take_flags(App *app, int argc, char **argv)
 
         if (v && SDL_strcmp(a, "--shot") == 0)       { app->shot_path = v; i++; }
         else if (v && SDL_strcmp(a, "--aa") == 0) {
-            g_launch.anti_aliasing = SDL_strcmp(v, "on") == 0  ? REAKTOR_AA_ON
-                                   : SDL_strcmp(v, "off") == 0 ? REAKTOR_AA_OFF
-                                   : REAKTOR_AA_AUTO;
+            g_launch.anti_aliasing = (reaktor_aa)pick(v, "on", REAKTOR_AA_ON, "off",
+                                                      REAKTOR_AA_OFF, REAKTOR_AA_AUTO);
             i++;
         }
         else if (v && SDL_strcmp(a, "--console") == 0) {
-            g_launch.console = SDL_strcmp(v, "debug") == 0  ? REAKTOR_CONSOLE_DEBUG
-                             : SDL_strcmp(v, "parent") == 0 ? REAKTOR_CONSOLE_PARENT
-                             : REAKTOR_CONSOLE_NONE;
+            g_launch.console = (reaktor_console)pick(v, "debug", REAKTOR_CONSOLE_DEBUG, "parent",
+                                                     REAKTOR_CONSOLE_PARENT, REAKTOR_CONSOLE_NONE);
             i++;
         }
-        else if (v && SDL_strcmp(a, "--css") == 0) {
-            if (g_cli_css_n < REAKTOR_LAYER_MAX) g_cli_css[g_cli_css_n++] = own_here(v);
-            else SDL_Log("--css: four at most; %s is not read", v);
-            i++;
-        }
-        else if (v && SDL_strcmp(a, "--icons") == 0) {
-            if (g_cli_icon_n < REAKTOR_LAYER_MAX) g_cli_icons[g_cli_icon_n++] = own_here(v);
-            else SDL_Log("--icons: four at most; %s is not read", v);
-            i++;
-        }
+        else if (v && SDL_strcmp(a, "--css") == 0)   { push_layer(g_cli_css, &g_cli_css_n, a, v); i++; }
+        else if (v && SDL_strcmp(a, "--icons") == 0) { push_layer(g_cli_icons, &g_cli_icon_n, a, v); i++; }
         else if (v && SDL_strcmp(a, "--font") == 0)      { g_cli_font = own_here(v); i++; }
         else if (v && SDL_strcmp(a, "--font-bold") == 0) { g_cli_font_bold = own_here(v); i++; }
         else if (v && SDL_strcmp(a, "--a11y-dump") == 0) { app->dump_path = v; i++; }
@@ -291,14 +284,8 @@ take_flags(App *app, int argc, char **argv)
         else if (SDL_strcmp(a, "--inspect") == 0)        g_inspect_flag = 1;
         else if (SDL_strcmp(a, "--no-inspector") == 0)   g_inspect_flag = -1;
         else if (SDL_strcmp(a, "--watch-css") == 0)      g_watch = 1;
-        else if (v && SDL_strcmp(a, "--motion") == 0) {
-            g_motion_flag = SDL_strcmp(v, "reduce") == 0 ? 1 : SDL_strcmp(v, "full") == 0 ? -1 : 0;
-            i++;
-        }
-        else if (v && SDL_strcmp(a, "--contrast") == 0) {
-            g_contrast_flag = SDL_strcmp(v, "more") == 0 ? 1 : SDL_strcmp(v, "normal") == 0 ? -1 : 0;
-            i++;
-        }
+        else if (v && SDL_strcmp(a, "--motion") == 0)   { g_motion_flag = pick(v, "reduce", 1, "full", -1, 0); i++; }
+        else if (v && SDL_strcmp(a, "--contrast") == 0) { g_contrast_flag = pick(v, "more", 1, "normal", -1, 0); i++; }
         else if (SDL_strcmp(a, "--new-instance") == 0)   g_new_instance = 1;
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--video") == 0)    { app->video_pref = v; i++; }
@@ -309,9 +296,8 @@ take_flags(App *app, int argc, char **argv)
         else if (v && SDL_strcmp(a, "--lang") == 0)     { app->lang_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--font-fallback") == 0) { add_fallback(v); i++; }
         else if (v && SDL_strcmp(a, "--theme") == 0) {
-            if (SDL_strcmp(v, "light") == 0)     app->theme_mode = REAKTOR_THEME_LIGHT;
-            else if (SDL_strcmp(v, "dark") == 0) app->theme_mode = REAKTOR_THEME_DARK;
-            else                                 app->theme_mode = REAKTOR_THEME_SYSTEM;
+            app->theme_mode = pick(v, "light", REAKTOR_THEME_LIGHT, "dark", REAKTOR_THEME_DARK,
+                                   REAKTOR_THEME_SYSTEM);
             i++;
         } else {
             argv[n++] = argv[i];
@@ -504,8 +490,7 @@ load_theme(App *app)
             read_roles(app);
     }
     t1 = SDL_GetPerformanceCounter();
-    app->style_ms_x100 = (int)(100000.0 * (double)(t1 - t0) /
-                               (double)SDL_GetPerformanceFrequency());
+    app->style_ms_x100 = ms_x100(t0, t1);
     app->card_bg = reaktor_style_token("--background", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(226, 226, 226);
     if (reaktor_style_token("--text-muted", c))
@@ -533,12 +518,6 @@ reaktor_app_wake(const App *app)
     e.type = SDL_EVENT_USER;
     if (app && app->secondary) e.user.windowID = app->win_id;
     return SDL_PushEvent(&e);
-}
-
-static bool
-wake_loop(void)
-{
-    return reaktor_app_wake(NULL);
 }
 
 #ifdef __EMSCRIPTEN__
@@ -597,7 +576,6 @@ static int renderer_is_software(SDL_Renderer *ren) { (void)ren; return 0; }
 #define HOVER_GAP_MS 50
 
 Uint64 g_hover_gap_ms = HOVER_GAP_MS;
-static int    g_hover_gap_pinned;
 
 #define CAL_SKIP    3
 #define CAL_FRAMES  8
@@ -607,7 +585,7 @@ calibrate_hover_gap(App *app)
 {
     double now;
 
-    if (g_hover_gap_pinned || app->cal_done) return;
+    if (app->cal_done) return;
     if (app->cal_frames < CAL_SKIP) { app->cal_frames++; return; }
     now = reaktor_process_cpu_ms();
     if (app->cal_frames == CAL_SKIP) app->cal_cpu0 = now;
@@ -706,7 +684,7 @@ fail(App *app, const char *what)
     char msg[512];
 
     SDL_Log("%s: %s", what, SDL_GetError());
-    if (app->shot_path || app->dump_path) return SDL_APP_FAILURE;
+    if (capturing(app)) return SDL_APP_FAILURE;
     SDL_snprintf(msg, sizeof(msg), "%s.\n\n%s", what, SDL_GetError());
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, launch_title(), msg, NULL);
     return SDL_APP_FAILURE;
@@ -735,7 +713,7 @@ reaktor_hard_quit(int code)
 {
     SDL_SetAtomicInt(&g_exit_code, code);
     SDL_SetAtomicInt(&g_hard_quit, 1);
-    wake_loop();
+    reaktor_app_wake(NULL);
 }
 
 static void
@@ -801,7 +779,7 @@ app_init(void **appstate, int argc, char *argv[])
         SDL_SetAppMetadata(g_launch.name, g_launch.version, g_launch.id);
     /* A later launch hands its files to the running copy and is done. */
     /* A run for a shot or a dump is a test, and always its own copy. */
-    if (g_launch.single_instance && !g_new_instance && !app->shot_path && !app->dump_path &&
+    if (g_launch.single_instance && !g_new_instance && !capturing(app) &&
         !reaktor_instance_claim(argc, argv))
         return SDL_APP_SUCCESS;
     reaktor_hint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
@@ -891,7 +869,6 @@ app_init(void **appstate, int argc, char *argv[])
         }
         app->renderer_is_sw =
             SDL_strcmp(SDL_GetRendererName(app->ren), "software") == 0;
-        app->sw_noaa = 0;
 #ifndef __EMSCRIPTEN__
         if (g_launch.window.min_w > 0 || g_launch.window.min_h > 0)
             SDL_SetWindowMinimumSize(app->win,
@@ -915,7 +892,6 @@ app_init(void **appstate, int argc, char *argv[])
 
     app->vsync_on = SDL_SetRenderVSync(app->ren, 1) ? 1 : 0;
     app->aa_mode = (int)g_launch.anti_aliasing;
-    app->redraw_always = 0;
 
     SDL_strlcpy(app->frame_rate, "waitevent", sizeof(app->frame_rate));
 
@@ -1099,7 +1075,7 @@ reaktor_take_event(App *app, SDL_Event *event)
         break;
 
     case SDL_EVENT_KEY_DOWN:
-        app->queue.hook_ate = g_launch.key && g_launch.key(app, event);
+        app->queue.hook_ate = reaktor_key_hook(app, event);
         if (app->queue.hook_ate) return;
         if (focus_key(app, event)) return;
         break;
@@ -1513,7 +1489,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     struct nk_context *ctx = app->ctx;
     struct nk_rect area = nk_rect(0, 0, (float)win_w, (float)win_h);
     int is_main = !app->secondary, shot = 0, shown;
-    Uint64 now = SDL_GetTicks(), f, t_build0, t_render0, t_present0, t_end;
+    Uint64 now = SDL_GetTicks(), t_build0, t_render0, t_present0, t_end;
 
     app->laid_w  = win_w;
     app->laid_h  = win_h;
@@ -1624,7 +1600,6 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     nk_style_pop_float(ctx);
     nk_style_pop_vec2(ctx);
 
-    f = SDL_GetPerformanceFrequency();
     t_render0 = SDL_GetPerformanceCounter();
     if (same_frame(app, ctx)) {
         t_present0 = t_end = t_render0;
@@ -1645,9 +1620,9 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
 
     app->last_draw_ms = SDL_GetTicks();
     if (is_main && app->first_frame_done) calibrate_hover_gap(app);
-    app->build_ms_x100   = (int)(100000.0 * (double)(t_render0 - t_build0) / (double)f);
-    app->render_ms_x100  = (int)(100000.0 * (double)(t_present0 - t_render0) / (double)f);
-    app->present_ms_x100 = (int)(100000.0 * (double)(t_end - t_present0) / (double)f);
+    app->build_ms_x100   = ms_x100(t_build0, t_render0);
+    app->render_ms_x100  = ms_x100(t_render0, t_present0);
+    app->present_ms_x100 = ms_x100(t_present0, t_end);
 
     nk_input_begin(ctx);
 
@@ -1705,7 +1680,7 @@ app_iterate(void *appstate)
 
     reaktor_app_size(app, &win_w, &win_h);
     reaktor_app_due(app, win_w, win_h);
-    if (!app->dirty && !app->redraw_always)
+    if (!app->dirty)
         return SDL_APP_CONTINUE;
     if (reaktor_app_frame(app, win_w, win_h, launch_title(), main_page, NULL))
         return SDL_APP_SUCCESS;
@@ -1850,11 +1825,10 @@ reaktor_quit(App *app, int exit_code)
 void
 reaktor_request_quit(App *app)
 {
-#ifdef __EMSCRIPTEN__
     (void)app;
+#ifdef __EMSCRIPTEN__
     SDL_Log("quit is ignored on the web");
 #else
-    (void)app;
     push_quit(REAKTOR_QUIT_APP);
 #endif
 }

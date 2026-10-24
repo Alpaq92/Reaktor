@@ -71,10 +71,7 @@ reaktor_locale_system_code(void)
 static void
 check_str(const char *what, const char *got, const char *want)
 {
-    if (got && want && !strcmp(got, want)) return;
-    printf("FAIL %s: got \"%s\", want \"%s\"\n", what, got ? got : "(null)",
-           want ? want : "(null)");
-    failures++;
+    test_str(what, got, want);
 }
 
 static void

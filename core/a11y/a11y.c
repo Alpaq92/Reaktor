@@ -55,13 +55,14 @@ intern(reaktor_a11y *a, const char *s, unsigned h)
 #define same_str(x, y) ((x) == (y) || ((x) && (y) && strcmp((x), (y)) == 0))
 
 static reaktor_a11y_slot *
-slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
+probe(reaktor_a11y_slot *tab, unsigned gen, unsigned key, int claim)
 {
     unsigned i = key & (REAKTOR_A11Y_SLOTS - 1), n;
 
     for (n = 0; n < REAKTOR_A11Y_SLOTS; n++) {
         reaktor_a11y_slot *sl = &tab[i];
         if (sl->gen != gen) {
+            if (!claim) return NULL;
             sl->gen = gen;
             sl->key = key;
             sl->val = 0;
@@ -74,17 +75,11 @@ slot_of(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 }
 
 static int
-slot_get(const reaktor_a11y_slot *tab, unsigned gen, unsigned key)
+slot_get(reaktor_a11y_slot *tab, unsigned gen, unsigned key)
 {
-    unsigned i = key & (REAKTOR_A11Y_SLOTS - 1), n;
+    const reaktor_a11y_slot *sl = probe(tab, gen, key, 0);
 
-    for (n = 0; n < REAKTOR_A11Y_SLOTS; n++) {
-        const reaktor_a11y_slot *sl = &tab[i];
-        if (sl->gen != gen) return 0;
-        if (sl->key == key) return sl->val;
-        i = (i + 1) & (REAKTOR_A11Y_SLOTS - 1);
-    }
-    return 0;
+    return sl ? sl->val : 0;
 }
 
 static int
@@ -93,9 +88,9 @@ same_rect(struct nk_rect x, struct nk_rect y)
     return x.x == y.x && x.y == y.y && x.w == y.w && x.h == y.h;
 }
 
-static unsigned
-emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
-     unsigned state, struct nk_rect bounds)
+unsigned
+reaktor_a11y_add(reaktor_a11y *a, unsigned char role, const char *name,
+                 const char *value, unsigned state, struct nk_rect bounds)
 {
     int f = a->front;
     reaktor_a11y_node *n;
@@ -114,7 +109,7 @@ emit(reaktor_a11y *a, unsigned char role, const char *name, const char *value,
     base = nh ^ ((unsigned)role * 0x9e3779b9u);
     base ^= parent + 0x9e3779b9u + (base << 6) + (base >> 2);
 
-    sl = slot_of(a->bucket, a->bucket_gen, base);
+    sl = probe(a->bucket, a->bucket_gen, base, 1);
     id = sl ? base ^ ((unsigned)sl->val++ * 0x85ebca6bu) : base;
     if (id == 0) id = 1;
 
@@ -218,17 +213,10 @@ reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
 }
 
 unsigned
-reaktor_a11y_add(reaktor_a11y *a, unsigned char role, const char *name,
-                 const char *value, unsigned state, struct nk_rect bounds)
-{
-    return emit(a, role, name, value, state, bounds);
-}
-
-unsigned
 reaktor_a11y_push(reaktor_a11y *a, unsigned char role, const char *name,
                   const char *value, unsigned state, struct nk_rect bounds)
 {
-    unsigned id = emit(a, role, name, value, state, bounds);
+    unsigned id = reaktor_a11y_add(a, role, name, value, state, bounds);
 
     if (a->depth < REAKTOR_A11Y_MAX_DEPTH)
         a->parent[a->depth] = id;
@@ -243,12 +231,11 @@ reaktor_a11y_pop(reaktor_a11y *a)
 }
 
 static void
-change(reaktor_a11y *a, unsigned char kind, unsigned id, int index)
+change(reaktor_a11y *a, unsigned char kind, unsigned id)
 {
     if (a->change_count >= REAKTOR_A11Y_MAX_CHANGES) return;
-    a->change[a->change_count].kind  = kind;
-    a->change[a->change_count].id    = id;
-    a->change[a->change_count].index = index;
+    a->change[a->change_count].kind = kind;
+    a->change[a->change_count].id   = id;
     a->change_count++;
 }
 
@@ -267,7 +254,7 @@ reaktor_a11y_end(reaktor_a11y *a)
 
     a->index_gen++;
     for (i = 0; i < ncur; i++)
-        if ((sl = slot_of(a->index, a->index_gen, cur[i].id))) sl->val = i + 1;
+        if ((sl = probe(a->index, a->index_gen, cur[i].id, 1))) sl->val = i + 1;
 
     for (i = 1; i < ncur; i++) {
         struct nk_rect b = cur[i].bounds;
@@ -291,7 +278,7 @@ reaktor_a11y_end(reaktor_a11y *a)
 
     a->index_gen++;
     for (i = 0; i < nold; i++)
-        if ((sl = slot_of(a->index, a->index_gen, old[i].id))) sl->val = i + 1;
+        if ((sl = probe(a->index, a->index_gen, old[i].id, 1))) sl->val = i + 1;
     if (nold > 0) memset(a->matched, 0, (size_t)nold);
 
     for (i = 0; i < ncur; i++) {
@@ -299,18 +286,18 @@ reaktor_a11y_end(reaktor_a11y *a)
         if (j < 0) {
             if (!cur[i].parent ||
                 slot_get(a->index, a->index_gen, cur[i].parent) > 0)
-                change(a, REAKTOR_A11Y_ADDED, cur[i].id, i);
+                change(a, REAKTOR_A11Y_ADDED, cur[i].id);
             continue;
         }
         a->matched[j] = 1;
         if (!same_str(cur[i].name, old[j].name) ||
             !same_str(cur[i].value, old[j].value) ||
             !same_str(cur[i].keys, old[j].keys))
-            change(a, REAKTOR_A11Y_RENAMED, cur[i].id, i);
+            change(a, REAKTOR_A11Y_RENAMED, cur[i].id);
         if (cur[i].state != old[j].state)
-            change(a, REAKTOR_A11Y_RESTATED, cur[i].id, i);
+            change(a, REAKTOR_A11Y_RESTATED, cur[i].id);
         else if (!same_rect(cur[i].bounds, old[j].bounds))
-            change(a, REAKTOR_A11Y_MOVED, cur[i].id, i);
+            change(a, REAKTOR_A11Y_MOVED, cur[i].id);
     }
     for (i = 0; i < nold; i++) {
         if (a->matched[i]) continue;
@@ -318,7 +305,7 @@ reaktor_a11y_end(reaktor_a11y *a)
             int up = slot_get(a->index, a->index_gen, old[i].parent) - 1;
             if (up >= 0 && !a->matched[up]) continue;
         }
-        change(a, REAKTOR_A11Y_REMOVED, old[i].id, i);
+        change(a, REAKTOR_A11Y_REMOVED, old[i].id);
     }
 
     a->front = b;

@@ -193,8 +193,7 @@ jobs:
             echo "the package carries the sysroot's path"; exit 1
           fi
           tar -cf cross-${{ matrix.os }}-arm64.tar \
-            build-arm64/onlaytest build-arm64/keytest build-arm64/a11ytest build-arm64/animtest \
-            build-arm64/localetest build-arm64/laytest build-arm64/texttest build-arm64/csstest \
+            $(sed 's|^|build-arm64/|' tools/ci/tests.txt) \
             build-arm64/showcase build-arm64/notepad build-arm64/simple build-arm64/bench \
             build-arm64/licenses build-arm64/CMakeCache.txt "dist/$name"
 
@@ -247,7 +246,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           fail=0
-          for t in onlaytest keytest a11ytest animtest localetest laytest texttest csstest; do
+          for t in $(cat tools/ci/tests.txt); do
             echo "== $t"
             if ./build/$t </dev/null; then :; else echo "$t: exit status $?"; fail=1; fi
           done
@@ -462,7 +461,7 @@ jobs:
         id: tests
         run: |
           fail=0
-          for t in onlaytest keytest a11ytest animtest localetest laytest texttest csstest; do
+          for t in $(cat tools/ci/tests.txt); do
             echo "== $t"
             if ./build-arm64/$t </dev/null; then :; else echo "$t: exit status $?"; fail=1; fi
           done

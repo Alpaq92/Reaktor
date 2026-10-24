@@ -94,7 +94,7 @@ followed by a frame.
 | Call | Effect |
 | --- | --- |
 | `reaktor_file_dialog_open(app, &(reaktor_file_dialog){ ... })` | The system picker. `.kind`: `REAKTOR_FILE_OPEN`, `_SAVE` or `REAKTOR_FOLDER_OPEN`. `.filters` (`"png;jpg"` patterns, kept alive until the answer), `.location`, `.many`. `.chosen(app, paths, count, user)` gets `count` 0 on cancel. One per window; answers 0 while one is open |
-| `reaktor_ask(app, &(reaktor_question){ ... })` | A modal floater: `.text` and one button per `.buttons` entry, the last accented. `.answered(app, button, user)` runs once; -1 if closed another way. The spec is copied |
+| `reaktor_ask(app, &(reaktor_question){ ... })` | A modal floater: `.text` and one button per `.buttons` entry, each at least as wide as its label, the last accented. `.answered(app, button, user)` runs once; -1 if closed another way. The spec is copied |
 | `reaktor_timer(app, ms, repeat, fn, user)` | `fn(app, user)` after `ms`, every `ms` with `repeat`; answers an id. Stops when the window closes |
 | `reaktor_timer_stop(id)` | Stop one |
 | `reaktor_post(app, fn, user)` | `fn(app, user)` on the main thread. Any thread; immediate on the main one |
@@ -453,7 +453,7 @@ A container's fields, and a widget's `.box`:
 | `.weight` | Its share of the space left over, against its siblings; 0 reads as 1 |
 | `.gap` | Between its children |
 | `.ml .mt .mr .mb` | Margins |
-| `.flags` | `REAKTOR_LAY_FILL_X`, `_FILL_Y`, `_WRAP`, `_CENTER_X`, `_CENTER_Y`, `_PACK_CENTER`, `_PACK_END`, `_PACK_SPREAD` |
+| `.flags` | `REAKTOR_LAY_FILL_X`, `_FILL_Y`, `_FILL` (both), `_WRAP`, `_CENTER_X`, `_CENTER_Y`, `_PACK_CENTER`, `_PACK_END`, `_PACK_SPREAD` |
 | `.name` | How a container is found again; a widget uses its spec's `.name` |
 | `.mark` | A handle for a [scripted test](#testing-an-application), on a widget or a container: `"#mark"` finds it, `"#mark Delete"` finds Delete inside it, and no reader hears it. One mark may sit on many widgets, every row of a list for one; up to 63 characters are kept. Marks are kept apart from the tree, in a table made only once something sets one; `--a11y-dump` lists them after the tree |
 
@@ -635,9 +635,8 @@ Water.css's palette (`variables-light.css` or `variables-dark.css`), Water.css
 (`parts/_core.css` and the parts it imports), `reaktor.css`, the application's
 `.css`, then `--css`. Nothing merges them. An `@import` is read in place,
 relative to the sheet that names it; one with a condition, such as
-`(prefers-color-scheme: dark)`, is read as that `@media` block. A selector or
-value longer than libcss holds as one token, or a value with a `;` in it, is
-dropped before libcss sees it. A field filled exactly like the rounded panel it sits on
+`(prefers-color-scheme: dark)`, is read as that `@media` block. A field filled
+exactly like the rounded panel it sits on
 takes the page's color instead, so a sheet that styles `input` and `details`
 alike still shows its fields on a card.
 
@@ -689,22 +688,10 @@ and the accent. An icon on a button takes its label's color.
   row of buttons starts and ends where the field below it does, and each line
   of a row that wraps starts at the edge. A margin set in code always counts,
   and a `REAKTOR_FREE` box keeps all four.
-- **libcss is not a browser.** `cssflat.c` resolves `var()`, works out
-  `color-mix(in srgb, …)`, writes every `rgb()` as `rgba()` with four
-  arguments, clamped, turns `em` and `rem` into pixels, works out `calc()`
-  over pixels and plain numbers (one with a percentage is left, and dropped),
-  keeps an `@media` block whose queries are all `prefers-color-scheme`,
-  `prefers-reduced-motion` or `prefers-contrast` and hold now, and drops
-  width and print queries, rewrites `[type=range]` as `.type-range`
-  and `[disabled]` as `.disabled`, and drops `:enabled`, since every widget
-  that asks is enabled and a disabled one asks for `:disabled`. An operator
-  form like `[href^="http"]` cannot be expressed, and its rule is dropped, as
-  is a declaration with a color it cannot read, and a selector that names a
-  class or pseudo-class twice in one compound: given two `:not()`, libcss
-  frees a list and goes on using it. Sheets are read in the C locale's numbers
-  whatever the program's locale.
-  reaktor.css uses the scheme branch to strengthen light hovers and tint the
-  current sidebar entry from `--links`.
+- **The engine is Reaktor's own, and small.** `core/css/css.c` reads the
+  sheets once into typed values; [What the engine reads](#what-the-engine-reads)
+  lists all of it. reaktor.css uses the scheme branch to strengthen light
+  hovers and tint the current sidebar entry from `--links`.
 
 **The system's settings.** Reduced motion and high contrast are read from the
 system: Windows' animation and high-contrast settings, macOS's accessibility
@@ -728,6 +715,65 @@ names, so once such a sheet is read, `--links`, `--background-body` and
 `--text-main` are given its link, page and text colors in one more sheet read
 last; Reaktor's own chrome then follows it too. A sheet laid over Water.css
 costs a second read.
+
+
+### What the engine reads
+
+A widget's selector names one element and its ancestors, such as
+`button.disabled:disabled:hover` or `button .icon`. A rule applies when each of
+its compounds names a subset of what the query names, in order.
+
+| At-rule | Read as |
+| --- | --- |
+| `@import url(…)` or `@import "…"` | Before any rule, as CSS allows it: the sheet, in place, relative to the one that names it; with a condition, as that `@media` block. Eight deep and 256 sheets at most, and a sheet past 4 MB is skipped |
+| `@media` | Kept when one of its comma-separated queries names only `prefers-color-scheme`, `prefers-reduced-motion` or `prefers-contrast`, each true now, with `only`, `and`, `screen` or `all` beside them. Width, print and every other query drop the block |
+| Any other | Skipped with its block: `@font-face`, `@keyframes`, `@supports`, `@layer` |
+
+| Selector | Read as |
+| --- | --- |
+| `button`, `*`, `.class`, `#id` | As CSS writes them, escapes such as `\:` and `\31 ` decoded |
+| `[attr]`, `[attr=value]` | The class `attr` or `attr-value`, so `[type=range]` answers `input.type-range` and `[disabled]` answers `.disabled` |
+| `:hover`, `:active`, `:focus`, `:disabled`, `:link`, any other pseudo-class | Holds when the query names it |
+| `:enabled` | Holds unless the query names `:disabled` |
+| `:not(…)` | Holds when none of its simple selectors does; it counts as its most specific argument |
+| `a b`, `a > b` | Descendant and child |
+| `a + b`, `a ~ b`, `::before`, `[href^="…"]` and the other operators | Drop that selector; the rest of its list stays |
+
+The cascade is CSS's: `!important` first, then specificity (ids, then classes,
+attributes and pseudo-classes, then types), then the later rule. Nothing is
+inherited: a widget reads its own selector, and the page reads `body`. `inherit`,
+`initial`, `unset` and `revert` all give a property its initial value.
+
+Custom properties come from rules that match the root in the active theme
+(`:root`, `html`, `[data-theme="dark"]`, `:root:not([data-theme="dark"])`) and
+from `::backdrop`, into one set where the last declaration wins.
+`var(--name, fallback)` nests, to 32 levels, 1,024 substitutions and 4 KB of
+expanded text; one that cannot resolve unsets its property. `rem` is the root's
+font size, `em` the body's, each from the rule that wins for it. A sheet left
+open at its end, in a comment, string or block, is closed there.
+
+| Value | Read as |
+| --- | --- |
+| Colors | Names, `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()` with commas or spaces and `/` before the alpha, `transparent`, `currentcolor`, and `color-mix(in srgb, a [p%], b [q%])` |
+| Lengths | `px`, `em` (the body's font size), `rem` (the root's), `0`, and `calc()` with `+ - * /` over those and plain numbers. `auto` and `none` are 0. A percentage, `vw`, `vh`, `pt` or `ch` drops the declaration |
+
+| Property | Notes |
+| --- | --- |
+| `color`, `background-color` | |
+| `background` | Its color, wherever it stands among the layers; one with none is transparent |
+| `border`, `border-top`, `-right`, `-bottom`, `-left` | Width, style and color in any order. A side with no style has no width; one with no color takes the text's |
+| `border-width`, `border-style`, and each side's | One to four values; `thin`, `medium` and `thick` are 1, 3 and 5 px |
+| `border-color`, `border-top-color` | The top color is the one a widget draws |
+| `border-radius` and each corner's | One to four values; an elliptical corner takes its first radius |
+| `padding`, `margin`, and each side's | One to four values; `auto` is 0 |
+| `width`, `height`, `min-width`, `min-height`, `max-width`, `max-height` | |
+| `font-size` | A length, or a percentage of the body's |
+| `font-weight` | `normal`, `bold`, `bolder`, `lighter` or 100 to 900; 600 and up is bold |
+| `line-height` | `normal`, a number or a percentage of the font size, or a length |
+| `opacity` | A number or a percentage |
+
+Every other property is read and left alone. A rule with none of these
+properties does not count toward `matched`.
 
 ## Keyboard
 
@@ -854,7 +900,7 @@ flowchart TB
     ren["<b>core/render</b><br/>Nuklear, then the SDL3 software rasterizer"]
     sdl["<b>SDL3</b><br/>window, input, surface, dialogs, tray"]
 
-    css["<b>core/css</b><br/>cssflat, libcss, style_map"]
+    css["<b>core/css</b><br/>the CSS engine, style_map"]
     tree["<b>core/a11y + core/anim</b><br/>the shadow tree, eased values"]
     plat["<b>platform/</b><br/>UIA, NSAccessibility, AT-SPI, DOM"]
 
@@ -868,7 +914,7 @@ flowchart TB
 include/reaktor  the public API; launch.h and main.h come first
 core/internal.h  the App struct, and what the layers share
 core/base        paths, metrics, assets
-core/css         cssflat and the libcss front end
+core/css         the CSS engine and the style cache
 core/render      Nuklear, the SDL3 backend, drawing, SVG and raster images
 core/ui          the declared tree (declare.c), its controls and views, layout,
                  the style map, keys, focus, floaters, toasts
@@ -903,8 +949,7 @@ catalogs are read from files; an icon that is not there is drawn as nothing,
 and the log names it.
 
 **`style_map.c` is the only writer of `nk_style`.** A widget style set
-anywhere else lasts until a theme change reloads the sheets. libcss never
-takes a sheet's rules back out of its store, so every load rebuilds it.
+anywhere else lasts until a theme change reloads the sheets.
 
 ## The frame loop
 
@@ -960,9 +1005,10 @@ repaint to make something update is the wrong fix** — mark what changed.
 | NetBSD | x86-64, ARM64 | 11.0 |
 | Web | WebAssembly | Chromium; emscripten 6.0.9 targets Chrome 85, Firefox 79 and Safari 15 |
 
-Every pull request builds each native one, runs the eight console tests, and
-writes a `--shot` and an `--a11y-dump` of `simple` and the showcase through
-the system's video driver and SDL's `dummy` one: `.github/workflows/` holds a
+Every pull request builds each native one, runs the ten console tests that
+`tools/ci/tests.txt` lists, and writes a `--shot` and an `--a11y-dump` of
+`simple` and the showcase through the system's video driver and SDL's `dummy`
+one: `.github/workflows/` holds a
 workflow per system. The BSDs run in virtual machines, and their ARM64
 programs are cross-compiled in the x86-64 machine, against a sysroot
 `tools/cross/sysroot.sh` gathers from the release's sets and packages, with
@@ -1023,7 +1069,7 @@ cmake --install build --prefix libreaktor --component libreaktor
 ```
 
 It is one static library — `reaktor.lib` with MSVC, `libreaktor.a` elsewhere
-— holding Reaktor, every module, SDL, libcss, plutosvg, Onlay, NukAnim,
+— holding Reaktor, every module, SDL, FreeType, plutosvg, Onlay, NukAnim,
 mojibake and kb_text_shape, merged with `lib.exe`, Apple's `libtool` or an
 `ar` MRI script. Beside it go the public headers with Nuklear's, NukAnim's
 and SDL's, a CMake package, a pkg-config file and `share/reaktor/licenses`:
@@ -1052,7 +1098,7 @@ the current build, into `build/dist`; each release carries both, built by CI.
 
 ```bash
 sh tools/libreaktor-pkg.sh -i
-./build.sh --target deb
+./build.sh deb
 ```
 
 The prefix is `/opt/reaktor` on Linux and `/usr/local/reaktor` on the BSDs,
@@ -1197,7 +1243,7 @@ Built by default and run from `build/`:
 | `animtest` | Curves, retargeting, a context a window |
 | `keytest` | Chord parsing and formatting |
 | `localetest` | Catalogs, lookup, plural rules, formatting |
-| `csstest` | Flattening a sheet for libcss: what is rewritten, what is dropped, and Simple.css read through it |
+| `csstest` | The CSS engine: matching, the cascade, values, `@media`, hostile sheets, and Simple.css read through it |
 | `imagetest` | PNG and JPEG decode; other formats are not compiled in |
 | `basetest` | Which URL schemes a link opens, and UTF-8 cleaning |
 | `uitest` | The scripted UI test below, driving its own window: find by name and mark, click, type, a check box, a key hook |

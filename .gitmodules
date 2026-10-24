@@ -10,9 +10,6 @@
 [submodule "external/SDL"]
 	path = external/SDL
 	url = https://github.com/libsdl-org/SDL.git
-[submodule "external/lcui"]
-	path = external/lcui
-	url = https://github.com/lc-soft/LCUI.git
 [submodule "external/onlay"]
 	path = external/onlay
 	url = https://github.com/Alpaq92/Onlay.git

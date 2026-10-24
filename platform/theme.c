@@ -13,11 +13,7 @@
 
 int reaktor_prefers_dark(void)
 {
-    switch (SDL_GetSystemTheme()) {
-    case SDL_SYSTEM_THEME_DARK:  return 1;
-    case SDL_SYSTEM_THEME_LIGHT: return 0;
-    default:                     return -1;
-    }
+    return SDL_GetSystemTheme() == SDL_SYSTEM_THEME_DARK;
 }
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
@@ -169,7 +165,7 @@ int reaktor_prefers_contrast(void)
 #endif
 }
 
-int reaktor_window_set_dark(SDL_Window *win, int dark)
+void reaktor_window_set_dark(SDL_Window *win, int dark)
 {
 #ifdef _WIN32
     void *native_window =
@@ -182,7 +178,7 @@ int reaktor_window_set_dark(SDL_Window *win, int dark)
     static int looked_up;
     int value = dark ? 1 : 0;
 
-    if (!native_window) return 0;
+    if (!native_window) return;
     if (!looked_up) {
         void *dll = (void *)LoadLibraryExA("dwmapi.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (dll)
@@ -190,14 +186,12 @@ int reaktor_window_set_dark(SDL_Window *win, int dark)
                 (HMODULE)dll, "DwmSetWindowAttribute");
         looked_up = 1;
     }
-    if (!set_attr) return 0;
+    if (!set_attr) return;
 
     if (set_attr(native_window, 20, &value, sizeof(value)) != 0)
         set_attr(native_window, 19, &value, sizeof(value));
-    return 1;
 #else
     (void)win;
     (void)dark;
-    return 1;
 #endif
 }

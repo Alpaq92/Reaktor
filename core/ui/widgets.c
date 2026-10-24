@@ -496,13 +496,6 @@ reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
     return css_button(app, ctx, "button", label);
 }
 
-int
-reaktor_button_label_as(App *app, struct nk_context *ctx, const char *sel,
-                        const char *label)
-{
-    return css_button(app, ctx, sel, label);
-}
-
 /* A button's icon is drawn white and tinted with its label's color. */
 const char *
 reaktor_button_src(char out[192], const char *ionicon)
@@ -579,17 +572,12 @@ reaktor_unfit_label(struct nk_context *ctx, int fitted)
 }
 
 int
-reaktor_css_button_color(App *app, struct nk_context *ctx, const char *name,
-                     struct nk_color fill)
+reaktor_css_button_color(App *app, struct nk_context *ctx, struct nk_color fill)
 {
-    struct nk_rect b = nk_widget_bounds(ctx);
     unsigned char hov[4];
-    char hex[10];
     int clicked;
 
-    hot_push(app, b, REAKTOR_CURSOR_POINTER, 1);
-    reaktor_hex(fill, hex);
-    reaktor_note(app, REAKTOR_A11Y_BUTTON, name, hex, 0, b);
+    hot_push(app, nk_widget_bounds(ctx), REAKTOR_CURSOR_POINTER, 1);
 
     hov[0] = fill.r; hov[1] = fill.g; hov[2] = fill.b; hov[3] = fill.a;
     reaktor_style_darken(hov, 0.12f);
@@ -1014,14 +1002,7 @@ unsigned
 reaktor_note_here(App *app, struct nk_context *ctx, unsigned char role,
                   const char *name, unsigned state)
 {
-    struct nk_rect b;
-    unsigned       id;
-
-    if (g_note_mute) return 0;
-    b  = nk_widget_bounds(ctx);
-    id = reaktor_a11y_add(&app->a11y, role, name, NULL, state, b);
-    focus_saw(app, id, b);
-    return id;
+    return reaktor_note(app, role, name, NULL, state, nk_widget_bounds(ctx));
 }
 
 const struct nk_user_font *

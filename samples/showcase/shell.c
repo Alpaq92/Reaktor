@@ -128,7 +128,7 @@ splash_page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
     credit(cv, reaktor_font(app, 30, 1), "Reaktor", 164.0f, w, ink, name);
     SDL_snprintf(line, sizeof line, "version %s", reaktor_version());
     credit(cv, reaktor_font(app, 15, 0), line, 204.0f, w, muted, name);
-    SDL_snprintf(line, sizeof line, "SDL %d.%d.%d  \xC2\xB7  Nuklear  \xC2\xB7  NukAnim  \xC2\xB7  LCUI  \xC2\xB7  plutosvg",
+    SDL_snprintf(line, sizeof line, "SDL %d.%d.%d  \xC2\xB7  Nuklear  \xC2\xB7  NukAnim  \xC2\xB7  FreeType  \xC2\xB7  plutosvg",
                  SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v));
     credit(cv, reaktor_font(app, 12, 0), line, 250.0f, w, muted, tag);
     credit(cv, reaktor_font(app, 12, 0), "Onlay  \xC2\xB7  mojibake  \xC2\xB7  kb_text_shape  \xC2\xB7  Water.css",
@@ -383,8 +383,7 @@ login_card(App *app, struct reaktor_context *ctx, float body_x, float body_w,
                 reaktor_label(&(reaktor_label_spec){
                     .text  = "Proceed with login",
                     .style = "h4",
-                    .box   = { .flags = REAKTOR_LAY_FILL_X |
-                                        REAKTOR_LAY_FILL_Y } });
+                    .box   = { .flags = REAKTOR_LAY_FILL } });
             }
 
             reaktor_field(&(reaktor_field_spec){

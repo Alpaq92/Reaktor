@@ -10,7 +10,6 @@ from the project's own license file at the pinned revision.
 | [SDL](https://github.com/libsdl-org/SDL) | Window, input, renderer, system theme, file dialog, tray | zlib |
 | [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) | Widgets and the SDL3 backend | MIT **or** public domain |
 | [NukAnim](https://github.com/Alpaq92/NukAnim) | Every animation, and `nukanim.h` for applications — a port of [ImAnim](https://github.com/soufianekhiat/ImAnim) with [ImAnimate](https://github.com/RaidcoreGG/ImAnimate)'s `animate` | MIT |
-| [LCUI](https://github.com/lc-soft/LCUI) | `libcss` (parse, match, cascade) and `yutil` | MIT |
 | [Onlay](https://github.com/Alpaq92/Onlay) | The rectangles — a fork of [randrew/layout](https://github.com/randrew/layout) | MIT |
 | [Water.css](https://github.com/kognise/water.css) | The stylesheet the look comes from, compiled in | MIT |
 | [Simple.css](https://github.com/kevquirk/simple.css) | Alternative style used in the demo app | MIT |
@@ -22,10 +21,9 @@ from the project's own license file at the pinned revision.
 | [kb_text_shape](https://github.com/JimmyLefevre/kb) | OpenType shaping, script segmentation and font coverage, for the Text module | zlib |
 | [ini.h](https://github.com/mattiasgustavsson/libs) | Reading and writing `settings.conf` | MIT **or** public domain |
 
-Only LCUI's `libcss` and `yutil` are built, not the toolkit. SDL is built
-static, without audio, joystick, haptic, HID, sensor, camera, power, GPU,
-offscreen, the render backends Reaktor never selects, or its dynamic API (see
-below). Its tray is built: on
+SDL is built static, without audio, joystick, haptic, HID, sensor, camera,
+power, GPU, offscreen, the render backends Reaktor never selects, or its
+dynamic API (see below). Its tray is built: on
 Linux and the BSDs it loads AppIndicator and GTK 3 when a tray opens, and
 nothing links them. mojibake is built without its collation, IDNA, security
 and character-name tables. NukAnim is one header, compiled in
@@ -35,6 +33,9 @@ with a recursive checkout and is not built. kb_text_shape is one header, compile
 its TrueType, CFF, auto-hinter and anti-aliasing modules, and
 `core/render/ft/reaktor_ftoption.h` turns off what Reaktor never reads, its
 environment override among them.
+
+The stylesheets are read by Reaktor's own engine, `core/css/css.c`; no CSS
+library is linked or copied.
 
 Portions of this software are copyright © 2026 The FreeType Project
 (https://freetype.org). All rights reserved.
@@ -138,7 +139,7 @@ each toolchain fetches its own framework, and none is part of a Reaktor build.
 
 ## What is redistributed
 
-A native build links SDL, libcss, yutil, plutosvg, plutovg and FreeType
+A native build links SDL, plutosvg, plutovg and FreeType
 statically, plus mojibake and kb_text_shape with the Text module, and compiles
 in Nuklear, NukAnim, Onlay and ini.h, so it carries the zlib, MIT and FreeType
 License terms above. Each license

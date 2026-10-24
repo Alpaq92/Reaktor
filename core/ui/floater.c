@@ -194,6 +194,14 @@ typedef struct question {
     float            text_h;
 } question;
 
+static float
+ask_button_w(App *app, struct nk_context *ctx, const char *label)
+{
+    float w = reaktor_button_width(app, ctx, NULL, label);
+
+    return w > 96.0f ? w : 96.0f;
+}
+
 static void
 ask_body(App *app, struct nk_context *ctx, int w, int h, void *user)
 {
@@ -210,7 +218,8 @@ ask_body(App *app, struct nk_context *ctx, int w, int h, void *user)
     nk_spacer(ctx);
     nk_layout_row_template_begin(ctx, 36.0f);
     nk_layout_row_template_push_dynamic(ctx);
-    for (i = 0; i < q->q.count; i++) nk_layout_row_template_push_static(ctx, 96.0f);
+    for (i = 0; i < q->q.count; i++)
+        nk_layout_row_template_push_static(ctx, ask_button_w(app, ctx, q->q.buttons[i]));
     nk_layout_row_template_end(ctx);
     nk_spacer(ctx);
     for (i = 0; i < q->q.count; i++)
@@ -259,7 +268,8 @@ reaktor_ask(App *app, const reaktor_question *spec)
     q->q.text = SDL_memcpy(at, spec->text, SDL_strlen(spec->text) + 1);
 
     f = reaktor_style_font(app, ".popup-title", 16, 1);
-    w = 104.0f * (float)spec->count + 120.0f;
+    w = 120.0f;
+    for (i = 0; i < spec->count; i++) w += ask_button_w(app, app->ctx, spec->buttons[i]) + 8.0f;
     if (w < 328.0f) w = 328.0f;
     q->text_h = 22.0f * (float)(1 + (int)(f->width(f->userdata, f->height, q->q.text,
                                                    (int)SDL_strlen(q->q.text)) / w));

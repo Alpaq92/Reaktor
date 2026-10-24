@@ -427,32 +427,28 @@ reaktor_soak(void)
     (void)decl_place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &box, NULL);
 }
 
-void
-decl_tip_at(const char *tip, struct nk_rect r, int cursor)
+static void
+tip_at(App *app, struct nk_context *ctx, struct nk_rect r, const char *text, int cursor)
 {
-    const struct nk_input *in = &g_frame_ctx->input;
-
-    if (!tip) return;
-    reaktor_hot_follow(g_frame_app, r, cursor);
-    if (nk_input_is_mouse_hovering_rect(in, r) &&
-        nk_input_is_mouse_hovering_rect(in, g_frame_ctx->current->layout->clip)) {
-        SDL_strlcpy(g_frame_app->tip_text, tip, sizeof g_frame_app->tip_text);
-        g_frame_app->tip = g_frame_app->tip_text;
+    if (!text || !ctx || !ctx->current) return;
+    reaktor_hot_follow(app, r, cursor);
+    if (nk_input_is_mouse_hovering_rect(&ctx->input, r) &&
+        nk_input_is_mouse_hovering_rect(&ctx->input, ctx->current->layout->clip)) {
+        SDL_strlcpy(app->tip_text, text, sizeof app->tip_text);
+        app->tip = app->tip_text;
     }
 }
 
 void
 reaktor_tip(App *app, struct nk_rect r, const char *text)
 {
-    struct nk_context *ctx = app ? app->ctx : NULL;
+    tip_at(app, app ? app->ctx : NULL, r, text, 0);
+}
 
-    if (!text || !ctx || !ctx->current) return;
-    reaktor_hot_follow(app, r, 0);
-    if (nk_input_is_mouse_hovering_rect(&ctx->input, r) &&
-        nk_input_is_mouse_hovering_rect(&ctx->input, ctx->current->layout->clip)) {
-        SDL_strlcpy(app->tip_text, text, sizeof app->tip_text);
-        app->tip = app->tip_text;
-    }
+void
+decl_tip_at(const char *tip, struct nk_rect r, int cursor)
+{
+    tip_at(g_frame_app, g_frame_ctx, r, tip, cursor);
 }
 
 void
