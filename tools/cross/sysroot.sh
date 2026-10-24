@@ -38,10 +38,20 @@ freebsd)
     [ "$(find "$tmp/pkgs" -name '*.pkg' | wc -l)" -gt 0 ] || { echo "no packages were fetched" >&2; exit 1; }
     ;;
 netbsd)
+    # The CDN drops a request now and then, and ftp -V says nothing when it does.
+    get() {
+        n=1
+        until ftp -V -o "$1" "$2"; do
+            [ "$n" -lt 4 ] || { echo "sysroot: could not fetch $2" >&2; return 1; }
+            n=$((n + 1))
+            echo "sysroot: $2 failed, try $n of 4" >&2
+            sleep 10
+        done
+    }
     url="https://cdn.NetBSD.org/pub/NetBSD/NetBSD-$version/evbarm-aarch64/binary/sets"
-    ftp -V -o "$tmp/SHA512" "$url/SHA512"
+    get "$tmp/SHA512" "$url/SHA512"
     for set in base comp xbase xcomp; do
-        ftp -V -o "$tmp/$set.tar.xz" "$url/$set.tar.xz"
+        get "$tmp/$set.tar.xz" "$url/$set.tar.xz"
         want=$(awk -v f="$set.tar.xz" '$2 == "(" f ")" { print $4 }' "$tmp/SHA512")
         got=$(cksum -a SHA512 "$tmp/$set.tar.xz" | awk '{ print $4 }')
         [ "$got" = "$want" ] || { echo "$set.tar.xz: checksum mismatch" >&2; exit 1; }
@@ -59,7 +69,7 @@ netbsd)
     echo "sysroot: packages from $repo"
     rm -rf "$tmp/pkgs"
     mkdir -p "$tmp/pkgs"
-    ftp -V -o "$tmp/pkgs/pkg_summary.gz" "$repo/pkg_summary.gz"
+    get "$tmp/pkgs/pkg_summary.gz" "$repo/pkg_summary.gz"
     # The closure of what SDL and the modules link, resolved from the summary
     # so no directory listing is read.
     gunzip -c "$tmp/pkgs/pkg_summary.gz" | awk '
@@ -79,7 +89,7 @@ netbsd)
             }
         }' > "$tmp/pkgs/list"
     while IFS= read -r f; do
-        ftp -V -o "$tmp/pkgs/$f" "$repo/$f"
+        get "$tmp/pkgs/$f" "$repo/$f"
     done < "$tmp/pkgs/list"
     mkdir -p "$dir/var/db/pkg"
     while IFS= read -r f; do
