@@ -57,7 +57,7 @@ page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
             "styling, and it is either true in front of you or it is not.");
     api(app, ctx, "external/simplecss");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_check(&(reaktor_check_spec){
                 .label = "Read Simple.css over the top of Water.css",
                 .name  = "Override stylesheet",
@@ -74,7 +74,7 @@ page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
     api(app, ctx, "the same widgets as everywhere else");
 
     REAKTOR_COLUMN(.gap = 10.0f) {
-        REAKTOR_ROW(.gap = ctx->style.window.spacing.x,
+        REAKTOR_ROW(.gap = reaktor_item_spacing(ctx).x,
                     .flags = REAKTOR_LAY_FILL_X) {
             reaktor_button(&(reaktor_button_spec){
                 .label = "A button",
@@ -87,7 +87,7 @@ page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
                 .box = { .flags = REAKTOR_LAY_FILL_X } });
         }
 
-        REAKTOR_ROW(.gap = ctx->style.window.spacing.x,
+        REAKTOR_ROW(.gap = reaktor_item_spacing(ctx).x,
                     .flags = REAKTOR_LAY_FILL_X) {
             reaktor_field(&(reaktor_field_spec){
                 .name = "Name", .hint = "a text field",
@@ -140,7 +140,7 @@ page_styling(App *app, struct reaktor_context *ctx, showcase_state *s)
             "widget on Nuklear's own default.");
     api(app, ctx, "reaktor_style_init(sheets, n, theme)");
 
-    REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+    REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
         reaktor_label(&(reaktor_label_spec){
             .text = "Two controls here have no rule in either sheet - a "
                     "slider and a progress bar are not things a document "

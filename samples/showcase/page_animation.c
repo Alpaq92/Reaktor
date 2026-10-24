@@ -89,7 +89,7 @@ static void
 well_caption(struct reaktor_context *ctx, struct reaktor_rect r,
              const char *text)
 {
-    const struct reaktor_user_font *f = ctx->style.font;
+    const struct reaktor_user_font *f = reaktor_current_font(ctx);
     int len = (int)strlen(text);
     float w = f->width(f->userdata, f->height, text, len);
 
@@ -437,7 +437,7 @@ fx_demo(App *app, struct reaktor_context *ctx, showcase_state *s)
             }
     }
 
-    REAKTOR_COLUMN(.gap = 6.0f) REAKTOR_ROW(.h = 40.0f, .gap = ctx->style.window.spacing.x,
+    REAKTOR_COLUMN(.gap = 6.0f) REAKTOR_ROW(.h = 40.0f, .gap = reaktor_item_spacing(ctx).x,
                                             .flags = REAKTOR_LAY_FILL_X) {
         REAKTOR_ROW(.name = "Password", .flags = REAKTOR_LAY_FILL) {
             float dx = reaktor_anim_shake(a, shake, 26.0f, 22.0f, 0.6f);
@@ -588,7 +588,7 @@ text_demo(App *app, struct reaktor_context *ctx, showcase_state *s)
                         float y1 = r.y + r.h < keep.y + keep.h ? r.y + r.h : keep.y + keep.h;
 
                         reaktor_fill_round(app, cv, r, 6.0f, well_color());
-                        o.pos = reaktor_vec2(r.x + 12.0f, r.y + (r.h - ctx->style.font->height) * 0.5f);
+                        o.pos = reaktor_vec2(r.x + 12.0f, r.y + (r.h - reaktor_current_font(ctx)->height) * 0.5f);
                         reaktor_push_scissor(cv, reaktor_rect(x0, y0, x1 > x0 ? x1 - x0 : 0.0f, y1 > y0 ? y1 - y0 : 0.0f));
                         reaktor_anim_text_stagger(a, ctx, line, t, &o);
                         reaktor_push_scissor(cv, keep);
@@ -630,7 +630,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
                   "reaktor_anim_tween_float(reaktor_anim(app), id, 0, to, 0.6f, "
                   "reaktor_anim_ease_spring(1, 170, 16, 0), ...)");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         for (i = 0; i < 3; i++)
             if (reaktor_button(&(reaktor_button_spec){
                     .label = stop_name[i],
@@ -696,7 +696,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
             "chose, which is the value arriving.");
     api(app, ctx, "reaktor_ease_at(curve, t)  /  REAKTOR_EASE_*");
 
-    REAKTOR_ROW(.gap = ctx->style.window.spacing.x,
+    REAKTOR_ROW(.gap = reaktor_item_spacing(ctx).x,
                 .flags = REAKTOR_LAY_PACK_CENTER | REAKTOR_LAY_WRAP) {
         unsigned id = reaktor_box_id();
 
@@ -761,7 +761,7 @@ page_animation(App *app, struct reaktor_context *ctx, showcase_state *s)
         static const char *const word[4] = { "Home", "Search", "Library", "Profile" };
         struct reaktor_anim_context *anim = reaktor_anim(app);
         struct reaktor_command_buffer *cv = reaktor_window_get_canvas(ctx);
-        const struct reaktor_user_font *f = ctx->style.font;
+        const struct reaktor_user_font *f = reaktor_current_font(ctx);
         struct reaktor_colorf rest = reaktor_color_cf(reaktor_token("--background-alt", reaktor_rgb(48, 48, 48)));
         struct reaktor_colorf lit = reaktor_color_cf(reaktor_accent_color(app));
 

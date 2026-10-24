@@ -10,7 +10,7 @@ static void
 diag_row(App *app, struct reaktor_context *ctx, const char *name,
          const char *value)
 {
-    REAKTOR_ROW(.h = 24.0f, .gap = ctx->style.window.spacing.x,
+    REAKTOR_ROW(.h = 24.0f, .gap = reaktor_item_spacing(ctx).x,
                 .flags = REAKTOR_LAY_FILL_X) {
         struct reaktor_rect r;
         unsigned       id;
@@ -38,7 +38,7 @@ diag_row(App *app, struct reaktor_context *ctx, const char *name,
 
 #define DIAG_ROWS(ctx)                                                       \
     REAKTOR_COLUMN(.w = reaktor_widget_bounds(ctx).w,                        \
-                   .gap = (ctx)->style.window.spacing.y)
+                   .gap = reaktor_item_spacing(ctx).y)
 
 void
 page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
@@ -55,7 +55,7 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
             "page; Pick, then a click here, finds the widget under the "
             "pointer.");
     api(app, ctx, ".inspector = { .attach = 1 }  /  reaktor_inspector_open");
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         int shown = reaktor_inspector_shown(app);
 
         if (reaktor_button(&(reaktor_button_spec){

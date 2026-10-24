@@ -881,6 +881,7 @@ out by hand inside a declared page. [`include/reaktor/ui.h`](../include/reaktor/
 | --- | --- |
 | `reaktor_token`, `reaktor_col`, `reaktor_on`, `reaktor_visible`, `reaktor_page_color`, `reaktor_accent_color` | Colors from the sheet; readable text on a background; the page and the accent |
 | `reaktor_font`, `reaktor_style_font` | A baked face, by size or by selector |
+| `reaktor_item_spacing`, `reaktor_text_color`, `reaktor_current_font` | The gap between widgets, the text color and the font in effect now, pushes included |
 | `reaktor_ionicon`, `reaktor_ionicon_exact`, `reaktor_glyph_at` | An Ionicon as a `reaktor_image`, in any color, or drawn into a rectangle |
 | `reaktor_image_file`, `REAKTOR_MARK` | Any image asset: an SVG, recolored by `?stroke=#rrggbb&fill=&sw=`, or a PNG or JPEG; the mark's name |
 | `reaktor_image_centered` | An image at its own size, centered in the next widget slot |

@@ -482,7 +482,7 @@ sample_option(App *app, struct reaktor_context *ctx, const char *label, float w,
     int             hit;
 
     if (w <= 0.0f) {
-        const struct reaktor_user_font *f = ctx->style.font;
+        const struct reaktor_user_font *f = reaktor_current_font(ctx);
         /* Nuklear takes the rounding out of a button's text room too. */
         w = f->width(f->userdata, f->height, label, (int)strlen(label))
           + 2.0f * ((float)TAB_PAD_X + STRIP_ROUND);

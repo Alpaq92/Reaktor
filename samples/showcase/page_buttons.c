@@ -70,7 +70,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     {
         REAKTOR_ROW(.h = 38.0f,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             if (reaktor_button(&(reaktor_button_spec){
                     .label = "Default",
                     .box = { .flags = REAKTOR_LAY_FILL } })) s->presses++;
@@ -99,7 +99,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
             { "menu-outline",            "Menu" }
         };
         REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_WRAP,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             for (i = 0; i < ICON_N; i++)
                 if (reaktor_button(&(reaktor_button_spec){
                         .label = g_icons[i].label, .icon = g_icons[i].icon,
@@ -131,7 +131,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 
         for (m = 0; m < 4; m++) {
             REAKTOR_ROW(.h = 38.0f, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 reaktor_label(&(reaktor_label_spec){ .text = how[m],
                                                      .box = { .w = 110.0f, .flags = REAKTOR_LAY_FILL_Y } });
                 if (reaktor_button(&(reaktor_button_spec){
@@ -157,7 +157,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
             "text color for the button's state. Its name is what a reader hears.");
     api(app, ctx, ".paint  /  .paint_user  /  reaktor_button_custom(app, ctx, name, paint, user)");
     REAKTOR_ROW(.h = 52.0f, .flags = REAKTOR_LAY_FILL_X,
-                .gap = ctx->style.window.spacing.x) {
+                .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "Inbox, 12 new", .paint = paint_inbox, .paint_user = "12",
                 .box = { .w = 180.0f, .flags = REAKTOR_LAY_FILL_Y } }))
@@ -210,7 +210,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     {
         REAKTOR_ROW(.h = 40.0f,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             compact_push(ctx);
             if (reaktor_swatch(&(reaktor_swatch_spec){
                     .name = "Tint swatch", .fill = reaktor_rgb_cf(s->tint),
@@ -237,7 +237,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
                  s->presses, s->repeats);
     reaktor_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
     reaktor_label_colored(ctx, line, REAKTOR_TEXT_LEFT,
-                          reaktor_token("--text-muted", ctx->style.text.color));
+                          reaktor_token("--text-muted", reaktor_text_color(ctx)));
     reaktor_style_pop_font(ctx);
 
     section(app, ctx, "Checkboxes and radios",
@@ -256,9 +256,9 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
             { "read", 1u }, { "write", 2u }, { "execute", 4u }
         };
 
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 reaktor_check(&(reaktor_check_spec){
                     .label = "Wrap long lines", .on = &s->check_wrap,
                     .box_right = 1,
@@ -275,7 +275,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
             }
 
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 for (i = 0; i < 3; i++) {
                     reaktor_check(&(reaktor_check_spec){
                         .label = perms[i].label, .flags = &s->flags,
@@ -293,14 +293,14 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
     SDL_snprintf(line, sizeof(line), "flags = 0x%02x", s->flags);
     reaktor_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
     reaktor_label_colored(ctx, line, REAKTOR_TEXT_LEFT,
-                          reaktor_token("--text-muted", ctx->style.text.color));
+                          reaktor_token("--text-muted", reaktor_text_color(ctx)));
     reaktor_style_pop_font(ctx);
 
     {
         static const char *const names[3] = { "Never", "On Wi-Fi", "Always" };
 
         REAKTOR_ROW(.h = ROW,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             for (i = 0; i < 3; i++) {
                 reaktor_radio(&(reaktor_radio_spec){
                     .label = names[i], .choice = &s->radio, .value = i,
@@ -321,7 +321,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     {
         REAKTOR_ROW(.h = 32.0f,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             for (i = 0; i < 4; i++) {
                 char lab[16];
 
@@ -335,7 +335,7 @@ page_buttons(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     {
         REAKTOR_ROW(.h = 32.0f,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             reaktor_select(&(reaktor_select_spec){
                 .label = "With a symbol", .on = &s->sel_row,
                 .disc = 1, .centered = 1,

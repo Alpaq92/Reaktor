@@ -10,7 +10,7 @@ head_and_note(App *app, struct reaktor_context *ctx, const char *title,
               const char *note)
 {
     (void)app;
-    REAKTOR_COLUMN(.name = title, .gap = ctx->style.window.spacing.y) {
+    REAKTOR_COLUMN(.name = title, .gap = reaktor_item_spacing(ctx).y) {
         reaktor_label(&(reaktor_label_spec){
             .text = title, .style = "h4",
             .color = "--text-bright",
