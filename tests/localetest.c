@@ -2,6 +2,8 @@
 #include <string.h>
 #include <time.h>
 
+#include <SDL3/SDL.h>
+
 #include "locale_internal.h"
 #include "test.h"
 
