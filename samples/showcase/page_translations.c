@@ -3,7 +3,7 @@
 static void
 format_row(struct reaktor_context *ctx, const char *label, const char *value)
 {
-    REAKTOR_ROW(.gap = ctx->style.window.spacing.x, .flags = REAKTOR_LAY_FILL_X) {
+    REAKTOR_ROW(.gap = reaktor_item_spacing(ctx).x, .flags = REAKTOR_LAY_FILL_X) {
         reaktor_label(&(reaktor_label_spec){
             .text = label, .color = "--text-muted", .box = { .w = 110.0f } });
         reaktor_label(&(reaktor_label_spec){
@@ -36,7 +36,7 @@ page_translations_formats(struct reaktor_context *ctx)
                  reaktor_trn("locale.count", 5, b, sizeof b),
                  reaktor_trn("locale.count", 22, c, sizeof c));
 
-    REAKTOR_COLUMN(.w = 360.0f, .gap = ctx->style.window.spacing.y) {
+    REAKTOR_COLUMN(.w = 360.0f, .gap = reaktor_item_spacing(ctx).y) {
         reaktor_label(&(reaktor_label_spec){
             .text = reaktor_tr("locale.formats"), .style = "h4",
             .color = "--text-bright", .box = { .flags = REAKTOR_LAY_FILL_X } });
@@ -98,7 +98,7 @@ page_translations(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     REAKTOR_ROW(.gap = 40.0f, .flags = REAKTOR_LAY_WRAP) {
     REAKTOR_COLUMN(.w = SDL_min(reaktor_window_get_content_region_size(ctx).x, 640.0f),
-                   .gap = ctx->style.window.spacing.y) {
+                   .gap = reaktor_item_spacing(ctx).y) {
         reaktor_label(&(reaktor_label_spec){
             .text = reaktor_tr("locale.title"), .style = "h4",
             .color = "--text-bright",

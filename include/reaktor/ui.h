@@ -33,6 +33,9 @@ struct reaktor_color       reaktor_visible(struct reaktor_color want,
 struct reaktor_color       reaktor_page_color(App *app);
 struct reaktor_color       reaktor_accent_color(App *app);
 const struct reaktor_user_font *reaktor_font(App *app, int px, int bold);
+struct reaktor_vec2        reaktor_item_spacing(struct reaktor_context *ctx);
+struct reaktor_color       reaktor_text_color(struct reaktor_context *ctx);
+const struct reaktor_user_font *reaktor_current_font(struct reaktor_context *ctx);
 
 struct reaktor_image reaktor_ionicon(App *app, const char *name, int px);
 struct reaktor_image reaktor_ionicon_exact(App *app, const char *name, int px,

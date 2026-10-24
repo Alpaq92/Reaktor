@@ -23,6 +23,24 @@ reaktor_font(App *app, int px, int bold)
     return pick_font(app, px, bold);
 }
 
+struct nk_vec2
+reaktor_item_spacing(struct nk_context *ctx)
+{
+    return ctx->style.window.spacing;
+}
+
+struct nk_color
+reaktor_text_color(struct nk_context *ctx)
+{
+    return ctx->style.text.color;
+}
+
+const struct nk_user_font *
+reaktor_current_font(struct nk_context *ctx)
+{
+    return ctx->style.font;
+}
+
 #define ICON_HAIRLINE_BELOW 20
 
 const char *

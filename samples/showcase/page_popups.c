@@ -18,7 +18,7 @@ floater_text(App *app, struct reaktor_context *ctx, const char *title,
                             reaktor_style_font(app, ".popup-title", 16, 1));
     reaktor_label_colored(ctx, title, REAKTOR_TEXT_LEFT,
                           reaktor_token("--text-bright",
-                                        ctx->style.text.color));
+                                        reaktor_text_color(ctx)));
     reaktor_style_pop_font(ctx);
 
     reaktor_layout_row_dynamic(ctx, 8.0f, 1);
@@ -28,7 +28,7 @@ floater_text(App *app, struct reaktor_context *ctx, const char *title,
     reaktor_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
     reaktor_label_colored_wrap(ctx, text,
                                reaktor_token("--text-muted",
-                                             ctx->style.text.color));
+                                             reaktor_text_color(ctx)));
     reaktor_style_pop_font(ctx);
 
     reaktor_layout_row_dynamic(ctx, 12.0f, 1);
@@ -90,7 +90,7 @@ floater_demos(App *app, struct reaktor_context *ctx)
             "the page live under it.");
     api(app, ctx, "reaktor_floater_open  /  reaktor_floater_close");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label    = "Open a floater",
                 .disabled = (unsigned char)(g_plain_floater != 0),
@@ -170,7 +170,7 @@ window_demos(App *app, struct reaktor_context *ctx)
                    "until it closes.");
     api(app, ctx, "reaktor_window_open  /  reaktor_window_close");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label    = "Open a window",
                 .disabled = (unsigned char)(none || g_plain_win),
@@ -314,7 +314,7 @@ toast_demos(App *app, struct reaktor_context *ctx)
             "own on Linux, macOS and the BSDs, the browser's on the web.");
     api(app, ctx, "reaktor_toast  /  reaktor_notify");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "Simple toast",
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }))
@@ -329,7 +329,7 @@ toast_demos(App *app, struct reaktor_context *ctx)
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }))
             reaktor_toast(app, &g_toast_icon);
     }
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "With custom controls",
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }))
@@ -346,7 +346,7 @@ toast_demos(App *app, struct reaktor_context *ctx)
             reaktor_toast(app, &(reaktor_toast_spec){
                 .text = "This one stays until it is closed" });
     }
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "System notification",
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }) &&
@@ -367,7 +367,7 @@ print_demos(App *app, struct reaktor_context *ctx)
             "be written to a PDF file instead.");
     api(app, ctx, "reaktor_print  /  reaktor_print_pdf");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "Print a page",
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }) &&
@@ -429,7 +429,7 @@ ask_demo(App *app, struct reaktor_context *ctx)
             "same for a call made on any other thread.");
     api(app, ctx, "reaktor_ask  /  reaktor_timer  /  reaktor_post");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         if (reaktor_button(&(reaktor_button_spec){
                 .label = "Ask a question",
                 .box   = { .flags = REAKTOR_LAY_FILL_X } }))
@@ -464,8 +464,8 @@ settings_demo(App *app, struct reaktor_context *ctx)
     api(app, ctx, "reaktor_setting_set  /  reaktor_settings_save  /  reaktor_settings_clear");
 
     REAKTOR_COLUMN(.name = "Settings", .flags = REAKTOR_LAY_FILL_X,
-                   .gap = ctx->style.window.spacing.y) {
-        REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X, .gap = ctx->style.window.spacing.x) {
+                   .gap = reaktor_item_spacing(ctx).y) {
+        REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X, .gap = reaktor_item_spacing(ctx).x) {
             reaktor_field(&(reaktor_field_spec){
                 .buf = note, .len = &note_len, .cap = (int)sizeof note,
                 .hint = "A note to keep", .name = "Note",
@@ -582,7 +582,7 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     {
         reaktor_style_push_font(ctx, reaktor_style_font(app, ".small", 13, 0));
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
             SDL_snprintf(line, sizeof(line), "last chosen: %s", s->menu_pick);
             reaktor_label(&(reaktor_label_spec){
                 .text   = line,
@@ -658,7 +658,7 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
         struct reaktor_rect b;
 
         REAKTOR_ROW(.h = 34.0f,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             reaktor_button(&(reaktor_button_spec){
                 .label   = "Hover for a plain tooltip",
                 .tooltip = "A one-line tooltip.",

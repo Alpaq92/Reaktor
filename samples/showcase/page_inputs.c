@@ -18,14 +18,14 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
     api(app, ctx, "reaktor_field with .filter = reaktor_filter_default / _decimal / _hex");
 
     {
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
             reaktor_field(&(reaktor_field_spec){
                 .buf = s->name, .len = &s->name_len, .cap = SC_TEXT_CAP,
                 .hint = "Full name", .filter = reaktor_filter_default,
                 .box = { .h = 36.0f, .flags = REAKTOR_LAY_FILL_X } });
 
             REAKTOR_ROW(.h = 36.0f, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 reaktor_field(&(reaktor_field_spec){
                     .buf = s->digits, .len = &s->digits_len,
                     .cap = SC_TEXT_CAP, .hint = "Digits only",
@@ -66,9 +66,9 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
         SDL_snprintf(fv, sizeof(fv), "%.2f", (double)s->slider_f);
         SDL_snprintf(iv, sizeof(iv), "%d", s->slider_i);
 
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 reaktor_slider(&(reaktor_slider_spec){
                     .name = "Float", .value = &s->slider_f,
                     .lo = 0.0f, .hi = 1.0f, .step = 0.01f,
@@ -78,7 +78,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                     .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 reaktor_slider(&(reaktor_slider_spec){
                     .name = "Integer", .ivalue = &s->slider_i,
                     .lo = 0.0f, .hi = 100.0f, .step = 1.0f,
@@ -88,7 +88,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                     .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 reaktor_progress(&(reaktor_progress_spec){
                     .name = "Progress", .value = &s->progress, .max = 100,
                     .modifiable = 1,
@@ -98,7 +98,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                     .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = 62.0f, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 reaktor_knob(&(reaktor_knob_spec){
                     .name = "Knob", .value = &s->knob, .lo = 0.0f, .hi = 1.0f,
                     .box = { .w = 62.0f, .h = 62.0f } });
@@ -115,7 +115,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
 
     {
         REAKTOR_ROW(.h = ROW,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             reaktor_property(&(reaktor_property_spec){
                 .label = "Columns:", .ivalue = &s->prop_i,
                 .lo = 1, .hi = 24, .step = 1, .grain = 0.25f,
@@ -129,7 +129,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                 .lo = 0.0, .hi = 100.0, .step = 0.25, .grain = 0.05f,
                 .box = { .flags = REAKTOR_LAY_FILL } });
         }
-        REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
             static const char *const quality[] = { "Low", "Medium", "High", "Best" };
             static const char *const days[] = { "Monday", "Tuesday", "Wednesday",
                                                 "Thursday", "Friday", "Saturday",
@@ -153,7 +153,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
             "wheels. Enter or OK sets the value, Escape or Cancel leaves it.");
     api(app, ctx, "reaktor_date_pick  /  reaktor_time_pick");
 
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         reaktor_date_pick(&(reaktor_date_spec){
             .name = "Date", .year = &s->date_y, .month = &s->date_m, .day = &s->date_d,
             .box = { .flags = REAKTOR_LAY_FILL } });
@@ -176,8 +176,8 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
     {
         int i;
 
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
-            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x,
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
+            REAKTOR_ROW(.h = ROW_TALL, .gap = reaktor_item_spacing(ctx).x,
                         .flags = REAKTOR_LAY_FILL_X) {
                 REAKTOR_COMBO(.label = sizes[s->combo_size], .name = "Size",
                               .body_h = 130.0f,
@@ -197,7 +197,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                             s->combo_symbol = i;
                 }
             }
-            REAKTOR_ROW(.h = ROW_TALL, .gap = ctx->style.window.spacing.x,
+            REAKTOR_ROW(.h = ROW_TALL, .gap = reaktor_item_spacing(ctx).x,
                         .flags = REAKTOR_LAY_FILL_X) {
                 struct reaktor_color tint = reaktor_rgb_cf(s->tint);
 
@@ -245,13 +245,13 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
         SDL_snprintf(line, sizeof(line), "#%02x%02x%02x", c.r, c.g, c.b);
 
         REAKTOR_ROW(.h = 132.0f,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             reaktor_color_pick(&(reaktor_color_spec){
                 .name = "Color picker", .value = &s->tint,
                 .box = { .w = 210.0f, .h = 132.0f } });
 
             REAKTOR_COLUMN(.w = 210.0f,
-                           .gap = ctx->style.window.spacing.y) {
+                           .gap = reaktor_item_spacing(ctx).y) {
                 reaktor_swatch(&(reaktor_swatch_spec){
                     .name = "Chosen color", .fill = c,
                     .box = { .h = 44.0f, .flags = REAKTOR_LAY_FILL_X } });

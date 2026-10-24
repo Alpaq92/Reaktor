@@ -189,16 +189,16 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
         };
         int i;
 
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
             REAKTOR_ROW(.h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 for (i = 0; i < 3; i++)
                     reaktor_label(&(reaktor_label_spec){
                         .text = edges[i], .align = (unsigned char)i,
                         .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = ROW_SMALL, .flags = REAKTOR_LAY_FILL_X,
-                        .gap = ctx->style.window.spacing.x) {
+                        .gap = reaktor_item_spacing(ctx).x) {
                 for (i = 0; i < 3; i++)
                     reaktor_label(&(reaktor_label_spec){
                         .text = tokens[i], .color = tokens[i],
@@ -236,7 +236,7 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
         static const int accent = 5;
 
         REAKTOR_ROW(.h = 30.0f,
-                    .gap = ctx->style.window.spacing.x) {
+                    .gap = reaktor_item_spacing(ctx).x) {
             for (k = 0; k < 8; k++)
                 reaktor_icon(&(reaktor_icon_spec){
                     .name   = names[k],
@@ -329,7 +329,7 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
     api(app, ctx, "reaktor_list .drag  /  .dropped  /  reaktor_undo_push");
     g_lane_app = app;
 
-    REAKTOR_ROW(.h = 200.0f, .gap = ctx->style.window.spacing.x, .flags = REAKTOR_LAY_FILL_X) {
+    REAKTOR_ROW(.h = 200.0f, .gap = reaktor_item_spacing(ctx).x, .flags = REAKTOR_LAY_FILL_X) {
         reaktor_list(&(reaktor_list_spec){
             .name = "To do", .count = g_lane_n[0], .cell = lane_cell, .user = (void *)0,
             .drag = "task", .dropped = lane_dropped, .columns = (const char *const[]){ "To do" },
@@ -339,7 +339,7 @@ page_display(App *app, struct reaktor_context *ctx, showcase_state *s)
             .drag = "task", .dropped = lane_dropped, .columns = (const char *const[]){ "Done" },
             .box = { .flags = REAKTOR_LAY_FILL } });
     }
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+    REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
         char undo[48], redo[48];
 
         SDL_snprintf(undo, sizeof undo, "Undo %s", reaktor_undo_label(app) ? reaktor_undo_label(app) : "");

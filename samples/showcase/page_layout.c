@@ -42,20 +42,20 @@ page_layout(App *app, struct reaktor_context *ctx, showcase_state *s)
     api(app, ctx, "REAKTOR_ROW  /  REAKTOR_COLUMN  /  .gap");
 
     {
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X)
                 reaktor_button(&(reaktor_button_spec){
                     .label = "one child, filling",
                     .box   = { .flags = REAKTOR_LAY_FILL_X } });
 
-            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+            REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x,
                         .flags = REAKTOR_LAY_FILL_X)
                 for (i = 0; i < 3; i++)
                     reaktor_button(&(reaktor_button_spec){
                         .label = "an equal share",
                         .box   = { .flags = REAKTOR_LAY_FILL_X } });
 
-            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+            REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x,
                         .flags = REAKTOR_LAY_FILL_X)
                 for (i = 0; i < 4; i++)
                     reaktor_button(&(reaktor_button_spec){
@@ -95,8 +95,8 @@ page_layout(App *app, struct reaktor_context *ctx, showcase_state *s)
         static const float share[3] = { 2.0f, 5.0f, 3.0f };
         static const char *const share_lab[3] = { "20%", "50%", "30%" };
 
-        REAKTOR_COLUMN(.gap = ctx->style.window.spacing.y) {
-            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+        REAKTOR_COLUMN(.gap = reaktor_item_spacing(ctx).y) {
+            REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x,
                         .flags = REAKTOR_LAY_FILL_X)
                 for (i = 0; i < 3; i++) {
                     char lab[16];
@@ -105,7 +105,7 @@ page_layout(App *app, struct reaktor_context *ctx, showcase_state *s)
                         .label = lab, .box = { .w = w[i] } });
                 }
 
-            REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x,
+            REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x,
                         .flags = REAKTOR_LAY_FILL_X)
                 for (i = 0; i < 3; i++)
                     reaktor_button(&(reaktor_button_spec){
@@ -149,7 +149,7 @@ page_layout(App *app, struct reaktor_context *ctx, showcase_state *s)
     api(app, ctx, ".w alone  /  .w with FILL_X  /  FILL_X alone");
 
     {
-        REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
+        REAKTOR_ROW(.h = ROW, .gap = reaktor_item_spacing(ctx).x) {
             reaktor_button(&(reaktor_button_spec){
                 .label = "fixed 80", .box = { .w = 80.0f } });
             reaktor_button(&(reaktor_button_spec){
