@@ -187,18 +187,26 @@ window_demos(App *app, struct reaktor_context *ctx)
 static void
 tray_demo(App *app, struct reaktor_context *ctx)
 {
+    static reaktor_bool hide;
     reaktor_bool on = (reaktor_bool)showcase_tray_on();
 
     section(app, ctx, "Tray",
             on ? "The window's icon in the system's tray, with a menu: show "
-                 "the window, send a toast, pick the theme, quit."
+                 "the window, send a toast, pick the theme, quit. Minimizing "
+                 "can hide the window there instead of in the taskbar."
                : "The window's icon in the system's tray, with a menu. It is "
                  "off here, or the system has no tray.");
-    api(app, ctx, "reaktor_tray_open  /  reaktor_tray_check  /  reaktor_tray_close");
+    api(app, ctx, "reaktor_tray_open  /  reaktor_tray_check  /  reaktor_tray_close"
+                  "  /  reaktor_tray_hide_on_minimize");
     REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X) {
         if (reaktor_check(&(reaktor_check_spec){ .label = "Icon in the tray",
                                                  .on = &on }))
             showcase_tray_show(app, on);
+    }
+    REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X) {
+        if (reaktor_check(&(reaktor_check_spec){
+                .label = "Minimize to the tray", .on = &hide }))
+            reaktor_tray_hide_on_minimize(app, hide);
     }
 }
 

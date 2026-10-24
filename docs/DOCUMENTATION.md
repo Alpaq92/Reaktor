@@ -582,6 +582,14 @@ before `.chosen` runs, so set checkboxes from your state with
 `reaktor_tray_check(app, index, on)` each frame. `reaktor_tray_close` removes
 the icon. There is one tray, of up to sixteen entries.
 
+`reaktor_tray_hide_on_minimize(app, 1)` makes minimizing the main window hide
+it while the icon is there, so it leaves the taskbar; `reaktor_set_visible(app,
+1)` brings it back, unminimized. Closing the tray leaves a hidden window
+hidden, so show it first. SDL's tray has no click of its own, so a Show entry
+in the menu is the way back. Wayland tells a window nothing when it is minimized, so
+there it stays in the taskbar. To close to the tray instead, have `closing`
+hide the window and refuse `REAKTOR_QUIT_WINDOW`.
+
 ```c
 static const reaktor_tray_item items[] = {
     { .label = "Show", .chosen = show },
@@ -1174,7 +1182,8 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
   `reaktor_setting` answers `NULL`, saving and clearing do nothing, and
   `.remember_window` is ignored.
 - **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, so AppIndicator
-  and GTK 3 are never loaded on Linux and the BSDs.
+  and GTK 3 are never loaded on Linux and the BSDs, and minimizing never
+  hides the window.
 - **`REAKTOR_PRINT=OFF`** leaves the print module out; `reaktor_print` and
   `reaktor_print_pdf` answer 0.
 - **`REAKTOR_INSPECTOR=OFF`** answers 0 from `reaktor_inspector_open` and

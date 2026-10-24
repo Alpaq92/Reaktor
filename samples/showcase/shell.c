@@ -592,8 +592,7 @@ static void
 tray_show(App *app, int checked, void *user)
 {
     (void)checked; (void)user;
-    SDL_RestoreWindow(reaktor_sdl_window(app));
-    SDL_RaiseWindow(reaktor_sdl_window(app));
+    reaktor_set_visible(app, 1);
 }
 
 static void
