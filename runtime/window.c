@@ -143,6 +143,7 @@ reaktor_window_spawn(const reaktor_window *spec, const struct nk_rect *popup)
 #else
     App  *m = reaktor_main_app(), *a;
     rwin *w;
+    float k;
     int   i;
 
     if (!m || !spec || !spec->page || g_win_n == WINDOW_MAX) return 0;
@@ -150,21 +151,21 @@ reaktor_window_spawn(const reaktor_window *spec, const struct nk_rect *popup)
     a->secondary      = 1;
     a->hot_last       = -1;
     a->queue.moved_ok = 1;
+    k = to_points(m);
     if (popup) {
-        float k = to_points(m);
-
         a->win = SDL_CreatePopupWindow(m->win, (int)(popup->x * k), (int)(popup->y * k),
                                        (int)(popup->w * k + 0.5f), (int)(popup->h * k + 0.5f),
                                        SDL_WINDOW_POPUP_MENU | SDL_WINDOW_NOT_FOCUSABLE |
                                        SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
-    } else
-    a->win = SDL_CreateWindow(spec->window.title ? spec->window.title : "",
-                              reaktor_px(spec->window.w > 0 ? (float)spec->window.w : 420.0f),
-                              reaktor_px(spec->window.h > 0 ? (float)spec->window.h : 280.0f),
-                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
-                              SDL_WINDOW_HIDDEN |
-                              (spec->window.borderless ? SDL_WINDOW_BORDERLESS : 0) |
-                              (spec->window.skip_taskbar ? SDL_WINDOW_UTILITY : 0));
+    } else {
+        a->win = SDL_CreateWindow(spec->window.title ? spec->window.title : "",
+                                  (int)((spec->window.w > 0 ? (float)spec->window.w : 420.0f) * k + 0.5f),
+                                  (int)((spec->window.h > 0 ? (float)spec->window.h : 280.0f) * k + 0.5f),
+                                  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
+                                  SDL_WINDOW_HIDDEN |
+                                  (spec->window.borderless ? SDL_WINDOW_BORDERLESS : 0) |
+                                  (spec->window.skip_taskbar ? SDL_WINDOW_UTILITY : 0));
+    }
     if (a->win && spec->window.centered) {
         SDL_DisplayID d = SDL_GetDisplayForWindow(m->win);
 
@@ -172,8 +173,8 @@ reaktor_window_spawn(const reaktor_window *spec, const struct nk_rect *popup)
                               SDL_WINDOWPOS_CENTERED_DISPLAY(d));
     }
     if (a->win && (spec->window.min_w > 0 || spec->window.min_h > 0))
-        SDL_SetWindowMinimumSize(a->win, reaktor_px((float)spec->window.min_w),
-                                 reaktor_px((float)spec->window.min_h));
+        SDL_SetWindowMinimumSize(a->win, (int)((float)spec->window.min_w * k + 0.5f),
+                                 (int)((float)spec->window.min_h * k + 0.5f));
     if (a->win && spec->window.borderless && spec->window.hit_test)
         SDL_SetWindowHitTest(a->win, spec->window.hit_test, a);
     if (a->win && spec->modal) {

@@ -117,6 +117,7 @@ reaktor_a11y_add(reaktor_a11y *a, unsigned char role, const char *name,
 
     if (id == a->focus_id) state |= REAKTOR_A11Y_FOCUSED;
 
+    if ((sl = probe(a->index, a->index_gen, id, 1))) sl->val = a->count[f] + 1;
     n = &a->node[f][a->count[f]++];
     n->id     = id;
     n->parent = parent;
@@ -134,12 +135,11 @@ reaktor_a11y_add(reaktor_a11y *a, unsigned char role, const char *name,
 static reaktor_a11y_node *
 node_of(reaktor_a11y *a, unsigned id)
 {
-    int f = a->front, i;
+    int i;
 
     if (!a->building || !id) return NULL;
-    for (i = a->count[f] - 1; i >= 0; i--)
-        if (a->node[f][i].id == id) return &a->node[f][i];
-    return NULL;
+    i = slot_get(a->index, a->index_gen, id) - 1;
+    return i >= 0 ? &a->node[a->front][i] : NULL;
 }
 
 static const char *
@@ -199,6 +199,7 @@ reaktor_a11y_begin(reaktor_a11y *a, const char *window_name,
     a->change_count = 0;
     a->building    = 1;
     a->bucket_gen++;
+    a->index_gen++;
     if (a->pool_gen == 0) a->pool_gen = 1;
 
     if (a->pool_used > REAKTOR_A11Y_POOL - REAKTOR_A11Y_POOL / 4 ||
@@ -251,10 +252,6 @@ reaktor_a11y_end(reaktor_a11y *a)
     if (!a->building) return 0;
     a->building = 0;
     a->depth    = 0;
-
-    a->index_gen++;
-    for (i = 0; i < ncur; i++)
-        if ((sl = probe(a->index, a->index_gen, cur[i].id, 1))) sl->val = i + 1;
 
     for (i = 1; i < ncur; i++) {
         struct nk_rect b = cur[i].bounds;

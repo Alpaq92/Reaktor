@@ -529,7 +529,10 @@ popup, toasts are drawn but take no input.
 ### Windows
 
 `reaktor_window_open` opens a real window with its own renderer, atlas and
-Nuklear context, and answers its id, or 0 on the web. `.page` draws it with
+Nuklear context, and answers its id, or 0 on the web. The first such window
+bakes its atlas and keeps the image, and every later one uploads that copy
+instead of baking, so the image stays in memory once a second window, or a
+menu in a window of its own, has opened. `.page` draws it with
 that window's App, so the same widgets and sheets work, and it follows the
 main window's theme and scale. It takes its input the way the main window
 does: focus navigation, the `key` hook and dropped files with its App, one
@@ -702,7 +705,9 @@ reach the sheets as `@media (prefers-reduced-motion: reduce)` and
 `(prefers-contrast: more)`; reaktor.css answers more contrast by drawing muted
 text, placeholders and borders in `--text-bright`. Under reduced motion every
 `reaktor_animate` returns its end value at once. Both are read again when the
-system theme changes and when the window regains focus.
+system theme changes and when the window regains focus. The portal is asked
+for all four settings in one call, and a desktop without one is not asked
+again.
 
 **Live reload.** With `--watch-css` the runtime looks at every sheet it read
 from disk, `@import`s included, twice a second, and restyles when one is

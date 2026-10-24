@@ -243,6 +243,7 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
                      int n, const nk_rune *ranges)
 {
     nk_rune       *cp;
+    FT_Face        face = NULL;
     baked         *b = NULL;
     unsigned char *bits = NULL;
     int            ncp = 0, nb = 0, cap_b = 0, cap_bits = 0, used = 0, i, k, ok = 0;
@@ -255,9 +256,12 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
     set->count = n;
     for (i = 0; i < n; i++) {
         struct reaktor_font *f = &set->fonts[i];
-        FT_Face              face = reaktor_ft_open(src[i].ttf, src[i].size);
         float                scale;
 
+        if (!i || src[i].ttf != src[i - 1].ttf) {
+            if (face) FT_Done_Face(face);
+            face = reaktor_ft_open(src[i].ttf, src[i].size);
+        }
         f->glyphs = set->glyphs + nb;
         f->height = src[i].px;
         if (!face) continue;
@@ -278,10 +282,8 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
                 continue;
             bm = &face->glyph->bitmap;
             if (!reaktor_grow((void **)&b, &cap_b, nb + 1, sizeof *b) ||
-                !reaktor_grow((void **)&bits, &cap_bits, used + (int)(bm->width * bm->rows), 1)) {
-                FT_Done_Face(face);
+                !reaktor_grow((void **)&bits, &cap_bits, used + (int)(bm->width * bm->rows), 1))
                 goto done;
-            }
             d       = &b[nb];
             d->w    = (int)bm->width;
             d->h    = (int)bm->rows;
@@ -302,7 +304,6 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
             g->y1        = g->y0 + (float)d->h;
             f->glyph_count++;
         }
-        FT_Done_Face(face);
         f->fallback = reaktor_font_glyph(f, '?');
         if (!f->fallback && f->glyph_count) f->fallback = &f->glyphs[0];
     }
@@ -324,11 +325,39 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
     }
     ok = 1;
 done:
+    if (face) FT_Done_Face(face);
     SDL_free(cp);
     SDL_free(b);
     SDL_free(bits);
     if (!ok) reaktor_fontset_free(set);
     return ok;
+}
+
+int
+reaktor_fontset_copy(struct reaktor_fontset *to, const struct reaktor_fontset *from)
+{
+    int glyphs = 0, i;
+
+    SDL_zerop(to);
+    for (i = 0; i < from->count; i++) glyphs += from->fonts[i].glyph_count;
+    if (!(to->fonts = SDL_malloc((size_t)(from->count ? from->count : 1) * sizeof *to->fonts)) ||
+        !(to->glyphs = SDL_malloc((size_t)(glyphs ? glyphs : 1) * sizeof *to->glyphs))) {
+        reaktor_fontset_free(to);
+        return 0;
+    }
+    SDL_memcpy(to->fonts, from->fonts, (size_t)from->count * sizeof *to->fonts);
+    SDL_memcpy(to->glyphs, from->glyphs, (size_t)glyphs * sizeof *to->glyphs);
+    for (i = 0; i < from->count; i++) {
+        struct reaktor_font       *f = &to->fonts[i];
+        const struct reaktor_font *s = &from->fonts[i];
+
+        f->glyphs = to->glyphs + (s->glyphs - from->glyphs);
+        if (s->fallback) f->fallback = to->glyphs + (s->fallback - from->glyphs);
+    }
+    to->count = from->count;
+    to->w     = from->w;
+    to->h     = from->h;
+    return 1;
 }
 
 void
