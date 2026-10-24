@@ -271,17 +271,28 @@ reaktor_css_button_look(App *app, struct nk_context *ctx,
 }
 
 static float
+linear(unsigned char c)
+{
+    static float table[256];
+    static int   filled;
+
+    if (!filled) {
+        int i;
+
+        for (i = 0; i < 256; i++) {
+            float v = i / 255.0f;
+            table[i] = v <= 0.04045f ? v / 12.92f
+                                     : powf((v + 0.055f) / 1.055f, 2.4f);
+        }
+        filled = 1;
+    }
+    return table[c];
+}
+
+static float
 luminance(const unsigned char c[4])
 {
-    float ch[3];
-    int i;
-
-    for (i = 0; i < 3; i++) {
-        float v = c[i] / 255.0f;
-        ch[i] = v <= 0.04045f ? v / 12.92f
-                              : powf((v + 0.055f) / 1.055f, 2.4f);
-    }
-    return 0.2126f * ch[0] + 0.7152f * ch[1] + 0.0722f * ch[2];
+    return 0.2126f * linear(c[0]) + 0.7152f * linear(c[1]) + 0.0722f * linear(c[2]);
 }
 
 static float

@@ -32,12 +32,11 @@ unsigned *
 reaktor_locale_glyphs(void)
 {
     unsigned *cp, *out;
-    int       n = reaktor_locale_codepoints(NULL, 0), i, at = 0;
+    int       n = 0, i, at = 0;
 
-    if (n <= 0 || !(cp = SDL_malloc((size_t)n * sizeof *cp))) return NULL;
+    if (!(cp = reaktor_locale_codepoints(&n))) return NULL;
     out = SDL_malloc(((size_t)n * 2 + 3) * sizeof *out);
     if (out) {
-        reaktor_locale_codepoints(cp, n);
         out[at++] = 0x0020;
         out[at++] = 0x00FF;
         for (i = 0; i < n; i++) {

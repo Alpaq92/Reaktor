@@ -612,12 +612,14 @@ nbsp_as_space(struct reaktor_font *f)
 }
 
 static void
-finish_face(struct reaktor_font *f, float height, const char *path)
+finish_face(struct reaktor_font *f, float height, const char *path, int fresh)
 {
     if (!f) return;
     f->handle.height = height;
-    center_glyphs_optically(f);
-    nbsp_as_space(f);
+    if (fresh) {
+        center_glyphs_optically(f);
+        nbsp_as_space(f);
+    }
     /* After centering: the Text module reads the baseline. */
     reaktor_text_attach_font(f, path);
 }
@@ -677,18 +679,36 @@ load_face(const char **name, const char *stand_in, size_t *size)
     return take_face(*name, size);
 }
 
+/* The atlas image, kept from the first window after the main one, so later
+   windows upload it instead of baking their own. */
+static struct {
+    struct reaktor_fontset set;
+    const char            *face, *bold;
+} g_kept;
+
 void
-rebuild_font(App *app)
+atlas_forget(void)
+{
+    reaktor_fontset_free(&g_kept.set);
+    SDL_zero(g_kept);
+}
+
+static int
+keeps(const App *app)
+{
+    return g_kept.set.pixels && app->font_face == g_kept.face && app->font_face_bold == g_kept.bold;
+}
+
+static int
+bake(App *app, struct reaktor_fontset *set, int *bold)
 {
     static const nk_rune latin[] = { 0x0020, 0x00FF, 0 };
     struct reaktor_face_src src[2 * FONT_STEPS];
-    struct reaktor_fontset  set;
-    struct reaktor_font    *font = NULL;
     size_t size = 0, bsize = 0;
     char *ttf, *bttf = NULL;
     unsigned *ranges;
     Uint64 t0;
-    int n = 0, bold, ok, i;
+    int n = 0, ok, i;
 
     ttf = load_face(&app->font_face, FONT_FILE, &size);
     if (ttf) bttf = load_face(&app->font_face_bold, FONT_BOLD_FILE, &bsize);
@@ -702,10 +722,10 @@ rebuild_font(App *app)
         src[n].size = bsize;
         src[n++].px = (float)reaktor_px(g_font_px[i]);
     }
-    bold   = bttf != NULL;
+    *bold  = bttf != NULL;
     ranges = reaktor_locale_glyphs();
     t0     = SDL_GetPerformanceCounter();
-    ok     = n > 0 && reaktor_fontset_bake(&set, src, n, ranges ? ranges : latin);
+    ok     = n > 0 && reaktor_fontset_bake(set, src, n, ranges ? ranges : latin);
     app->atlas_ms_x100 = (int)(100000.0 * (double)(SDL_GetPerformanceCounter() - t0) /
                                (double)SDL_GetPerformanceFrequency());
     SDL_free(ranges);
@@ -716,14 +736,30 @@ rebuild_font(App *app)
         if (!app->fonts.count)
             SDL_snprintf(app->font_status, sizeof(app->font_status),
                          "FALLBACK - could not load %s", app->font_face);
-        return;
     }
+    return ok;
+}
 
-    if (!app->secondary) reaktor_text_attach_font(NULL, NULL);
+void
+rebuild_font(App *app)
+{
+    struct reaktor_fontset set;
+    struct reaktor_font   *font = NULL;
+    unsigned char         *pixels;
+    int bold, shared, i;
+
+    shared = app->secondary && keeps(app) && reaktor_fontset_copy(&set, &g_kept.set);
+    if (shared) bold = set.count > FONT_STEPS;
+    else if (!bake(app, &set, &bold)) return;
+
+    if (!app->secondary) {
+        reaktor_text_attach_font(NULL, NULL);
+        atlas_forget();
+    }
     reaktor_fontset_free(&app->fonts);
     app->fonts = set;
-    reaktor_fontset_bind(&app->fonts, nk_sdl_font_upload(app->ctx, set.pixels, set.w, set.h));
-    SDL_free(app->fonts.pixels);
+    pixels = shared ? g_kept.set.pixels : set.pixels;
+    reaktor_fontset_bind(&app->fonts, nk_sdl_font_upload(app->ctx, pixels, set.w, set.h));
     app->fonts.pixels = NULL;
     for (i = 0; i < FONT_STEPS; i++) {
         app->faces[i] = &app->fonts.fonts[i];
@@ -738,9 +774,17 @@ rebuild_font(App *app)
 
     for (i = 0; i < FONT_STEPS; i++) {
         finish_face(app->faces[i], (float)g_font_px[i],
-                    app->secondary ? NULL : app->font_face);
+                    app->secondary ? NULL : app->font_face, !shared);
         finish_face(app->bolds[i], (float)g_font_px[i],
-                    app->secondary ? NULL : app->font_face_bold);
+                    app->secondary ? NULL : app->font_face_bold, !shared);
+    }
+    if (app->secondary && !shared && !g_kept.set.pixels &&
+        reaktor_fontset_copy(&g_kept.set, &app->fonts)) {
+        g_kept.set.pixels = pixels;
+        g_kept.face       = app->font_face;
+        g_kept.bold       = app->font_face_bold;
+    } else if (!shared) {
+        SDL_free(pixels);
     }
 
     app->atlas_w = app->atlas_h = app->atlas_bpp = 0;

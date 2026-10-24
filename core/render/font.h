@@ -44,6 +44,7 @@ void       reaktor_ft_size(FT_Face face, float px);
 
 int  reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src *src,
                           int n, const nk_rune *ranges);
+int  reaktor_fontset_copy(struct reaktor_fontset *to, const struct reaktor_fontset *from);
 void reaktor_fontset_bind(struct reaktor_fontset *set, nk_handle texture);
 void reaktor_fontset_free(struct reaktor_fontset *set);
 

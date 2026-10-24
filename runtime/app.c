@@ -366,9 +366,12 @@ theme_sheet(int dark)
 static int
 read_prefs(void)
 {
-    int r = g_motion_flag ? g_motion_flag > 0 : reaktor_prefers_reduced_motion();
-    int c = g_contrast_flag ? g_contrast_flag > 0 : reaktor_prefers_contrast();
-    int changed = r != g_reduced || c != g_contrast;
+    int r = 0, c = 0, changed;
+
+    if (!g_motion_flag || !g_contrast_flag) reaktor_prefers(&r, &c);
+    if (g_motion_flag) r = g_motion_flag > 0;
+    if (g_contrast_flag) c = g_contrast_flag > 0;
+    changed = r != g_reduced || c != g_contrast;
 
     g_reduced = r;
     g_contrast = c;
@@ -819,11 +822,12 @@ app_init(void **appstate, int argc, char *argv[])
 #endif
 
     {
-        float pre = reaktor_dpi_query_scale(NULL);
-        int win_w = (int)((g_launch.window.w > 0 ? g_launch.window.w : WINDOW_WIDTH)
-                          * pre + 0.5f);
-        int win_h = (int)((g_launch.window.h > 0 ? g_launch.window.h : WINDOW_HEIGHT)
-                          * pre + 0.5f);
+        float pre = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+        int win_w, win_h;
+
+        if (pre <= 0.0f) pre = 1.0f;
+        win_w = (int)((g_launch.window.w > 0 ? g_launch.window.w : WINDOW_WIDTH) * pre + 0.5f);
+        win_h = (int)((g_launch.window.h > 0 ? g_launch.window.h : WINDOW_HEIGHT) * pre + 0.5f);
 
 #ifdef __EMSCRIPTEN__
         web_page_size(&win_w, &win_h);
@@ -1739,6 +1743,7 @@ app_quit(void *appstate, SDL_AppResult result)
     if (app->ren) img_cache_free(app);
     if (app->ctx) nk_sdl_shutdown(app->ctx);
     reaktor_fontset_free(&app->fonts);
+    atlas_forget();
     if (app->ren) SDL_DestroyRenderer(app->ren);
     if (app->win) SDL_DestroyWindow(app->win);
     reaktor_anim_destroy(app->anim);

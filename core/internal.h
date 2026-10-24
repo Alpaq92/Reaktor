@@ -275,6 +275,7 @@ struct nk_image icon_ink(App *app, const char *src, int px, float *left, float *
 const struct nk_user_font *pick_font(App *app, int px, int bold);
 const struct nk_user_font *base_font(App *app);
 void rebuild_font(App *app);
+void atlas_forget(void);
 void apply_render_scale(App *app);
 void reaktor_set_window_icon(SDL_Window *win, const char *name);
 

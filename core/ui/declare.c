@@ -282,17 +282,21 @@ decl_place(unsigned char role, const char *name, const char *value, unsigned sta
     return 0;
 }
 
+static const struct nk_user_font *
+style_font(const reaktor_style *st)
+{
+    return st->matched && st->font_px > 0 ? pick_font(g_frame_app, st->font_px, st->bold)
+                                         : g_frame_ctx->style.font;
+}
+
 const struct nk_user_font *
 decl_style_font(const char *selector)
 {
     reaktor_style st;
 
-    if (selector) {
-        reaktor_style_get(selector, &st);
-        if (st.matched && st.font_px > 0)
-            return pick_font(g_frame_app, st.font_px, st.bold);
-    }
-    return g_frame_ctx->style.font;
+    if (!selector) return g_frame_ctx->style.font;
+    reaktor_style_get(selector, &st);
+    return style_font(&st);
 }
 
 void
@@ -342,23 +346,22 @@ void
 decl_box_from_style(reaktor_box *box, const char *text, const char *selector,
                     const char *element, float pad_x, float pad_y)
 {
-    const char                *sel = element ? element : selector;
     const struct nk_user_font *f;
     reaktor_style              st;
     float                      extra_w, extra_h;
 
     memset(&st, 0, sizeof(st));
     if (element) reaktor_style_get(element, &st);
+    f = style_font(&st);
     if (selector) {
         reaktor_style narrow;
 
         reaktor_style_get(selector, &narrow);
         if (narrow.matched) {
-            sel = selector;
+            f = style_font(&narrow);
             overlay(&st, &narrow);
         }
     }
-    f = decl_style_font(sel);
 
     if (st.matched) {
         extra_w = st.pad[REAKTOR_SIDE_LEFT] + st.pad[REAKTOR_SIDE_RIGHT]

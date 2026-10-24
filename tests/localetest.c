@@ -142,7 +142,7 @@ static void
 catalogs(void)
 {
     char     buf[64];
-    unsigned cps[64];
+    unsigned *cps;
     int      i, n, sorted = 1, dup = 0, has_s = 0, has_ko = 0, has_ni = 0,
              has_o = 0;
 
@@ -203,10 +203,9 @@ catalogs(void)
               reaktor_trn("files", 5, buf, sizeof buf),
               "%d \xE5\x80\x8B\xE3\x81\xAE\xE3\x83\x95\xE3\x82\xA1\xE3\x82\xA4\xE3\x83\xAB");
 
-    n = reaktor_locale_codepoints(NULL, 0);
-    check("codepoints counted without a buffer",
-          reaktor_locale_codepoints(cps, (int)(sizeof cps / sizeof cps[0])), n);
-    for (i = 0; i < n && i < 64; i++) {
+    cps = reaktor_locale_codepoints(&n);
+    check("codepoints found", cps != NULL && n > 0, 1);
+    for (i = 0; cps && i < n; i++) {
         if (i && cps[i] <= cps[i - 1]) { sorted = 0; dup += cps[i] == cps[i - 1]; }
         has_s  |= cps[i] == 0x015B;
         has_ko |= cps[i] == 0x3053;
@@ -219,6 +218,7 @@ catalogs(void)
     check("codepoints include hiragana ko", has_ko, 1);
     check("codepoints include the kanji in the language name", has_ni, 1);
     check("codepoints leave out Latin-1", has_o, 0);
+    SDL_free(cps);
 
     g_system_code = "pl";
     check("NULL follows the system", reaktor_locale_set(NULL), 1);

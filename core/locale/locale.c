@@ -295,7 +295,7 @@ scan(const char *text, unsigned **set, int *n, int *cap)
         if (cp <= 0xFF || cp == SDL_INVALID_UNICODE_CODEPOINT) continue;
         if (*n == *cap) {
             int       grow = *cap ? *cap * 2 : 256;
-            unsigned *more = realloc(*set, (size_t)grow * sizeof **set);
+            unsigned *more = SDL_realloc(*set, (size_t)grow * sizeof **set);
 
             if (!more) return;
             *set = more;
@@ -305,8 +305,8 @@ scan(const char *text, unsigned **set, int *n, int *cap)
     }
 }
 
-int
-reaktor_locale_codepoints(unsigned *out, int cap)
+unsigned *
+reaktor_locale_codepoints(int *count)
 {
     unsigned *set = NULL;
     int       n = 0, room = 0, unique = 0, i, j;
@@ -318,11 +318,12 @@ reaktor_locale_codepoints(unsigned *out, int cap)
         }
 
     if (n) qsort(set, (size_t)n, sizeof *set, by_codepoint);
-    for (i = 0; i < n; i++) {
-        if (unique && set[i] == set[i - 1]) continue;
-        if (out && unique < cap) out[unique] = set[i];
-        unique++;
+    for (i = 0; i < n; i++)
+        if (!unique || set[i] != set[unique - 1]) set[unique++] = set[i];
+    *count = unique;
+    if (!unique) {
+        SDL_free(set);
+        return NULL;
     }
-    free(set);
-    return unique;
+    return set;
 }
