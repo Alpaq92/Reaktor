@@ -237,6 +237,12 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
 
     add_executable(imagetest tests/imagetest.c)
     target_link_libraries(imagetest PRIVATE plutovg)
+
+    if(MSVC)
+        foreach(_t keytest a11ytest animtest localetest laytest csstest basetest imagetest)
+            target_compile_options(${_t} PRIVATE /we4013)
+        endforeach()
+    endif()
 endif()
 
 if(WIN32 AND NOT EMSCRIPTEN)
