@@ -30,14 +30,12 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                     .buf = s->digits, .len = &s->digits_len,
                     .cap = SC_TEXT_CAP, .hint = "Digits only",
                     .filter = reaktor_filter_decimal,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
                 reaktor_field(&(reaktor_field_spec){
                     .buf = s->hex, .len = &s->hex_len,
                     .cap = SC_TEXT_CAP, .hint = "Hex only",
                     .filter = reaktor_filter_hex,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
             }
         }
     }
@@ -50,8 +48,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                 .buf = s->note, .len = &s->note_len, .cap = SC_BOX_CAP,
                 .name = "Notes", .multiline = 1, .line_numbers = 1,
                 .filter = reaktor_filter_default,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL } });
         }
     }
 
@@ -75,36 +72,30 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                 reaktor_slider(&(reaktor_slider_spec){
                     .name = "Float", .value = &s->slider_f,
                     .lo = 0.0f, .hi = 1.0f, .step = 0.01f,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
                 reaktor_label(&(reaktor_label_spec){
                     .text = fv,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
                 reaktor_slider(&(reaktor_slider_spec){
                     .name = "Integer", .ivalue = &s->slider_i,
                     .lo = 0.0f, .hi = 100.0f, .step = 1.0f,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
                 reaktor_label(&(reaktor_label_spec){
                     .text = iv,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = ROW, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
                 reaktor_progress(&(reaktor_progress_spec){
                     .name = "Progress", .value = &s->progress, .max = 100,
                     .modifiable = 1,
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
                 reaktor_label(&(reaktor_label_spec){
                     .text = "modifiable - drag it",
-                    .box = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
             }
             REAKTOR_ROW(.h = 62.0f, .flags = REAKTOR_LAY_FILL_X,
                         .gap = ctx->style.window.spacing.x) {
@@ -128,18 +119,15 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
             reaktor_property(&(reaktor_property_spec){
                 .label = "Columns:", .ivalue = &s->prop_i,
                 .lo = 1, .hi = 24, .step = 1, .grain = 0.25f,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL } });
             reaktor_property(&(reaktor_property_spec){
                 .label = "Stroke:", .fvalue = &s->prop_f,
                 .lo = 0.25, .hi = 8.0, .step = 0.05, .grain = 0.01f,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL } });
             reaktor_property(&(reaktor_property_spec){
                 .label = "Ratio:", .dvalue = &s->prop_d,
                 .lo = 0.0, .hi = 100.0, .step = 0.25, .grain = 0.05f,
-                .box = { .flags = REAKTOR_LAY_FILL_X |
-                                  REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL } });
         }
         REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
             static const char *const quality[] = { "Low", "Medium", "High", "Best" };
@@ -149,11 +137,11 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
 
             reaktor_spinner(&(reaktor_spinner_spec){
                 .label = "Quality:", .items = quality, .count = 4, .chosen = &s->spin_q,
-                .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL } });
             reaktor_spinner(&(reaktor_spinner_spec){
                 .label = "Day:", .items = days, .count = 7, .chosen = &s->spin_d,
                 .wrap = 1,
-                .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+                .box = { .flags = REAKTOR_LAY_FILL } });
         }
     }
 
@@ -168,13 +156,13 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
     REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
         reaktor_date_pick(&(reaktor_date_spec){
             .name = "Date", .year = &s->date_y, .month = &s->date_m, .day = &s->date_d,
-            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+            .box = { .flags = REAKTOR_LAY_FILL } });
         reaktor_time_pick(&(reaktor_time_spec){
             .name = "Time", .hour = &s->time_h, .minute = &s->time_m,
-            .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+            .box = { .flags = REAKTOR_LAY_FILL } });
         reaktor_time_pick(&(reaktor_time_spec){
             .name = "Time, 12-hour", .hour = &s->time12_h, .minute = &s->time12_m,
-            .clock12 = 1, .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+            .clock12 = 1, .box = { .flags = REAKTOR_LAY_FILL } });
     }
 
     section(app, ctx, "Combo boxes",
@@ -193,8 +181,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                         .flags = REAKTOR_LAY_FILL_X) {
                 REAKTOR_COMBO(.label = sizes[s->combo_size], .name = "Size",
                               .body_h = 130.0f,
-                              .box = { .flags = REAKTOR_LAY_FILL_X |
-                                                REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL }) {
                     reaktor_layout_row_dynamic(ctx, 26.0f, 1);
                     for (i = 0; i < 3; i++)
                         if (reaktor_combo_item(sizes[i], i == s->combo_size))
@@ -203,8 +190,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                 REAKTOR_COMBO(.label = sizes[s->combo_symbol],
                               .name = "Size, with a symbol",
                               .body_h = 130.0f, .disc = 1,
-                              .box = { .flags = REAKTOR_LAY_FILL_X |
-                                                REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL }) {
                     reaktor_layout_row_dynamic(ctx, 26.0f, 1);
                     for (i = 0; i < 3; i++)
                         if (reaktor_combo_item(sizes[i], i == s->combo_symbol))
@@ -217,8 +203,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
 
                 REAKTOR_COMBO(.name = "Tint", .body_h = 150.0f,
                               .swatch = &tint,
-                              .box = { .flags = REAKTOR_LAY_FILL_X |
-                                                REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL }) {
                     reaktor_layout_row_dynamic(ctx, 26.0f, 1);
                     reaktor_hot_follow(app, reaktor_widget_bounds(ctx), 0);
                     reaktor_property_float(ctx, "R:", 0.0f, &s->tint.r, 1.0f,
@@ -232,8 +217,7 @@ page_inputs(App *app, struct reaktor_context *ctx, showcase_state *s)
                 }
                 REAKTOR_COMBO(.label = "Anything at all",
                               .name = "Anything at all", .body_h = 130.0f,
-                              .box = { .flags = REAKTOR_LAY_FILL_X |
-                                                REAKTOR_LAY_FILL_Y }) {
+                              .box = { .flags = REAKTOR_LAY_FILL }) {
                     reaktor_layout_row_dynamic(ctx, 26.0f, 1);
                     reaktor_text_label(ctx, "A combo is just a popup",
                                        REAKTOR_TEXT_LEFT);

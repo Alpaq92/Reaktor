@@ -133,8 +133,8 @@ to_points(const App *m)
     return reaktor_scale() / (d > 0.0f ? d : 1.0f);
 }
 
-static int
-open_window(const reaktor_window *spec, const struct nk_rect *popup)
+int
+reaktor_window_spawn(const reaktor_window *spec, const struct nk_rect *popup)
 {
 #ifdef __EMSCRIPTEN__
     (void)spec; (void)popup;
@@ -190,7 +190,6 @@ open_window(const reaktor_window *spec, const struct nk_rect *popup)
     a->win_id = SDL_GetWindowID(a->win);
     SDL_SetRenderVSync(a->ren, 1);
     a->renderer_is_sw = SDL_strcmp(SDL_GetRendererName(a->ren), "software") == 0;
-    a->sw_noaa        = m->sw_noaa;
     a->aa_mode        = m->aa_mode;
     a->font_face      = m->font_face;
     a->font_face_bold = m->font_face_bold;
@@ -231,13 +230,7 @@ int
 reaktor_window_open(App *app, const reaktor_window *spec)
 {
     (void)app;
-    return open_window(spec, NULL);
-}
-
-int
-reaktor_window_spawn(const reaktor_window *spec, const struct nk_rect *popup)
-{
-    return open_window(spec, popup);
+    return reaktor_window_spawn(spec, NULL);
 }
 
 void

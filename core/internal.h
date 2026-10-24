@@ -132,7 +132,7 @@ struct App {
     char        tip_text[256];
 
     char render_mode[32];
-    int  vsync_on, aa_mode, redraw_always;
+    int  vsync_on, aa_mode;
 
     char frame_rate[16];
     char drag_rate[16];
@@ -218,7 +218,6 @@ struct App {
     Uint64 last_draw_ms;
     int    hover_pending;
     int    renderer_is_sw;
-    int    sw_noaa;
     int    drag_moved;
     int    cal_frames, cal_done;
     double cal_cpu0;
@@ -448,8 +447,6 @@ typedef struct reaktor_button_look {
 void reaktor_button_look_of(const char *selector, reaktor_button_look *k);
 int  reaktor_css_button_look(App *app, struct nk_context *ctx,
                              const reaktor_button_look *k, const char *label);
-int  reaktor_button_label_as(App *app, struct nk_context *ctx,
-                             const char *sel, const char *label);
 int  reaktor_button_accent_as(App *app, struct nk_context *ctx, const char *sel,
                               const char *ionicon, const char *label);
 int  reaktor_css_button_custom(App *app, struct nk_context *ctx, const char *sel,
@@ -497,8 +494,7 @@ void reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h,
 
 int reaktor_link_label(App *app, struct nk_context *ctx, const char *label,
                        int active);
-int reaktor_css_button_color(App *app, struct nk_context *ctx, const char *name,
-                         struct nk_color fill);
+int reaktor_css_button_color(App *app, struct nk_context *ctx, struct nk_color fill);
 
 void field_undo_clear(App *app);
 

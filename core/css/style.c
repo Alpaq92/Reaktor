@@ -1,14 +1,6 @@
 #include "style.h"
-#include "cssflat.h"
+#include "css.h"
 
-#include <css.h>
-#include <css/parser.h>
-#include <css/library.h>
-#include <css/selector.h>
-#include <css/computed.h>
-#include <css/style_decl.h>
-
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,23 +13,11 @@ typedef struct cache_entry {
 } cache_entry;
 
 static struct {
-    int            ready;
+    reaktor_sheet *sheet;
     cache_entry   *cache;
     unsigned       cache_cap, cache_n;
-    css_metrics_t  metrics;
-    reaktor_cssvars *vars;
-    css_computed_style_t root;
-    int            root_ready;
     unsigned       generation;
 } g;
-
-static void rgba_of(css_color_value_t c, unsigned char out[4])
-{
-    out[0] = (unsigned char)((c >> 16) & 0xff);
-    out[1] = (unsigned char)((c >> 8) & 0xff);
-    out[2] = (unsigned char)(c & 0xff);
-    out[3] = (unsigned char)((c >> 24) & 0xff);
-}
 
 static void cache_clear(int release)
 {
@@ -53,11 +33,6 @@ static void cache_clear(int release)
         g.cache     = NULL;
         g.cache_cap = 0;
     }
-}
-
-static unsigned hash_of(const char *s)
-{
-    return reaktor_fnv(REAKTOR_FNV, s);
 }
 
 static cache_entry *cache_slot(const char *selector, unsigned h)
@@ -84,110 +59,28 @@ static void cache_grow(void)
     free(old);
 }
 
-static void base_reset(void)
-{
-    if (g.root_ready) css_computed_style_destroy(&g.root);
-    memset(&g.root, 0, sizeof(g.root));
-    g.root_ready = 0;
-}
-
-static int style_load(const char *const *css_paths, int count,
-                      const char *theme)
-{
-    char *flat;
-    css_parser_t *parser;
-
-    if (!g.ready) {
-        css_init();
-        g.metrics.dpi = 96.0f;
-        g.metrics.density = 1.0f;
-        g.metrics.scaled_density = 1.0f;
-        g.metrics.scale = 1.0f;
-        g.ready = 1;
-    } else {
-        css_destroy_library();
-        css_init_library();
-    }
-    cache_clear(0);
-    g.generation++;
-    base_reset();
-
-    reaktor_cssvars_free(g.vars);
-    g.vars = NULL;
-    /* The parser copies each token into a buffer this size without a bound. */
-    flat = reaktor_css_flatten(css_paths, count, theme, CSS_PARSER_BUFFER_SIZE - 1,
-                               &g.vars);
-    if (!flat) return 0;
-
-    parser = css_parser_create("reaktor");
-    if (!parser) { free(flat); return 0; }
-    {
-        const char *cur = flat;
-        size_t len = 1;
-        while (len > 0) {
-            len = css_parser_parse(parser, cur);
-            cur += len;
-        }
-    }
-    css_parser_destroy(parser);
-    free(flat);
-
-    /* One cascade: a second resets the first and leaks its font_family. */
-    base_reset();
-    {
-        static const css_computed_style_t none;
-        css_selector_t *bs = css_selector_create("body");
-
-        if (bs) {
-            css_style_decl_t *bd = css_select_style(bs);
-
-            css_selector_destroy(bs);
-            if (bd) {
-                css_cascade_style(bd, &g.root);
-                css_style_decl_destroy(bd);
-            }
-        }
-        css_compute_absolute_values(&none, &g.root, &g.metrics);
-    }
-    g.root_ready = 1;
-    return 1;
-}
-
-/* libcss reads numbers with sscanf, which takes the locale's decimal mark. */
 int reaktor_style_init(const char *const *css_paths, int count,
                        const char *theme)
 {
-    char *was = reaktor_c_locale_keep(1);
-    int ok;
+    reaktor_sheet *sheet = reaktor_sheet_load(css_paths, count, theme);
 
-    reaktor_c_locale_put(1, NULL);
-    ok = style_load(css_paths, count, theme);
-    reaktor_c_locale_put(1, was);
-    return ok;
+    cache_clear(0);
+    g.generation++;
+    reaktor_sheet_free(g.sheet);
+    g.sheet = sheet;
+    return sheet != NULL;
 }
 
 void reaktor_style_shutdown(void)
 {
-    if (!g.ready) return;
-    reaktor_cssvars_free(g.vars);
-    g.vars = NULL;
-    if (g.root_ready) {
-        css_computed_style_destroy(&g.root);
-        g.root_ready = 0;
-    }
-    css_destroy();
-    g.ready = 0;
     cache_clear(1);
+    reaktor_sheet_free(g.sheet);
+    g.sheet = NULL;
 }
 
 unsigned reaktor_style_loads(void)
 {
     return g.generation;
-}
-
-int reaktor_style_token(const char *name, unsigned char rgba[4])
-{
-    return reaktor_cssvars_color(g.vars, name, rgba);
 }
 
 void reaktor_style_darken(unsigned char rgba[4], float amount)
@@ -200,158 +93,46 @@ void reaktor_style_darken(unsigned char rgba[4], float amount)
         rgba[i] = (unsigned char)(rgba[i] * (1.0f - amount) + 0.5f);
 }
 
-static float px_of(css_numeric_value_t v, css_unit_t unit)
+/* Selectors and "--" tokens share the cache; a token keeps its color in bg. */
+static const reaktor_style *cached(const char *key)
 {
-    return unit == CSS_UNIT_PX ? v : 0.0f;
+    unsigned     h = reaktor_fnv(REAKTOR_FNV, key);
+    size_t       len;
+    cache_entry *e;
+
+    if (g.cache_cap && (e = cache_slot(key, h))->selector) return &e->style;
+    if (2 * (g.cache_n + 1) > g.cache_cap) cache_grow();
+    if (g.cache_n + 1 >= g.cache_cap) return NULL;
+    len = strlen(key) + 1;
+    e   = cache_slot(key, h);
+    if (!(e->selector = malloc(len))) return NULL;
+    memcpy(e->selector, key, len);
+    e->hash = h;
+    if (key[0] == '-' && key[1] == '-') {
+        memset(&e->style, 0, sizeof e->style);
+        e->style.matched = reaktor_sheet_color(g.sheet, key, e->style.bg);
+    } else {
+        reaktor_sheet_style(g.sheet, key, &e->style);
+    }
+    g.cache_n++;
+    return &e->style;
 }
 
-static void resolve(const char *selector, reaktor_style *out)
+int reaktor_style_token(const char *name, unsigned char rgba[4])
 {
-    css_selector_t *sel;
-    css_style_decl_t *decl;
-    css_computed_style_t computed;
+    const reaktor_style *c;
 
-    memset(out, 0, sizeof(*out));
-    out->opacity = 1.0f;
-    if (!g.ready || !selector) return;
-
-    sel = css_selector_create(selector);
-    if (!sel) return;
-
-    decl = css_select_style(sel);
-    css_selector_destroy(sel);
-    if (!decl) return;
-
-    memset(&computed, 0, sizeof(computed));
-    css_cascade_style(decl, &computed);
-    css_compute_absolute_values(&g.root, &computed, &g.metrics);
-
-    rgba_of(computed.background_color, out->bg);
-    rgba_of(computed.color, out->fg);
-    rgba_of(computed.border_top_color, out->border_col);
-    out->border   = px_of(computed.border_top_width,
-                          computed.unit_bits.border_top_width);
-    out->rounding = px_of(computed.border_top_left_radius,
-                          computed.unit_bits.border_top_left_radius);
-    out->pad_x    = px_of(computed.padding_left,
-                          computed.unit_bits.padding_left);
-    out->pad_y    = px_of(computed.padding_top,
-                          computed.unit_bits.padding_top);
-
-    out->pad[REAKTOR_SIDE_TOP]    = out->pad_y;
-    out->pad[REAKTOR_SIDE_RIGHT]  = px_of(computed.padding_right,
-                                          computed.unit_bits.padding_right);
-    out->pad[REAKTOR_SIDE_BOTTOM] = px_of(computed.padding_bottom,
-                                          computed.unit_bits.padding_bottom);
-    out->pad[REAKTOR_SIDE_LEFT]   = out->pad_x;
-
-    out->border_w[REAKTOR_SIDE_TOP]    = out->border;
-    out->border_w[REAKTOR_SIDE_RIGHT]  =
-        px_of(computed.border_right_width,
-              computed.unit_bits.border_right_width);
-    out->border_w[REAKTOR_SIDE_BOTTOM] =
-        px_of(computed.border_bottom_width,
-              computed.unit_bits.border_bottom_width);
-    out->border_w[REAKTOR_SIDE_LEFT]   =
-        px_of(computed.border_left_width,
-              computed.unit_bits.border_left_width);
-
-    out->radius[REAKTOR_CORNER_TL] = out->rounding;
-    out->radius[REAKTOR_CORNER_TR] =
-        px_of(computed.border_top_right_radius,
-              computed.unit_bits.border_top_right_radius);
-    out->radius[REAKTOR_CORNER_BR] =
-        px_of(computed.border_bottom_right_radius,
-              computed.unit_bits.border_bottom_right_radius);
-    out->radius[REAKTOR_CORNER_BL] =
-        px_of(computed.border_bottom_left_radius,
-              computed.unit_bits.border_bottom_left_radius);
-
-    out->margin[REAKTOR_SIDE_TOP]    = px_of(computed.margin_top,
-                                             computed.unit_bits.margin_top);
-    out->margin[REAKTOR_SIDE_RIGHT]  = px_of(computed.margin_right,
-                                             computed.unit_bits.margin_right);
-    out->margin[REAKTOR_SIDE_BOTTOM] =
-        px_of(computed.margin_bottom, computed.unit_bits.margin_bottom);
-    out->margin[REAKTOR_SIDE_LEFT]   = px_of(computed.margin_left,
-                                             computed.unit_bits.margin_left);
-
-    out->width       = px_of(computed.width, computed.unit_bits.width);
-    out->height      = px_of(computed.height, computed.unit_bits.height);
-    out->min_width   = px_of(computed.min_width,
-                             computed.unit_bits.min_width);
-    out->min_height  = px_of(computed.min_height,
-                             computed.unit_bits.min_height);
-    out->font_px     = computed.font_size > 0.0f
-                     ? (int)(computed.font_size + 0.5f) : 0;
-    out->max_width   = px_of(computed.max_width,
-                             computed.unit_bits.max_width);
-    out->max_height  = px_of(computed.max_height,
-                             computed.unit_bits.max_height);
-
-    out->opacity = computed.type_bits.opacity == CSS_OPACITY_SET
-                 ? computed.opacity : 1.0f;
-    if (out->opacity < 0.0f) out->opacity = 0.0f;
-    if (out->opacity > 1.0f) out->opacity = 1.0f;
-
-    out->line_height = 0.0f;
-    switch (computed.type_bits.line_height) {
-    case CSS_LINE_HEIGHT_NUMBER: {
-        float fs = computed.font_size > 0.0f ? computed.font_size
-                                             : g.root.font_size;
-
-        out->line_height = computed.line_height * (fs > 0.0f ? fs : 16.0f);
-        break;
-    }
-    case CSS_LINE_HEIGHT_DIMENSION:
-        out->line_height = px_of(computed.line_height,
-                                 computed.unit_bits.line_height);
-        break;
-    default:
-        break;
-    }
-
-    switch (computed.type_bits.font_weight) {
-    case CSS_FONT_WEIGHT_BOLD:
-    case CSS_FONT_WEIGHT_700:
-    case CSS_FONT_WEIGHT_800:
-    case CSS_FONT_WEIGHT_900:
-        out->bold = 1;
-        break;
-    default:
-        out->bold = 0;
-        break;
-    }
-    out->matched = decl->length > 0;
-
-    css_style_decl_destroy(decl);
-    css_computed_style_destroy(&computed);
+    if (!name || name[0] != '-' || name[1] != '-') return 0;
+    if (!(c = cached(name))) return reaktor_sheet_color(g.sheet, name, rgba);
+    if (c->matched) memcpy(rgba, c->bg, 4);
+    return c->matched;
 }
 
 void reaktor_style_get(const char *selector, reaktor_style *out)
 {
-    unsigned     h;
-    size_t       len;
-    cache_entry *e;
+    const reaktor_style *c;
 
     if (!out) return;
-    h = hash_of(selector);
-    if (g.cache_cap) {
-        e = cache_slot(selector, h);
-        if (e->selector) {
-            *out = e->style;
-            return;
-        }
-    }
-    resolve(selector, out);
-    if (2 * (g.cache_n + 1) > g.cache_cap) cache_grow();
-    if (g.cache_n + 1 >= g.cache_cap) return;
-    len = strlen(selector) + 1;
-    e   = cache_slot(selector, h);
-    e->selector = malloc(len);
-    if (!e->selector) return;
-    memcpy(e->selector, selector, len);
-    e->hash  = h;
-    e->style = *out;
-    g.cache_n++;
+    if (selector && (c = cached(selector)) != NULL) *out = *c;
+    else reaktor_sheet_style(g.sheet, selector, out);
 }

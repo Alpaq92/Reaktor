@@ -61,16 +61,7 @@ message(int argc, char **argv, char **out, Uint32 *out_len)
 
     for (i = 1; i < argc && count < INSTANCE_PATHS_MAX; i++) {
         if (!argv[i] || !*argv[i]) continue;
-        if (reaktor_path_absolute(argv[i])) {
-            abs[count] = SDL_strdup(argv[i]);
-        } else {
-            char *cwd = SDL_GetCurrentDirectory();
-
-            abs[count] = NULL;
-            if (cwd && SDL_asprintf(&abs[count], "%s%s", cwd, argv[i]) < 0) abs[count] = NULL;
-            SDL_free(cwd);
-        }
-        if (!abs[count]) continue;
+        if (!(abs[count] = reaktor_path_from_cwd(argv[i]))) continue;
         total += (Uint32)(sizeof(Uint32) + SDL_strlen(abs[count]));
         count++;
     }

@@ -7,6 +7,6 @@ int reaktor_prefers_contrast(void);
 
 struct SDL_Window;
 
-int reaktor_window_set_dark(struct SDL_Window *win, int dark);
+void reaktor_window_set_dark(struct SDL_Window *win, int dark);
 
 #endif

@@ -29,7 +29,6 @@ enum {
 typedef struct reaktor_a11y_change {
     unsigned char kind;
     unsigned      id;
-    int           index;
 } reaktor_a11y_change;
 
 #define REAKTOR_A11Y_MAX_NODES   256

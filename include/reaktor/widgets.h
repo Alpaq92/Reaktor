@@ -17,6 +17,7 @@ enum {
 enum {
     REAKTOR_LAY_FILL_X = 1u << 0,
     REAKTOR_LAY_FILL_Y = 1u << 1,
+    REAKTOR_LAY_FILL   = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y,
     REAKTOR_LAY_WRAP   = 1u << 2,
     REAKTOR_LAY_CENTER_X = 1u << 3,
     REAKTOR_LAY_CENTER_Y = 1u << 4,

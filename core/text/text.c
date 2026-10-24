@@ -137,18 +137,6 @@ static int           g_draws, g_draw_cap;
 static unsigned      g_seq;
 static int           g_seq_known, g_took;
 
-static void *
-grow(void *p, int *cap, int need, size_t size)
-{
-    int n = *cap > 0 ? *cap : 64;
-
-    if (need <= *cap) return p;
-    while (n < need) n *= 2;
-    p = SDL_realloc(p, (size_t)n * size);
-    if (p) *cap = n;
-    return p;
-}
-
 static int
 font_add(const char *path)
 {
@@ -252,11 +240,9 @@ atlas_draws(const struct reaktor_font *font, const char *s, int len)
 static int
 decode(const char *s, int len)
 {
-    text_char *p;
     int        n = 0, at = 0;
 
-    if (!(p = grow(g_ch, &g_ch_cap, len, sizeof *g_ch))) return 0;
-    g_ch = p;
+    if (!reaktor_grow((void **)&g_ch, &g_ch_cap, len, sizeof *g_ch)) return 0;
     while (at < len) {
         kbts_decode d = kbts_DecodeUtf8(s + at, (kbts_un)(len - at));
 
@@ -355,15 +341,13 @@ choose_fonts(int base, int n)
 static int
 split(int n)
 {
-    text_run *p;
     int       i, r = 0;
 
     for (i = 0; i < n; i++) {
         if (r == 0 || g_ch[i].level != g_ch[i - 1].level ||
             g_ch[i].script != g_ch[i - 1].script ||
             g_ch[i].font != g_ch[i - 1].font) {
-            if ((p = grow(g_run, &g_run_cap, r + 1, sizeof *g_run)) != NULL) {
-                g_run = p;
+            if (reaktor_grow((void **)&g_run, &g_run_cap, r + 1, sizeof *g_run)) {
                 g_run[r].from   = i;
                 g_run[r].font   = g_ch[i].font;
                 g_run[r].level  = g_ch[i].level;
@@ -464,7 +448,6 @@ shape_run(const text_run *r, float pen)
     kbts_glyph_iterator it;
     kbts_glyph         *g;
     shaped             *out;
-    void               *p;
     int                 i;
 
     if (!c) return pen;
@@ -480,9 +463,8 @@ shape_run(const text_run *r, float pen)
         return pen;
     }
     while (kbts_GlyphIteratorNext(&it, &g)) {
-        if (!(p = grow(g_glyph, &g_glyph_cap, g_glyphs + 1, sizeof *g_glyph)))
+        if (!reaktor_grow((void **)&g_glyph, &g_glyph_cap, g_glyphs + 1, sizeof *g_glyph))
             break;
-        g_glyph   = p;
         out       = &g_glyph[g_glyphs++];
         out->x    = pen + (float)g->OffsetX * f->unit;
         out->y    = (float)g->OffsetY * f->unit;
@@ -498,7 +480,6 @@ shape(int file, const char *s, int len)
 {
     shape_entry *e;
     Uint32       hash = reaktor_fnv_n(REAKTOR_FNV ^ (Uint32)file, s, (size_t)(len > 0 ? len : 0));
-    void        *p;
     float        pen = 0.0f;
     int          i, n, runs, first;
 
@@ -516,13 +497,10 @@ shape(int file, const char *s, int len)
     segment(n);
     choose_fonts(file, n);
     runs = split(n);
-    if (!(p = grow(g_order, &g_order_cap, runs, sizeof *g_order))) return -1;
-    g_order = p;
+    if (!reaktor_grow((void **)&g_order, &g_order_cap, runs, sizeof *g_order)) return -1;
     order(runs);
-    if (!(p = grow(g_entry, &g_entry_cap, g_entries + 1, sizeof *g_entry))) return -1;
-    g_entry = p;
-    if (!(p = grow(g_bytes, &g_byte_cap, g_byte_n + len, 1))) return -1;
-    g_bytes = p;
+    if (!reaktor_grow((void **)&g_entry, &g_entry_cap, g_entries + 1, sizeof *g_entry)) return -1;
+    if (!reaktor_grow((void **)&g_bytes, &g_byte_cap, g_byte_n + len, 1)) return -1;
 
     first = g_glyphs;
     for (i = 0; i < runs; i++) pen = shape_run(&g_run[g_order[i]], pen);
@@ -624,11 +602,9 @@ static int
 upload(int page, int x, int y, const FT_Bitmap *bm)
 {
     SDL_Rect r;
-    void    *p;
     int      w = (int)bm->width, h = (int)bm->rows, bw = w + 2, bh = h + 2, i;
 
-    if (!(p = grow(g_bitmap, &g_bitmap_cap, bw * bh, 1))) return 0;
-    g_bitmap = p;
+    if (!reaktor_grow((void **)&g_bitmap, &g_bitmap_cap, bw * bh, 1)) return 0;
     SDL_memset(g_bitmap, 0, (size_t)(bw * bh));
     for (i = 0; i < h; i++)
         SDL_memcpy(g_bitmap + (i + 1) * bw + 1, bm->buffer + i * bm->pitch, (size_t)w);
@@ -638,8 +614,7 @@ upload(int page, int x, int y, const FT_Bitmap *bm)
     r.h = bh;
     if (!g_page[page].argb)
         return SDL_UpdateTexture(g_page[page].tex, &r, g_bitmap, bw);
-    if (!(p = grow(g_pixels, &g_pixel_cap, bw * bh, sizeof *g_pixels))) return 0;
-    g_pixels = p;
+    if (!reaktor_grow((void **)&g_pixels, &g_pixel_cap, bw * bh, sizeof *g_pixels)) return 0;
     for (i = 0; i < bw * bh; i++)
         g_pixels[i] = (Uint32)g_bitmap[i] << 24 | 0x00FFFFFF;
     return SDL_UpdateTexture(g_page[page].tex, &r, g_pixels, bw * 4);
@@ -843,7 +818,6 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
         struct nk_command_custom *c = (struct nk_command_custom *)cmd;
         const struct reaktor_font *font;
         text_draw                 d;
-        void                     *p;
         short                     x, y;
         unsigned short            w, h;
         int                       face;
@@ -854,8 +828,7 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
         if (face < 0 || atlas_draws(font, t->string, t->length) ||
             !font_open(g_face[face].file))
             continue;
-        if (!(p = grow(g_draw, &g_draw_cap, g_draws + 1, sizeof *g_draw))) break;
-        g_draw   = p;
+        if (!reaktor_grow((void **)&g_draw, &g_draw_cap, g_draws + 1, sizeof *g_draw)) break;
         d.face   = face;
         d.len    = t->length;
         d.height = t->height;

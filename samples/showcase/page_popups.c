@@ -610,8 +610,7 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
             reaktor_box_rect(&trigger);
             reaktor_button(&(reaktor_button_spec){
                 .label = "Right-click anywhere on this button",
-                .box   = { .flags = REAKTOR_LAY_FILL_X |
-                                    REAKTOR_LAY_FILL_Y } });
+                .box   = { .flags = REAKTOR_LAY_FILL } });
         }
         if (reaktor_contextual_begin(ctx, REAKTOR_WINDOW_BORDER, reaktor_vec2(150.0f, reaktor_menu_height(3)),
                                      trigger)) {
@@ -655,18 +654,16 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
             reaktor_button(&(reaktor_button_spec){
                 .label   = "Hover for a plain tooltip",
                 .tooltip = "A one-line tooltip.",
-                .box     = { .flags = REAKTOR_LAY_FILL_X |
-                                      REAKTOR_LAY_FILL_Y } });
+                .box     = { .flags = REAKTOR_LAY_FILL } });
 
-            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y) {
+            REAKTOR_ROW(.flags = REAKTOR_LAY_FILL) {
                 b = reaktor_rect(0, 0, 0, 0);
                 reaktor_box_rect(&b);
                 reaktor_hot_follow(app, b, 1);
                 ctx->last_widget_state = 0;
                 reaktor_button(&(reaktor_button_spec){
                     .label = "Hover for a laid-out one",
-                    .box   = { .flags = REAKTOR_LAY_FILL_X |
-                                        REAKTOR_LAY_FILL_Y } });
+                    .box   = { .flags = REAKTOR_LAY_FILL } });
                 if (ctx->last_widget_state & REAKTOR_WIDGET_STATE_HOVER) tip = 1;
             }
         }

@@ -151,7 +151,7 @@ kv_list(const char *name)
     reaktor_list(&(reaktor_list_spec){
         .name = name, .count = g_rows, .columns = cols, .widths = widths,
         .column_count = 2, .cell = kv_cell,
-        .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+        .box = { .flags = REAKTOR_LAY_FILL } });
 }
 
 static void
@@ -184,7 +184,7 @@ tab_tree(void)
     reaktor_tree(&(reaktor_tree_spec){
         .name = "Widgets", .count = g_n, .parent = tree_parent, .label = tree_label,
         .open = g_open, .selected = &sel,
-        .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+        .box = { .flags = REAKTOR_LAY_FILL } });
     if (sel != g_sel_ix && sel >= 0 && sel < g_n) {
         g_sel    = g_node[sel].id;
         g_sel_ix = sel;
@@ -311,7 +311,7 @@ tab_style(void)
     row("min", "%.0f x %.0f", st.min_width, st.min_height);
     row("max", "%.0f x %.0f", st.max_width, st.max_height);
     row("font", "%dpx%s", st.font_px, st.bold ? " bold" : "");
-    REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y, .gap = 8.0f) {
+    REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL, .gap = 8.0f) {
         kv_list("Style");
         note("CSS here applies after every other sheet, to this run only.");
         reaktor_field(&(reaktor_field_spec){
@@ -405,7 +405,7 @@ tab_logs(void)
     reaktor_list(&(reaktor_list_spec){
         .name = "Log", .count = g_log_rows, .columns = cols, .widths = widths,
         .column_count = 3, .cell = log_cell,
-        .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+        .box = { .flags = REAKTOR_LAY_FILL } });
 }
 
 /* A flat icon beside the tabs; its name is also what the pointer shows. */
@@ -457,7 +457,7 @@ page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
             }
 #endif
         }
-        REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y, .gap = 8.0f) {
+        REAKTOR_COLUMN(.flags = REAKTOR_LAY_FILL, .gap = 8.0f) {
             switch (g_tab) {
             case TAB_TREE:  tab_tree();  break;
             case TAB_BOX:   tab_box();   break;

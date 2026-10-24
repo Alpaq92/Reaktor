@@ -411,7 +411,7 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
         }
     }
 
-    body.flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y;
+    body.flags = REAKTOR_LAY_FILL;
     if (decl_place(REAKTOR_A11Y_NONE, NULL, NULL, 0u, NULL, &body, NULL)) {
         struct nk_rect area = nk_widget_bounds(g_frame_ctx);
         int            focused = -1;

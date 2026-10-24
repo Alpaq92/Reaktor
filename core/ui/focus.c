@@ -52,14 +52,35 @@ focus_reveal(App *app, const reaktor_a11y_node *t, int n, int pick)
     }
 }
 
+static int
+node_index(const reaktor_a11y_node *t, int n, unsigned id)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+        if (t[i].id == id) return i;
+    return -1;
+}
+
+static void
+focus_to(App *app, const reaktor_a11y_node *t, int n, int i)
+{
+    app->focus_id = t[i].id;
+    reaktor_a11y_set_focus(&app->a11y, app->focus_id);
+    app->focus_rect    = t[i].bounds;
+    app->focus_seen    = 1;
+    app->focus_visible = 1;
+    app->dirty = 1;
+    focus_reveal(app, t, n, i);
+}
+
 static void
 focus_move(App *app, int step)
 {
-    int n, i, cur = -1, pick = -1, lo, hi;
+    int n, i, cur, pick = -1, lo, hi;
     const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
-    for (i = 0; i < n; i++)
-        if (t[i].id == app->focus_id) { cur = i; break; }
+    cur = node_index(t, n, app->focus_id);
     lo = 0;
     hi = n - 1;
     if (app->popup_hi >= 0 && app->popup_hi < n) {
@@ -88,14 +109,7 @@ focus_move(App *app, int step)
         }
     }
     if (pick < 0) return;
-
-    app->focus_id = t[pick].id;
-    reaktor_a11y_set_focus(&app->a11y, app->focus_id);
-    app->focus_rect    = t[pick].bounds;
-    app->focus_seen    = 1;
-    app->focus_visible = 1;
-    app->dirty = 1;
-    focus_reveal(app, t, n, pick);
+    focus_to(app, t, n, pick);
     if (t[pick].role == REAKTOR_A11Y_TEXTBOX) reaktor_key_click_ask(app);
 }
 
@@ -113,11 +127,7 @@ focus_resolve(App *app)
     const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
     if (!app->focus_id) return;
-    for (i = 0; i < n; i++)
-        if (t[i].id == app->focus_id) {
-            if (focusable(&t[i])) return;
-            break;
-        }
+    if ((i = node_index(t, n, app->focus_id)) >= 0 && focusable(&t[i])) return;
     app->focus_id = 0;
     reaktor_a11y_set_focus(&app->a11y, 0);
 }
@@ -129,13 +139,9 @@ focus_steps(App *app)
     int n, i;
     const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
-    if (!app->focus_id) return 0;
-    for (i = 0; i < n; i++)
-        if (t[i].id == app->focus_id)
-            return t[i].role == REAKTOR_A11Y_SLIDER ||
-                   t[i].role == REAKTOR_A11Y_SPINBUTTON ? 1
-                 : t[i].role == REAKTOR_A11Y_TREEITEM ? 2 : 0;
-    return 0;
+    if (!app->focus_id || (i = node_index(t, n, app->focus_id)) < 0) return 0;
+    return t[i].role == REAKTOR_A11Y_SLIDER || t[i].role == REAKTOR_A11Y_SPINBUTTON ? 1
+         : t[i].role == REAKTOR_A11Y_TREEITEM ? 2 : 0;
 }
 
 int
@@ -231,17 +237,7 @@ reader_focus(void *user, unsigned id)
     int n, i;
     const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
-    for (i = 0; i < n; i++)
-        if (t[i].id == id) {
-            app->focus_id = id;
-            reaktor_a11y_set_focus(&app->a11y, id);
-            app->focus_rect    = t[i].bounds;
-            app->focus_seen    = 1;
-            app->focus_visible = 1;
-            app->dirty = 1;
-            focus_reveal(app, t, n, i);
-            return;
-        }
+    if ((i = node_index(t, n, id)) >= 0) focus_to(app, t, n, i);
 }
 
 void
@@ -335,11 +331,8 @@ focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv)
     int n, i, in_page = 0;
     const reaktor_a11y_node *t = reaktor_a11y_tree(&app->a11y, &n);
 
-    for (i = 0; i < n && app->focus_layer == FOCUS_PAGE; i++)
-        if (t[i].id == app->focus_id) {
-            in_page = node_under(t, n, i, app->page_node);
-            break;
-        }
+    if (app->focus_layer == FOCUS_PAGE && (i = node_index(t, n, app->focus_id)) >= 0)
+        in_page = node_under(t, n, i, app->page_node);
     if (in_page) nk_push_scissor(cv, app->body_rect);
     /* Truncated as nk_widget truncates the chrome it surrounds. */
     r = reaktor_rect_trunc(r);

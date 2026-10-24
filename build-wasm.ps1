@@ -6,7 +6,6 @@ $root   = $PSScriptRoot
 $outDir = Join-Path $root "build-wasm"
 
 $emsdk = if ($env:EMSDK) { $env:EMSDK } else { "$env:USERPROFILE\emsdk" }
-$emcc  = Join-Path $emsdk "upstream\emscripten\emcc.py"
 $toolchain = Join-Path $emsdk "upstream\emscripten\cmake\Modules\Platform\Emscripten.cmake"
 if (-not (Test-Path $toolchain)) {
     throw "emsdk not found at $emsdk - clone https://github.com/emscripten-core/emsdk, run 'emsdk install latest' then 'emsdk activate latest', or set EMSDK"
@@ -47,5 +46,7 @@ Write-Host "a file:// page cannot fetch the .wasm, so serve it:"
 Write-Host "  python -m http.server -d build-wasm 8000"
 
 if ($Serve) {
-    & (Join-Path $emsdk "python\3.13.3_64bit\python.exe") -m http.server -d $outDir 8000
+    $python = Get-ChildItem (Join-Path $emsdk "python") -Filter python.exe -Recurse -Depth 1 |
+        Sort-Object FullName | Select-Object -Last 1
+    & $python.FullName -m http.server -d $outDir 8000
 }

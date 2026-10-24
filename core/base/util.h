@@ -11,6 +11,8 @@ char *reaktor_read_file(const char *path, size_t *len);
 FILE *reaktor_fopen(const char *path, const char *mode);
 
 int reaktor_path_absolute(const char *path);
+char *reaktor_path_from_cwd(const char *path);
+int   reaktor_grow(void **p, int *cap, int need, size_t size);
 const char *reaktor_path_leaf(const char *path);
 
 char *reaktor_c_locale_keep(int numeric);
@@ -56,7 +58,5 @@ reaktor_fnv_n(unsigned h, const void *p, size_t n)
     while (n--) h = (h ^ *b++) * 16777619u;
     return h;
 }
-
-#define REAKTOR_MARK "assets/icons/reaktor-icon.svg"
 
 #endif

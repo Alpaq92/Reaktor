@@ -422,7 +422,7 @@ mask_rounded_fills(App *app)
 int
 reaktor_aa_lines(const App *app)
 {
-    return app->aa_mode != REAKTOR_AA_OFF && !(app->renderer_is_sw && app->sw_noaa);
+    return app->aa_mode != REAKTOR_AA_OFF;
 }
 
 /* Left to a GPU renderer by default; rounded fills are masks either way. */

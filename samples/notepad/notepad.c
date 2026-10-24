@@ -329,7 +329,7 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
             .heap = &g.text, .heap_cap = &g.cap, .len = &g.len,
             .name = "Document", .multiline = 1, .line_numbers = 1,
             .box = { .ml = 6.0f, .mr = 6.0f, .mt = 2.0f, .mb = 3.0f,
-                     .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+                     .flags = REAKTOR_LAY_FILL } });
 
         REAKTOR_ROW(.h = STATUS_H, .flags = REAKTOR_LAY_FILL_X) {
             SDL_snprintf(line, sizeof(line), "%s%s  -  %d characters  -  %s",

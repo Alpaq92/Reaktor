@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include "internal.h"
 #include "declare.h"
 #include "anim.h"
@@ -18,6 +19,18 @@ note(const char *what)
     if (!f) return;
     fprintf(f, "%s\n", what);
     fclose(f);
+}
+
+static void
+notef(const char *fmt, ...)
+{
+    char    line[600];
+    va_list ap;
+
+    va_start(ap, fmt);
+    SDL_vsnprintf(line, sizeof line, fmt, ap);
+    va_end(ap);
+    note(line);
 }
 
 static int
@@ -75,7 +88,6 @@ static void
 floater_body(App *app, struct nk_context *ctx, int w, int h, void *user)
 {
     static int clicked;
-    char line[32];
 
     (void)w;
     if (SDL_strcmp((const char *)user, "Cover") == 0 && !clicked &&
@@ -86,8 +98,7 @@ floater_body(App *app, struct nk_context *ctx, int w, int h, void *user)
     }
     nk_layout_row_dynamic(ctx, h > 120 ? 120.0f : 28.0f, 1);
     if (reaktor_button_label(app, ctx, (const char *)user)) {
-        SDL_snprintf(line, sizeof line, "pressed %s", (const char *)user);
-        note(line);
+        notef("pressed %s", (const char *)user);
     }
 }
 
@@ -161,10 +172,7 @@ when(void)
 static void
 said(const char *what)
 {
-    char line[64];
-
-    SDL_snprintf(line, sizeof line, "%s %s", what, when());
-    note(line);
+    notef("%s %s", what, when());
 }
 
 static void
@@ -250,8 +258,7 @@ hold_page(App *app, struct nk_context *ctx, int w, int h)
         if (g_frames == 4 || g_frames == 17)
             push_click(app, g_link.x + 10.0f, g_link.y + g_link.h * 0.5f);
         if (g_frames == 7 || g_frames == 17) {
-            SDL_snprintf(line, sizeof line, "cursor %d", app->want_cursor);
-            note(line);
+            notef("cursor %d", app->want_cursor);
         }
         if (g_frames == 7 || g_frames == 12)
             push_click(app, g_field.x + 20.0f, g_field.y + g_field.h * 0.5f);
@@ -338,9 +345,7 @@ hold_page(App *app, struct nk_context *ctx, int w, int h)
         if (closing && g_frames == 13) reaktor_floater_close(app, g_second);
         if (g_frames == 16) push_text(app, "b");
         if (g_frames == 20) {
-            SDL_snprintf(line, sizeof line, "typed '%s', text input %d", buf,
-                         (int)SDL_TextInputActive(app->win));
-            note(line);
+            notef("typed '%s', text input %d", buf, (int)SDL_TextInputActive(app->win));
         }
     }
     if (is("hold-toast") || is("hold-toast-page")) {
@@ -350,10 +355,7 @@ hold_page(App *app, struct nk_context *ctx, int w, int h)
             reaktor_toast(app, &(reaktor_toast_spec){ .text = "toast" });
         if (g_frames == 9) push_text(app, "b");
         if (g_frames == 13) {
-            SDL_snprintf(line, sizeof line, "typed '%s', text input %d",
-                         is("hold-toast") ? g_modal_buf : buf,
-                         (int)SDL_TextInputActive(app->win));
-            note(line);
+            notef("typed '%s', text input %d", is("hold-toast") ? g_modal_buf : buf, (int)SDL_TextInputActive(app->win));
         }
     }
     if (g_frames == 26) {
@@ -375,7 +377,6 @@ static void
 window_page(App *app, struct nk_context *ctx, int w, int h, void *user)
 {
     static int frames;
-    char line[96];
 
     (void)w; (void)h; (void)user;
     frames++;
@@ -387,9 +388,7 @@ window_page(App *app, struct nk_context *ctx, int w, int h, void *user)
         push_text(app, "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\xe3\x81\xae"
                        "\xe3\x83\x86\xe3\x82\xad");
     if (frames == 10) {
-        SDL_snprintf(line, sizeof line, "window text %d bytes, text input %d",
-                     (int)SDL_strlen(g_win_buf), (int)SDL_TextInputActive(app->win));
-        note(line);
+        notef("window text %d bytes, text input %d", (int)SDL_strlen(g_win_buf), (int)SDL_TextInputActive(app->win));
         reaktor_quit(app, 0);
     }
     app->dirty = 1;
@@ -403,7 +402,6 @@ static char  g_one_buf[16];
 static void
 win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
 {
-    char line[128];
     int f = ++g_win_frames, more = f < 30;
 
     (void)user;
@@ -415,11 +413,7 @@ win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
         SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(app->win), &d);
         SDL_GetWindowPosition(app->win, &x, &y);
         SDL_GetWindowSize(app->win, &ww, &wh);
-        SDL_snprintf(line, sizeof line, "borderless %d, utility %d, centered %d",
-                     !!(fl & SDL_WINDOW_BORDERLESS), !!(fl & SDL_WINDOW_UTILITY),
-                     SDL_abs(x + ww / 2 - (d.x + d.w / 2)) <= 1 &&
-                     SDL_abs(y + wh / 2 - (d.y + d.h / 2)) <= 1);
-        note(line);
+        notef("borderless %d, utility %d, centered %d", !!(fl & SDL_WINDOW_BORDERLESS), !!(fl & SDL_WINDOW_UTILITY), SDL_abs(x + ww / 2 - (d.x + d.w / 2)) <= 1 && SDL_abs(y + wh / 2 - (d.y + d.h / 2)) <= 1);
         reaktor_quit(app, 0);
     }
     if (is("win-keys")) {
@@ -456,10 +450,7 @@ win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
     } else if (is("win-title")) {
         if (f == 2) reaktor_set_title(app, "Retitled");
         if (f == 8) {
-            SDL_snprintf(line, sizeof line, "window title '%s', main '%s'",
-                         SDL_GetWindowTitle(app->win),
-                         SDL_GetWindowTitle(reaktor_main_app()->win));
-            note(line);
+            notef("window title '%s', main '%s'", SDL_GetWindowTitle(app->win), SDL_GetWindowTitle(reaktor_main_app()->win));
             reaktor_quit(app, 0);
         }
     } else if (is("win-theme")) {
@@ -470,17 +461,13 @@ win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
             reaktor_set_theme(app, want ? REAKTOR_THEME_DARK : REAKTOR_THEME_LIGHT);
         }
         if (f == 10) {
-            SDL_snprintf(line, sizeof line, "theme followed: main %s, window %s",
-                         reaktor_main_app()->dark == want ? "yes" : "no",
-                         app->dark == want ? "yes" : "no");
-            note(line);
+            notef("theme followed: main %s, window %s", reaktor_main_app()->dark == want ? "yes" : "no", app->dark == want ? "yes" : "no");
             reaktor_quit(app, 0);
         }
     } else if (is("win-wake")) {
         if (f == 5) g_main_at = g_frames;
         if (f == 30) {
-            SDL_snprintf(line, sizeof line, "main frames +%d", g_frames - g_main_at);
-            note(line);
+            notef("main frames +%d", g_frames - g_main_at);
             reaktor_quit(app, 0);
         }
     } else if (is("win-one-change")) {
@@ -493,8 +480,7 @@ win_page(App *app, struct nk_context *ctx, int w, int h, void *user)
             push_tap(app, SDLK_BACKSPACE);
         }
         if (f == 15) {
-            SDL_snprintf(line, sizeof line, "field '%s'", g_one_buf);
-            note(line);
+            notef("field '%s'", g_one_buf);
             reaktor_quit(app, 0);
         }
     } else if (is("win-drag")) {
@@ -529,11 +515,8 @@ open_probe_window(App *app)
 static int SDLCALL
 report_anim(void *app)
 {
-    char line[32];
-
     SDL_Delay(1500);
-    SDL_snprintf(line, sizeof line, "anim %.0f", (double)g_anim);
-    note(line);
+    notef("anim %.0f", (double)g_anim);
     reaktor_quit((App *)app, 0);
     return 0;
 }
@@ -541,15 +524,12 @@ report_anim(void *app)
 static int SDLCALL
 count_drag(void *app)
 {
-    char line[64];
     int at;
 
     SDL_Delay(1200);
     at = g_win_frames;
     SDL_Delay(3300);
-    SDL_snprintf(line, sizeof line, "window frames +%d while dragged",
-                 g_win_frames - at);
-    note(line);
+    notef("window frames +%d while dragged", g_win_frames - at);
     reaktor_quit((App *)app, 0);
     return 0;
 }
@@ -563,41 +543,39 @@ quit_after(void *app)
 }
 
 /* The last frame's tree: this frame's is still being built. */
-static int
-press_named(App *app, const char *name)
+static const reaktor_a11y_node *
+last_node(App *app, unsigned char role, const char *name)
 {
     const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
     int n = app->a11y.count[1 - app->a11y.front], i;
 
     for (i = 0; i < n; i++)
-        if (t[i].role == REAKTOR_A11Y_BUTTON && t[i].name &&
-            SDL_strcmp(t[i].name, name) == 0) {
-            push_click(app, t[i].bounds.x + t[i].bounds.w * 0.5f,
-                       t[i].bounds.y + t[i].bounds.h * 0.5f);
-            return 1;
-        }
-    return 0;
+        if (t[i].role == role && t[i].name && SDL_strcmp(t[i].name, name) == 0) return &t[i];
+    return NULL;
+}
+
+static int
+press_role(App *app, unsigned char role, const char *name)
+{
+    const reaktor_a11y_node *t = last_node(app, role, name);
+
+    if (t) push_click(app, t->bounds.x + t->bounds.w * 0.5f, t->bounds.y + t->bounds.h * 0.5f);
+    return t != NULL;
 }
 
 static void
 answered(App *app, int button, void *user)
 {
-    char line[32];
-
     (void)app; (void)user;
-    SDL_snprintf(line, sizeof line, "answer %d", button);
-    note(line);
+    notef("answer %d", button);
 }
 
 static void
 ticked(App *app, void *user)
 {
     static int n;
-    char line[32];
 
-    SDL_snprintf(line, sizeof line, "tick %d %s", ++n,
-                 app == reaktor_main_app() ? "main" : "other");
-    note(line);
+    notef("tick %d %s", ++n, app == reaktor_main_app() ? "main" : "other");
     if (n == 3) reaktor_timer_stop(*(unsigned *)user);
 }
 
@@ -628,16 +606,12 @@ cell(int row, int column, void *user)
 static int
 row_shown(App *app, int row)
 {
-    const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
-    int  n = app->a11y.count[1 - app->a11y.front], i;
+    const reaktor_a11y_node *t;
     char name[8];
 
     SDL_snprintf(name, sizeof name, "row %d", row);
-    for (i = 0; i < n; i++)
-        if (t[i].role == REAKTOR_A11Y_LISTITEM && t[i].name &&
-            SDL_strcmp(t[i].name, name) == 0)
-            return !(t[i].state & REAKTOR_A11Y_OFFSCREEN);
-    return 0;
+    t = last_node(app, REAKTOR_A11Y_LISTITEM, name);
+    return t && !(t->state & REAKTOR_A11Y_OFFSCREEN);
 }
 
 static Uint64 g_saved_at;
@@ -668,13 +642,12 @@ service_page(App *app, struct nk_context *ctx, int w, int h)
     static int chosen = -1, said = -1;
     static float share = 0.5f;
     int split = is("split-keys") || is("split-vkeys");
-    char line[48];
 
     (void)ctx;
     if (is("ask") && g_frames == 2)
         reaktor_ask(app, &(reaktor_question){ .text = "Save it?", .buttons = buttons,
                                               .count = 2, .answered = answered });
-    if (is("ask") && g_frames == 6) note(press_named(app, "Save") ? "pressed" : "no button");
+    if (is("ask") && g_frames == 6) note(press_role(app, REAKTOR_A11Y_BUTTON, "Save") ? "pressed" : "no button");
     if (is("timer") && g_frames == 2) {
         repeat = reaktor_timer(app, 50, 1, ticked, &repeat);
         note(repeat ? "timer on" : "timer refused");
@@ -709,40 +682,29 @@ service_page(App *app, struct nk_context *ctx, int w, int h)
         reaktor_setting_set("launchtest.key", "a=b");
         reaktor_setting_set("launchtest.gone", "x");
         reaktor_setting_set("launchtest.gone", NULL);
-        SDL_snprintf(line, sizeof line, "setting %s %s",
-                     reaktor_setting("launchtest.key"),
-                     reaktor_setting("launchtest.gone") ? "kept" : "removed");
-        note(line);
+        notef("setting %s %s", reaktor_setting("launchtest.key"), reaktor_setting("launchtest.gone") ? "kept" : "removed");
     }
     if (is("list") && g_frames == 4) {
-        const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
-        int n = app->a11y.count[1 - app->a11y.front], i;
+        const reaktor_a11y_node *t = last_node(app, REAKTOR_A11Y_LISTITEM, "row 1");
 
-        for (i = 0; i < n; i++)
-            if (t[i].role == REAKTOR_A11Y_LISTITEM && t[i].name &&
-                SDL_strcmp(t[i].name, "row 1") == 0)
-                push_click(app, t[i].bounds.x + 10.0f, t[i].bounds.y + t[i].bounds.h * 0.5f);
+        if (t) push_click(app, t->bounds.x + 10.0f, t->bounds.y + t->bounds.h * 0.5f);
     }
     if (is("list-keys") && (g_frames == 3 || g_frames == 4)) push_tap(app, SDLK_TAB);
     if (is("list-keys") && g_frames >= 6 && g_frames < 30 && g_frames % 2 == 0)
         push_tap(app, SDLK_DOWN);
     if (is("list-keys") && g_frames == 50) {
-        SDL_snprintf(line, sizeof line, "chosen %d, %s", chosen,
-                     row_shown(app, chosen) ? "in view" : "out of view");
-        note(line);
+        notef("chosen %d, %s", chosen, row_shown(app, chosen) ? "in view" : "out of view");
     }
     if (split && (g_frames == 3 || g_frames == 5)) push_tap(app, SDLK_TAB);
     if (split && (g_frames == 8 || g_frames == 10))
         push_tap(app, is("split-vkeys") ? SDLK_DOWN : SDLK_RIGHT);
     if (split && g_frames == 12) push_tap(app, is("split-vkeys") ? SDLK_UP : SDLK_LEFT);
     if (split && g_frames == 30) {
-        SDL_snprintf(line, sizeof line, "split %.2f", share);
-        note(line);
+        notef("split %.2f", share);
     }
     if (is("list") && chosen != said) {
         said = chosen;
-        SDL_snprintf(line, sizeof line, "chosen %d", chosen);
-        note(line);
+        notef("chosen %d", chosen);
     }
     if (g_frames > 60) reaktor_quit(app, 0);
     REAKTOR_FREE(.w = (float)w, .h = (float)h) {
@@ -786,21 +748,6 @@ focused_name(App *app)
     return "nothing";
 }
 
-static int
-press_role(App *app, unsigned char role, const char *name)
-{
-    const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
-    int n = app->a11y.count[1 - app->a11y.front], i;
-
-    for (i = 0; i < n; i++)
-        if (t[i].role == role && t[i].name && SDL_strcmp(t[i].name, name) == 0) {
-            push_click(app, t[i].bounds.x + t[i].bounds.w * 0.5f,
-                       t[i].bounds.y + t[i].bounds.h * 0.5f);
-            return 1;
-        }
-    return 0;
-}
-
 static const char *
 expanded(App *app)
 {
@@ -831,7 +778,6 @@ menu_page(App *app, struct nk_context *ctx, int w, int h)
     static const reaktor_menu menus[] = { { "File", items, 4 }, { "View", view, 2 } };
     static const reaktor_menu_entry *pe;
     static int pm = -1;
-    char line[96];
 
     (void)ctx;
     if (g_frames >= 3 && g_frames <= 9 && g_frames % 2 &&
@@ -846,10 +792,7 @@ menu_page(App *app, struct nk_context *ctx, int w, int h)
     if (g_frames == 72) push_tap(app, SDLK_LEFT);
     if (g_frames == 20 || g_frames == 30 || g_frames == 45 || g_frames == 52 ||
         g_frames == 64 || g_frames == 90 || g_frames == 100 || g_frames == 108) {
-        SDL_snprintf(line, sizeof line, "open %s, focus on %s, picked %s in %d, wrap %s",
-                     expanded(app), focused_name(app), pe ? pe->label : "nothing", pm,
-                     wrap ? "on" : "off");
-        note(line);
+        notef("open %s, focus on %s, picked %s in %d, wrap %s", expanded(app), focused_name(app), pe ? pe->label : "nothing", pm, wrap ? "on" : "off");
     }
     if (g_frames == 94 || g_frames == 102) press_role(app, REAKTOR_A11Y_MENU, "File");
     if (g_frames > 112) reaktor_quit(app, 0);
@@ -875,7 +818,6 @@ tree_page(App *app, struct nk_context *ctx, int w, int h)
 {
     static unsigned char open[6];
     static int sel = -1;
-    char line[96];
     static const SDL_Keycode keys[] = { SDLK_TAB, SDLK_RIGHT, SDLK_RIGHT, SDLK_RIGHT,
                                         SDLK_DOWN, SDLK_LEFT, SDLK_LEFT };
     int k = (g_frames - 4) / 6;
@@ -884,23 +826,16 @@ tree_page(App *app, struct nk_context *ctx, int w, int h)
     if (g_frames >= 4 && (g_frames - 4) % 6 == 0 && k < (int)SDL_arraysize(keys))
         push_tap(app, keys[k]);
     if (g_frames >= 4 && (g_frames - 4) % 6 == 5 && k < (int)SDL_arraysize(keys)) {
-        SDL_snprintf(line, sizeof line, "focus %s, selected %d, open %d%d%d%d%d%d",
-                     focused_name(app), sel, open[0], open[1], open[2], open[3],
-                     open[4], open[5]);
-        note(line);
+        notef("focus %s, selected %d, open %d%d%d%d%d%d", focused_name(app), sel, open[0], open[1], open[2], open[3], open[4], open[5]);
     }
     if (g_frames == 60) press_role(app, REAKTOR_A11Y_TREEITEM, "B");
     if (g_frames == 66) {
-        const reaktor_a11y_node *t = app->a11y.node[1 - app->a11y.front];
-        int n = app->a11y.count[1 - app->a11y.front], i;
+        const reaktor_a11y_node *t = last_node(app, REAKTOR_A11Y_TREEITEM, "B");
 
-        for (i = 0; i < n; i++)
-            if (t[i].role == REAKTOR_A11Y_TREEITEM && SDL_strcmp(t[i].name, "B") == 0)
-                push_click(app, t[i].bounds.x + 15.0f, t[i].bounds.y + t[i].bounds.h * 0.5f);
+        if (t) push_click(app, t->bounds.x + 15.0f, t->bounds.y + t->bounds.h * 0.5f);
     }
     if (g_frames == 72) {
-        SDL_snprintf(line, sizeof line, "clicked: selected %d, B open %d", sel, open[4]);
-        note(line);
+        notef("clicked: selected %d, B open %d", sel, open[4]);
     }
     if (g_frames > 76) reaktor_quit(app, 0);
     REAKTOR_FREE(.w = (float)w, .h = (float)h) {
@@ -919,7 +854,6 @@ find_page(App *app, struct nk_context *ctx, int w, int h)
     static char  *text, run[601];
     static int    len, cap;
     struct nk_window *pw = nk_window_find(ctx, "page");
-    char line[96];
 
     if (g_frames == 3) {
         SDL_memset(run, 'x', 600);
@@ -928,14 +862,11 @@ find_page(App *app, struct nk_context *ctx, int w, int h)
     }
     if (g_frames == 8) push_text(app, run);
     if (g_frames == 70) {
-        SDL_snprintf(line, sizeof line, "len %d, room %s", len, cap > len ? "kept" : "short");
-        note(line);
+        notef("len %d, room %s", len, cap > len ? "kept" : "short");
         reaktor_field_select(app, text, 10, 20);
     }
     if (g_frames == 84 && pw) {
-        SDL_snprintf(line, sizeof line, "active %d, selected %d to %d", pw->edit.active,
-                     pw->edit.sel_start, pw->edit.sel_end);
-        note(line);
+        notef("active %d, selected %d to %d", pw->edit.active, pw->edit.sel_start, pw->edit.sel_end);
     }
     if (g_frames > 88) reaktor_quit(app, 0);
     REAKTOR_FREE(.w = (float)w, .h = (float)h) {
@@ -956,14 +887,12 @@ spin_page(App *app, struct nk_context *ctx, int w, int h)
                                         SDLK_LEFT, SDLK_TAB, SDLK_LEFT };
     static int one, two;
     int k = (g_frames - 4) / 6;
-    char line[64];
 
     (void)ctx;
     if (g_frames >= 4 && (g_frames - 4) % 6 == 0 && k < (int)SDL_arraysize(keys))
         push_tap(app, keys[k]);
     if (g_frames == 50) {
-        SDL_snprintf(line, sizeof line, "stops at %d, wraps to %d", one, two);
-        note(line);
+        notef("stops at %d, wraps to %d", one, two);
     }
     if (g_frames > 54) reaktor_quit(app, 0);
     REAKTOR_FREE(.w = (float)w, .h = (float)h) {
@@ -987,28 +916,23 @@ date_page(App *app, struct nk_context *ctx, int w, int h)
                                         SDLK_LEFT, SDLK_DOWN, SDLK_RETURN, SDLK_TAB,
                                         SDLK_RETURN, SDLK_UP, SDLK_ESCAPE };
     int k = (g_frames - 4) / 8;
-    char line[96];
 
     (void)ctx;
     if (g_frames >= 4 && (g_frames - 4) % 8 == 0 && k < (int)SDL_arraysize(keys))
         push_tap(app, keys[k]);
     if (g_frames == 16) note(d ? "set too early" : "open, not set");
     if (g_frames == 60) {
-        SDL_snprintf(line, sizeof line, "hour %d, focus on %s", hh, focused_name(app));
-        note(line);
+        notef("hour %d, focus on %s", hh, focused_name(app));
     }
     if (g_frames == 100) {
-        SDL_snprintf(line, sizeof line, "after escape: hour %d, focus on %s", hh,
-                     focused_name(app));
-        note(line);
+        notef("after escape: hour %d, focus on %s", hh, focused_name(app));
     }
     if (g_frames > 104) reaktor_quit(app, 0);
     REAKTOR_FREE(.w = (float)w, .h = (float)h) {
         REAKTOR_ROW(.w = (float)w, .h = 30.0f) {
             if (reaktor_date_pick(&(reaktor_date_spec){ .name = "Date", .year = &y,
                                                        .month = &m, .day = &d })) {
-                SDL_snprintf(line, sizeof line, "set %04d-%02d-%02d", y, m, d);
-                note(line);
+                notef("set %04d-%02d-%02d", y, m, d);
             }
             reaktor_time_pick(&(reaktor_time_spec){ .name = "Time", .hour = &hh,
                                                     .minute = &mm });
@@ -1044,7 +968,6 @@ static void
 undo_page(App *app)
 {
     static int one = 1;
-    char line[128];
 
     if (g_frames == 2) {
         reaktor_undo_step s = { "Add", undo_minus, undo_plus, NULL, &one, 0 };
@@ -1063,11 +986,7 @@ undo_page(App *app)
     if (g_frames == 6 || g_frames == 12) push_chord(app, SDLK_Z, SDL_KMOD_CTRL);
     if (g_frames == 18) push_chord(app, SDLK_Z, SDL_KMOD_CTRL | SDL_KMOD_SHIFT);
     if (g_frames == 4 || g_frames == 16 || g_frames == 24) {
-        SDL_snprintf(line, sizeof line, "value %d, undo %s, redo %s, %s", g_undo_v,
-                     reaktor_undo_label(app) ? reaktor_undo_label(app) : "-",
-                     reaktor_redo_label(app) ? reaktor_redo_label(app) : "-",
-                     reaktor_undo_dirty(app) ? "changed" : "saved");
-        note(line);
+        notef("value %d, undo %s, redo %s, %s", g_undo_v, reaktor_undo_label(app) ? reaktor_undo_label(app) : "-", reaktor_redo_label(app) ? reaktor_redo_label(app) : "-", reaktor_undo_dirty(app) ? "changed" : "saved");
     }
     if (g_frames > 28) reaktor_quit(app, 0);
     app->dirty = 1;
@@ -1130,7 +1049,7 @@ confirm_page(App *app)
         SDL_PushEvent(&e);
     }
     if (g_frames == 10)
-        note(press_named(app, is("confirm") ? "Quit" : "Cancel") ? "asked"
+        note(press_role(app, REAKTOR_A11Y_BUTTON, is("confirm") ? "Quit" : "Cancel") ? "asked"
                                                                  : "not asked");
     if (g_frames == 25) {
         note("still running");
@@ -1146,7 +1065,6 @@ leak_page(App *app)
     static int cycle, id;
     static size_t rss0, priv0;
     size_t rss, priv;
-    char line[80];
 
     if (id) {
         reaktor_window_close(app, id);
@@ -1156,9 +1074,7 @@ leak_page(App *app)
         if (++cycle == 10) reaktor_process_memory(&rss0, &priv0);
     } else {
         reaktor_process_memory(&rss, &priv);
-        SDL_snprintf(line, sizeof line, "grew %d KB private over 200 windows",
-                     (int)(((long long)priv - (long long)priv0) / 1024));
-        note(line);
+        notef("grew %d KB private over 200 windows", (int)(((long long)priv - (long long)priv0) / 1024));
         reaktor_quit(app, 0);
         return;
     }
@@ -1169,8 +1085,6 @@ leak_page(App *app)
 static void
 page(App *app, struct nk_context *ctx, int w, int h)
 {
-    char line[80];
-
     g_frames++;
     if (is("win-leak")) {
         leak_page(app);
@@ -1217,9 +1131,7 @@ page(App *app, struct nk_context *ctx, int w, int h)
         return;
     }
     if (ctx->input.keyboard.text_len > 0) {
-        SDL_snprintf(line, sizeof line, "text %.*s",
-                     ctx->input.keyboard.text_len, ctx->input.keyboard.text);
-        note(line);
+        notef("text %.*s", ctx->input.keyboard.text_len, ctx->input.keyboard.text);
     }
     if (is("title")) reaktor_set_title(app, "Renamed");
     REAKTOR_FREE(.w = (float)w, .h = (float)h) {
@@ -1248,11 +1160,8 @@ request_twice(void *app)
 static int SDLCALL
 count_frames(void *app)
 {
-    char line[32];
-
     SDL_Delay(1500);
-    SDL_snprintf(line, sizeof line, "frames %d", g_frames);
-    note(line);
+    notef("frames %d", g_frames);
     reaktor_quit((App *)app, 0);
     return 0;
 }
@@ -1352,16 +1261,12 @@ key(App *app, const SDL_Event *e)
 static void
 picked(App *app, const char *const *paths, int count, void *user)
 {
-    char line[600];
     int  i;
 
     (void)user;
-    SDL_snprintf(line, sizeof line, "file in %s: %s",
-                 app->secondary ? "window" : "main", count ? paths[0] : "(none)");
-    note(line);
+    notef("file in %s: %s", app->secondary ? "window" : "main", count ? paths[0] : "(none)");
     for (i = 1; i < count; i++) {
-        SDL_snprintf(line, sizeof line, "and %s", paths[i]);
-        note(line);
+        notef("and %s", paths[i]);
     }
     if (SDL_strncmp(g_mode, "dialog-", 7) == 0) reaktor_quit(app, 0);
 }
@@ -1385,21 +1290,14 @@ dialog_page(App *app)
 static void
 file_opened(App *app, const char *path)
 {
-    char line[96];
-
-    SDL_snprintf(line, sizeof line, "file in %s: %s",
-                 app->secondary ? "window" : "main", path ? path : "(none)");
-    note(line);
+    notef("file in %s: %s", app->secondary ? "window" : "main", path ? path : "(none)");
 }
 
 static int
 closing(App *app, reaktor_quit_reason why)
 {
-    char line[64];
-
     (void)app;
-    SDL_snprintf(line, sizeof line, "closing %d", (int)why);
-    note(line);
+    notef("closing %d", (int)why);
     return (is("veto") || is("request")) && ++g_closings == 1;
 }
 
@@ -1436,10 +1334,8 @@ main(int argc, char **argv)
     int rc = launchApp(argc, argv, &l);
 
     if (is("twice")) {
-        char line[32];
 
-        SDL_snprintf(line, sizeof line, "again %d", launchApp(argc, argv, &l));
-        note(line);
+        notef("again %d", launchApp(argc, argv, &l));
     }
     return rc;
 }

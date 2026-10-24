@@ -34,10 +34,6 @@ extern "C"{
 #endif
 
 NK_API struct nk_context*   nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer, struct nk_allocator allocator);
-#ifdef NK_INCLUDE_FONT_BAKING
-NK_API struct nk_font_atlas* nk_sdl_font_stash_begin(struct nk_context* ctx);
-NK_API void                 nk_sdl_font_stash_end(struct nk_context* ctx);
-#endif
 /* REAKTOR: an atlas Reaktor bakes itself, alpha8. */
 NK_API nk_handle            nk_sdl_font_upload(struct nk_context* ctx, const void *image, int width, int height);
 NK_API int                  nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt);
@@ -90,9 +86,6 @@ struct nk_sdl {
     SDL_Renderer *renderer;
     struct nk_sdl_device ogl;
     struct nk_context ctx;
-#ifdef NK_INCLUDE_FONT_BAKING
-    struct nk_font_atlas atlas;
-#endif
     struct nk_allocator allocator;
     Uint64 last_render;
     bool insert_toggle;
@@ -646,38 +639,6 @@ nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer, struct nk_allocator allocat
     return &sdl->ctx;
 }
 
-#ifdef NK_INCLUDE_FONT_BAKING
-NK_API struct nk_font_atlas*
-nk_sdl_font_stash_begin(struct nk_context* ctx)
-{
-    struct nk_sdl* sdl;
-    NK_ASSERT(ctx);
-    sdl = (struct nk_sdl*)ctx->userdata.ptr;
-    NK_ASSERT(sdl);
-    nk_font_atlas_init(&sdl->atlas, &sdl->allocator);
-    nk_font_atlas_begin(&sdl->atlas);
-    return &sdl->atlas;
-}
-#endif
-
-#ifdef NK_INCLUDE_FONT_BAKING
-NK_API void
-nk_sdl_font_stash_end(struct nk_context* ctx)
-{
-    struct nk_sdl* sdl;
-    const void *image; int w, h;
-    NK_ASSERT(ctx);
-    sdl = (struct nk_sdl*)ctx->userdata.ptr;
-    NK_ASSERT(sdl);
-    /* REAKTOR: alpha8. */
-    image = nk_font_atlas_bake(&sdl->atlas, &w, &h, NK_FONT_ATLAS_ALPHA8);
-    NK_ASSERT(image);
-    nk_font_atlas_end(&sdl->atlas, nk_sdl_font_upload(&sdl->ctx, image, w, h), &sdl->ogl.tex_null);
-    if (sdl->atlas.default_font) {
-        nk_style_set_font(&sdl->ctx, &sdl->atlas.default_font->handle);
-    }
-}
-#endif
 
 /* REAKTOR */
 NK_API nk_handle
@@ -861,11 +822,6 @@ void nk_sdl_shutdown(struct nk_context* ctx)
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
-
-#ifdef NK_INCLUDE_FONT_BAKING
-    if (sdl->atlas.font_num > 0)
-        nk_font_atlas_clear(&sdl->atlas);
-#endif
 
     nk_buffer_free(&sdl->ogl.cmds);
     nk_buffer_free(&sdl->ogl.vbuf);

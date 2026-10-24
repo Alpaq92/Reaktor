@@ -32,8 +32,7 @@ diag_row(App *app, struct reaktor_context *ctx, const char *name,
             .text   = value,
             .name   = "value",
             .silent = 1,
-            .box    = { .flags = REAKTOR_LAY_FILL_X |
-                                 REAKTOR_LAY_FILL_Y } });
+            .box    = { .flags = REAKTOR_LAY_FILL } });
     }
 }
 
@@ -76,33 +75,6 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
             "front, and the new copy exits. --new-instance starts a separate copy "
             "anyway.");
     api(app, ctx, ".single_instance  /  .file_opened  /  --new-instance");
-#ifndef __EMSCRIPTEN__
-    REAKTOR_ROW(.h = ROW, .gap = ctx->style.window.spacing.x) {
-        if (reaktor_button(&(reaktor_button_spec){
-                .label = "Launch the showcase again, with a file",
-                .name  = "Launch again", .box = { .w = 340.0f } })) {
-            char        exe[1024];
-            const char *base = SDL_GetBasePath();
-            const char *args[3];
-            SDL_Process *p;
-
-            SDL_snprintf(exe, sizeof exe, "%sshowcase%s", base ? base : "",
-#ifdef _WIN32
-                         ".exe"
-#else
-                         ""
-#endif
-            );
-            args[0] = exe;
-            args[1] = exe;
-            args[2] = NULL;
-            p = SDL_CreateProcess(args, false);
-            if (p) SDL_DestroyProcess(p);
-            else SDL_Log("could not launch %s: %s", exe, SDL_GetError());
-        }
-        reaktor_soak();
-    }
-#endif
     SDL_snprintf(v, sizeof v, "%d, the last %s", st->handed,
                  st->handed ? st->file_pick : "none yet");
     REAKTOR_ROW(.h = ROW_SMALL) {
@@ -181,7 +153,7 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
     }
 
     section(app, ctx, "Style and text",
-            "The stylesheets are parsed by LCUI's libcss on every theme "
+            "The stylesheets are parsed by Reaktor's own CSS engine on every theme "
             "change, and the font atlas is baked per size at the display's "
             "scale. The system's reduced motion and contrast reach the sheets as "
             "@media queries, and with --watch-css a sheet saved on disk restyles "

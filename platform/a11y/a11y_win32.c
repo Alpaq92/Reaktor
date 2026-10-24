@@ -72,6 +72,7 @@ typedef struct Provider {
 } Provider;
 
 static Provider *provider_new(bridge *b, unsigned id);
+static HRESULT out_fragment(bridge *b, unsigned id, IRawElementProviderFragment **out);
 
 #define FROM_SIMPLE(p)   ((Provider *)((char *)(p) - offsetof(Provider, simple)))
 #define FROM_FRAGMENT(p) ((Provider *)((char *)(p) - offsetof(Provider, fragment)))
@@ -345,12 +346,7 @@ fragment_Navigate(IRawElementProviderFragment *self,
         switch (dir) {
         case NavigateDirection_Parent:
             to = reaktor_snap_parent_in(t, p->id);
-            if (!to) {
-                Provider *r = provider_new(p->b, 0);
-                if (!r) return E_OUTOFMEMORY;
-                *out = &r->fragment;
-                return S_OK;
-            }
+            if (!to) return out_fragment(p->b, 0, out);
             break;
         case NavigateDirection_FirstChild:
             to = reaktor_snap_child_in(t, p->id, 0);
@@ -367,13 +363,7 @@ fragment_Navigate(IRawElementProviderFragment *self,
         default: break;
         }
     }
-    if (!to) return S_OK;
-    {
-        Provider *q = provider_new(p->b, to);
-        if (!q) return E_OUTOFMEMORY;
-        *out = &q->fragment;
-    }
-    return S_OK;
+    return to ? out_fragment(p->b, to, out) : S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE
@@ -471,13 +461,7 @@ root_ElementProviderFromPoint(IRawElementProviderFragmentRoot *self,
     if (!snap_of(p) || !ClientToScreen(p->b->hwnd, &origin)) return S_OK;
     hit = reaktor_snap_hit_in(snap_of(p), (float)(x - origin.x),
                               (float)(y - origin.y));
-    if (!hit) return S_OK;
-    {
-        Provider *q = provider_new(p->b, hit);
-        if (!q) return E_OUTOFMEMORY;
-        *out = &q->fragment;
-    }
-    return S_OK;
+    return hit ? out_fragment(p->b, hit, out) : S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE
@@ -489,13 +473,7 @@ root_GetFocus(IRawElementProviderFragmentRoot *self,
 
     *out = NULL;
     id = reaktor_snap_focus_in(snap_of(p));
-    if (!id) return S_OK;
-    {
-        Provider *q = provider_new(p->b, id);
-        if (!q) return E_OUTOFMEMORY;
-        *out = &q->fragment;
-    }
-    return S_OK;
+    return id ? out_fragment(p->b, id, out) : S_OK;
 }
 
 static IRawElementProviderFragmentRootVtbl g_root_vtbl = {
@@ -691,6 +669,16 @@ static IRangeValueProviderVtbl g_range_vtbl = {
     range_get_Maximum, range_get_Minimum, range_get_LargeChange,
     range_get_SmallChange
 };
+
+static HRESULT
+out_fragment(bridge *b, unsigned id, IRawElementProviderFragment **out)
+{
+    Provider *q = provider_new(b, id);
+
+    if (!q) return E_OUTOFMEMORY;
+    *out = &q->fragment;
+    return S_OK;
+}
 
 static Provider *
 provider_new(bridge *b, unsigned id)

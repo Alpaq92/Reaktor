@@ -14,9 +14,10 @@ while [ $# -gt 0 ]; do
             target="$1" ;;
         --debug)   buildtype="Debug" ;;
         --release) buildtype="Release" ;;
-        --help|-h) echo "usage: build.sh [--target NAME] [--debug] [-- CMAKE_ARGS]"; exit 0 ;;
+        --help|-h) echo "usage: build.sh [NAME | --target NAME] [--debug] [-- CMAKE_ARGS]"; exit 0 ;;
         --)        shift; break ;;
-        *) echo "build.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
+        -*) echo "build.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
+        *)  target="$1" ;;
     esac
     shift
 done

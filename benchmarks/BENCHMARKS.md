@@ -85,9 +85,11 @@ Each arm uses its framework's own toolchain; none is vendored here.
 ```bash
 cd benchmarks/electron-bench
 npm install
+npx install-electron
 ```
 
-Node 20.19+ or 22+; older Node fails with `ERR_REQUIRE_ESM`. `--software`
+Node 20.19+ or 22+; older Node fails with `ERR_REQUIRE_ESM`. Since Electron 44
+`npm install` no longer fetches the binary; `install-electron` does. `--software`
 turns hardware acceleration off.
 
 ### Flutter
@@ -148,14 +150,14 @@ MSVC 14.44 Release, the C runtime linked in:
 
 | Program | Bytes |
 | --- | --- |
-| `bench.exe` | 2,752,512 |
-| `simple.exe` | 2,760,192 |
-| `notepad.exe` | 2,797,568 |
-| `showcase.exe` | 3,782,656 |
+| `bench.exe` | 2,395,136 |
+| `simple.exe` | 2,404,864 |
+| `notepad.exe` | 2,518,016 |
+| `showcase.exe` | 3,585,536 |
 
-The C runtime is about 300 KB of each; a default `./build.ps1` links its DLL
+The C runtime is 220–260 KB of each; a default `./build.ps1` links its DLL
 instead. Only the showcase links the three optional modules, and Text is
-0.8 MB of the difference ([Modules](../docs/PERFORMANCE.md#modules)).
+0.7 MB of the difference ([Modules](../docs/PERFORMANCE.md#modules)).
 
 The v0.2.0 downloads, as GitHub Actions built and published them:
 

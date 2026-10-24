@@ -196,7 +196,7 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
                     }
                 }
                 if (t->action &&
-                    reaktor_button_label_as(app, ctx, ".toast-button", t->action))
+                    css_button(app, ctx, ".toast-button", t->action))
                     act = first + i;
                 if (!t->spec.no_close &&
                     reaktor_css_button_image(

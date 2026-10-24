@@ -128,12 +128,7 @@ text(const char *what, unsigned mods, SDL_Keycode key, const char *want)
 {
     char buf[64];
     reaktor_chord_text(mods, key, buf, (int)sizeof(buf));
-    if (strcmp(buf, want) != 0) {
-        failures++;
-        printf("  %-52s got \"%s\", wanted \"%s\"   FAILED\n", what, buf, want);
-    } else {
-        printf("  %-52s \"%s\"\n", what, buf);
-    }
+    test_str(what, buf, want);
 }
 
 static void
@@ -181,12 +176,7 @@ list(const char *what, int action, int index, const char *want)
 
     buf[0] = '\0';
     reaktor_shortcut_text(LIST, LIST_N, action, index, buf, (int)sizeof(buf));
-    if (strcmp(buf, want) != 0) {
-        failures++;
-        printf("  %-52s got \"%s\", wanted \"%s\"   FAILED\n", what, buf, want);
-    } else {
-        printf("  %-52s \"%s\"\n", what, buf);
-    }
+    test_str(what, buf, want);
 }
 
 static void

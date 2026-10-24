@@ -108,11 +108,11 @@ axis. Leave the axis unset and the rule applies. See
 
 ### Why can't I use `em` or `rem`, and how far do `var()` and `color-mix()` go?
 
-You can: the engine underneath, libcss, has neither, so `cssflat.c` turns
-them into pixels before it reads the sheet. It also resolves `var()`, works
-out `color-mix(in srgb, …)` and `calc()` over pixels, and keeps the
-`prefers-color-scheme` branch for the active scheme. Operator selectors such
-as `[href^="http"]` are dropped. See [Styling](DOCUMENTATION.md#styling).
+You can: `em` is the body's font size and `rem` the root's. The engine also
+resolves `var()`, works out `color-mix(in srgb, …)` and `calc()` over pixels,
+and keeps the `prefers-color-scheme` branch for the active scheme. Percentages
+are not lengths, and operator selectors such as `[href^="http"]` are dropped.
+See [Styling](DOCUMENTATION.md#styling).
 
 ### How do I ship my own stylesheet or theme?
 

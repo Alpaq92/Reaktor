@@ -120,8 +120,8 @@ value and position.
 
 [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) draws the widgets.
 [SDL3](https://github.com/libsdl-org/SDL) supplies the window, input, tray and
-software renderer. libcss, from [LCUI](https://github.com/lc-soft/LCUI), parses
-the stylesheets, and [Onlay](https://github.com/Alpaq92/Onlay), a fork of
+software renderer. Reaktor's own CSS engine reads the stylesheets, and
+[Onlay](https://github.com/Alpaq92/Onlay), a fork of
 [randrew/layout](https://github.com/randrew/layout), computes the rectangles.
 [NukAnim](https://github.com/Alpaq92/NukAnim), a port of ImAnim, moves them.
 Every dependency is a submodule, used as it ships; the full list is in

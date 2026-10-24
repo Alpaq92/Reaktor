@@ -4,18 +4,19 @@ static void
 rule_says(const char *selector)
 {
     reaktor_style st;
-    char line[320];
+    char line[320], bg[16] = "transparent";
 
     reaktor_style_get(selector, &st);
+    if (st.bg[3])
+        SDL_snprintf(bg, sizeof(bg), "#%02x%02x%02x", st.bg[0], st.bg[1], st.bg[2]);
     if (st.matched)
         SDL_snprintf(line, sizeof(line),
-                     "%s is #%02x%02x%02x on #%02x%02x%02x, corners %.0f, "
+                     "%s is #%02x%02x%02x on %s, corners %.0f, "
                      "border %.0f, padding %.1f %.1f %.1f %.1f, type %dpx, "
                      "box %.0fx%.0f min %.0fx%.0f max %.0fx%.0f, "
                      "margin %.1f %.1f %.1f %.1f, "
                      "line %.1f",
-                     selector, st.fg[0], st.fg[1], st.fg[2],
-                     st.bg[0], st.bg[1], st.bg[2],
+                     selector, st.fg[0], st.fg[1], st.fg[2], bg,
                      (double)st.rounding, (double)st.border,
                      (double)st.pad[REAKTOR_SIDE_TOP],
                      (double)st.pad[REAKTOR_SIDE_RIGHT],

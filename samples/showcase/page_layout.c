@@ -126,17 +126,17 @@ page_layout(App *app, struct reaktor_context *ctx, showcase_state *s)
 
         REAKTOR_ROW(.h = 3.0f * ROW) {
             REAKTOR_COLUMN(.weight = split,
-                           .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y)
+                           .flags = REAKTOR_LAY_FILL)
                 reaktor_button(&(reaktor_button_spec){
                     .label = "Left",
-                    .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
             reaktor_splitter(&(reaktor_splitter_spec){ .value = &split,
                                                        .name = "Split" });
             REAKTOR_COLUMN(.weight = 1.0f - split,
-                           .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y)
+                           .flags = REAKTOR_LAY_FILL)
                 reaktor_button(&(reaktor_button_spec){
                     .label = "Right",
-                    .box = { .flags = REAKTOR_LAY_FILL_X | REAKTOR_LAY_FILL_Y } });
+                    .box = { .flags = REAKTOR_LAY_FILL } });
         }
     }
 
