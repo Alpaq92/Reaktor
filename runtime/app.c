@@ -470,7 +470,6 @@ load_theme(App *app)
     Uint64 t0, t1;
 
     app->dark = effective_dark(app);
-    read_prefs();
     if (g_watch) watch_begin();
 
     sheets[n++] = theme_sheet(app->dark);
@@ -937,6 +936,7 @@ app_init(void **appstate, int argc, char *argv[])
     reaktor_rss_mark(REAKTOR_RSS_START);
 
     take_pending(app);
+    read_prefs();
     load_theme(app);
     reaktor_rss_mark(REAKTOR_RSS_STYLE);
     if (g_launch.single_instance) reaktor_instance_listen(app, g_launch.file_opened);
@@ -1062,7 +1062,7 @@ reaktor_take_event(App *app, SDL_Event *event)
         break;
 
     case SDL_EVENT_SYSTEM_THEME_CHANGED:
-        if (app->theme_mode == REAKTOR_THEME_SYSTEM || read_prefs()) load_theme(app);
+        if (read_prefs() || app->theme_mode == REAKTOR_THEME_SYSTEM) load_theme(app);
         break;
 
     case SDL_EVENT_LOCALE_CHANGED:
@@ -1606,7 +1606,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     nk_style_pop_vec2(ctx);
 
     t_render0 = SDL_GetPerformanceCounter();
-    if (same_frame(app, ctx)) {
+    if (app->build_only || same_frame(app, ctx)) {
         t_present0 = t_end = t_render0;
         app->frames_skipped++;
     } else {
@@ -1660,6 +1660,7 @@ app_iterate(void *appstate)
     }
     if (g_css_pending || app->theme_pending) {
         take_pending(app);
+        read_prefs();
         load_theme(app);
     }
     reaktor_windows_draw();

@@ -239,6 +239,7 @@ struct App {
     int            popup_open, popups_inline;
     undo_stack     undo;
     int            want_capture;
+    int            build_only;
     SDL_Surface   *capture;
     struct { const char *buf; int from, to, asked; } field_pick;
     struct { char kind[32], from[64], label[96]; int item, armed, active; struct nk_vec2 at; } drag;

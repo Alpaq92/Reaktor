@@ -285,10 +285,16 @@ struct nk_sdl_rect {
     int          opaque;
 };
 
+/* REAKTOR: what a run of rectangles left set, put back before triangles. */
+struct nk_sdl_sw {
+    float tint[4];
+    int   tinted, unblended;
+};
+
 /* REAKTOR: whether the six indices at ix are one rectangle. */
 NK_INTERN int
 nk_sdl_quad(const void *vertices, const nk_draw_index *ix, SDL_Texture *tex,
-            float sx, float sy, struct nk_sdl_rect *q)
+            float tw, float th, float sx, float sy, struct nk_sdl_rect *q)
 {
     const struct nk_sdl_vertex *v[6];
     float x0, x1, y0, y1, u[2] = {0, 0}, w[2] = {0, 0};
@@ -339,9 +345,7 @@ nk_sdl_quad(const void *vertices, const nk_draw_index *ix, SDL_Texture *tex,
     d.y = (d.y + (d.y < 0.0f ? -0.25f : 0.25f)) / sy;
 
     if (tex) {
-        float tw, th;
-
-        if (!SDL_GetTextureSize(tex, &tw, &th)) return 0;
+        if (!(tw > 0.0f && th > 0.0f)) return 0;
         /* REAKTOR: a sub-image ends on whole texels, but u * size comes back a
          * hair under one, and SDL's software copy truncates it a texel short. */
         q->src.x = SDL_roundf(u[0] * tw);
@@ -358,20 +362,36 @@ nk_sdl_quad(const void *vertices, const nk_draw_index *ix, SDL_Texture *tex,
 
 /* REAKTOR: SDL truncates a scaled rectangle's position and size apart. */
 NK_INTERN void
-nk_sdl_quad_draw(SDL_Renderer *ren, SDL_Texture *tex, const struct nk_sdl_rect *q)
+nk_sdl_quad_draw(SDL_Renderer *ren, SDL_Texture *tex, const struct nk_sdl_rect *q,
+                 struct nk_sdl_sw *st)
 {
     if (tex) {
-        SDL_SetTextureColorModFloat(tex, q->col[0], q->col[1], q->col[2]);
-        SDL_SetTextureAlphaModFloat(tex, q->col[3]);
+        if (!st->tinted || SDL_memcmp(st->tint, q->col, sizeof st->tint) != 0) {
+            SDL_SetTextureColorModFloat(tex, q->col[0], q->col[1], q->col[2]);
+            SDL_SetTextureAlphaModFloat(tex, q->col[3]);
+            SDL_memcpy(st->tint, q->col, sizeof st->tint);
+            st->tinted = 1;
+        }
         SDL_RenderTexture(ren, tex, &q->src, &q->d);
-        SDL_SetTextureColorModFloat(tex, 1.0f, 1.0f, 1.0f);
-        SDL_SetTextureAlphaModFloat(tex, 1.0f);
         return;
     }
-    if (q->opaque) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    if (q->opaque != st->unblended) {
+        SDL_SetRenderDrawBlendMode(ren, q->opaque ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+        st->unblended = q->opaque;
+    }
     SDL_SetRenderDrawColorFloat(ren, q->col[0], q->col[1], q->col[2], q->col[3]);
     SDL_RenderFillRect(ren, &q->d);
-    if (q->opaque) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+}
+
+NK_INTERN void
+nk_sdl_sw_restore(SDL_Renderer *ren, SDL_Texture *tex, struct nk_sdl_sw *st)
+{
+    if (st->tinted) {
+        SDL_SetTextureColorModFloat(tex, 1.0f, 1.0f, 1.0f);
+        SDL_SetTextureAlphaModFloat(tex, 1.0f);
+    }
+    if (st->unblended) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+    st->tinted = st->unblended = 0;
 }
 
 /* REAKTOR: fill and stroke feathering apart. */
@@ -497,23 +517,30 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
                 /* REAKTOR: software rectangles from device pixels. */
                 if (is_sw) {
+                    struct nk_sdl_sw st;
                     nk_uint k = 0, from = 0;
+                    float tw = 0.0f, th = 0.0f;
 
+                    SDL_zero(st);
+                    if (tex && !SDL_GetTextureSize(tex, &tw, &th)) tw = th = 0.0f;
                     while (k + 6 <= cmd->elem_count) {
                         struct nk_sdl_rect q;
 
-                        if (!nk_sdl_quad(vertices, offset + k, tex, sx, sy, &q)) {
+                        if (!nk_sdl_quad(vertices, offset + k, tex, tw, th, sx, sy, &q)) {
                             k += 3;
                             continue;
                         }
                         /* What came before it in the list is drawn before it. */
-                        if (k > from)
+                        if (k > from) {
+                            nk_sdl_sw_restore(sdl->renderer, tex, &st);
                             nk_sdl_geometry_sw(sdl->renderer, tex, vertices, n,
                                                offset + from, (int)(k - from));
-                        nk_sdl_quad_draw(sdl->renderer, tex, &q);
+                        }
+                        nk_sdl_quad_draw(sdl->renderer, tex, &q, &st);
                         k += 6;
                         from = k;
                     }
+                    nk_sdl_sw_restore(sdl->renderer, tex, &st);
                     if (cmd->elem_count > from)
                         nk_sdl_geometry_sw(sdl->renderer, tex, vertices, n,
                                            offset + from,
