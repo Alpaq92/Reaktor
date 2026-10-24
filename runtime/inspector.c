@@ -351,6 +351,8 @@ tab_frame(void)
     row("Present", "%.2f ms", d.present_ms);
     row("Since the previous frame", "%.1f ms", d.frame_gap_ms);
     row("Stylesheets", "%d, loaded in %.2f ms", d.sheets, d.style_ms);
+    row("Startup", "window %.1f ms, atlas %.1f ms, first frame at %.0f ms",
+        d.window_ms, d.atlas_ms, d.first_frame_ms);
     row("Renderer", "%s, %s", d.renderer ? d.renderer : "", d.mode ? d.mode : "");
     row("Scale", "%.2f", d.scale);
     row("Process memory", "%lu KiB", d.rss_bytes / 1024ul);

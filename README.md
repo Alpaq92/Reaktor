@@ -34,8 +34,8 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
   spinners, combos, a color picker, date and time pickers, sidebar, tabs, a
   menu bar, tables, trees and a splitter, with tooltips; rows drag between
   lists; all of Nuklear underneath, under Reaktor's names.
-- **Layers** — menus in windows of their own, in-window dialogs, questions,
-  toasts, more windows, and a tray icon with a menu.
+- **Layers** — menus in windows of their own, in-window dialogs, modal
+  questions, toasts, more native windows, and a tray icon with its own menu.
 - **Services** — system open, save and folder pickers, timers, main-thread
   posting, settings that persist, an undo stack, system notifications, and
   printing and PDF export.

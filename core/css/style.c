@@ -71,6 +71,14 @@ int reaktor_style_init(const char *const *css_paths, int count,
     return sheet != NULL;
 }
 
+int reaktor_style_add(const char *path)
+{
+    if (!reaktor_sheet_add(g.sheet, path)) return 0;
+    cache_clear(0);
+    g.generation++;
+    return 1;
+}
+
 void reaktor_style_shutdown(void)
 {
     cache_clear(1);

@@ -254,7 +254,8 @@ struct App {
     Uint64 last_frame_ms;
     float  frame_gap_ms;
     struct nka_context *anim;
-    int   style_ms_x100;
+    int   style_ms_x100, window_ms_x100, atlas_ms_x100, first_ms_x100;
+    Uint64 started;
     int   sheets;
     const char *font_face, *font_face_bold;
     const char *icon_dirs[8];

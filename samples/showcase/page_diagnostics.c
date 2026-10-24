@@ -167,6 +167,9 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
         SDL_snprintf(v, sizeof(v), "%d, parsed in %.2f ms", d.sheets,
                      (double)d.style_ms);
         diag_row(app, ctx, "stylesheets", v);
+        SDL_snprintf(v, sizeof(v), "window %.1f ms, atlas %.1f ms, first frame at %.0f ms",
+                     (double)d.window_ms, (double)d.atlas_ms, (double)d.first_frame_ms);
+        diag_row(app, ctx, "startup", v);
         SDL_snprintf(v, sizeof(v), "%.2fx", (double)d.scale);
         diag_row(app, ctx, "display scale", v);
         diag_row(app, ctx, "font", d.font);

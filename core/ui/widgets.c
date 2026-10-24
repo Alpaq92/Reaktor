@@ -1297,6 +1297,9 @@ reaktor_diagnostics(App *app, reaktor_diag *out)
     out->sheets     = app->sheets;
     out->scale      = reaktor_scale();
     out->style_ms   = app->style_ms_x100 / 100.0f;
+    out->window_ms  = app->window_ms_x100 / 100.0f;
+    out->atlas_ms   = app->atlas_ms_x100 / 100.0f;
+    out->first_frame_ms = app->first_ms_x100 / 100.0f;
     out->frame_gap_ms = app->frame_gap_ms;
     out->cpu_ms_per_frame = app->cpu_ms_per_frame;
     out->hover_gap_ms     = (int)g_hover_gap_ms;

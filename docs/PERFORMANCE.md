@@ -11,8 +11,8 @@ queue and builds a frame only when the picture would differ. So **CPU is a
 count of frames, not a load**, and **memory is a floor, not a curve**: once the
 atlas and icons are baked, nothing grows.
 
-On Windows today, `showcase.exe` is 3,327,488 bytes, `notepad.exe` 2,294,784,
-`simple.exe` 2,181,632 and `bench.exe` 2,171,904. The showcase links all three
+On Windows today, `showcase.exe` is 3,229,184 bytes, `notepad.exe` 2,277,376,
+`simple.exe` 2,157,568 and `bench.exe` 2,147,840. The showcase links all three
 optional modules and the others none; each carries the default look —
 Aileron, the mark, the sheets and seven icons, 73,123 bytes — compiled in. The
 four-platform figures below come from an older build that shipped one
@@ -22,10 +22,10 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 8.5 MB, the same binary on D3D11 57.6 MB, on D3D12 121.4 MB
-and on OpenGL 69.7 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin
+Memory: Reaktor 8.5 MB, the same binary on D3D12 121.4 MB and on OpenGL
+69.7 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin
 Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor
-6.7%, D3D11 13.4%, D3D12 5.6%, OpenGL 5.6%, Flutter 15.3%, Electron 19.6%,
+6.7%, D3D12 5.6%, OpenGL 5.6%, Flutter 15.3%, Electron 19.6%,
 Kotlin Multiplatform 29.4%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
@@ -53,8 +53,8 @@ plotted: it does not link on Windows.
 - **Every Reaktor renderer takes less CPU than every other framework.** On a
   GPU renderer its memory is mostly the graphics driver's: 58–121 MB, below
   Flutter's 133.
-- **Startup counts.** A run that draws for only 0.2 s takes 0.14 s of CPU on
-  `software` and 0.38–0.50 s on a GPU renderer. Once running, `direct3d12` and
+- **Startup counts.** A run that draws for only 0.2 s takes 0.16 s of CPU on
+  `software` and 0.41–0.50 s on a GPU renderer (medians of five runs). Once running, `direct3d12` and
   `opengl` take about a point less than `software`.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
   program keeping it busy, `direct3d11` and `opengl` missed 60 fps and took
@@ -117,9 +117,9 @@ replaced libcss.
 
 | `showcase` | Default | Module off | Saved |
 | --- | --- | --- | --- |
-| `.exe`, accessibility bridges | 3,327,488 | 3,311,104 | 16,384 (0.49%) |
-| `.exe`, Locale | 3,327,488 | 3,312,640 | 14,848 (0.45%) |
-| `.exe`, Text | 3,327,488 | 2,620,928 | 706,560 (21.2%) |
+| `.exe`, accessibility bridges | 3,229,184 | 3,214,336 | 14,848 (0.46%) |
+| `.exe`, Locale | 3,229,184 | 3,213,824 | 15,360 (0.48%) |
+| `.exe`, Text | 3,229,184 | 2,604,032 | 625,152 (19.4%) |
 | `.wasm` + `.js`, accessibility bridges | 2,308,781 | 2,305,843 | 2,938 (0.13%) |
 | `.wasm` + `.js`, Locale | 2,308,781 | 2,295,269 | 13,512 (0.59%) |
 | `.wasm` + `.js`, Text | 2,308,781 | 1,824,708 | 484,073 (21.0%) |
@@ -135,12 +135,12 @@ them.
 391 KB of tables, and mojibake 19 KB of code and 180 KB of line-breaking and
 bidirectional data; the `.data` it saves is M PLUS 1p, 1,758,688 bytes.
 Locale is 15 KB of the executable and 7,581 bytes of catalogs; compiled in
-(`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,335,168 bytes.
+(`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,236,352 bytes.
 
 **Text costs memory once it draws.** Medians of private bytes over ten
-launches: Diagnostics is 12.5 MB with every module, 12.3 MB without Locale and
-12.1 MB without Text — kb_text_shape's tables are not `const`, so they are
-committed untouched. Translations is 14.9 MB against 12.3 MB without Text: M PLUS 1p
+launches: Diagnostics is 12.6 MB with every module and 12.3 MB without Locale
+or without Text — kb_text_shape's tables are not `const`, so they are
+committed untouched. Translations is 15.2 MB against 12.4 MB without Text: M PLUS 1p
 held open, what kb_text_shape parses from it, the glyph texture and the
 caches.
 
@@ -150,13 +150,13 @@ Idle on the Login page.
 
 | | Windows | Linux | macOS | GhostBSD |
 | --- | --- | --- | --- | --- |
-| Committed / private / footprint | **12.2 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
-| Resident / working set | **29.4 MB** | **11.4 MB** | **33–36 MB** | **11.9 MB** |
+| Committed / private / footprint | **12.4 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
+| Resident / working set | **31.3 MB** | **11.4 MB** | **33–36 MB** | **11.9 MB** |
 
 Committed is what the process asked the system to back; resident is what is
 in RAM, shared library pages included. Windows is today's `showcase`, with
 every module; the others are the older single-executable build. Idle on
-Windows, `notepad` is 9.0 MB and `simple`, which links no module, 6.9 MB.
+Windows, `notepad` is 9.0 MB and `simple`, which links no module, 7.1 MB.
 
 - **Windows is mostly the system's.** Split before the CSS engine replaced
   libcss, 1.7 MB of the showcase's 12.6 MB was Reaktor's own allocations, the largest the glyph atlas (548 KB) and its
@@ -201,12 +201,15 @@ Metal texture to present it. On GhostBSD most of a frame is the present, a
 software blit into VMware's framebuffer: 6.7 ms of Login's 7.1 ms, 11.1 ms of
 Buttons' 14.8.
 
-Today's Windows build, at its default 1100×680: Login takes **1.2–1.4 ms** a
-frame and Buttons **2.7–3.3 ms**; `direct3d11` takes 0.3–0.6 ms and 0.7–1.1 ms.
+Today's Windows build, at its default 1100×680, redrawing continuously with
+vsync off, build, render and present, p10–p90 of 31 frames after 9 to warm up,
+over three launches: Login takes **1.3–1.5 ms** a frame and Buttons
+**2.8–3.1 ms**; `direct3d11` takes 0.4–0.6 ms and 0.8–1.1 ms. In software the
+present is most of it: 1.06 ms of Login's frame.
 Without a GPU, `direct3d11` falls back to WARP, which rasterizes on threads of
-its own: drawing `bench` flat out, the process spends **1.65 ms** of CPU a
-frame on WARP against 0.72 ms on `software`, which made software the
-default.
+its own: drawing `bench` flat out, the process spends **1.70 ms** of CPU a
+frame on WARP against 0.74 ms on `software` (medians of five runs), which
+made software the default.
 
 The accessibility tree adds **3.3 µs** to a drawn frame (82 nodes). With a
 GPU, `direct3d12` and `opengl` take less CPU; see **Against the others**.
