@@ -140,8 +140,8 @@ sh tools/ci/pss-pages.sh        # estimate 2; builds build-map with maps first
 Without `-x` both run on the current `DISPLAY` (or Wayland), which is the
 point of a desktop run. `-x Xvfb` starts a virtual display instead, as CI does;
 `-n RUNS` changes the ten launches; `-w WRAP` runs each app under a wrapper.
-Close any running Reaktor app first: the showcase and notepad are single
-instance, and a running copy would take the launch.
+Close any running Reaktor app first: the showcase is single instance, so a
+running copy would take its launch, and another app's pages would skew PSS.
 
 Output lands in `smoke/pss/` and `smoke/pss-pages/`: `runs.txt` holds each
 launch's raw numbers (kB), `saving.txt` the per-launch saving, and each app's
