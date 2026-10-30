@@ -156,6 +156,11 @@ jobs:
         continue-on-error: true
         run: docker exec -i debian sh tools/ci/pss.sh -x Xvfb -w "dbus-run-session -- timeout 120" build </dev/null
 
+      - name: What a shared libreaktor would save, page by page
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
+        continue-on-error: true
+        run: docker exec -i debian sh tools/ci/pss-pages.sh -x Xvfb -w "dbus-run-session -- timeout 120" </dev/null
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
