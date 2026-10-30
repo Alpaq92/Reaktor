@@ -151,6 +151,11 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
         run: docker exec -i debian sh tools/ci/uitest.sh -w "dbus-run-session -- timeout 120" build </dev/null
 
+      - name: What a shared libreaktor would save
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
+        continue-on-error: true
+        run: docker exec -i debian sh tools/ci/pss.sh -x Xvfb -w "dbus-run-session -- timeout 120" build </dev/null
+
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
