@@ -150,7 +150,7 @@ against 20%.
 
 Worth noting with the result: distribution, desktop (X11 or Wayland), GPU or
 not, and whether the numbers differ from CI's. A desktop run loads the real
-GL, input-method and accessibility stacks, so PSS grows and the percentage is
+input-method, accessibility and tray stacks, so PSS grows and the percentage is
 likely to fall.
 
 ## Phase 1: the shared build (only if Phase 0 says go)
