@@ -100,7 +100,9 @@ pages() {
     base=$(awk 'NR == 1 { print $1 }' "$out/ranges")
     base=$((base - (vaddr & ~4095)))
     while read -r lo hi; do
-        od -An -v -t x8 -w8 -j $((lo / 4096 * 8)) -N $(((hi - lo) / 4096 * 8)) "/proc/$pid/pagemap" |
+        # dd seeks; od would skip by reading the whole table below the binary.
+        dd if="/proc/$pid/pagemap" bs=65536 iflag=skip_bytes,count_bytes            skip=$((lo / 4096 * 8)) count=$(((hi - lo) / 4096 * 8)) 2>/dev/null |
+            od -An -v -t x8 -w8 |
             awk -v first=$(((lo - base) / 4096)) '
                 { d = substr($1, 1, 1) }
                 d == "a" || d == "b" || d == "e" || d == "f" { print first + NR - 1 }'
