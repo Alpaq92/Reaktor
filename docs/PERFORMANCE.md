@@ -186,6 +186,20 @@ launches.
 `tools/vmwalk.c` (`cmake --build build --target vmwalk`) splits another
 process's private bytes into named buckets.
 
+**Three apps share 21% at most.** `tools/ci/pss.sh` runs `showcase`,
+`notepad` and `simple` together, idle; medians of ten launches. Each carries
+its own copy of libreaktor and SDL, which a shared library would map once.
+
+| | PSS | Clean pages of its binary |
+| --- | --- | --- |
+| `showcase` | 9,180 KB | 2,796 KB |
+| `notepad` | 5,957 KB | 2,208 KB |
+| `simple` | 5,251 KB | 2,164 KB |
+
+Of the 20,433 KB together, one copy instead of three would save 4,366 KB, or
+21.3%. That counts each app's own code as library code, so it is an upper
+bound.
+
 ## CPU
 
 **At rest: 0% of a core** on Windows, Linux and GhostBSD, on every page; macOS
@@ -237,6 +251,8 @@ since a `file://` page cannot fetch the `.wasm`.
 - **macOS** — 11.7 Big Sur, Intel iMac, Apple Clang 12, 1024×768 non-Retina,
   built with `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk`.
 - **GhostBSD** — 26.1-R15.0p2, x86_64, Clang 19.1.7, X11, VMware, no 3D.
+- **Sharing** — GitHub `ubuntu-24.04` runner, x86_64, Debian 12 container,
+  GCC Release, Xvfb, no GPU.
 
 The **Diagnostics** page shows the renderer, the frame breakdown and the
 resident set live; reproduce any of this there.
