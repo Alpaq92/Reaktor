@@ -200,6 +200,13 @@ Of the 20,433 KB together, one copy instead of three would save 4,366 KB, or
 21.3%. That counts each app's own code as library code, so it is an upper
 bound.
 
+Counted page by page, it is 20.2%. `tools/ci/pss-pages.sh` links the three
+with maps and sorts each resident page of a binary by the object it came from:
+2,386 KB of `showcase`'s is libreaktor and SDL, 2,090 KB of `notepad`'s and
+2,018 KB of `simple`'s. Sharing would save 4,120 KB of the 20,423. That is still
+an upper bound: it takes the largest app's library pages as all three's, and
+leaves out what the dynamic linker costs each app.
+
 ## CPU
 
 **At rest: 0% of a core** on Windows, Linux and GhostBSD, on every page; macOS
