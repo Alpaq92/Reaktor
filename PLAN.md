@@ -70,6 +70,89 @@ library code.
 apps running together save at least **20% of their summed PSS**. Disk space
 does not count toward it; smaller packages would be a separate argument.
 
+## Phase 0 results (CI, 2026-10-30)
+
+**What was measured.** `showcase`, `notepad` and `simple` run together, idle,
+for 10 seconds; ten launches, medians. For each app:
+
+- **PSS** from `/proc/<pid>/smaps_rollup`: memory it has to itself in full,
+  plus its share of pages it shares with other processes.
+- **Library pages**: the resident pages of its own binary that hold libreaktor
+  or SDL. Today each app links them statically, so each carries a copy.
+
+A shared `libreaktor.so` would hold one copy for all three. The saving is the
+three apps' library pages minus the largest app's, as a share of their summed
+PSS.
+
+**Machine.** GitHub `ubuntu-24.04` runner, x86_64, Debian 12 container, GCC
+Release, Xvfb, no GPU.
+
+**Two estimates.**
+
+1. `tools/ci/pss.sh` counts every clean page of each binary as library, so it
+   overcounts by the apps' own code: **21.3%**.
+
+   | | PSS | Clean pages of its binary |
+   | --- | --- | --- |
+   | `showcase` | 9,180 KB | 2,796 KB |
+   | `notepad` | 5,957 KB | 2,208 KB |
+   | `simple` | 5,251 KB | 2,164 KB |
+
+   Summed PSS 20,433 KB; sharing saves 4,366 KB.
+
+2. `tools/ci/pss-pages.sh` links the three with linker maps and sorts each
+   resident, file-backed page of a binary (from `/proc/<pid>/pagemap`) by the
+   object it came from. Only a page holding nothing but libreaktor or SDL
+   counts: **20.2%**.
+
+   | | PSS | lib | app | mixed | other |
+   | --- | --- | --- | --- | --- | --- |
+   | `showcase` | 9,105 KB | 2,386 KB | 170 KB | 32 KB | 144 KB |
+   | `notepad` | 6,028 KB | 2,090 KB | 16 KB | 24 KB | 132 KB |
+   | `simple` | 5,217 KB | 2,018 KB | 0 KB | 28 KB | 128 KB |
+
+   Summed PSS 20,423 KB; sharing saves 4,120 KB.
+
+**Still an upper bound.** It assumes the smaller apps use no library page the
+showcase does not, and leaves out what the dynamic linker costs each app at
+start (relocations, private GOT pages). Both pull the real figure down, most
+likely under 20%.
+
+**Reading.** About 4 MB saved across three apps, on the line. Recommendation
+so far: no-go, pending a run on a real Linux desktop.
+
+## Running Phase 0 on a Linux desktop
+
+Needs GCC with GNU ld from binutils 2.38 or later (`-Map=DIR/` writes one map
+per program; not lld or gold), CMake, Ninja, `readelf`, GNU `dd` and `od`, a
+kernel with `smaps_rollup` (4.14+). No root needed: an unprivileged
+`pagemap` read still has the present and file-page bits.
+
+From the checkout, on branch `shared-phase0`:
+
+```sh
+git submodule update --init --recursive
+./build.sh                      # build/showcase, build/notepad, build/simple
+sh tools/ci/pss.sh build        # estimate 1, on the desktop's own display
+sh tools/ci/pss-pages.sh        # estimate 2; builds build-map with maps first
+```
+
+Without `-x` both run on the current `DISPLAY` (or Wayland), which is the
+point of a desktop run. `-x Xvfb` starts a virtual display instead, as CI does;
+`-n RUNS` changes the ten launches; `-w WRAP` runs each app under a wrapper.
+Close any running Reaktor app first: the showcase and notepad are single
+instance, and a running copy would take the launch.
+
+Output lands in `smoke/pss/` and `smoke/pss-pages/`: `runs.txt` holds each
+launch's raw numbers (kB), `saving.txt` the per-launch saving, and each app's
+`.log` its output. The last lines printed are the medians and the saving
+against 20%.
+
+Worth noting with the result: distribution, desktop (X11 or Wayland), GPU or
+not, and whether the numbers differ from CI's. A desktop run loads the real
+GL, input-method and accessibility stacks, so PSS grows and the percentage is
+likely to fall.
+
 ## Phase 1: the shared build (only if Phase 0 says go)
 
 1. A `REAKTOR_SHARED` option, default `OFF`, building `libreaktor.so` with a
@@ -109,5 +192,5 @@ does not count toward it; smaller packages would be a separate argument.
 
 ## Open questions
 
-None. The threshold is 20% (agreed 2026-10-30), and Phase 0 runs in CI only:
-`tools/ci/pss.sh`, a step of `linux.yml` on branch `shared-phase0`.
+1. Go or no-go, once a Linux desktop run is in. The threshold is 20% (agreed
+   2026-10-30); CI says 20.2% at most.
