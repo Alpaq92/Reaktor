@@ -50,6 +50,13 @@ measure() {
     echo "$pss $bin"
 }
 
+# Under a wrapper the app is not the child, so it is found by its binary.
+find_app() {
+    for d in /proc/[0-9]*; do
+        [ "$(readlink "$d/exe" 2>/dev/null)" = "$1" ] && echo "${d#/proc/}"
+    done
+}
+
 rows=smoke/pss/runs.txt
 : >"$rows"
 i=0
@@ -57,23 +64,14 @@ while [ "$i" -lt "$runs" ]; do
     i=$((i + 1))
     pids=""
     for a in $apps; do
-        rm -f "smoke/pss/$a.log"
-        $wrap "$build/$a" --log "smoke/pss/$a.log" </dev/null >/dev/null 2>&1 &
+        $wrap "$build/$a" </dev/null >"smoke/pss/$a.log" 2>&1 &
         pids="$pids $!"
     done
-    for a in $apps; do
-        n=0
-        while [ ! -s "smoke/pss/$a.log" ] && [ "$n" -lt 60 ]; do n=$((n + 1)); sleep 1; done
-    done
-    sleep 5
+    sleep 10
     row=""
     found=""
     for a in $apps; do
-        # Under a wrapper the app is not the child, so find it by its binary.
-        pid=""
-        for d in /proc/[0-9]*; do
-            [ "$(readlink "$d/exe" 2>/dev/null)" = "$build/$a" ] && pid=${d#/proc/}
-        done
+        pid=$(find_app "$build/$a")
         if [ -z "$pid" ]; then echo "run $i: $a is not running"; cat "smoke/pss/$a.log" 2>/dev/null; exit 1; fi
         found="$found $pid"
         row="$row $(measure "$pid" "$build/$a")"
