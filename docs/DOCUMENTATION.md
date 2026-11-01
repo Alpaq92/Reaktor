@@ -299,8 +299,9 @@ first column names the row. With `.selected`, a click picks a row and the
 selection follows keyboard focus; the arrow keys move it, scrolling the row
 into view. Without it the rows are plain text. Unsized, a list shows up to
 eight rows and fills its row. Colors come from `thead`, `th`, `td`,
-`--table-bg` and `--table-bg-alt`, which reaktor.css takes from Water.css's
-`--links`, `--background-body` and `--background-alt`.
+`--table`, `--table-bg` and `--table-bg-alt`, which reaktor.css takes from
+Water.css's `--links`, `--background-body` and `--background-alt`. The header
+row is `thead`'s background, or `--table` without one, as the sheet writes it.
 
 **A row can be dragged** out of a list that names a `.drag` kind, a string.
 Its first column follows the pointer as a tooltip would, and any list of the
@@ -672,7 +673,7 @@ if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
 | Floater | `dialog` |
 | Toast | `.toast`, `.toast-button`, `.toast-close` |
 | Tooltip | `.tooltip` |
-| List | `thead`, `th`, `td`; `--table-bg`, `--table-bg-alt` |
+| List | `thead`, `th`, `td`; `--table`, `--table-bg`, `--table-bg-alt` |
 | Sidebar, tabs | `.sidebar-item`, `.sidebar-current`, `.sidebar-edge`; `.tab`, `.tab-current`, `.tab-edge` |
 
 With `:hover` and `:active` where a widget has those states, a button's
