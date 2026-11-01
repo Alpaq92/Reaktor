@@ -658,7 +658,7 @@ Nuklear's default:
 ```c
 reaktor_style s;
 reaktor_style_get("button", &s);
-if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
+if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px, s.gradient */ }
 ```
 
 | Widget | Reads |
@@ -775,7 +775,8 @@ open at its end, in a comment, string or block, is closed there.
 | Property | Notes |
 | --- | --- |
 | `color`, `background-color` | |
-| `background` | Its color, wherever it stands among the layers; one with none is transparent |
+| `background` | Its color, wherever it stands among the layers, and a `linear-gradient()` among them; one with neither is transparent, and a gradient alone stands in as its first stop where a color is read |
+| `background-image` | `linear-gradient()` or `none`. Two stops, run `to right`, `to left`, `to top`, `to bottom` or a multiple of `90deg`; any other gradient is not drawn. It fills a button (in each state) and a slider's filled part when that slider's rule has one; `background-color` leaves it in place, as in CSS |
 | `border`, `border-top`, `-right`, `-bottom`, `-left` | Width, style and color in any order. A side with no style has no width; one with no color takes the text's |
 | `border-width`, `border-style`, and each side's | One to four values; `thin`, `medium` and `thick` are 1, 3 and 5 px |
 | `border-color`, `border-top-color` | The top color is the one a widget draws |
@@ -887,7 +888,7 @@ out by hand inside a declared page. [`include/reaktor/ui.h`](../include/reaktor/
 | `reaktor_image_file`, `REAKTOR_MARK` | Any image asset: an SVG, recolored by `?stroke=#rrggbb&fill=&sw=`, or a PNG or JPEG; the mark's name |
 | `reaktor_image_centered` | An image at its own size, centered in the next widget slot |
 | `reaktor_style_frame`, `reaktor_style_frame_pop` | Counts of style pushes, popped together |
-| `reaktor_fill_round`, `reaktor_edge_round` | Rounded fills and borders, smooth on the software renderer |
+| `reaktor_fill_round`, `reaktor_fill_gradient`, `reaktor_edge_round` | Rounded fills, two-stop gradients (`REAKTOR_GRADIENT_ACROSS` left to right, `_DOWN` top to bottom) and borders, smooth on the software renderer |
 | `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)), with a `REAKTOR_CURSOR_*` over it: default, pointer, text, or a horizontal or vertical resize |
 | `reaktor_tip(app, rect, text)` | A tooltip over a rectangle you drew yourself, such as a bar of a chart; the text is copied, and the rectangle redraws as the pointer crosses it |
 | `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_button_accent_icon`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside hand-laid rows |

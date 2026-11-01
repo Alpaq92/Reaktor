@@ -27,7 +27,7 @@ enum {
     P_BG, P_FG, P_BC,
     P_BW, P_BS = P_BW + 4, P_RAD = P_BS + 4, P_PAD = P_RAD + 4, P_MAR = P_PAD + 4,
     P_W = P_MAR + 4, P_H, P_MINW, P_MINH, P_MAXW, P_MAXH,
-    P_FS, P_FW, P_LH, P_OP, P_COUNT
+    P_FS, P_FW, P_LH, P_OP, P_GFROM, P_GTO, P_COUNT
 };
 
 enum { F_IMPORTANT = 1, F_INITIAL = 2, F_CURRENT = 4, F_NUMBER = 8 };
@@ -636,6 +636,58 @@ static int color(const char *s, size_t n, unsigned char rgba[4], unsigned char *
     return 1;
 }
 
+static int direction(const char *s, size_t n, int *axis, int *flip)
+{
+    const char *end;
+    double      deg;
+    size_t      a = 2, e = n;
+
+    if (n > 3 && word(s, 2, "to") && space(s[2])) {
+        trim(s, &a, &e);
+        *flip = word(s + a, e - a, "left") || word(s + a, e - a, "top");
+        if (word(s + a, e - a, "left") || word(s + a, e - a, "right"))
+            *axis = REAKTOR_GRADIENT_ACROSS;
+        else if (word(s + a, e - a, "top") || word(s + a, e - a, "bottom"))
+            *axis = REAKTOR_GRADIENT_DOWN;
+        else
+            return 0;
+        return 1;
+    }
+    deg = number(s, &end);
+    if (end == s || !word(end, n - (size_t)(end - s), "deg") || deg != (double)(long)deg)
+        return 0;
+    switch ((((long)deg % 360) + 360) % 360) {
+    case 0:   *axis = REAKTOR_GRADIENT_DOWN;   *flip = 1; return 1;
+    case 90:  *axis = REAKTOR_GRADIENT_ACROSS; *flip = 0; return 1;
+    case 180: *axis = REAKTOR_GRADIENT_DOWN;   *flip = 0; return 1;
+    case 270: *axis = REAKTOR_GRADIENT_ACROSS; *flip = 1; return 1;
+    default:  return 0;
+    }
+}
+
+/* linear-gradient([to <side> | <n>deg,] a, b), turned to run left to right or
+   top to bottom. Two stops and the four sides are all that is drawn. */
+static int gradient(const char *s, size_t n, unsigned char from[4], unsigned char to[4],
+                    int *axis)
+{
+    size_t        i = 16, item[3][2];
+    unsigned char flags = 0;
+    int           k = 0, flip = 0, way = REAKTOR_GRADIENT_DOWN;
+
+    if (n < 18 || !word(s, 16, "linear-gradient(") || s[n - 1] != ')') return 0;
+    n--;
+    while (k < 3 && next_item(s, &i, n, &item[k][0], &item[k][1])) k++;
+    if (i < n || k < 2) return 0;
+    if (k == 3 && !direction(s + item[0][0], item[0][1] - item[0][0], &way, &flip))
+        return 0;
+    if (!color(s + item[k - 2][0], item[k - 2][1] - item[k - 2][0], flip ? to : from, &flags) ||
+        !color(s + item[k - 1][0], item[k - 1][1] - item[k - 1][0], flip ? from : to, &flags) ||
+        flags)
+        return 0;
+    *axis = way;
+    return 1;
+}
+
 static int line_style(const char *s, size_t n, float *v)
 {
     static const char *const styles[] = { "none", "hidden", "dotted", "dashed", "solid",
@@ -675,7 +727,8 @@ static void emit(ctx *x, int prop, float v, const unsigned char *rgba, unsigned 
     else memset(d->rgba, 0, 4);
 }
 
-enum { K_COLOR, K_BG, K_LEN, K_FS, K_FW, K_LH, K_OP, K_BOX, K_RADIUS, K_BSTYLE, K_BCOLOR, K_BORDER };
+enum { K_COLOR, K_BG, K_BGIMG, K_LEN, K_FS, K_FW, K_LH, K_OP, K_BOX, K_RADIUS, K_BSTYLE,
+       K_BCOLOR, K_BORDER };
 
 static const struct prop {
     const char   *name;
@@ -688,7 +741,7 @@ static const struct prop {
     { "min-height", K_LEN, P_MINH, 0 },        { "max-width", K_LEN, P_MAXW, 0 },
     { "max-height", K_LEN, P_MAXH, 0 },        { "font-size", K_FS, P_FS, 0 },
     { "font-weight", K_FW, P_FW, 0 },          { "line-height", K_LH, P_LH, 0 },
-    { "opacity", K_OP, P_OP, 0 },
+    { "opacity", K_OP, P_OP, 0 },              { "background-image", K_BGIMG, P_GTO, 0 },
     { "padding", K_BOX, P_PAD, -1 },           { "padding-top", K_BOX, P_PAD, 0 },
     { "padding-right", K_BOX, P_PAD, 1 },      { "padding-bottom", K_BOX, P_PAD, 2 },
     { "padding-left", K_BOX, P_PAD, 3 },       { "margin", K_BOX, P_MAR, -1 },
@@ -780,18 +833,42 @@ static void apply(ctx *x, const struct prop *p, const char *v, size_t n)
         return;
     default: break;
     }
-    if (reset) { emit(x, p->base, 0.0f, NULL, F_INITIAL); return; }
+    if (reset) {
+        if (p->kind == K_BG) emit(x, P_GTO, 0.0f, NULL, F_INITIAL);
+        emit(x, p->base, 0.0f, NULL, F_INITIAL);
+        return;
+    }
     switch (p->kind) {
     case K_COLOR:
         if (color(v, n, rgba, &flags)) emit(x, p->base, 0.0f, rgba, flags);
         break;
-    case K_BG:
+    case K_BG: {
+        unsigned char from[4] = { 0, 0, 0, 0 }, to[4] = { 0, 0, 0, 0 };
+        int           axis = REAKTOR_GRADIENT_NONE, painted = 0;
+
         for (;;) {
             while (i < n && (space(v[i]) || v[i] == '/')) i++;
-            if (!part(v, &i, n, &a, &b) || color(v + a, b - a, rgba, &flags)) break;
+            if (!part(v, &i, n, &a, &b)) break;
+            if (!axis && gradient(v + a, b - a, from, to, &axis)) continue;
+            if (color(v + a, b - a, rgba, &flags)) { painted = 1; break; }
         }
+        /* Where the gradient is not drawn, its first stop stands for it. */
+        if (axis && !painted) memcpy(rgba, from, 4);
         emit(x, P_BG, 0.0f, rgba, flags);
+        emit(x, P_GFROM, 0.0f, from, 0);
+        emit(x, P_GTO, (float)axis, to, 0);
         break;
+    }
+    case K_BGIMG: {
+        unsigned char from[4] = { 0, 0, 0, 0 }, to[4] = { 0, 0, 0, 0 };
+        int           axis = REAKTOR_GRADIENT_NONE;
+
+        if (word(v, n, "none") || gradient(v, n, from, to, &axis)) {
+            emit(x, P_GFROM, 0.0f, from, 0);
+            emit(x, P_GTO, (float)axis, to, 0);
+        }
+        break;
+    }
     case K_LEN:
         if (length(x, v, n, &f)) emit(x, p->base, f, NULL, 0);
         break;
@@ -1586,6 +1663,11 @@ static void resolve(const reaktor_sheet *s, const decl *const *w, reaktor_style 
     o->fg[3] = 255;
     paint(w[P_FG], o->fg, o->fg);
     paint(w[P_BG], o->fg, o->bg);
+    if (set(w[P_GTO]) && set(w[P_GFROM]) && w[P_GTO]->v > 0.0f) {
+        o->gradient = (int)w[P_GTO]->v;
+        memcpy(o->gradient_from, w[P_GFROM]->rgba, 4);
+        memcpy(o->gradient_to, w[P_GTO]->rgba, 4);
+    }
     memcpy(o->border_col, o->fg, 4);
     paint(w[P_BC], o->fg, o->border_col);
     for (k = 0; k < 4; k++) {

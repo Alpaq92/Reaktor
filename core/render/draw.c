@@ -581,6 +581,120 @@ reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
     }
 }
 
+typedef struct ramp {
+    struct nk_rect  b;
+    struct nk_color from, to;
+    int             across;
+} ramp;
+
+static struct nk_color
+ramp_at(const ramp *g, float at)
+{
+    float span = g->across ? g->b.w : g->b.h;
+    float t = (at - (g->across ? g->b.x : g->b.y)) / span;
+
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return nk_rgba((int)(g->from.r + (g->to.r - g->from.r) * t + 0.5f),
+                   (int)(g->from.g + (g->to.g - g->from.g) * t + 0.5f),
+                   (int)(g->from.b + (g->to.b - g->from.b) * t + 0.5f),
+                   (int)(g->from.a + (g->to.a - g->from.a) * t + 0.5f));
+}
+
+static void
+ramp_rect(struct nk_command_buffer *cv, const ramp *g, struct nk_rect r)
+{
+    struct nk_color a = ramp_at(g, g->across ? r.x : r.y);
+    struct nk_color z = ramp_at(g, g->across ? r.x + r.w : r.y + r.h);
+
+    if (g->across) nk_fill_rect_multi_color(cv, r, a, z, z, a);
+    else           nk_fill_rect_multi_color(cv, r, a, a, z, z);
+}
+
+/* A corner is cut into texel-wide strips along the ramp, each tinted where it sits. */
+static void
+ramp_corners(struct nk_command_buffer *cv, const ramp *g, struct nk_image mask, int m,
+             int r)
+{
+    float M = (float)m, D = (float)(2 * m + 1), R = (float)r;
+    int i, k;
+
+    for (i = 0; i < 4; i++) {
+        float x = (i & 1) ? g->b.x + g->b.w - R : g->b.x;
+        float y = (i & 2) ? g->b.y + g->b.h - R : g->b.y;
+        float u = (i & 1) ? M + 1.0f : 0.0f;
+        float v = (i & 2) ? M + 1.0f : 0.0f;
+
+        for (k = 0; k < m; k++) {
+            float s0 = R * (float)k / M, s1 = R * (float)(k + 1) / M;
+            struct nk_rect  at = g->across ? nk_rect(x + s0, y, s1 - s0, R)
+                                           : nk_rect(x, y + s0, R, s1 - s0);
+            struct nk_rect  src = g->across ? nk_rect(u + (float)k, v, 1.0f, M)
+                                            : nk_rect(u, v + (float)k, M, 1.0f);
+            struct nk_image q = nk_subimage_handle(mask.handle, (nk_ushort)D,
+                                                   (nk_ushort)D, src);
+
+            nk_draw_image(cv, at, &q,
+                          ramp_at(g, g->across ? at.x + at.w * 0.5f
+                                               : at.y + at.h * 0.5f));
+        }
+    }
+}
+
+void
+reaktor_fill_gradient(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                      float rounding, struct nk_color from, struct nk_color to,
+                      int axis)
+{
+    struct nk_image disc;
+    ramp  g;
+    float R, D;
+    int   r, m;
+
+    if (axis == REAKTOR_GRADIENT_NONE || !memcmp(&from, &to, sizeof from)) {
+        reaktor_fill_round(app, cv, b, rounding, from);
+        return;
+    }
+    if (b.w <= 0.0f || b.h <= 0.0f || (!from.a && !to.a)) return;
+    g.b      = whole_px(b);
+    g.from   = from;
+    g.to     = to;
+    g.across = axis == REAKTOR_GRADIENT_ACROSS;
+    if (g.b.w <= 0.0f || g.b.h <= 0.0f) return;
+    if (app) {
+        app->surface_at = b;
+        app->surface    = ramp_at(&g, g.across ? g.b.x + g.b.w * 0.5f
+                                               : g.b.y + g.b.h * 0.5f);
+    }
+    r = corner_px(g.b, rounding);
+    if (r < 1) { ramp_rect(cv, &g, g.b); return; }
+    m = mask_px((float)r);
+    disc = round_mask(app, m, 0);
+    if (!disc.handle.ptr) { ramp_rect(cv, &g, g.b); return; }
+
+    ramp_corners(cv, &g, disc, m, r);
+    b = g.b;
+    R = (float)r;
+    D = 2.0f * R;
+    if (b.h > D)
+        ramp_rect(cv, &g, nk_rect(b.x, b.y + R, b.w, b.h - D));
+    if (b.w > D) {
+        ramp_rect(cv, &g, nk_rect(b.x + R, b.y, b.w - D, R));
+        ramp_rect(cv, &g, nk_rect(b.x + R, b.y + b.h - R, b.w - D, R));
+    }
+}
+
+void
+reaktor_fill_style(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                   float rounding, const reaktor_style *s)
+{
+    if (s->gradient)
+        reaktor_fill_gradient(app, cv, b, rounding, nk_rgba_bv(s->gradient_from),
+                              nk_rgba_bv(s->gradient_to), s->gradient);
+    else
+        reaktor_fill_round(app, cv, b, rounding, nk_rgba_bv(s->bg));
+}
+
 
 static void
 center_glyphs_optically(struct reaktor_font *f)

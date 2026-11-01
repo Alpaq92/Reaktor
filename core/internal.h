@@ -376,6 +376,8 @@ typedef struct reaktor_surface {
 } reaktor_surface;
 
 reaktor_surface reaktor_rule_surface(const reaktor_style *s, float radius);
+void reaktor_fill_style(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                        float rounding, const reaktor_style *s);
 void reaktor_paint_surface(App *app, struct nk_command_buffer *cv, struct nk_rect r,
                            const reaktor_surface *s);
 struct nk_rect reaktor_rect_trunc(struct nk_rect b);
@@ -484,8 +486,11 @@ void reaktor_unfit_label(struct nk_context *ctx, int fitted);
 int reaktor_radio_label(App *app, struct nk_context *ctx, const char *label,
                         int on);
 
+void reaktor_slider_ramp(App *app, struct nk_context *ctx, unsigned id, float *val,
+                         float lo, float hi, float step, const reaktor_style *fill);
 void reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id,
-                            int *val, int lo, int hi, int step);
+                            int *val, int lo, int hi, int step,
+                            const reaktor_style *fill);
 void reaktor_knob_dial(App *app, struct nk_context *ctx, float *val,
                        float lo, float hi, enum nk_heading zero);
 
