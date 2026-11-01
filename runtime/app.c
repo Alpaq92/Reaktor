@@ -97,6 +97,16 @@ reaktor_asset_name(const reaktor_asset *a, const char *fallback)
 #define ON_WEB 0
 #endif
 
+#if defined(__EMSCRIPTEN__)
+#define GPU_DRIVERS "opengles2"
+#elif defined(__APPLE__)
+#define GPU_DRIVERS "metal"
+#elif defined(_WIN32)
+#define GPU_DRIVERS "opengl,direct3d12,direct3d11"
+#else
+#define GPU_DRIVERS "opengl,opengles2"
+#endif
+
 static int
 capturing(const App *app)
 {
@@ -806,6 +816,8 @@ app_init(void **appstate, int argc, char *argv[])
                     sizeof(app->render_mode));
         if (SDL_strcasecmp(app->renderer_pref, "directx") == 0)
             reaktor_hint(SDL_HINT_RENDER_DRIVER, "direct3d12,direct3d11");
+        else if (SDL_strcasecmp(app->renderer_pref, "gpu") == 0)
+            reaktor_hint(SDL_HINT_RENDER_DRIVER, GPU_DRIVERS);
         else if (SDL_strcmp(app->renderer_pref, "auto") != 0)
             reaktor_hint(SDL_HINT_RENDER_DRIVER, app->renderer_pref);
     } else {

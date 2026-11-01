@@ -1146,7 +1146,7 @@ Passed to CMake, through either script:
 | `REAKTOR_PRINT` | `ON` | Printing and PDF export |
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
 | `REAKTOR_SDL_D3D` | `ON` | Build SDL's Direct3D 11 and 12 renderers on Windows; off, a program is 105 KB smaller and draws in software only |
-| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs |
+| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs; macOS builds them either way |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
@@ -1208,7 +1208,7 @@ removes them from `argv` before the application sees it:
 | `--theme <system\|light\|dark>` | Open in that scheme; on OpenBSD `system` reads as light |
 | `--lang <code>` | Open in that catalog: `en`, `pl`, `ja` |
 | `--font-fallback <path>` | A font for the Text module, before the application's; repeatable |
-| `--renderer <name>` | `software` (default), `auto`, `directx`, or a driver name; see [The renderer](#the-renderer) |
+| `--renderer <name>` | `software` (default), `auto`, `gpu`, `directx`, or a driver name; see [The renderer](#the-renderer) |
 | `--aa <auto\|on\|off>` | Override `.anti_aliasing` |
 | `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
 | `--popups inline` | Menus inside the window, not in windows of their own |
@@ -1330,10 +1330,11 @@ command line names one, and `--new-instance` is passed for it.
 
 | Name | Where | For | Against |
 | --- | --- | --- | --- |
+| `gpu` | Everywhere | `metal` on macOS; `opengl`, else `direct3d12`, else `direct3d11` on Windows; `opengl`, else `opengles2` on Linux and the BSDs; `opengles2` on the web | A driver left out of the build is skipped, so without `-DREAKTOR_SDL_GL=ON` it is `directx` on Windows; on Linux with no GPU, `opengl` runs on the CPU through Mesa |
 | `directx` | Windows | Direct3D 12 where it starts, else 11 | As below |
 | `direct3d12` | Windows 10 and later | Least CPU once running | Most memory, slowest start |
 | `direct3d11` | Windows | Any Windows GPU | Most CPU of the GPU renderers measured; neither Direct3D renderer is built with `-DREAKTOR_SDL_D3D=OFF` |
-| `opengl` | Windows, Linux, BSDs | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`; on Linux without a GPU it loads Mesa and LLVM |
+| `opengl` | Windows, Linux, BSDs, macOS | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`, except on macOS; on Linux without a GPU it loads Mesa and LLVM; macOS deprecates it in favor of Metal |
 | `opengles2` | Where the driver offers it | | Built only with `-DREAKTOR_SDL_GL=ON`; not measured |
 | `metal` | macOS | | |
 | `auto` | Everywhere | SDL chooses | |
