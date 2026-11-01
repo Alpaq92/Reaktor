@@ -97,6 +97,67 @@ reaktor_asset_name(const reaktor_asset *a, const char *fallback)
 #define ON_WEB 0
 #endif
 
+#if defined(__EMSCRIPTEN__)
+#define GPU_DRIVERS "opengles2"
+#elif defined(__APPLE__)
+#define GPU_DRIVERS "metal"
+#elif defined(_WIN32)
+#define GPU_DRIVERS "opengl,direct3d12,direct3d11"
+#else
+#define GPU_DRIVERS "opengl,opengles2"
+#endif
+
+/* An output colorspace is fixed when the renderer is made. scRGB is the HDR one
+   SDL scales sRGB drawing into; a renderer without it, software among them, is
+   made SDR as before. */
+SDL_Renderer *
+reaktor_renderer_for(SDL_Window *win, const char *name, int hdr)
+{
+    SDL_Renderer *ren = NULL;
+
+    if (hdr) {
+        SDL_PropertiesID p = SDL_CreateProperties();
+
+        SDL_SetPointerProperty(p, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, win);
+        if (name) SDL_SetStringProperty(p, SDL_PROP_RENDERER_CREATE_NAME_STRING, name);
+        SDL_SetNumberProperty(p, SDL_PROP_RENDERER_CREATE_OUTPUT_COLORSPACE_NUMBER,
+                              SDL_COLORSPACE_SRGB_LINEAR);
+        ren = SDL_CreateRendererWithProperties(p);
+        SDL_DestroyProperties(p);
+    }
+    /* SDL's gpu renderer keeps a linear output on a swapchain that cannot show
+       one, and draws everything dark there. */
+    if (ren) {
+        SDL_GPUDevice *dev = (SDL_GPUDevice *)SDL_GetPointerProperty(
+            SDL_GetRendererProperties(ren), SDL_PROP_RENDERER_GPU_DEVICE_POINTER, NULL);
+
+        if (dev && !SDL_WindowSupportsGPUSwapchainComposition(
+                       dev, win, SDL_GPU_SWAPCHAINCOMPOSITION_HDR_EXTENDED_LINEAR)) {
+            SDL_DestroyRenderer(ren);
+            ren = NULL;
+        }
+    }
+    return ren ? ren : SDL_CreateRenderer(win, name);
+}
+
+static const char *launch_title(void);
+
+/* SDL_CreateWindowAndRenderer, with the renderer made by the call above. */
+static bool
+open_window(App *app, int w, int h, SDL_WindowFlags flags)
+{
+    app->win = SDL_CreateWindow(launch_title(), w, h, flags | SDL_WINDOW_HIDDEN);
+    if (!app->win) return false;
+    app->ren = reaktor_renderer_for(app->win, NULL, g_launch.hdr);
+    if (!app->ren) {
+        SDL_DestroyWindow(app->win);
+        app->win = NULL;
+        return false;
+    }
+    if (!(flags & SDL_WINDOW_HIDDEN)) SDL_ShowWindow(app->win);
+    return true;
+}
+
 static int
 capturing(const App *app)
 {
@@ -288,6 +349,10 @@ take_flags(App *app, int argc, char **argv)
         else if (v && SDL_strcmp(a, "--contrast") == 0) { g_contrast_flag = pick(v, "more", 1, "normal", -1, 0); i++; }
         else if (SDL_strcmp(a, "--new-instance") == 0)   g_new_instance = 1;
         else if (v && SDL_strcmp(a, "--renderer") == 0) { app->renderer_pref = v; i++; }
+        else if (v && SDL_strcmp(a, "--hdr") == 0) {
+            g_launch.hdr = pick(v, "on", 1, "off", 0, g_launch.hdr);
+            i++;
+        }
         else if (v && SDL_strcmp(a, "--video") == 0)    { app->video_pref = v; i++; }
         else if (v && SDL_strcmp(a, "--popups") == 0) {
             app->popups_inline = SDL_strcmp(v, "inline") == 0;
@@ -801,11 +866,16 @@ app_init(void **appstate, int argc, char *argv[])
     reaktor_rss_mark(REAKTOR_RSS_SDL);
     take_assets(app);
 
+    if (!app->renderer_pref) app->renderer_pref = g_launch.renderer;
     if (app->renderer_pref && SDL_strcmp(app->renderer_pref, "software") != 0) {
         SDL_strlcpy(app->render_mode, app->renderer_pref,
                     sizeof(app->render_mode));
         if (SDL_strcasecmp(app->renderer_pref, "directx") == 0)
             reaktor_hint(SDL_HINT_RENDER_DRIVER, "direct3d12,direct3d11");
+        else if (SDL_strcasecmp(app->renderer_pref, "gpu") == 0)
+            reaktor_hint(SDL_HINT_RENDER_DRIVER, GPU_DRIVERS);
+        else if (SDL_strcasecmp(app->renderer_pref, "sdl-gpu") == 0)
+            reaktor_hint(SDL_HINT_RENDER_DRIVER, "gpu");
         else if (SDL_strcmp(app->renderer_pref, "auto") != 0)
             reaktor_hint(SDL_HINT_RENDER_DRIVER, app->renderer_pref);
     } else {
@@ -839,15 +909,12 @@ app_init(void **appstate, int argc, char *argv[])
 
         Uint64 t0 = SDL_GetPerformanceCounter();
 
-        if (!SDL_CreateWindowAndRenderer(launch_title(), win_w, win_h, flags,
-                                         &app->win, &app->ren)) {
+        if (!open_window(app, win_w, win_h, flags)) {
             SDL_Log("renderer '%s' would not start (%s); falling back",
                     app->render_mode, SDL_GetError());
-            if (app->win) { SDL_DestroyWindow(app->win); app->win = NULL; }
             reaktor_hint(SDL_HINT_RENDER_DRIVER, NULL);
             SDL_strlcpy(app->render_mode, "auto", sizeof(app->render_mode));
-            if (!SDL_CreateWindowAndRenderer(launch_title(), win_w, win_h, flags,
-                                             &app->win, &app->ren))
+            if (!open_window(app, win_w, win_h, flags))
                 return fail(app, "The window could not be opened");
         }
 
@@ -988,6 +1055,7 @@ reaktor_take_event(App *app, SDL_Event *event)
     case SDL_EVENT_SYSTEM_THEME_CHANGED:
     case SDL_EVENT_LOCALE_CHANGED:
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+    case SDL_EVENT_WINDOW_HDR_STATE_CHANGED:
         app->dirty = 1;
         app->why |= REAKTOR_WHY_INPUT;
         break;
@@ -995,15 +1063,19 @@ reaktor_take_event(App *app, SDL_Event *event)
         break;
     }
 
-    /* What the window shows may be gone, whatever the frame would draw. */
+    /* What the window shows may be gone, whatever the frame would draw; and a
+       box is placed a frame late, so a new size needs a second frame. */
     switch (event->type) {
     case SDL_EVENT_WINDOW_RESIZED:
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-    case SDL_EVENT_WINDOW_EXPOSED:
-    case SDL_EVENT_WINDOW_SHOWN:
     case SDL_EVENT_WINDOW_RESTORED:
     case SDL_EVENT_WINDOW_MAXIMIZED:
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+        if (!app->dragging && app->restore_rate < 2) app->restore_rate = 2;
+        /* fall through */
+    case SDL_EVENT_WINDOW_EXPOSED:
+    case SDL_EVENT_WINDOW_SHOWN:
+    case SDL_EVENT_WINDOW_HDR_STATE_CHANGED:
     case SDL_EVENT_RENDER_TARGETS_RESET:
     case SDL_EVENT_RENDER_DEVICE_RESET:
         app->must_draw = 1;

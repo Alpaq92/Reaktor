@@ -636,10 +636,11 @@ reaktor_select(const reaktor_select_spec *s)
 void
 reaktor_slider(const reaktor_slider_spec *s)
 {
-    reaktor_box box;
-    char        text[32];
-    unsigned    id = 0;
-    float       now;
+    reaktor_box   box;
+    reaktor_style fill;
+    char          text[32];
+    unsigned      id = 0;
+    float         now;
 
     if (!g_frame_app || !s || (!s->value && !s->ivalue)) return;
     now = s->value ? *s->value : (float)*s->ivalue;
@@ -656,12 +657,14 @@ reaktor_slider(const reaktor_slider_spec *s)
     if (!decl_place(REAKTOR_A11Y_SLIDER, s->name, text, 0u, NULL, &box, &id))
         return;
 
+    reaktor_style_get(s->style ? s->style : "input.type-range", &fill);
     reaktor_note_mute(g_frame_app, 1);
     if (s->value)
-        reaktor_slider_bar(g_frame_app, g_frame_ctx, id, s->value, s->lo, s->hi, s->step);
+        reaktor_slider_ramp(g_frame_app, g_frame_ctx, id, s->value, s->lo, s->hi, s->step,
+                            &fill);
     else
         reaktor_slider_bar_int(g_frame_app, g_frame_ctx, id, s->ivalue, (int)s->lo,
-                               (int)s->hi, (int)s->step);
+                               (int)s->hi, (int)s->step, &fill);
     reaktor_note_mute(g_frame_app, 0);
 }
 

@@ -241,7 +241,8 @@ See [Command-line flags](DOCUMENTATION.md#command-line-flags).
 
 Usually not. `software`, the default, needs no GPU, uses about a tenth of the
 memory and starts fastest. A GPU
-renderer pays off in long, continuous animation: `--renderer directx` takes
+renderer pays off in long, continuous animation: `--renderer gpu` takes
+Metal on macOS and OpenGL elsewhere where it is built, and `--renderer directx` takes
 Direct3D 12 on Windows where it starts, else 11, and `opengl` needs a build
 with `-DREAKTOR_SDL_GL=ON`. Expect six to thirteen times the memory. See
 [The renderer](DOCUMENTATION.md#the-renderer).
