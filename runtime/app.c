@@ -1012,6 +1012,19 @@ reaktor_take_event(App *app, SDL_Event *event)
         break;
     }
 
+    /* A box is placed a frame late, so a new size needs a second frame. */
+    switch (event->type) {
+    case SDL_EVENT_WINDOW_RESIZED:
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+    case SDL_EVENT_WINDOW_RESTORED:
+    case SDL_EVENT_WINDOW_MAXIMIZED:
+    case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+        if (!app->dragging && app->restore_rate < 2) app->restore_rate = 2;
+        break;
+    default:
+        break;
+    }
+
     switch (event->type) {
     case SDL_EVENT_MOUSE_MOTION:
         if (app->dragging) { app->drag_moved = 1; app->dirty = 1; }
