@@ -387,6 +387,7 @@ void reaktor_fade_since(struct nk_context *ctx, const struct nk_command_buffer *
 
 App *reaktor_main_app(void);
 bool reaktor_app_wake(const App *app);
+SDL_Renderer *reaktor_renderer_for(SDL_Window *win, const char *name, int hdr);
 void reaktor_hint(const char *name, const char *value);
 int  reaktor_key_hook(App *app, const SDL_Event *event);
 void reaktor_take_event(App *app, SDL_Event *event);

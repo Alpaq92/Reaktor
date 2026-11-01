@@ -1147,6 +1147,7 @@ Passed to CMake, through either script:
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
 | `REAKTOR_SDL_D3D` | `ON` | Build SDL's Direct3D 11 and 12 renderers on Windows; off, a program is 105 KB smaller and draws in software only |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs; macOS builds them either way |
+| `REAKTOR_SDL_GPU` | `ON` | Build SDL's GPU API and its renderer, `--renderer sdl-gpu`: Direct3D 12 on Windows, Metal on macOS, Vulkan on Linux and the BSDs; off, a program is 184 KB smaller on Windows |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
@@ -1208,7 +1209,8 @@ removes them from `argv` before the application sees it:
 | `--theme <system\|light\|dark>` | Open in that scheme; on OpenBSD `system` reads as light |
 | `--lang <code>` | Open in that catalog: `en`, `pl`, `ja` |
 | `--font-fallback <path>` | A font for the Text module, before the application's; repeatable |
-| `--renderer <name>` | `software` (default), `auto`, `gpu`, `directx`, or a driver name; see [The renderer](#the-renderer) |
+| `--renderer <name>` | `software` (default), `auto`, `gpu`, `sdl-gpu`, `directx`, or a driver name; see [The renderer](#the-renderer) |
+| `--hdr <on\|off>` | Make the renderer with an HDR output, as `.hdr` does; see [The renderer](#the-renderer) |
 | `--aa <auto\|on\|off>` | Override `.anti_aliasing` |
 | `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
 | `--popups inline` | Menus inside the window, not in windows of their own |
@@ -1337,7 +1339,22 @@ command line names one, and `--new-instance` is passed for it.
 | `opengl` | Windows, Linux, BSDs, macOS | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`, except on macOS; on Linux without a GPU it loads Mesa and LLVM; macOS deprecates it in favor of Metal |
 | `opengles2` | Where the driver offers it | | Built only with `-DREAKTOR_SDL_GL=ON`; not measured |
 | `metal` | macOS | | |
+| `sdl-gpu` | Windows, macOS, Linux, BSDs | SDL's GPU API: Direct3D 12, Metal or Vulkan, and an application's own shaders through `SDL_CreateGPURenderState` | Not built with `-DREAKTOR_SDL_GPU=OFF`; not measured |
 | `auto` | Everywhere | SDL chooses | |
+
+**An application names its renderer** with the launch's `.renderer`, read as
+`--renderer` is when the flag is not given, so `"sdl-gpu"` lets it draw with
+its own shaders: `reaktor_sdl_renderer(app)` hands it the renderer, and the
+renderer's `SDL_PROP_RENDERER_GPU_DEVICE_POINTER` the device they are made for.
+
+**HDR output** is the launch's `.hdr`, or `--hdr on`. The renderer is then made
+with a linear (scRGB) output, which SDL scales so sRGB drawing looks as before
+while an HDR texture can go past white. The colorspace is fixed when the
+renderer is made, so the software renderer, a display without HDR under
+`sdl-gpu`, or a renderer that refuses it gets an SDR one as before, and turning
+the system's HDR on or off takes effect at the next launch. On an SDR display a
+GPU renderer other than `sdl-gpu` keeps the linear output, which blends in
+linear light: edges and text come out slightly different from an SDR renderer.
 
 **Prefer `directx` or `direct3d12` to `direct3d11`.** Once running,
 `direct3d11` took 13.4% of a core where `direct3d12` and `opengl` took 5.6%,

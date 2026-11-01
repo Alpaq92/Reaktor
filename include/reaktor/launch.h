@@ -106,6 +106,8 @@ typedef struct reaktor_launch {
     int    skip_same_frames;
     reaktor_save save_settings;
     int    save_ms;
+    const char *renderer;
+    int    hdr;
 } reaktor_launch;
 
 typedef struct reaktor_window {
