@@ -48,7 +48,6 @@ static struct {
     float                *border, border_was;
     int                   edges;
     struct nk_color       edge_hover, edge_active;
-    int                   ramps;
     struct { struct nk_color from, to; int axis; } ramp[3];
 } g_chrome;
 
@@ -78,7 +77,7 @@ reaktor_chrome_disarm(void)
 {
     g_chrome.armed = 0;
     g_chrome.edges = 0;
-    g_chrome.ramps = 0;
+    g_chrome.ramp[0].axis = g_chrome.ramp[1].axis = g_chrome.ramp[2].axis = 0;
 }
 
 static int
@@ -108,7 +107,7 @@ button_chrome_begin(struct nk_command_buffer *out, nk_handle user)
         return;
     if (g_chrome.edges)
         edge = at == 1 ? g_chrome.edge_hover : at == 2 ? g_chrome.edge_active : edge;
-    if (g_chrome.ramps && g_chrome.ramp[at].axis) {
+    if (g_chrome.ramp[at].axis) {
         reaktor_fill_gradient(app, out, g_chrome.b, st->rounding,
                               nk_rgb_factor(g_chrome.ramp[at].from, k),
                               nk_rgb_factor(g_chrome.ramp[at].to, k),
@@ -191,11 +190,12 @@ push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
     g_chrome.edge_hover  = nk_rgba_bv(hov->matched ? hov->border_col : s.border_col);
     g_chrome.edge_active = nk_rgba_bv(act->matched ? act->border_col : s.border_col);
     {
-        const reaktor_style *by[3] = { &s, hov->matched ? hov : &s, act->matched ? act : NULL };
+        const reaktor_style *by[3];
         int i;
 
-        if (!by[2]) by[2] = by[1];
-        g_chrome.ramps = 0;
+        by[0] = &s;
+        by[1] = hov->matched ? hov : &s;
+        by[2] = act->matched ? act : by[1];
         for (i = 0; i < 3; i++) {
             unsigned char from[4], to[4];
 
@@ -209,7 +209,6 @@ push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
             }
             g_chrome.ramp[i].from = nk_rgba_bv(from);
             g_chrome.ramp[i].to   = nk_rgba_bv(to);
-            g_chrome.ramps        = 1;
         }
     }
 

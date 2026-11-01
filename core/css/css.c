@@ -643,15 +643,17 @@ static int direction(const char *s, size_t n, int *axis, int *flip)
     size_t      a = 2, e = n;
 
     if (n > 3 && word(s, 2, "to") && space(s[2])) {
+        int left, right, top, bottom;
+
         trim(s, &a, &e);
-        *flip = word(s + a, e - a, "left") || word(s + a, e - a, "top");
-        if (word(s + a, e - a, "left") || word(s + a, e - a, "right"))
-            *axis = REAKTOR_GRADIENT_ACROSS;
-        else if (word(s + a, e - a, "top") || word(s + a, e - a, "bottom"))
-            *axis = REAKTOR_GRADIENT_DOWN;
-        else
-            return 0;
-        return 1;
+        left   = word(s + a, e - a, "left");
+        right  = word(s + a, e - a, "right");
+        top    = word(s + a, e - a, "top");
+        bottom = word(s + a, e - a, "bottom");
+        *flip  = left || top;
+        *axis  = left || right ? REAKTOR_GRADIENT_ACROSS
+               : top || bottom ? REAKTOR_GRADIENT_DOWN : REAKTOR_GRADIENT_NONE;
+        return *axis != REAKTOR_GRADIENT_NONE;
     }
     deg = number(s, &end);
     if (end == s || !word(end, n - (size_t)(end - s), "deg") || deg != (double)(long)deg)
@@ -725,6 +727,13 @@ static void emit(ctx *x, int prop, float v, const unsigned char *rgba, unsigned 
     d->flags = (unsigned char)(x->flags | flags);
     if (rgba) memcpy(d->rgba, rgba, 4);
     else memset(d->rgba, 0, 4);
+}
+
+static void emit_gradient(ctx *x, int axis, const unsigned char from[4],
+                          const unsigned char to[4])
+{
+    emit(x, P_GFROM, 0.0f, from, 0);
+    emit(x, P_GTO, (float)axis, to, 0);
 }
 
 enum { K_COLOR, K_BG, K_BGIMG, K_LEN, K_FS, K_FW, K_LH, K_OP, K_BOX, K_RADIUS, K_BSTYLE,
@@ -817,8 +826,10 @@ static void box(ctx *x, const struct prop *p, const char *v, size_t n, int reset
 static void apply(ctx *x, const struct prop *p, const char *v, size_t n)
 {
     unsigned char rgba[4] = { 0, 0, 0, 0 }, flags = 0;
+    unsigned char from[4] = { 0, 0, 0, 0 }, to[4] = { 0, 0, 0, 0 };
     float         f;
     size_t        i = 0, a, b;
+    int           axis = REAKTOR_GRADIENT_NONE, painted = 0;
     int           pct, reset = word(v, n, "inherit") || word(v, n, "initial") ||
                                word(v, n, "unset") || word(v, n, "revert") ||
                                word(v, n, "revert-layer");
@@ -842,10 +853,7 @@ static void apply(ctx *x, const struct prop *p, const char *v, size_t n)
     case K_COLOR:
         if (color(v, n, rgba, &flags)) emit(x, p->base, 0.0f, rgba, flags);
         break;
-    case K_BG: {
-        unsigned char from[4] = { 0, 0, 0, 0 }, to[4] = { 0, 0, 0, 0 };
-        int           axis = REAKTOR_GRADIENT_NONE, painted = 0;
-
+    case K_BG:
         for (;;) {
             while (i < n && (space(v[i]) || v[i] == '/')) i++;
             if (!part(v, &i, n, &a, &b)) break;
@@ -855,20 +863,12 @@ static void apply(ctx *x, const struct prop *p, const char *v, size_t n)
         /* Where the gradient is not drawn, its first stop stands for it. */
         if (axis && !painted) memcpy(rgba, from, 4);
         emit(x, P_BG, 0.0f, rgba, flags);
-        emit(x, P_GFROM, 0.0f, from, 0);
-        emit(x, P_GTO, (float)axis, to, 0);
+        emit_gradient(x, axis, from, to);
         break;
-    }
-    case K_BGIMG: {
-        unsigned char from[4] = { 0, 0, 0, 0 }, to[4] = { 0, 0, 0, 0 };
-        int           axis = REAKTOR_GRADIENT_NONE;
-
-        if (word(v, n, "none") || gradient(v, n, from, to, &axis)) {
-            emit(x, P_GFROM, 0.0f, from, 0);
-            emit(x, P_GTO, (float)axis, to, 0);
-        }
+    case K_BGIMG:
+        if (word(v, n, "none") || gradient(v, n, from, to, &axis))
+            emit_gradient(x, axis, from, to);
         break;
-    }
     case K_LEN:
         if (length(x, v, n, &f)) emit(x, p->base, f, NULL, 0);
         break;
