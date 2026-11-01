@@ -569,16 +569,42 @@ ramp_at(const ramp *g, float at)
                    (int)(g->from.a + (g->to.a - g->from.a) * t + 0.5f));
 }
 
+/* The largest step, in levels of one channel, between the ramp's two ends. */
+static int
+ramp_levels(const ramp *g)
+{
+    int d[4] = { g->to.r - g->from.r, g->to.g - g->from.g, g->to.b - g->from.b,
+                 g->to.a - g->from.a };
+    int i, most = 0;
+
+    for (i = 0; i < 4; i++)
+        if (SDL_abs(d[i]) > most) most = SDL_abs(d[i]);
+    return most;
+}
+
+/* A run in solid bands, one per level the ramp changes by across it: SDL fills
+   a solid rectangle far faster than it shades one from its corners. */
 static void
 ramp_rect(struct nk_command_buffer *cv, const ramp *g, struct nk_rect r)
 {
-    struct nk_color a, z;
+    float at = g->across ? r.x : r.y, len = g->across ? r.w : r.h;
+    int   n, j;
 
     if (g->flat) { nk_fill_rect(cv, r, 0.0f, g->from); return; }
-    a = ramp_at(g, g->across ? r.x : r.y);
-    z = ramp_at(g, g->across ? r.x + r.w : r.y + r.h);
-    if (g->across) nk_fill_rect_multi_color(cv, r, a, z, z, a);
-    else           nk_fill_rect_multi_color(cv, r, a, a, z, z);
+    n = (int)SDL_ceilf((float)ramp_levels(g) * len / (g->across ? g->b.w : g->b.h));
+    if (n > (int)len) n = (int)len;
+    if (n < 1) n = 1;
+    /* Whole pixels, so neighbors share an edge the renderer cannot round apart. */
+    for (j = 0; j < n; j++) {
+        float s0 = at + (float)(int)(len * (float)j / (float)n + 0.5f);
+        float s1 = at + (float)(int)(len * (float)(j + 1) / (float)n + 0.5f);
+        struct nk_color c = ramp_at(g, (s0 + s1) * 0.5f);
+
+        if (s1 <= s0) continue;
+
+        nk_fill_rect(cv, g->across ? nk_rect(s0, r.y, s1 - s0, r.h)
+                                   : nk_rect(r.x, s0, r.w, s1 - s0), 0.0f, c);
+    }
 }
 
 /* A corner is cut into texel-wide strips along the ramp, each tinted where it sits. */
@@ -634,6 +660,16 @@ fill_shape(App *app, struct nk_command_buffer *cv, float rounding, const ramp *g
     ramp_corners(cv, g, disc, m, r);
     R = (float)r;
     D = 2.0f * R;
+    /* The long run lies across the ramp, so each band is drawn once. */
+    if (!g->flat && g->across) {
+        if (b.w > D)
+            ramp_rect(cv, g, nk_rect(b.x + R, b.y, b.w - D, b.h));
+        if (b.h > D) {
+            ramp_rect(cv, g, nk_rect(b.x, b.y + R, R, b.h - D));
+            ramp_rect(cv, g, nk_rect(b.x + b.w - R, b.y + R, R, b.h - D));
+        }
+        return;
+    }
     if (b.h > D)
         ramp_rect(cv, g, nk_rect(b.x, b.y + R, b.w, b.h - D));
     if (b.w > D) {
