@@ -19,7 +19,7 @@ from the project's own license file at the pinned revision.
 | [plutovg](https://github.com/sammycage/plutovg) | plutosvg's canvas (nested submodule) | MIT |
 | [mojibake](https://github.com/zaerl/mojibake) | Bidirectional text (UAX #9) and line breaking (UAX #14), for the Text module | MIT |
 | [kb_text_shape](https://github.com/JimmyLefevre/kb) | OpenType shaping, script segmentation and font coverage, for the Text module | zlib |
-| [toml-c](https://github.com/arp242/toml-c) | Reading `settings.toml` | MIT |
+| [toml-c](https://github.com/arp242/toml-c) | Reading `settings.toml`; a fork of [tomlc99](https://github.com/cktan/tomlc99), whose copyright notice it keeps | MIT |
 
 SDL is built static, without audio, joystick, haptic, HID, sensor, camera,
 power, GPU, offscreen, the render backends Reaktor never selects, or its
