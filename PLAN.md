@@ -359,7 +359,34 @@ the tree's own `simple`. Phase 2, item 3 puts that into `check-libreaktor.sh`.
    twin, so each module's code stays out of the shared core.
 5. `reaktor.pc` and `reaktorConfig.cmake` learn the shared variant.
 
-## Phase 2: keeping the ABI honest
+## Phase 2: keeping the ABI honest (in, 2026-11-02)
+
+**Status.** All three items are in, and CI's x86-64 job runs them in a step
+of its own (`Shared libreaktor`) on a `-DREAKTOR_SHARED=ON` build:
+
+- `tools/ci/check-abi.sh` compiles `tools/abi/abi.c` (just `reaktor.h`) with
+  debug types and has gdb print, with `ptype /o`, every `reaktor_` struct,
+  union and enum in `include/reaktor/`, `nk_window` and `nk_input`, every
+  Nuklear type `reaktor/nuklear.h` renames, and the value of every `NK_`
+  constant it renames. Nothing is copied out of Nuklear by hand. The output
+  must match `tools/abi/libreaktor.so.0-x86_64.abi` (12,266 lines); otherwise
+  the soname must go up and the table be rewritten with `-u`. Adding one field
+  to `reaktor_shortcut` fails it. Only x86-64 has a table. gdb lays its output
+  out a little differently between versions, so the table may need writing
+  again from CI's Debian 12: the script keeps its output in `smoke/abi/`, and
+  CI uploads that when the step fails.
+- `tools/ci/check-exports.sh` holds the built library to `tools/reaktor.map`,
+  which now lists Reaktor's names instead of `reaktor_*`: the 149 public
+  functions the library defines, the 34 non-public ones the modules call,
+  three that `tests/launchtest.c` calls, and five FreeType and plutovg calls.
+  It fails on a name exported but not listed, listed but not exported, public
+  but in neither the library nor the modules, exported without being public
+  or under a "Not public" comment, or under one and no longer called. Exports
+  fell from 1,185 to 1,033: 154 internals are no longer exported.
+- `check-libreaktor.sh` links `examples/consumer` against `libreaktor.so`
+  too, where the install has it, checks the program needs it, and requires
+  the same pixels and accessibility tree as the built `simple`.
+
 
 1. The CI `sizeof` / `offsetof` table for the Nuklear structs apps can see,
    and for Reaktor's own public structs. A change fails CI until the soname

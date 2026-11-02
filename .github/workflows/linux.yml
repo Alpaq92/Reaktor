@@ -64,7 +64,7 @@ jobs:
             libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev \
             libxrandr-dev libxrender-dev libxtst-dev libxkbcommon-dev \
             libwayland-dev wayland-protocols libegl-dev libdbus-1-dev \
-            dbus xvfb xauth ccache </dev/null
+            dbus xvfb xauth ccache gdb </dev/null
           EOF
 
       # ccache only: the build folder is rebuilt, so a stale cache cannot hide a broken one.
@@ -160,6 +160,27 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
         continue-on-error: true
         run: docker exec -i debian sh tools/ci/pss-pages.sh -x Xvfb -w "dbus-run-session -- timeout 120" </dev/null
+
+      - name: Shared libreaktor
+        id: shared
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
+        run: |
+          docker exec -i debian sh -eu <<'EOF'
+          cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          cmake --build build-shared </dev/null
+          sh tools/ci/check-exports.sh build-shared </dev/null
+          sh tools/ci/check-abi.sh </dev/null
+          sh tools/ci/check-libreaktor.sh -w "timeout 600" build-shared libreaktor-shared-check </dev/null
+          EOF
+
+      - name: Upload the ABI table
+        if: ${{ !cancelled() && steps.shared.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: abi-linux-${{ matrix.arch }}
+          path: smoke/abi/
 
       - name: Package
         id: package

@@ -1,0 +1,5 @@
+window "Simple" 0,0 340x180
+  group 0,0 340x180
+    button "Close" keys="Escape" 90,70 160x40
+
+# 3 of 256 nodes, 20 of 16384 string bytes, 3 interned, struct 96696 bytes
