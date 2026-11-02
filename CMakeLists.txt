@@ -1086,6 +1086,39 @@ add_custom_command(OUTPUT "${_lib}"
     VERBATIM)
 add_custom_target(libreaktor DEPENDS "${_lib}")
 
+# Beside libreaktor.so, the modules as libreaktor-modules.a for apps built
+# outside the tree: an app links them in and exports them back to the library.
+if(REAKTOR_SHARED)
+    set(_mod_parts reaktor_modules)
+    foreach(_t mojibake_lib kb_text_shape)
+        if(TARGET ${_t})
+            list(APPEND _mod_parts ${_t})
+        endif()
+    endforeach()
+    set(_mod_lib "${CMAKE_BINARY_DIR}/lib/libreaktor-modules.a")
+    set(_mri "CREATE ${_mod_lib}\n")
+    foreach(_t IN LISTS _mod_parts)
+        string(APPEND _mri "ADDLIB $<TARGET_FILE:${_t}>\n")
+    endforeach()
+    string(APPEND _mri "SAVE\nEND\n")
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor-modules.mri" CONTENT "${_mri}")
+    add_custom_command(OUTPUT "${_mod_lib}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/lib"
+        COMMAND "${CMAKE_COMMAND}" -E remove -f "${_mod_lib}"
+        COMMAND "${CMAKE_COMMAND}" "-DAR=${CMAKE_AR}"
+                "-DMRI=${CMAKE_BINARY_DIR}/reaktor-modules.mri"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/merge-lib.cmake"
+        DEPENDS ${_mod_parts}
+        COMMENT "Merging libreaktor-modules"
+        VERBATIM)
+    add_custom_target(libreaktor_modules DEPENDS "${_mod_lib}")
+    add_dependencies(libreaktor reaktor_shared SDL3-shared libreaktor_modules)
+    # Both archives and libraries sit in one lib/: -l would pick the .so.
+    set(REAKTOR_PC_LINK "-l:libreaktor.a")
+else()
+    set(REAKTOR_PC_LINK "-lreaktor")
+endif()
+
 option(REAKTOR_INSTALL "Install libreaktor's files" ${_reaktor_top})
 if(REAKTOR_INSTALL)
     include(CMakePackageConfigHelpers)
@@ -1093,6 +1126,11 @@ if(REAKTOR_INSTALL)
     write_basic_package_version_file("${CMAKE_BINARY_DIR}/reaktorConfigVersion.cmake"
         COMPATIBILITY SameMinorVersion)
     install(FILES "${_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
+    if(REAKTOR_SHARED)
+        install(TARGETS reaktor_shared SDL3-shared
+                LIBRARY DESTINATION lib COMPONENT libreaktor NAMELINK_COMPONENT libreaktor)
+        install(FILES "${_mod_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
+    endif()
     install(DIRECTORY include/reaktor DESTINATION include COMPONENT libreaktor)
     install(FILES "${TP}/nuklear/nuklear.h" DESTINATION include COMPONENT libreaktor)
     install(FILES "${TP}/nukanim/nukanim.h" DESTINATION include COMPONENT libreaktor)
@@ -1104,6 +1142,11 @@ if(REAKTOR_INSTALL)
         configure_file(tools/reaktor.pc.in "${CMAKE_BINARY_DIR}/reaktor.pc" @ONLY)
         install(FILES "${CMAKE_BINARY_DIR}/reaktor.pc" DESTINATION lib/pkgconfig
                 COMPONENT libreaktor)
+        if(REAKTOR_SHARED)
+            configure_file(tools/reaktor-shared.pc.in "${CMAKE_BINARY_DIR}/reaktor-shared.pc" @ONLY)
+            install(FILES "${CMAKE_BINARY_DIR}/reaktor-shared.pc" DESTINATION lib/pkgconfig
+                    COMPONENT libreaktor)
+        endif()
     endif()
     install(DIRECTORY "${CMAKE_BINARY_DIR}/licenses/" DESTINATION share/reaktor/licenses
             COMPONENT libreaktor)

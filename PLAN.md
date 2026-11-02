@@ -334,10 +334,20 @@ shared (14.6%), four 29,802 KB against 23,810 KB (20.1%). `bench` build and
 render 0.05 and 0.08 ms; `showcase` CPU in its first 3 s 232 ms, static 231 ms.
 All unit tests pass in both builds.
 
-Item 5 (`reaktor.pc`, `reaktorConfig.cmake`, install) is still to do. An app
-built outside the tree also needs the modules: the likely shape is a
-`libreaktor-modules.a` linked into the app, which exports its symbols back
-(`-Wl,--export-dynamic`).
+Item 5 is in too. With `REAKTOR_SHARED`, `cmake --install` adds to the
+static files `libreaktor.so*`, `libreaktor-sdl3.so*` and
+`libreaktor-modules.a`, the modules (and mojibake and kb_text_shape) for apps
+built outside the tree. Such an app links `libreaktor.so`, then the modules
+archive, which fills in what the library calls, then `libreaktor-sdl3.so`,
+and exports the modules back with `-Wl,--export-dynamic`. That is what
+`reaktor-shared.pc` and the CMake target `reaktor::shared` give it; in CMake,
+`reaktor::reaktor` stays the static one. Since the `.a` and the `.so` share a
+`lib/`, `reaktor.pc` then names `-l:libreaktor.a`, so it stays static.
+
+Checked by hand: `examples/consumer` linked statically, linked with
+`-DCONSUMER_SHARED=ON`, and `simple.c` built with `pkg-config reaktor` and
+`reaktor-shared` all draw the same pixels and the same accessibility tree as
+the tree's own `simple`. Phase 2, item 3 puts that into `check-libreaktor.sh`.
 
 
 1. A `REAKTOR_SHARED` option, default `OFF`, building `libreaktor.so` with a

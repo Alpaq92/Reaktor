@@ -9,4 +9,15 @@ if(NOT TARGET reaktor::reaktor)
         INTERFACE_LINK_DIRECTORIES "@REAKTOR_LINK_DIRS@"
         INTERFACE_LINK_OPTIONS "@REAKTOR_LINK_OPTIONS@")
 endif()
+# The shared variant, where it is installed: the modules go into the app,
+# after libreaktor.so so they fill in what it calls, and the app
+# exports them back to it.
+if(NOT TARGET reaktor::shared AND EXISTS "${_reaktor_prefix}/lib/libreaktor.so")
+    add_library(reaktor::shared INTERFACE IMPORTED)
+    set_target_properties(reaktor::shared PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${_reaktor_prefix}/include"
+        INTERFACE_LINK_LIBRARIES "${_reaktor_prefix}/lib/libreaktor.so;${_reaktor_prefix}/lib/libreaktor-modules.a;${_reaktor_prefix}/lib/libreaktor-sdl3.so;@REAKTOR_LINK_LIBS@"
+        INTERFACE_LINK_DIRECTORIES "@REAKTOR_LINK_DIRS@"
+        INTERFACE_LINK_OPTIONS "-Wl,--export-dynamic;@REAKTOR_LINK_OPTIONS@")
+endif()
 unset(_reaktor_prefix)
