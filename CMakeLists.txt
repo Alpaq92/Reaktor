@@ -574,6 +574,52 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
 
+# Experimental, for measuring only: libreaktor-proto.so holds the runtime,
+# the core, SDL and the libraries under them, and the samples link it. No
+# soname; Linux and the BSDs, with -DCMAKE_POSITION_INDEPENDENT_CODE=ON.
+# REAKTOR_SHARED_PROTO_HIDE exports only the reaktor_, nk_, nka_ and SDL_ APIs
+# and the few symbols the modules reach, and binds the rest inside the library.
+option(REAKTOR_SHARED_PROTO "Link the samples against an experimental shared libreaktor" OFF)
+option(REAKTOR_SHARED_PROTO_HIDE "Export only the public APIs from the experimental shared libreaktor" OFF)
+if(REAKTOR_SHARED_PROTO)
+    if(NOT CMAKE_POSITION_INDEPENDENT_CODE)
+        message(FATAL_ERROR "REAKTOR_SHARED_PROTO needs -DCMAKE_POSITION_INDEPENDENT_CODE=ON")
+    endif()
+    set(_proto_parts reaktor_runtime reaktor_core plutosvg plutovg freetype onlay SDL3-static)
+    set(_proto_files "")
+    foreach(_t IN LISTS _proto_parts)
+        list(APPEND _proto_files "$<TARGET_FILE:${_t}>")
+    endforeach()
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/proto.c" CONTENT "")
+    add_library(reaktor_proto SHARED "${CMAKE_BINARY_DIR}/proto.c")
+    set_target_properties(reaktor_proto PROPERTIES OUTPUT_NAME reaktor-proto
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    add_dependencies(reaktor_proto ${_proto_parts})
+    target_link_libraries(reaktor_proto PRIVATE
+        -Wl,--whole-archive ${_proto_files} -Wl,--no-whole-archive
+        $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_LINK_LIBRARIES>)
+    if(REAKTOR_SHARED_PROTO_HIDE)
+        foreach(_t IN LISTS _proto_parts)
+            target_compile_options(${_t} PRIVATE -fno-semantic-interposition)
+        endforeach()
+        file(WRITE "${CMAKE_BINARY_DIR}/proto.map" "{
+  global: reaktor_*; nk_*; nka_*; SDL_*;
+    plutovg_*; FT_Done_Face; FT_Load_Glyph;
+  local: *;
+};
+")
+        target_link_options(reaktor_proto PRIVATE
+            "-Wl,--version-script=${CMAKE_BINARY_DIR}/proto.map")
+        set_property(TARGET reaktor_proto APPEND PROPERTY LINK_DEPENDS
+                     "${CMAKE_BINARY_DIR}/proto.map")
+    endif()
+    add_library(reaktor_proto_headers INTERFACE)
+    target_include_directories(reaktor_proto_headers INTERFACE
+        $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_compile_definitions(reaktor_proto_headers INTERFACE
+        $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_COMPILE_DEFINITIONS>)
+endif()
+
 function(reaktor_add_app name)
     cmake_parse_arguments(RA "CONSOLE" "" "SOURCES;MODULES;ASSETS" ${ARGN})
     if(RA_CONSOLE)
@@ -592,7 +638,13 @@ function(reaktor_add_app name)
             list(APPEND _mods reaktor_${_m}_none)
         endif()
     endforeach()
-    target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
+    if(REAKTOR_SHARED_PROTO)
+        # The modules stay in the app; the shared core calls them back.
+        target_link_libraries(${name} PRIVATE reaktor_proto_headers ${_mods} reaktor_proto)
+        set_target_properties(${name} PROPERTIES ENABLE_EXPORTS ON)
+    else()
+        target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
+    endif()
     if(MSVC)
         target_compile_options(${name} PRIVATE /we4013)
     elseif(APPLE)

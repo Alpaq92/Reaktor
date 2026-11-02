@@ -112,9 +112,11 @@ pages() {
 rows=$out/runs.txt
 : >"$rows"
 i=0
+retries=0
 while [ "$i" -lt "$runs" ]; do
     i=$((i + 1))
     pids=""
+    missing=""
     for a in $apps; do
         $wrap "$build/$a" </dev/null >"$out/$a.log" 2>&1 &
         pids="$pids $!"
@@ -124,7 +126,7 @@ while [ "$i" -lt "$runs" ]; do
     found=""
     for a in $apps; do
         pid=$(find_app "$build/$a")
-        if [ -z "$pid" ]; then echo "run $i: $a is not running"; cat "$out/$a.log"; exit 1; fi
+        if [ -z "$pid" ]; then missing=$a; break; fi
         found="$found $pid"
         pss=$(awk '/^Pss:/ { print $2 }' "/proc/$pid/smaps_rollup")
         pages "$pid" "$build/$a" >"$out/$a.present"
@@ -134,6 +136,18 @@ while [ "$i" -lt "$runs" ]; do
                  "$out/$a.owners" "$out/$a.present")
         row="$row $pss $counts"
     done
+    # An app that quit early (a stray click or key on a live desktop does it)
+    # costs that run, not the measurement: say why, and launch the run again.
+    if [ -n "$missing" ]; then
+        echo "run $i: $missing is not running; its log:"
+        cat "$out/$missing.log" 2>/dev/null
+        kill $pids 2>/dev/null || :
+        for p in $pids; do wait "$p"; echo "  pid $p ended with status $?"; done
+        retries=$((retries + 1))
+        if [ "$retries" -gt 3 ]; then echo "giving up after $retries lost runs"; exit 1; fi
+        i=$((i - 1))
+        continue
+    fi
     echo "$row" >>"$rows"
     echo "run $i:$row"
     kill $found 2>/dev/null || :

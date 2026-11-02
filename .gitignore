@@ -13,6 +13,7 @@ build-lib/
 build-consumer/
 build-embedded/
 build-map/
+build-proto*/
 .claude/settings.local.json
 .dart_tool/
 .gradle/

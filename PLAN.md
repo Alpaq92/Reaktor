@@ -1,8 +1,9 @@
 # Plan: libreaktor as a shared library
 
-**Decision (2026-11-02): no-go.** Phase 0 measured at most 20.2% in CI and
-17.3% on a Linux desktop, against the 20% threshold. Phases 1 to 3 are not
-started; libreaktor stays static. This plan stays as the record of why.
+**Decision (2026-11-02): go.** Three apps together save 14.8%, under the 20%
+threshold, but four save 20.4% and five 24.2% (Phase 0d), and Reaktor apps
+are expected to run four or more at a time. Phase 1 starts. Static stays the
+default.
 
 ## Where things stand
 
@@ -152,6 +153,137 @@ three apps, ten launches, medians.
 bounds, and both are under 20%. **No-go**, unless a run on real GPU hardware
 differs.
 
+## Phase 0b: a real shared build, measured (2026-11-02)
+
+The estimates above are upper bounds, so a working prototype was built to
+measure the real difference. `-DREAKTOR_SHARED_PROTO=ON` (with
+`-DCMAKE_POSITION_INDEPENDENT_CODE=ON`) links the runtime, the core, SDL,
+FreeType, plutosvg, plutovg and onlay into `libreaktor-proto.so`; each sample
+keeps its modules (or their `_none` twins) and exports their symbols back to
+the library. No soname, no hidden symbols: everything is exported, which is
+the worst case for relocations and calls.
+
+Same desktop as above; ten launches, medians, static and shared measured in
+the same session.
+
+**Memory** (`pss.sh`, the three apps together, idle):
+
+| | static | shared | saved |
+| --- | --- | --- | --- |
+| `showcase` | 14,261 KB | 13,007 KB | 1,254 KB |
+| `notepad` | 5,370 KB | 4,239 KB | 1,131 KB |
+| `simple` | 4,501 KB | 3,453 KB | 1,048 KB |
+| **summed** | **24,152 KB** | **20,698 KB** | **3,454 KB (14.3%)** |
+
+The library's pages that each app dirties (GOT, relocated data) are about
+124 KB per app in `simple`.
+
+**Disk:** 11.4 MB for the three static binaries, against 6.2 MB shared
+(`libreaktor-proto.so` 5.0 MB, unstripped, plus 1.16 MB of apps).
+
+**Start:** the dynamic loader takes 0.1 to 0.2 ms for either build;
+`showcase` goes from 19,525 to 21,709 relocations. CPU in the first 3
+seconds: `simple` 40 ms both, `showcase` 220 ms static and 230 ms shared.
+
+**Frame cost** (`bench --no-vsync`, five runs):
+
+| | build | render | whole frame |
+| --- | --- | --- | --- |
+| static | 0.04 ms | 0.05 ms | 1.46 to 1.63 ms |
+| shared | 0.05 ms | 0.10 ms | 1.48 to 1.53 ms |
+| shared, `-fno-semantic-interposition` | 0.04 ms | 0.08 ms | 1.40 to 1.61 ms |
+| shared, that and `-Wl,-Bsymbolic-functions` | 0.04 ms | 0.06 ms | as static |
+
+Present (llvmpipe) dominates the frame, so fps does not change.
+
+**Why the shared build was slower** (`perf`, both builds):
+
+- **Frame.** The extra render time is in `nk_sdl_render_ex`, Nuklear's
+  SDL drawing loop. With every symbol exported and interposable, GCC stops
+  inlining and specialising small functions inside SDL and Nuklear:
+  `SDL_floorf`, `SDL_roundf`, `SDL_memcmp`, `nk_buffer_memory`, `nk_vec2`
+  become real calls, and the `.constprop`/`.isra` clones go. Calls between
+  files then go through the PLT. `-fno-semantic-interposition` restores the
+  inlining (build back to static); `-Bsymbolic-functions` binds the calls
+  inside the library directly (render back to static). Hidden symbols
+  (Phase 1, item 2) do both, so Phase 1 needs no extra flags.
+- **Start.** `showcase` uses about 10 ms more CPU in its first 3 s
+  (`perf stat -r 10`: 222 against 232 ms), split about evenly between user
+  and kernel time, with the same page faults (4,170 against 4,199). Lazy
+  binding in the dynamic loader (`_dl_fixup`, `_dl_lookup_symbol_x`) is
+  about 0.3 ms of it; the rest is the slower code above running during start
+  (font rasterising, the first frames) and the kernel mapping one more
+  library. With both flags the difference falls inside run-to-run noise
+  (225 against 234 ms in one pass).
+
+**Reading.** The real saving is 14.3%, under the 20% threshold and under the
+17.3% estimate. As built first it cost about 10 ms of start CPU in the showcase
+and twice Reaktor's render time; with hidden or directly bound symbols both
+costs go away. The disk saving
+(46%) is the stronger argument, but it was agreed not to count toward the
+threshold.
+
+## Phase 0c: the same, with hidden symbols (2026-11-02)
+
+`-DREAKTOR_SHARED_PROTO_HIDE=ON` adds a version script that exports only
+`reaktor_*`, `nk_*`, `nka_*`, `SDL_*` and the five FreeType and plutovg
+symbols the modules call, and compiles the library's parts with
+`-fno-semantic-interposition`. Everything else (X11 and Wayland glue,
+FreeType's and plutovg's insides) binds inside the library. Exports fall from
+4,653 to 3,365; SDL's own API is 1,961 of them, as it would be as
+`libreaktor-sdl3.so`. Every sample starts with `LD_BIND_NOW=1`, so nothing
+it needs is hidden.
+
+| | static | shared | shared, hidden |
+| --- | --- | --- | --- |
+| summed PSS, three apps | 24,152 KB | 20,698 KB | 20,617 KB |
+| saving against static | | 14.3% | 14.6% |
+| library pages each app dirties (`simple`) | | 124 KB | 116 KB |
+| `showcase` relocations | 19,525 | 21,709 | 20,559 |
+| `bench` build / render | 0.04 / 0.06 ms | 0.05 / 0.10 ms | 0.04 / 0.08 ms |
+| `showcase` CPU, first 3 s | 216 to 222 ms | 225 to 232 ms | 224 to 230 ms |
+
+**Reading.** Hiding symbols does not move memory: 81 KB of 20.7 MB. The
+saving stays at about 14.5%. It does recover build time, and half the render
+time. The rest of render is the calls into SDL, which go through the PLT
+because SDL's API stays exported. With SDL as its own library, as decided,
+that cost stays. Binding SDL inside libreaktor (`-Bsymbolic-functions`,
+Phase 0b) removes it, but then an app cannot have SDL from anywhere else.
+
+**Seen and not explained:** in three of six early runs of `pss.sh` on this
+build, `notepad` had exited by the time it was measured, with nothing in its
+log. A signal, a closed window, Ctrl+Q and the menu's Quit all end it exactly
+so: status 0, empty log; a crash would have left a core dump and a kernel
+line, and there was neither. Since then the runtime logs one `quitting:` line
+with the reason, and `pss.sh` prints how each app ended. A soak of 15 rounds
+of ten launches for the hidden build and 15 for the static one, alternating,
+ran clean (300 launches each of the three apps). Not reproduced; most likely
+something on the live desktop asked notepad to quit.
+
+## Phase 0d: more apps at once (2026-11-02)
+
+The saving grows with each extra app, since each one stops carrying its own
+copy of the library. `pss.sh -a` takes the list of apps. The fourth and fifth
+apps are copies of `notepad` and `simple` under new names (`notepad2`,
+`simple2`): a copy is another file, so statically it shares nothing with the
+original, as a different app would not. Hidden-symbol shared build against
+static, same desktop, ten launches, medians.
+
+| apps together | static | shared | saved | saving |
+| --- | --- | --- | --- | --- |
+| 3 (`showcase`, `notepad`, `simple`) | 24,200 KB | 20,630 KB | 3,570 KB | 14.8% |
+| 4 (+ `notepad2`) | 29,802 KB | 23,726 KB | 6,076 KB | **20.4%** |
+| 5 (+ `simple2`) | 34,437 KB | 26,087 KB | 8,350 KB | **24.2%** |
+
+Each extra app saves about 2.3 to 2.5 MB: its own library pages, and a
+little of everyone else's PSS as the shared pages split one more way.
+
+**Reading.** With four different Reaktor apps running together, sharing
+crosses the 20% threshold; with five it saves about a quarter. With three it
+does not. Real different apps carry a little more code of their own than
+these copies, which pulls the figures down slightly. Whether to go now turns
+on how many Reaktor apps a user would really run at once.
+
 ## Running Phase 0 on a Linux desktop
 
 Needs GCC with GNU ld from binutils 2.38 or later (`-Map=DIR/` writes one map
@@ -223,6 +355,8 @@ likely to fall.
 
 ## Open questions
 
-1. Go or no-go. The threshold is 20% (agreed 2026-10-30). CI says 20.2% at
+1. ~~Go or no-go.~~ Go (2026-11-02), on four or more apps. The threshold is 20% (agreed 2026-10-30). CI says 20.2% at
    most, and a Linux desktop says 17.3% (2026-11-02). That points to no-go;
-   a run on a desktop with a real GPU would confirm it.
+   a run on a desktop with a real GPU would confirm it. A real shared
+   build (Phase 0b) saves 14.3%, and 14.6% with hidden symbols (Phase 0c),
+   with three apps. Four apps save 20.4%, five 24.2% (Phase 0d).
