@@ -396,7 +396,30 @@ of its own (`Shared libreaktor`) on a `-DREAKTOR_SHARED=ON` build:
 3. `check-libreaktor.sh` gains a shared run: `examples/consumer` linked
    against the `.so` must draw the same pixels as the static `simple`.
 
-## Phase 3: packages
+## Phase 3: packages (in, 2026-11-02)
+
+**Status.** `tools/libreaktor-pkg.sh -s` builds with `REAKTOR_SHARED` (and
+`-b` takes a shared build as it is). When the install holds `libreaktor.so`,
+the package splits in three: `libreaktor-sdl3-0` (`libreaktor-sdl3.so.0*`
+and SDL's license), `libreaktor0` (`libreaktor.so.0*`, the other licenses,
+`NOTICE.md`; needs the first) and the development package under its old
+name (`libreaktor-dev`, `libreaktor-devel`, `libreaktor` on the BSDs) with
+the headers, both archives, the `.so` links, `reaktor.pc`,
+`reaktor-shared.pc` and the CMake files; it needs both. Each file is in one
+package. A static build packs one package, as before. `/opt/reaktor/lib` is
+not on the loader's path, so `reaktor-shared.pc` and `reaktor::shared` add
+an rpath to the install's `lib/`.
+
+Checked here: the three `.deb`s, their dependencies and files, and
+`examples/consumer -DCONSUMER_SHARED=ON` built against them, unpacked, which
+draws the same as the built `simple`; a static build still packs one
+`libreaktor-dev`; `-f tar` writes three tarballs. CI now packs the shared
+build as `.deb`s on x86-64, installs them, builds the shared consumer,
+removes `libreaktor-dev` and runs it on the two runtime packages alone; the
+rpm job does the same with `-s`. The rpm, FreeBSD, OpenBSD and NetBSD
+branches are written but have not run: rpmbuild and the BSD tools are not on
+this machine, and `bsd.yml` does not pack the shared build yet.
+
 
 1. `tools/libreaktor-pkg.sh` packs the shared library and SDL as their own
    packages (`libreaktor0`, `libreaktor-sdl3-0` or the distro's spelling) and

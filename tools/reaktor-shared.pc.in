@@ -6,4 +6,4 @@ Name: reaktor-shared
 Description: A Nuklear-powered GUI library for C, linked as libreaktor.so
 Version: @PROJECT_VERSION@
 Cflags: -I${includedir}
-Libs: -Wl,--export-dynamic -L${libdir} -lreaktor -l:libreaktor-modules.a -lreaktor-sdl3 @REAKTOR_PC_LIBS@
+Libs: -Wl,--export-dynamic -Wl,-rpath,${libdir} -L${libdir} -lreaktor -l:libreaktor-modules.a -lreaktor-sdl3 @REAKTOR_PC_LIBS@

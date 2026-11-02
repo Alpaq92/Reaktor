@@ -5,8 +5,9 @@ set -eu
 
 usage() {
     cat <<'EOF'
-usage: libreaktor-pkg.sh [-i] [-b BUILD] [-p PREFIX] [-o DIR] [-f FORMAT] [-m MAINTAINER] [-a ARCH]
+usage: libreaktor-pkg.sh [-i] [-s] [-b BUILD] [-p PREFIX] [-o DIR] [-f FORMAT] [-m MAINTAINER] [-a ARCH]
   -i  install the package once it is built (through sudo or doas)
+  -s  build libreaktor.so too, and split the package in three (Linux and the BSDs)
   -b  pack from this configured build instead of building one
   -p  where the files go (/opt/reaktor on Linux, /usr/local/reaktor on the BSDs)
   -o  where the package is written (dist)
@@ -25,10 +26,12 @@ format=""
 maintainer="Reaktor <reaktor@invalid>"
 build=""
 debarch=""
+shared=OFF
 
-while getopts ib:p:o:f:m:a:h opt; do
+while getopts isb:p:o:f:m:a:h opt; do
     case $opt in
         i) install=1 ;;
+        s) shared=ON ;;
         b) build=$OPTARG ;;
         p) prefix=$OPTARG ;;
         o) out=$OPTARG ;;
@@ -76,14 +79,14 @@ if [ -z "$build" ]; then
     if command -v ninja >/dev/null 2>&1; then gen="-G Ninja"; else gen=""; fi
     # shellcheck disable=SC2086
     cmake -S "$root" -B "$build" $gen -DCMAKE_BUILD_TYPE=Release \
-          -DREAKTOR_SAMPLES=OFF -DREAKTOR_TESTS=OFF
+          -DREAKTOR_SAMPLES=OFF -DREAKTOR_TESTS=OFF -DREAKTOR_SHARED=$shared
 fi
 cmake --build "$build" --parallel "$ncpu" --target libreaktor
 rm -rf "$stage"
 DESTDIR="$stage" cmake --install "$build" --component libreaktor --prefix "$prefix"
 
 listing() {
-    (cd "$stage$prefix" &&
+    (cd "$1$prefix" &&
      find . -type d ! -name . | sed 's|^\./||; s|$|/|' | sort
      find . ! -type d | sed 's|^\./||' | sort)
 }
@@ -94,103 +97,166 @@ as_root() {
     else doas "$@"; fi
 }
 
+# The development package keeps the name it has always had in each format.
 case $format in
-deb)
-    arch=${debarch:-$(dpkg --print-architecture)}
-    pkg="$out/libreaktor-dev_${version}_$arch.deb"
-    mkdir -p "$stage/DEBIAN"
-    cat >"$stage/DEBIAN/control" <<EOF
-Package: libreaktor-dev
-Version: $version
-Architecture: $arch
-Maintainer: $maintainer
-Section: libdevel
-Priority: optional
-Homepage: $www
-Description: $summary
-EOF
-    dpkg-deb --root-owner-group --build "$stage" "$pkg"
-    rm -rf "$stage/DEBIAN"
-    [ $install -eq 0 ] || as_root dpkg -i "$pkg"
-    ;;
-rpm)
-    top="$work/rpm"
-    rm -rf "$top"
-    mkdir -p "$top/SPECS"
-    cat >"$top/SPECS/libreaktor.spec" <<EOF
-Name: libreaktor-devel
-Version: $version
-Release: 1
-Summary: $summary
-License: MIT
-URL: $www
-AutoReqProv: no
-
-%description
-$summary.
-
-%install
-cp -a "$stage/." %{buildroot}/
-
-%files
-$prefix
-EOF
-    rpmbuild -bb --define "_topdir $top" --define "debug_package %{nil}" \
-             --define "__os_install_post %{nil}" "$top/SPECS/libreaktor.spec"
-    pkg=$(find "$top/RPMS" -name '*.rpm' | head -n 1)
-    cp "$pkg" "$out/"
-    pkg="$out/$(basename "$pkg")"
-    [ $install -eq 0 ] || as_root rpm -U --replacepkgs "$pkg"
-    ;;
-freebsd)
-    cat >"$work/manifest" <<EOF
-name: libreaktor
-version: "$version"
-origin: devel/libreaktor
-comment: "$comment"
-desc: "$summary"
-maintainer: "$maintainer"
-www: "$www"
-prefix: "$prefix"
-EOF
-    listing | grep -v '/$' >"$work/plist"
-    pkg create -M "$work/manifest" -p "$work/plist" -r "$stage" -o "$out"
-    pkg="$out/libreaktor-$version.pkg"
-    [ $install -eq 0 ] || as_root pkg add "$pkg"
-    ;;
-openbsd)
-    listing >"$work/plist"
-    pkg="$out/libreaktor-$version.tgz"
-    pkg_create -A "$(arch -s)" -B "$stage" -p "$prefix" -f "$work/plist" \
-               -D COMMENT="$comment" -D FULLPKGPATH=devel/libreaktor \
-               -D HOMEPAGE="$www" -D MAINTAINER="$maintainer" \
-               -d "-$summary." "$pkg"
-    [ $install -eq 0 ] || as_root pkg_add -D unsigned "$pkg"
-    ;;
-netbsd)
-    listing | grep -v '/$' >"$work/plist"
-    cat >"$work/build-info" <<EOF
-MACHINE_ARCH=$(uname -p)
-OPSYS=NetBSD
-OS_VERSION=$(uname -r)
-PKGTOOLS_VERSION=$(pkg_info -V)
-EOF
-    pkg="$out/libreaktor-$version.tgz"
-    pkg_create -B "$work/build-info" -c "-$comment" -d "-$summary." \
-               -f "$work/plist" -I "$prefix" -p "$stage$prefix" "$pkg"
-    [ $install -eq 0 ] || as_root pkg_add -U "$pkg"
-    ;;
-tar)
-    pkg="$out/libreaktor-$version-$(uname -s | tr 'A-Z' 'a-z')-$(uname -m).tar.gz"
-    tar -C "$stage" -czf "$pkg" .
-    [ $install -eq 0 ] || as_root tar -C / -xzf "$pkg"
-    ;;
-*)
-    echo "libreaktor-pkg.sh: unknown format: $format" >&2
-    exit 2
-    ;;
+    rpm) dev=libreaktor-devel ;;
+    deb) dev=libreaktor-dev ;;
+    *)   dev=libreaktor ;;
 esac
 
-echo "packed: $pkg"
+# pack NAME ROOT SUMMARY [DEPENDENCY...]: one package of the files under ROOT.
+pack() {
+    name=$1 root=$2 what=$3
+    shift 3
+    case $format in
+    deb)
+        arch=${debarch:-$(dpkg --print-architecture)}
+        pkg="$out/${name}_${version}_$arch.deb"
+        mkdir -p "$root/DEBIAN"
+        deps=""
+        for d in "$@"; do deps="${deps:+$deps, }$d (= $version)"; done
+        {
+            echo "Package: $name"
+            echo "Version: $version"
+            echo "Architecture: $arch"
+            echo "Maintainer: $maintainer"
+            if [ "$name" = "$dev" ]; then echo "Section: libdevel"; else echo "Section: libs"; fi
+            echo "Priority: optional"
+            echo "Homepage: $www"
+            [ -z "$deps" ] || echo "Depends: $deps"
+            echo "Description: $what"
+        } >"$root/DEBIAN/control"
+        dpkg-deb --root-owner-group --build "$root" "$pkg"
+        rm -rf "$root/DEBIAN"
+        ;;
+    rpm)
+        top="$work/rpm-$name"
+        rm -rf "$top"
+        mkdir -p "$top/SPECS"
+        {
+            echo "Name: $name"
+            echo "Version: $version"
+            echo "Release: 1"
+            echo "Summary: $what"
+            echo "License: MIT"
+            echo "URL: $www"
+            echo "AutoReqProv: no"
+            for d in "$@"; do echo "Requires: $d = $version-1"; done
+            echo
+            echo "%description"
+            echo "$what."
+            echo
+            echo "%install"
+            echo "cp -a \"$root/.\" %{buildroot}/"
+            echo
+            echo "%files"
+            # Split packages share directories, so each lists only its files.
+            if [ "$split" = 0 ]; then echo "$prefix"
+            else listing "$root" | grep -v '/$' | sed "s|^|$prefix/|"; fi
+        } >"$top/SPECS/$name.spec"
+        rpmbuild -bb --define "_topdir $top" --define "debug_package %{nil}" \
+                 --define "__os_install_post %{nil}" "$top/SPECS/$name.spec"
+        pkg=$(find "$top/RPMS" -name '*.rpm' | head -n 1)
+        cp "$pkg" "$out/"
+        pkg="$out/$(basename "$pkg")"
+        ;;
+    freebsd)
+        {
+            echo "name: $name"
+            echo "version: \"$version\""
+            echo "origin: devel/$name"
+            echo "comment: \"$comment\""
+            echo "desc: \"$what\""
+            echo "maintainer: \"$maintainer\""
+            echo "www: \"$www\""
+            echo "prefix: \"$prefix\""
+            if [ $# -gt 0 ]; then
+                echo "deps: {"
+                for d in "$@"; do echo "  $d: { origin: \"devel/$d\", version: \"$version\" }"; done
+                echo "}"
+            fi
+        } >"$work/manifest"
+        listing "$root" | grep -v '/$' >"$work/plist"
+        pkg create -M "$work/manifest" -p "$work/plist" -r "$root" -o "$out"
+        pkg="$out/$name-$version.pkg"
+        ;;
+    openbsd)
+        listing "$root" >"$work/plist"
+        pkg="$out/$name-$version.tgz"
+        deps=""
+        for d in "$@"; do deps="$deps -P devel/$d:$d-$version:$d-$version"; done
+        # shellcheck disable=SC2086
+        pkg_create -A "$(arch -s)" -B "$root" -p "$prefix" -f "$work/plist" \
+                   -D COMMENT="$comment" -D FULLPKGPATH="devel/$name" \
+                   -D HOMEPAGE="$www" -D MAINTAINER="$maintainer" \
+                   -d "-$what." $deps "$pkg"
+        ;;
+    netbsd)
+        listing "$root" | grep -v '/$' >"$work/plist"
+        {
+            echo "MACHINE_ARCH=$(uname -p)"
+            echo "OPSYS=NetBSD"
+            echo "OS_VERSION=$(uname -r)"
+            echo "PKGTOOLS_VERSION=$(pkg_info -V)"
+        } >"$work/build-info"
+        pkg="$out/$name-$version.tgz"
+        deps=""
+        for d in "$@"; do deps="$deps -P $d>=$version"; done
+        # shellcheck disable=SC2086
+        pkg_create -B "$work/build-info" -c "-$comment" -d "-$what." \
+                   -f "$work/plist" -I "$prefix" -p "$root$prefix" $deps "$pkg"
+        ;;
+    tar)
+        pkg="$out/$name-$version-$(uname -s | tr 'A-Z' 'a-z')-$(uname -m).tar.gz"
+        tar -C "$root" -czf "$pkg" .
+        ;;
+    *)
+        echo "libreaktor-pkg.sh: unknown format: $format" >&2
+        exit 2
+        ;;
+    esac
+    echo "packed: $pkg"
+    packed="$packed $pkg"
+}
+
+# A REAKTOR_SHARED build splits in three, so an app can install the libraries
+# alone: libreaktor-sdl3-0 (our SDL), libreaktor0 (libreaktor.so, which needs
+# it) and the development package with everything else, which needs both.
+split=0
+[ -f "$stage$prefix/lib/libreaktor.so" ] && split=1
+packed=""
+if [ "$split" = 0 ]; then
+    pack "$dev" "$stage" "$summary"
+else
+    sdl="$work/split/sdl" lib="$work/split/lib"
+    rm -rf "$work/split"
+    mkdir -p "$sdl$prefix/lib" "$sdl$prefix/share/reaktor/licenses" "$lib$prefix/lib" \
+             "$lib$prefix/share/reaktor"
+    mv "$stage$prefix"/lib/libreaktor-sdl3.so.* "$sdl$prefix/lib/"
+    mv "$stage$prefix/share/reaktor/licenses/SDL.txt" "$sdl$prefix/share/reaktor/licenses/"
+    mv "$stage$prefix"/lib/libreaktor.so.* "$lib$prefix/lib/"
+    mv "$stage$prefix/share/reaktor/licenses" "$stage$prefix/share/reaktor/NOTICE.md" \
+       "$lib$prefix/share/reaktor/"
+    pack libreaktor-sdl3-0 "$sdl" \
+         "SDL 3 as Reaktor builds it, for apps linked against libreaktor.so"
+    pack libreaktor0 "$lib" \
+         "Reaktor, a C99 GUI library on Nuklear styled by CSS (shared library)" libreaktor-sdl3-0
+    pack "$dev" "$stage" \
+         "Reaktor, a C99 GUI library on Nuklear styled by CSS (headers, static and shared libraries)" \
+         libreaktor0 libreaktor-sdl3-0
+fi
+
+if [ $install -eq 1 ]; then
+    # shellcheck disable=SC2086
+    case $format in
+        deb)     as_root dpkg -i $packed ;;
+        rpm)     as_root rpm -U --replacepkgs $packed ;;
+        freebsd) for p in $packed; do as_root pkg add "$p"; done ;;
+        openbsd) for p in $packed; do as_root pkg_add -D unsigned "$p"; done ;;
+        netbsd)  for p in $packed; do as_root pkg_add -U "$p"; done ;;
+        tar)     for p in $packed; do as_root tar -C / -xzf "$p"; done ;;
+    esac
+fi
+
 echo "use it: pkg-config --cflags --libs reaktor with PKG_CONFIG_PATH=$prefix/lib/pkgconfig,"
 echo "        or find_package(reaktor) with CMAKE_PREFIX_PATH=$prefix"

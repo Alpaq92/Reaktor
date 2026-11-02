@@ -240,6 +240,34 @@ jobs:
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged.$e"; done
           EOF
 
+      # The shared build splits in three. An app linked against it must still
+      # run, and draw the same, with only the two runtime packages left.
+      - name: Pack and check the shared libreaktor .debs
+        id: shareddeb
+        if: ${{ !cancelled() && steps.shared.outcome == 'success' && steps.deb.outcome == 'success' }}
+        run: |
+          docker exec -i debian sh -eu <<'EOF'
+          sh tools/libreaktor-pkg.sh -f deb -b build-shared -o dist-pkg-shared </dev/null
+          dpkg -i dist-pkg-shared/*.deb </dev/null
+          cmake -S examples/consumer -B build-pkg-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH=/opt/reaktor -DCONSUMER_SHARED=ON </dev/null
+          cmake --build build-pkg-shared </dev/null
+          dpkg -r libreaktor-dev </dev/null
+          dpkg -s libreaktor0 libreaktor-sdl3-0 | grep -c '^Status: install ok installed' | grep -q 2
+          timeout 600 build-pkg-shared/simple --theme light --video dummy \
+            --shot check/lib-packaged-shared.bmp --a11y-dump check/lib-packaged-shared.txt </dev/null
+          for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged-shared.$e"; done
+          EOF
+
+      - name: Upload the shared .debs
+        if: ${{ !cancelled() && steps.shareddeb.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-deb-shared-linux-${{ matrix.arch }}
+          path: dist-pkg-shared/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Check an app that embeds Reaktor
         if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.arch == 'x86-64' }}
         run: |
@@ -327,12 +355,22 @@ jobs:
           cmake -S examples/consumer -B build-pkg-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_PREFIX_PATH=/opt/reaktor </dev/null
           cmake --build build-pkg-consumer </dev/null
+          rm -rf build-pkg
+          sh tools/libreaktor-pkg.sh -s -i -o dist-pkg-shared </dev/null
+          rpm -q libreaktor0 libreaktor-sdl3-0 libreaktor-devel
+          cmake -S examples/consumer -B build-pkg-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH=/opt/reaktor -DCONSUMER_SHARED=ON </dev/null
+          cmake --build build-pkg-shared </dev/null
+          rpm -e libreaktor-devel
+          build-pkg-shared/simple --theme light --video dummy --shot check-shared.bmp </dev/null
           EOF
 
       - name: Upload the .rpm
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-rpm-linux-${{ matrix.arch }}
-          path: dist-pkg/*.rpm
+          path: |
+            dist-pkg/*.rpm
+            dist-pkg-shared/*.rpm
           if-no-files-found: error
           retention-days: 14
