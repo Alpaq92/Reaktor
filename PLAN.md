@@ -316,7 +316,29 @@ not, and whether the numbers differ from CI's. A desktop run loads the real
 input-method, accessibility and tray stacks, so PSS grows and the percentage is
 likely to fall.
 
-## Phase 1: the shared build (only if Phase 0 says go)
+## Phase 1: the shared build (started 2026-11-02)
+
+**Status.** Items 1 to 4 are in: `-DREAKTOR_SHARED=ON` builds
+`lib/libreaktor.so.0` (2.0 MB) and `libreaktor-sdl3.so.0` (2.9 MB, SDL 3.4.18
+with `core/sdl/no_dynapi.h` as for the static build) beside `libreaktor.a`,
+and links the samples and tests to them. Exports come from a version script,
+`tools/reaktor.map`, not an export macro: 1,185 symbols, all `reaktor_`, `nk_`,
+`nka_` and the five FreeType and plutovg calls the modules make. The modules
+reach some `reaktor_` functions that are not in `include/reaktor/`, so for now
+the `reaktor_*` glob exports those too; Phase 2's symbol check will draw the
+line. The measurement prototype (`REAKTOR_SHARED_PROTO`, commit `0948611`) is
+gone.
+
+Measured as in Phase 0d: three apps 24,200 KB static against 20,659 KB
+shared (14.6%), four 29,802 KB against 23,810 KB (20.1%). `bench` build and
+render 0.05 and 0.08 ms; `showcase` CPU in its first 3 s 232 ms, static 231 ms.
+All unit tests pass in both builds.
+
+Item 5 (`reaktor.pc`, `reaktorConfig.cmake`, install) is still to do. An app
+built outside the tree also needs the modules: the likely shape is a
+`libreaktor-modules.a` linked into the app, which exports its symbols back
+(`-Wl,--export-dynamic`).
+
 
 1. A `REAKTOR_SHARED` option, default `OFF`, building `libreaktor.so` with a
    soname (`libreaktor.so.0`) beside the static archive.

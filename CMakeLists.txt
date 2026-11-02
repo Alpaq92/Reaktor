@@ -22,7 +22,20 @@ endif()
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
-set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
+# Beside libreaktor.a, a libreaktor.so for Linux and the BSDs, where several
+# apps can share one copy (PLAN.md). SDL goes into libreaktor-sdl3.so, built
+# here as now; the samples link the shared pair.
+option(REAKTOR_SHARED "Also build libreaktor.so and libreaktor-sdl3.so, and link the samples to them" OFF)
+if(REAKTOR_SHARED)
+    if(NOT UNIX OR APPLE OR EMSCRIPTEN)
+        message(FATAL_ERROR "REAKTOR_SHARED is for Linux and the BSDs")
+    endif()
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    set(REAKTOR_SDL SDL3::SDL3-shared)
+else()
+    set(REAKTOR_SDL SDL3::SDL3-static)
+endif()
+set(SDL_SHARED       ${REAKTOR_SHARED} CACHE BOOL "" FORCE)
 set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
 set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES     OFF CACHE BOOL "" FORCE)
@@ -92,6 +105,13 @@ if(MSVC)
 else()
     target_compile_options(SDL3-static PRIVATE
         -include "${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
+endif()
+if(REAKTOR_SHARED)
+    target_compile_options(SDL3-shared PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
+    # Our own SDL under its own name, never the distro's libSDL3.
+    set_target_properties(SDL3-shared PROPERTIES OUTPUT_NAME reaktor-sdl3
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 if(UNIX AND NOT EMSCRIPTEN)
@@ -188,7 +208,7 @@ add_library(reaktor_core STATIC
     core/render/svg.c
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
-target_link_libraries(reaktor_core PUBLIC plutosvg freetype reaktor_headers SDL3::SDL3-static)
+target_link_libraries(reaktor_core PUBLIC plutosvg freetype reaktor_headers ${REAKTOR_SDL})
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")
@@ -200,23 +220,23 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(keytest tests/keytest.c core/ui/keys.c)
     target_link_libraries(keytest PRIVATE reaktor_headers)
     target_include_directories(keytest PRIVATE core/ui)
-    target_link_libraries(keytest PRIVATE SDL3::SDL3-static)
+    target_link_libraries(keytest PRIVATE ${REAKTOR_SDL})
 
     add_executable(a11ytest tests/a11ytest.c core/a11y/a11y.c
         platform/a11y/a11y_snapshot.c core/base/utf8.c)
-    target_link_libraries(a11ytest PRIVATE reaktor_headers SDL3::SDL3-static)
+    target_link_libraries(a11ytest PRIVATE reaktor_headers ${REAKTOR_SDL})
     target_include_directories(a11ytest PRIVATE core/a11y core/render
         platform/a11y core/base)
 
     add_executable(animtest tests/animtest.c core/anim/anim.c)
     target_include_directories(animtest PRIVATE core/anim core/render
                                                 "${TP}/nuklear/demo/sdl3_renderer")
-    target_link_libraries(animtest PRIVATE reaktor_core SDL3::SDL3-static)
+    target_link_libraries(animtest PRIVATE reaktor_core ${REAKTOR_SDL})
 
     add_executable(localetest tests/localetest.c
                    core/locale/locale.c core/locale/plural.c
                    core/locale/format.c)
-    target_link_libraries(localetest PRIVATE reaktor_headers SDL3::SDL3-static)
+    target_link_libraries(localetest PRIVATE reaktor_headers ${REAKTOR_SDL})
     target_include_directories(localetest PRIVATE core/locale)
     target_compile_definitions(localetest PRIVATE REAKTOR_LOCALE_EMBEDDED)
 
@@ -233,7 +253,7 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
 
     add_executable(basetest tests/basetest.c core/base/url.c core/base/utf8.c)
     target_include_directories(basetest PRIVATE core/base)
-    target_link_libraries(basetest PRIVATE SDL3::SDL3-static)
+    target_link_libraries(basetest PRIVATE ${REAKTOR_SDL})
 
     add_executable(imagetest tests/imagetest.c)
     target_link_libraries(imagetest PRIVATE plutovg)
@@ -402,7 +422,7 @@ else()
         target_link_libraries(texttest PRIVATE reaktor_headers)
         target_include_directories(texttest PRIVATE core/render core/text)
         target_link_libraries(texttest PRIVATE reaktor_text reaktor_core
-                              SDL3::SDL3-static)
+                              ${REAKTOR_SDL})
     endif()
 endif()
 
@@ -548,7 +568,7 @@ target_include_directories(reaktor_runtime PUBLIC
 
 target_link_libraries(reaktor_runtime PUBLIC
     reaktor_core
-    SDL3::SDL3-static
+    ${REAKTOR_SDL}
     onlay)
 
 if(WIN32 AND NOT EMSCRIPTEN)
@@ -574,50 +594,35 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
 
-# Experimental, for measuring only: libreaktor-proto.so holds the runtime,
-# the core, SDL and the libraries under them, and the samples link it. No
-# soname; Linux and the BSDs, with -DCMAKE_POSITION_INDEPENDENT_CODE=ON.
-# REAKTOR_SHARED_PROTO_HIDE exports only the reaktor_, nk_, nka_ and SDL_ APIs
-# and the few symbols the modules reach, and binds the rest inside the library.
-option(REAKTOR_SHARED_PROTO "Link the samples against an experimental shared libreaktor" OFF)
-option(REAKTOR_SHARED_PROTO_HIDE "Export only the public APIs from the experimental shared libreaktor" OFF)
-if(REAKTOR_SHARED_PROTO)
-    if(NOT CMAKE_POSITION_INDEPENDENT_CODE)
-        message(FATAL_ERROR "REAKTOR_SHARED_PROTO needs -DCMAKE_POSITION_INDEPENDENT_CODE=ON")
-    endif()
-    set(_proto_parts reaktor_runtime reaktor_core plutosvg plutovg freetype onlay SDL3-static)
-    set(_proto_files "")
-    foreach(_t IN LISTS _proto_parts)
-        list(APPEND _proto_files "$<TARGET_FILE:${_t}>")
+if(REAKTOR_SHARED)
+    # libreaktor.so.0: the runtime, the core and the libraries under them,
+    # linking libreaktor-sdl3.so. reaktor.map exports Reaktor's, Nuklear's and
+    # nukanim's APIs and the few FreeType and plutovg calls the modules make;
+    # the rest binds inside the library. The modules stay in each app, which
+    # exports them back to it.
+    set(_so_parts reaktor_runtime reaktor_core plutosvg plutovg freetype onlay)
+    set(_so_files "")
+    foreach(_t IN LISTS _so_parts)
+        target_compile_options(${_t} PRIVATE -fno-semantic-interposition)
+        list(APPEND _so_files "$<TARGET_FILE:${_t}>")
     endforeach()
-    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/proto.c" CONTENT "")
-    add_library(reaktor_proto SHARED "${CMAKE_BINARY_DIR}/proto.c")
-    set_target_properties(reaktor_proto PROPERTIES OUTPUT_NAME reaktor-proto
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-    add_dependencies(reaktor_proto ${_proto_parts})
-    target_link_libraries(reaktor_proto PRIVATE
-        -Wl,--whole-archive ${_proto_files} -Wl,--no-whole-archive
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor_so.c" CONTENT "")
+    add_library(reaktor_shared SHARED "${CMAKE_BINARY_DIR}/reaktor_so.c")
+    set_target_properties(reaktor_shared PROPERTIES OUTPUT_NAME reaktor
+        VERSION ${PROJECT_VERSION} SOVERSION 0
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
+    add_dependencies(reaktor_shared ${_so_parts})
+    target_link_libraries(reaktor_shared PRIVATE
+        -Wl,--whole-archive ${_so_files} -Wl,--no-whole-archive
         $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_LINK_LIBRARIES>)
-    if(REAKTOR_SHARED_PROTO_HIDE)
-        foreach(_t IN LISTS _proto_parts)
-            target_compile_options(${_t} PRIVATE -fno-semantic-interposition)
-        endforeach()
-        file(WRITE "${CMAKE_BINARY_DIR}/proto.map" "{
-  global: reaktor_*; nk_*; nka_*; SDL_*;
-    plutovg_*; FT_Done_Face; FT_Load_Glyph;
-  local: *;
-};
-")
-        target_link_options(reaktor_proto PRIVATE
-            "-Wl,--version-script=${CMAKE_BINARY_DIR}/proto.map")
-        set_property(TARGET reaktor_proto APPEND PROPERTY LINK_DEPENDS
-                     "${CMAKE_BINARY_DIR}/proto.map")
-    endif()
-    add_library(reaktor_proto_headers INTERFACE)
-    target_include_directories(reaktor_proto_headers INTERFACE
+    target_link_options(reaktor_shared PRIVATE
+        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
+    target_include_directories(reaktor_shared INTERFACE
         $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_INCLUDE_DIRECTORIES>)
-    target_compile_definitions(reaktor_proto_headers INTERFACE
+    target_compile_definitions(reaktor_shared INTERFACE
         $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_COMPILE_DEFINITIONS>)
+    target_link_libraries(reaktor_shared INTERFACE ${REAKTOR_SDL})
 endif()
 
 function(reaktor_add_app name)
@@ -638,9 +643,9 @@ function(reaktor_add_app name)
             list(APPEND _mods reaktor_${_m}_none)
         endif()
     endforeach()
-    if(REAKTOR_SHARED_PROTO)
+    if(REAKTOR_SHARED)
         # The modules stay in the app; the shared core calls them back.
-        target_link_libraries(${name} PRIVATE reaktor_proto_headers ${_mods} reaktor_proto)
+        target_link_libraries(${name} PRIVATE ${_mods} reaktor_shared)
         set_target_properties(${name} PROPERTIES ENABLE_EXPORTS ON)
     else()
         target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
@@ -884,7 +889,8 @@ function(reaktor_outside_links)
         if(_real)
             set(_t ${_real})
         endif()
-        if(_t IN_LIST _seen)
+        # libreaktor.a carries SDL3-static in the shared SDL's place.
+        if(_t IN_LIST _seen OR _t STREQUAL "SDL3-shared")
             continue()
         endif()
         list(APPEND _seen ${_t})

@@ -1,0 +1,8 @@
+LIBREAKTOR_0 {
+  global:
+    reaktor_*; nk_*; nka_*;
+    plutovg_surface_create_for_data; plutovg_surface_destroy;
+    plutovg_surface_write_to_jpg_stream;
+    FT_Done_Face; FT_Load_Glyph;
+  local: *;
+};
