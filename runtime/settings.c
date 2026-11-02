@@ -56,45 +56,49 @@ setting_put(char *key, char *value)
         g_set[i].value = value;
         return;
     }
-    if (g_count == g_cap) {
-        int      cap  = g_cap ? g_cap * 2 : 16;
-        setting *grow = (setting *)SDL_realloc(g_set, (size_t)cap * sizeof *grow);
-
-        if (!grow) { SDL_free(key); SDL_free(value); return; }
-        g_set = grow;
-        g_cap = cap;
+    if (!reaktor_grow((void **)&g_set, &g_cap, g_count + 1, sizeof *g_set)) {
+        SDL_free(key);
+        SDL_free(value);
+        return;
     }
     g_set[g_count].key     = key;
     g_set[g_count++].value = value;
 }
 
-/* A table nested in a hand-written file reads as dotted keys; a value that is
-   not a string keeps its TOML spelling, so `maximized = 1` reads as "1". */
+/* A table nested in a hand-written file reads as dotted keys, and a number or
+   a boolean as its text, so `maximized = 1` reads as "1"; an array is skipped. */
 static void
 settings_take(const toml_table_t *t, const char *prefix)
 {
-    int i;
+    int i, len, n = toml_table_len(t);
 
-    for (i = 0; i < t->nkval; i++) {
-        const char  *name = t->kval[i]->key;
-        toml_value_t v    = toml_table_string(t, name);
-        char        *key  = NULL;
+    for (i = 0; i < n; i++) {
+        const char   *name = toml_table_key(t, i, &len);
+        toml_value_t  v;
+        toml_table_t *sub;
+        char         *key = NULL, *value = NULL;
 
         SDL_asprintf(&key, "%s%s", prefix, name);
-        if (!key) { if (v.ok) free(v.u.s); continue; }
-        if (v.ok) {
-            setting_put(key, SDL_strdup(v.u.s));
-            free(v.u.s);
-        } else {
-            setting_put(key, SDL_strdup(t->kval[i]->val));
+        if (!key) continue;
+        if ((sub = toml_table_table(t, name)) != NULL) {
+            SDL_asprintf(&value, "%s.", key);
+            if (value) settings_take(sub, value);
+            SDL_free(value);
+            SDL_free(key);
+            continue;
         }
-    }
-    for (i = 0; i < t->ntbl; i++) {
-        char *sub = NULL;
-
-        SDL_asprintf(&sub, "%s%s.", prefix, t->tbl[i]->key);
-        if (sub) settings_take(t->tbl[i], sub);
-        SDL_free(sub);
+        if ((v = toml_table_string(t, name)).ok) {
+            value = SDL_strdup(v.u.s);
+            free(v.u.s);
+        } else if ((v = toml_table_int(t, name)).ok) {
+            SDL_asprintf(&value, "%lld", (long long)v.u.i);
+        } else if ((v = toml_table_double(t, name)).ok) {
+            SDL_asprintf(&value, "%g", v.u.d);
+        } else if ((v = toml_table_bool(t, name)).ok) {
+            value = SDL_strdup(v.u.b ? "true" : "false");
+        }
+        if (value) setting_put(key, value);
+        else SDL_free(key);
     }
 }
 
@@ -206,7 +210,10 @@ reaktor_setting_set(const char *key, const char *value)
     i = setting_index(key);
     if (i < 0 && !value) return;
     if (i >= 0 && value && SDL_strcmp(g_set[i].value, value) == 0) return;
-    if (value) {
+    if (i >= 0 && value) {
+        SDL_free(g_set[i].value);
+        g_set[i].value = SDL_strdup(value);
+    } else if (value) {
         setting_put(SDL_strdup(key), SDL_strdup(value));
     } else {
         SDL_free(g_set[i].key);
@@ -235,17 +242,16 @@ settings_empty(void)
 void
 reaktor_settings_clear(void)
 {
+    char *path;
+
     settings_empty();
     g_loaded = 1;
     if (g_save_timer) reaktor_timer_stop(g_save_timer);
     g_save_timer = 0;
     if (reaktor_capturing()) return;
-    {
-        char *path = settings_path();
-
-        if (path) SDL_RemovePath(path);
-        SDL_free(path);
-    }
+    path = settings_path();
+    if (path) SDL_RemovePath(path);
+    SDL_free(path);
     settings_persist();
 }
 
