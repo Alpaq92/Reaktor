@@ -622,11 +622,11 @@ saved_file(int remove)
     char  *dir = SDL_GetPrefPath(NULL, "launchtest"), *path = NULL, *text = NULL;
     int    has = 0;
 
-    if (dir) SDL_asprintf(&path, "%ssettings.conf", dir);
+    if (dir) SDL_asprintf(&path, "%ssettings.toml", dir);
     if (path && remove) SDL_RemovePath(path);
     else if (path) {
         text = (char *)SDL_LoadFile(path, NULL);
-        has  = text && SDL_strstr(text, "[launchtest]\nkey=on disk") != NULL;
+        has  = text && SDL_strstr(text, "\"launchtest.key\" = \"on disk\"") != NULL;
     }
     SDL_free(text);
     SDL_free(path);

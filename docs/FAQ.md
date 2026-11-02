@@ -152,7 +152,7 @@ sheet, rounded fills and borders, a hot rectangle so hover redraws, and a
 
 ### Where are settings stored, and when are they saved?
 
-In `settings.conf`, an INI file in SDL's preference folder for the app.
+In `settings.toml`, a TOML file in SDL's preference folder for the app.
 `.save_settings` picks when: never (the default), on quit, on every change,
 or `.save_ms` after a change. `reaktor_settings_save` writes now and
 `reaktor_settings_clear` empties them and deletes the file. See
@@ -160,7 +160,7 @@ or `.save_ms` after a change. `reaktor_settings_save` writes now and
 
 ### How do settings work on the web?
 
-The same `settings.conf` lives in the browser's IndexedDB, loaded before
+The same `settings.toml` lives in the browser's IndexedDB, loaded before
 `main` and synced after each write; saving on quit means saving on change
 there. Clearing site data or closing a private window loses it.
 

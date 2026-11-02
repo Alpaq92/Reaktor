@@ -98,12 +98,14 @@ followed by a frame.
 | `reaktor_timer(app, ms, repeat, fn, user)` | `fn(app, user)` after `ms`, every `ms` with `repeat`; answers an id. Stops when the window closes |
 | `reaktor_timer_stop(id)` | Stop one |
 | `reaktor_post(app, fn, user)` | `fn(app, user)` on the main thread. Any thread; immediate on the main one |
-| `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. `window.maximized` is key `maximized` in section `[window]`. No newlines; no `=`, `[` or `]` in a key |
+| `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. A key is any non-empty string; `window` and `window.maximized` are two keys |
 | `reaktor_settings_save()`, `reaktor_settings_clear()` | Write the settings now, whatever the mode; empty them and delete the file |
 
-Settings are an INI file, `settings.conf` in SDL's preference folder for `.id`
-(or `.name`), read and written by [`ini.h`](https://github.com/mattiasgustavsson/libs);
-names match case-insensitively. `.save_settings` says when it is written:
+Settings are a TOML file, `settings.toml` in SDL's preference folder for `.id`
+(or `.name`), read by [toml-c](https://github.com/arp242/toml-c) and written by
+the runtime: one quoted key and string per line, `"window.maximized" = "1"`.
+A hand-written table reads as dotted keys, so `[window]` with `maximized = 1`
+is the same setting; names match case-sensitively. `.save_settings` says when it is written:
 
 | `.save_settings` | Written |
 | --- | --- |
@@ -113,7 +115,7 @@ names match case-insensitively. `.save_settings` says when it is written:
 | `REAKTOR_SAVE_ON_TIMER` | `.save_ms` (1000) after a change, and on quit |
 
 Each write goes to a new file renamed over the old, so a crash mid-write
-leaves the last one whole. On the web the same `settings.conf` lives in the
+leaves the last one whole. On the web the same `settings.toml` lives in the
 browser's IndexedDB: `tools/web-pre.js` mounts it with Emscripten's IDBFS and
 loads it before `main` runs, every write is synced back, and saving on quit
 means saving on change. Clearing site data, or a private window closing,
@@ -1139,7 +1141,7 @@ Passed to CMake, through either script:
 | `REAKTOR_LOCALE` | `ON` | Translations and formatting — [Localization](#localization) |
 | `REAKTOR_LOCALE_EMBED` | `OFF` | Compile the catalogs in rather than read them at startup |
 | `REAKTOR_TEXT` | `ON` | Direction, shaping, fallback glyphs and Unicode line breaks — [Text](#text) |
-| `REAKTOR_SETTINGS` | `ON` | Settings kept between runs, in `settings.conf` |
+| `REAKTOR_SETTINGS` | `ON` | Settings kept between runs, in `settings.toml` |
 | `REAKTOR_TRAY` | `ON` | The tray icon |
 | `REAKTOR_POPUP_WINDOWS` | `ON` | Menus in windows of their own |
 | `REAKTOR_NOTIFY` | `ON` | System notifications |
@@ -1182,7 +1184,7 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 - **`REAKTOR_TEXT=OFF`** leaves mojibake and kb_text_shape out. Nothing is
   reordered, shaped or taken from another font, and a line breaks after a
   space: Polish is untouched, Japanese comes out as boxes.
-- **`REAKTOR_SETTINGS=OFF`** leaves `ini.h` and the web's IndexedDB out:
+- **`REAKTOR_SETTINGS=OFF`** leaves toml-c and the web's IndexedDB out:
   `reaktor_setting` answers `NULL`, saving and clearing do nothing, and
   `.remember_window` is ignored.
 - **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, so AppIndicator
