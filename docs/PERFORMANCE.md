@@ -186,6 +186,33 @@ launches.
 `tools/vmwalk.c` (`cmake --build build --target vmwalk`) splits another
 process's private bytes into named buckets.
 
+**Three apps share 21% at most.** `tools/ci/pss.sh` runs `showcase`,
+`notepad` and `simple` together, idle; medians of ten launches. Each carries
+its own copy of libreaktor and SDL, which a shared library would map once.
+
+| | PSS | Clean pages of its binary |
+| --- | --- | --- |
+| `showcase` | 9,180 KB | 2,796 KB |
+| `notepad` | 5,957 KB | 2,208 KB |
+| `simple` | 5,251 KB | 2,164 KB |
+
+Of the 20,433 KB together, one copy instead of three would save 4,366 KB, or
+21.3%. That counts each app's own code as library code, so it is an upper
+bound.
+
+Counted page by page, it is 20.2%. `tools/ci/pss-pages.sh` links the three
+with maps and sorts each resident page of a binary by the object it came from:
+2,386 KB of `showcase`'s is libreaktor and SDL, 2,090 KB of `notepad`'s and
+2,018 KB of `simple`'s. Sharing would save 4,120 KB of the 20,423. That is still
+an upper bound: it takes the largest app's library pages as all three's, and
+leaves out what the dynamic linker costs each app.
+
+On a Linux desktop it falls under 20%: Linux Mint 22.3, Cinnamon on X11,
+llvmpipe (no GPU passthrough), a KVM guest on an AMD Ryzen 5 4600H with 4
+cores. `showcase` grows to 14,224 KB there, while the library pages barely
+move. Counting every clean page of a binary, sharing saves 4,602 KB of
+24,157 KB, or 19.0%; counted page by page, 4,176 KB of 24,200 KB, or 17.3%.
+
 ## CPU
 
 **At rest: 0% of a core** on Windows, Linux and GhostBSD, on every page; macOS
@@ -237,6 +264,8 @@ since a `file://` page cannot fetch the `.wasm`.
 - **macOS** — 11.7 Big Sur, Intel iMac, Apple Clang 12, 1024×768 non-Retina,
   built with `-DCMAKE_OSX_SYSROOT=…/MacOSX11.3.sdk`.
 - **GhostBSD** — 26.1-R15.0p2, x86_64, Clang 19.1.7, X11, VMware, no 3D.
+- **Sharing** — GitHub `ubuntu-24.04` runner, x86_64, Debian 12 container,
+  GCC Release, Xvfb, no GPU.
 
 The **Diagnostics** page shows the renderer, the frame breakdown and the
 resident set live; reproduce any of this there.

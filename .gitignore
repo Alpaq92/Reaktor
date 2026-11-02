@@ -12,6 +12,7 @@ build-arm64/
 build-lib/
 build-consumer/
 build-embedded/
+build-map/
 .claude/settings.local.json
 .dart_tool/
 .gradle/
