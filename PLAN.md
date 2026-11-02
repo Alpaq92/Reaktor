@@ -1,5 +1,9 @@
 # Plan: libreaktor as a shared library
 
+**Decision (2026-11-02): no-go.** Phase 0 measured at most 20.2% in CI and
+17.3% on a Linux desktop, against the 20% threshold. Phases 1 to 3 are not
+started; libreaktor stays static. This plan stays as the record of why.
+
 ## Where things stand
 
 - **libreaktor is static only.** CMake merges its parts into `libreaktor.a`
