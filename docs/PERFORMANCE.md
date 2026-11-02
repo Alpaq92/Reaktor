@@ -207,6 +207,12 @@ with maps and sorts each resident page of a binary by the object it came from:
 an upper bound: it takes the largest app's library pages as all three's, and
 leaves out what the dynamic linker costs each app.
 
+On a Linux desktop it falls under 20%: Linux Mint 22.3, Cinnamon on X11,
+llvmpipe (no GPU passthrough), a KVM guest on an AMD Ryzen 5 4600H with 4
+cores. `showcase` grows to 14,224 KB there, while the library pages barely
+move. Counting every clean page of a binary, sharing saves 4,602 KB of
+24,157 KB, or 19.0%; counted page by page, 4,176 KB of 24,200 KB, or 17.3%.
+
 ## CPU
 
 **At rest: 0% of a core** on Windows, Linux and GhostBSD, on every page; macOS

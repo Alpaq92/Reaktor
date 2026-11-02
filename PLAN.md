@@ -121,6 +121,33 @@ likely under 20%.
 **Reading.** About 4 MB saved across three apps, on the line. Recommendation
 so far: no-go, pending a run on a real Linux desktop.
 
+## Phase 0 results (Linux desktop, 2026-11-02)
+
+**Machine.** Linux Mint 22.3, Cinnamon on X11, Mesa llvmpipe (no GPU), a KVM
+guest on an AMD Ryzen 5 4600H with 4 cores, kernel 7.0, GCC Release. Same
+three apps, ten launches, medians.
+
+1. `pss.sh`: **19.0%**. Summed PSS 24,157 KB; sharing saves 4,602 KB.
+
+   | | PSS | Clean pages of its binary |
+   | --- | --- | --- |
+   | `showcase` | 14,224 KB | 2,898 KB |
+   | `notepad` | 5,386 KB | 2,322 KB |
+   | `simple` | 4,553 KB | 2,262 KB |
+
+2. `pss-pages.sh`: **17.3%**. Summed PSS 24,200 KB; sharing saves 4,176 KB.
+
+   | | PSS | lib | app | mixed | other |
+   | --- | --- | --- | --- | --- | --- |
+   | `showcase` | 14,282 KB | 2,606 KB | 232 KB | 32 KB | 148 KB |
+   | `notepad` | 5,382 KB | 2,124 KB | 80 KB | 24 KB | 136 KB |
+   | `simple` | 4,516 KB | 2,064 KB | 36 KB | 24 KB | 132 KB |
+
+**Reading.** As expected, the desktop stacks grow the showcase's PSS by about
+5 MB, while the library pages stay at about 4 MB. Both estimates are upper
+bounds, and both are under 20%. **No-go**, unless a run on real GPU hardware
+differs.
+
 ## Running Phase 0 on a Linux desktop
 
 Needs GCC with GNU ld from binutils 2.38 or later (`-Map=DIR/` writes one map
@@ -192,5 +219,6 @@ likely to fall.
 
 ## Open questions
 
-1. Go or no-go, once a Linux desktop run is in. The threshold is 20% (agreed
-   2026-10-30); CI says 20.2% at most.
+1. Go or no-go. The threshold is 20% (agreed 2026-10-30). CI says 20.2% at
+   most, and a Linux desktop says 17.3% (2026-11-02). That points to no-go;
+   a run on a desktop with a real GPU would confirm it.
