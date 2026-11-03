@@ -469,7 +469,12 @@ Windows, macOS and the web.
 - **macOS:** a framework signed with the app's Team ID, or a Homebrew formula,
   since apps from other developers cannot load it under the hardened runtime.
   Homebrew is ruled out (2026-11-03: no access), which leaves only the
-  framework, shared by apps under one Team ID.
+  framework, shared by apps under one Team ID. Kept in scope (2026-11-03).
+  It saves memory only when several of those apps run at once and the
+  framework is installed once, in `/Library/Frameworks`, not inside each
+  `.app`. Still open: an Apple Developer ID to sign and notarize it, and a
+  universal binary or one per architecture. It cannot be built or checked on
+  the Linux machine this plan was worked on; `macos.yml` would be its check.
 
 ## Open questions
 
