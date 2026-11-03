@@ -160,6 +160,12 @@ jobs:
 
           #### Shared
 
+          On macOS it also comes as \`Reaktor.framework\`, with SDL inside, in
+          \`libreaktor-$v-macos-<arch>.zip\` beside \`libreaktor-modules.a\` and the
+          static files: link \`reaktor::shared\`. Apps signed with one Team ID
+          share it from \`/Library/Frameworks\`, which their rpath searches; it
+          is signed ad hoc, like everything here.
+
           On Linux and the BSDs (x86-64) the library also comes shared, so
           several apps can share one copy in memory:
           \`libreaktor-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.0\`,

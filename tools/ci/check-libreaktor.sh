@@ -1,9 +1,9 @@
 #!/bin/sh
 # Installs libreaktor from a build into dist/NAME, links examples/consumer
 # against it, checks that program draws what the built simple does, and
-# leaves dist/NAME.tar.gz. Where the install has libreaktor.so (a
-# REAKTOR_SHARED build), the consumer is linked against that too, and must
-# draw the same.
+# leaves dist/NAME.tar.gz. Where the install has libreaktor.so or
+# Reaktor.framework (a REAKTOR_SHARED build), the consumer is linked against
+# that too, and must draw the same.
 #   check-libreaktor.sh [-i] [-w WRAP] BUILD NAME
 # -i: dist/NAME is installed already (a cross build ships it).
 set -eu
@@ -30,12 +30,15 @@ cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-consumer </dev/null
 runs="lib-built $build/simple
 lib-linked build-consumer/simple"
-if [ -f "dist/$name/lib/libreaktor.so" ]; then
+if [ -f "dist/$name/lib/libreaktor.so" ] || [ -d "dist/$name/Frameworks/Reaktor.framework" ]; then
     cmake -S examples/consumer -B build-consumer-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
           "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" -DCONSUMER_SHARED=ON </dev/null
     cmake --build build-consumer-shared </dev/null
-    readelf -d build-consumer-shared/simple | grep -q 'NEEDED.*\[libreaktor\.so\.' ||
-        { echo "the shared consumer does not link libreaktor.so"; exit 1; }
+    if command -v otool >/dev/null 2>&1; then
+        otool -L build-consumer-shared/simple | grep -q 'Reaktor\.framework/'
+    else
+        readelf -d build-consumer-shared/simple | grep -q 'NEEDED.*\[libreaktor\.so\.'
+    fi || { echo "the shared consumer does not link the shared libreaktor"; exit 1; }
     runs="$runs
 lib-shared build-consumer-shared/simple"
 fi

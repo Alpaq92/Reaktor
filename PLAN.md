@@ -476,6 +476,22 @@ Windows, macOS and the web.
   universal binary or one per architecture. It cannot be built or checked on
   the Linux machine this plan was worked on; `macos.yml` would be its check.
 
+  **Written, not yet run (2026-11-03).** `-DREAKTOR_SHARED=ON` on macOS builds
+  `Frameworks/Reaktor.framework` (`Versions/A`, install name
+  `@rpath/Reaktor.framework/...`, identifier `io.github.alpaq92.reaktor`)
+  from the same parts plus SDL, linked in with `-force_load`, so there is no
+  `libreaktor-sdl3`: no system SDL stands to be confused with ours. ld64 has
+  no version script, so CMake turns `tools/reaktor.map` into an exported
+  symbol list (190 names, checked here with `cmake -P`); the framework binds
+  its calls into the modules at load (`-undefined dynamic_lookup`) and apps
+  link with `-export_dynamic`, which also keeps those functions through
+  `-dead_strip`. `reaktor::shared` links the framework and
+  `libreaktor-modules.a`, with an rpath to the install and to
+  `/Library/Frameworks`. `macos.yml` builds it on both runners, runs
+  `check-libreaktor.sh` on it and uploads `libreaktor-VERSION-macos-ARCH.zip`.
+  Per architecture, signed ad hoc, as today; Developer ID signing and a
+  universal build are still open.
+
 ## Open questions
 
 1. ~~Go or no-go.~~ Go (2026-11-02), on four or more apps. The threshold is 20% (agreed 2026-10-30). CI says 20.2% at

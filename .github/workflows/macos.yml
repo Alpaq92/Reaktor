@@ -154,6 +154,37 @@ jobs:
           done
           ditto -c -k --keepParent "dist/$name" "dist/$name.zip"
 
+      # Reaktor.framework, with SDL inside, beside the static library: built,
+      # linked from an outside app, and drawn the same; released as
+      # libreaktor-VERSION-macos-ARCH.zip.
+      - name: Shared libreaktor
+        id: shared
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          export CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=500M
+          version='${{ inputs.version || 'dev' }}'
+          name="libreaktor-${version}-macos-${{ matrix.arch }}"
+          cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          cmake --build build-shared </dev/null
+          sh tools/ci/check-libreaktor.sh build-shared "$name" </dev/null
+          tar -C dist -xzf "dist/$name.tar.gz"
+          rm "dist/$name.tar.gz"
+          ditto -c -k --keepParent "dist/$name" "dist/$name.zip"
+          rm -rf "dist/$name"
+
+      - name: Upload the shared libreaktor
+        if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-macos-${{ matrix.arch }}
+          path: |
+            dist/libreaktor-*.zip
+            !dist/libreaktor-static-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Check an app that embeds Reaktor
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |

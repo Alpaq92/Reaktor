@@ -22,20 +22,28 @@ endif()
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
-# Beside libreaktor.a, a libreaktor.so for Linux and the BSDs, where several
-# apps can share one copy (PLAN.md). SDL goes into libreaktor-sdl3.so, built
-# here as now; the samples link the shared pair.
-option(REAKTOR_SHARED "Also build libreaktor.so and libreaktor-sdl3.so, and link the samples to them" OFF)
+# Beside libreaktor.a, a shared libreaktor, where several apps can share one
+# copy (PLAN.md). On Linux and the BSDs it is libreaktor.so, with SDL in
+# libreaktor-sdl3.so, built here as now. On macOS it is Reaktor.framework,
+# with SDL inside it: no system SDL stands to be confused with ours, and apps
+# under one Team ID share it from /Library/Frameworks. The samples link it.
+option(REAKTOR_SHARED "Also build a shared libreaktor, and link the samples to it" OFF)
+set(REAKTOR_SHARED_SDL OFF)
 if(REAKTOR_SHARED)
-    if(NOT UNIX OR APPLE OR EMSCRIPTEN)
-        message(FATAL_ERROR "REAKTOR_SHARED is for Linux and the BSDs")
+    if(NOT UNIX OR EMSCRIPTEN)
+        message(FATAL_ERROR "REAKTOR_SHARED is for Linux, the BSDs and macOS")
     endif()
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    if(NOT APPLE)
+        set(REAKTOR_SHARED_SDL ON)
+    endif()
+endif()
+if(REAKTOR_SHARED_SDL)
     set(REAKTOR_SDL SDL3::SDL3-shared)
 else()
     set(REAKTOR_SDL SDL3::SDL3-static)
 endif()
-set(SDL_SHARED       ${REAKTOR_SHARED} CACHE BOOL "" FORCE)
+set(SDL_SHARED       ${REAKTOR_SHARED_SDL} CACHE BOOL "" FORCE)
 set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
 set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES     OFF CACHE BOOL "" FORCE)
@@ -106,7 +114,7 @@ else()
     target_compile_options(SDL3-static PRIVATE
         -include "${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
 endif()
-if(REAKTOR_SHARED)
+if(REAKTOR_SHARED_SDL)
     target_compile_options(SDL3-shared PRIVATE
         -include "${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
     # Our own SDL under its own name, never the distro's libSDL3.
@@ -599,30 +607,71 @@ if(REAKTOR_SHARED)
     # linking libreaktor-sdl3.so. reaktor.map exports Reaktor's, Nuklear's and
     # nukanim's APIs and the few FreeType and plutovg calls the modules make;
     # the rest binds inside the library. The modules stay in each app, which
-    # exports them back to it.
+    # exports them back to it. On macOS the same parts and SDL make
+    # Reaktor.framework, exporting the same names (ld64 takes a list made from
+    # reaktor.map), and its calls into the modules bind when an app loads it.
     set(_so_parts reaktor_runtime reaktor_core plutosvg plutovg freetype onlay)
     set(_so_files "")
     foreach(_t IN LISTS _so_parts)
         target_compile_options(${_t} PRIVATE -fno-semantic-interposition)
+    endforeach()
+    if(APPLE)
+        list(APPEND _so_parts SDL3-static)
+    endif()
+    foreach(_t IN LISTS _so_parts)
         list(APPEND _so_files "$<TARGET_FILE:${_t}>")
     endforeach()
     file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor_so.c" CONTENT "")
     add_library(reaktor_shared SHARED "${CMAKE_BINARY_DIR}/reaktor_so.c")
-    set_target_properties(reaktor_shared PROPERTIES OUTPUT_NAME reaktor
+    set_target_properties(reaktor_shared PROPERTIES
         VERSION ${PROJECT_VERSION} SOVERSION 0
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
     add_dependencies(reaktor_shared ${_so_parts})
-    target_link_libraries(reaktor_shared PRIVATE
-        -Wl,--whole-archive ${_so_files} -Wl,--no-whole-archive
-        $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_LINK_LIBRARIES>)
-    target_link_options(reaktor_shared PRIVATE
-        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
+    if(APPLE)
+        # ld64 has no version script: the same names, as a symbol list.
+        file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map" _map_lines)
+        set(_exp "")
+        foreach(_l IN LISTS _map_lines)
+            if(_l MATCHES "^ *#" OR _l MATCHES "[{}:]")
+                continue()
+            endif()
+            string(REGEX MATCHALL "[A-Za-z_][A-Za-z0-9_*]*" _names "${_l}")
+            foreach(_n IN LISTS _names)
+                string(APPEND _exp "_${_n}\n")
+            endforeach()
+        endforeach()
+        file(WRITE "${CMAKE_BINARY_DIR}/reaktor.exp" "${_exp}")
+        set(_force "")
+        foreach(_f IN LISTS _so_files)
+            list(APPEND _force "-Wl,-force_load,${_f}")
+        endforeach()
+        set_target_properties(reaktor_shared PROPERTIES OUTPUT_NAME Reaktor
+            FRAMEWORK TRUE FRAMEWORK_VERSION A
+            MACOSX_FRAMEWORK_IDENTIFIER io.github.alpaq92.reaktor
+            MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${PROJECT_VERSION}
+            MACOSX_FRAMEWORK_BUNDLE_VERSION ${PROJECT_VERSION}
+            INSTALL_NAME_DIR "@rpath"
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Frameworks")
+        target_link_libraries(reaktor_shared PRIVATE ${_force}
+            $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_LINK_LIBRARIES>)
+        target_link_options(reaktor_shared PRIVATE
+            "-Wl,-exported_symbols_list,${CMAKE_BINARY_DIR}/reaktor.exp"
+            "-Wl,-undefined,dynamic_lookup")
+        target_link_libraries(reaktor_shared INTERFACE SDL3::Headers)
+    else()
+        set_target_properties(reaktor_shared PROPERTIES OUTPUT_NAME reaktor)
+        target_link_libraries(reaktor_shared PRIVATE
+            -Wl,--whole-archive ${_so_files} -Wl,--no-whole-archive
+            $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_LINK_LIBRARIES>)
+        target_link_options(reaktor_shared PRIVATE
+            "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
+        target_link_libraries(reaktor_shared INTERFACE ${REAKTOR_SDL})
+    endif()
     target_include_directories(reaktor_shared INTERFACE
         $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_INCLUDE_DIRECTORIES>)
     target_compile_definitions(reaktor_shared INTERFACE
         $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_COMPILE_DEFINITIONS>)
-    target_link_libraries(reaktor_shared INTERFACE ${REAKTOR_SDL})
 endif()
 
 function(reaktor_add_app name)
@@ -649,6 +698,10 @@ function(reaktor_add_app name)
         # The modules stay in the app; the shared core calls them back.
         target_link_libraries(${name} PRIVATE ${_mods} reaktor_shared)
         set_target_properties(${name} PROPERTIES ENABLE_EXPORTS ON)
+        if(APPLE)
+            # Kept through -dead_strip and visible to the framework's lookups.
+            target_link_options(${name} PRIVATE -Wl,-export_dynamic)
+        endif()
     else()
         target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
     endif()
@@ -1098,25 +1151,40 @@ if(REAKTOR_SHARED)
         endif()
     endforeach()
     set(_mod_lib "${CMAKE_BINARY_DIR}/lib/libreaktor-modules.a")
-    set(_mri "CREATE ${_mod_lib}\n")
-    foreach(_t IN LISTS _mod_parts)
-        string(APPEND _mri "ADDLIB $<TARGET_FILE:${_t}>\n")
-    endforeach()
-    string(APPEND _mri "SAVE\nEND\n")
-    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor-modules.mri" CONTENT "${_mri}")
+    if(APPLE)
+        set(_mod_files "")
+        foreach(_t IN LISTS _mod_parts)
+            list(APPEND _mod_files "$<TARGET_FILE:${_t}>")
+        endforeach()
+        set(_mod_merge "${REAKTOR_LIBTOOL}" -static -o "${_mod_lib}" ${_mod_files})
+    else()
+        set(_mri "CREATE ${_mod_lib}\n")
+        foreach(_t IN LISTS _mod_parts)
+            string(APPEND _mri "ADDLIB $<TARGET_FILE:${_t}>\n")
+        endforeach()
+        string(APPEND _mri "SAVE\nEND\n")
+        file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor-modules.mri" CONTENT "${_mri}")
+        set(_mod_merge "${CMAKE_COMMAND}" "-DAR=${CMAKE_AR}"
+                       "-DMRI=${CMAKE_BINARY_DIR}/reaktor-modules.mri"
+                       -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/merge-lib.cmake")
+    endif()
     add_custom_command(OUTPUT "${_mod_lib}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/lib"
         COMMAND "${CMAKE_COMMAND}" -E remove -f "${_mod_lib}"
-        COMMAND "${CMAKE_COMMAND}" "-DAR=${CMAKE_AR}"
-                "-DMRI=${CMAKE_BINARY_DIR}/reaktor-modules.mri"
-                -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/merge-lib.cmake"
+        COMMAND ${_mod_merge}
         DEPENDS ${_mod_parts}
         COMMENT "Merging libreaktor-modules"
         VERBATIM)
     add_custom_target(libreaktor_modules DEPENDS "${_mod_lib}")
-    add_dependencies(libreaktor reaktor_shared SDL3-shared libreaktor_modules)
-    # Both archives and libraries sit in one lib/: -l would pick the .so.
-    set(REAKTOR_PC_LINK "-l:libreaktor.a")
+    add_dependencies(libreaktor reaktor_shared libreaktor_modules)
+    if(REAKTOR_SHARED_SDL)
+        add_dependencies(libreaktor SDL3-shared)
+        # Both archives and libraries sit in one lib/: -l would pick the .so.
+        set(REAKTOR_PC_LINK "-l:libreaktor.a")
+    else()
+        # A framework is not found by -l, so libreaktor.a still is.
+        set(REAKTOR_PC_LINK "-lreaktor")
+    endif()
 else()
     set(REAKTOR_PC_LINK "-lreaktor")
 endif()
@@ -1129,8 +1197,12 @@ if(REAKTOR_INSTALL)
         COMPATIBILITY SameMinorVersion)
     install(FILES "${_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
     if(REAKTOR_SHARED)
-        install(TARGETS reaktor_shared SDL3-shared
-                LIBRARY DESTINATION lib COMPONENT libreaktor NAMELINK_COMPONENT libreaktor)
+        if(APPLE)
+            install(TARGETS reaktor_shared FRAMEWORK DESTINATION Frameworks COMPONENT libreaktor)
+        else()
+            install(TARGETS reaktor_shared SDL3-shared
+                    LIBRARY DESTINATION lib COMPONENT libreaktor NAMELINK_COMPONENT libreaktor)
+        endif()
         install(FILES "${_mod_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
     endif()
     install(DIRECTORY include/reaktor DESTINATION include COMPONENT libreaktor)
@@ -1144,7 +1216,7 @@ if(REAKTOR_INSTALL)
         configure_file(tools/reaktor.pc.in "${CMAKE_BINARY_DIR}/reaktor.pc" @ONLY)
         install(FILES "${CMAKE_BINARY_DIR}/reaktor.pc" DESTINATION lib/pkgconfig
                 COMPONENT libreaktor)
-        if(REAKTOR_SHARED)
+        if(REAKTOR_SHARED_SDL)
             configure_file(tools/reaktor-shared.pc.in "${CMAKE_BINARY_DIR}/reaktor-shared.pc" @ONLY)
             install(FILES "${CMAKE_BINARY_DIR}/reaktor-shared.pc" DESTINATION lib/pkgconfig
                     COMPONENT libreaktor)
