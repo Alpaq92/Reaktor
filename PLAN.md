@@ -48,9 +48,9 @@ measures it before anything is built.
 3. **Style access is settled.** Apps keep `ctx->style`. Three public calls
    cover the most common reads for clarity: `reaktor_item_spacing`,
    `reaktor_text_color`, `reaktor_current_font`. Done and merged (`5a8b7f3`).
-4. **Platforms, in order:** Linux and the BSDs first. Windows (as an MSIX
-   framework package) and macOS (same Team ID, or Homebrew only, since
-   hardened-runtime library validation refuses other developers' dylibs) are
+4. **Platforms, in order:** Linux and the BSDs first. Windows was dropped
+   (2026-11-03; see *Later*). macOS (same Team ID, or Homebrew only, since
+   hardened-runtime library validation refuses other developers' dylibs) is
    in scope at lower priority.
 
 ## Phase 0: measure (go / no-go)
@@ -461,10 +461,15 @@ Windows, macOS and the web.
 
 ## Later, lower priority
 
-- **Windows:** an MSIX framework package carrying `reaktor.dll` and SDL, which
-  packaged apps declare as a dependency.
+- ~~**Windows:** an MSIX framework package carrying `reaktor.dll` and SDL, which
+  packaged apps declare as a dependency.~~ Dropped (2026-11-03): each Windows
+  app ships alone, so sharing buys little, and a framework package serves only
+  MSIX-packaged apps while needing a signing certificate, an export macro on
+  every public declaration and the DLL C runtime. Windows stays static.
 - **macOS:** a framework signed with the app's Team ID, or a Homebrew formula,
   since apps from other developers cannot load it under the hardened runtime.
+  Homebrew is ruled out (2026-11-03: no access), which leaves only the
+  framework, shared by apps under one Team ID.
 
 ## Open questions
 
