@@ -153,9 +153,24 @@ jobs:
           \`PKG_CONFIG_PATH\` at its \`lib/pkgconfig\`.
 
           On Linux it also comes as a system package that installs into
-          \`/opt/reaktor\`: \`libreaktor-dev_${v}_<arch>.deb\` for Debian and Ubuntu
-          (amd64, i386, arm64, armhf, riscv64) and \`libreaktor-devel-${v}-1.<arch>.rpm\`
+          \`/opt/reaktor\`: \`libreaktor-static_${v}_<arch>.deb\` for Debian and Ubuntu
+          (amd64, i386, arm64, armhf, riscv64) and \`libreaktor-static-${v}-1.<arch>.rpm\`
           for Fedora and RHEL (x86_64, aarch64).
+
+          #### Shared
+
+          On Linux and the BSDs (x86-64) the library also comes shared, so
+          several apps can share one copy in memory:
+          \`libreaktor-shared-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.0\`,
+          our own SDL as \`libreaktor-sdl3.so.0\`, \`libreaktor-modules.a\` (the
+          modules, which go into each app), everything the static one has, and
+          \`reaktor-shared.pc\`. Link with \`reaktor::shared\` in CMake or
+          \`pkg-config --cflags --libs reaktor-shared\`; the app records where the
+          libraries are. As system packages it splits in three:
+          \`libreaktor-sdl3-0\` and \`libreaktor0\`, all an app needs to run, and
+          \`libreaktor-dev\` (\`libreaktor-devel\` as an rpm) to build one:
+          \`libreaktor0_${v}_<arch>.deb\`, \`libreaktor-sdl3-0_${v}_<arch>.deb\` and
+          the \`.rpm\`s beside them. The static library stays the default.
 
           \`SHA256SUMS\` lists every download's checksum. GitHub's own source
           archives below leave the submodules out; the \`-source.tar.gz\` above has

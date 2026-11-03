@@ -92,8 +92,11 @@ sh tools/libreaktor-pkg.sh -i
 It lands in `/opt/reaktor` (`/usr/local/reaktor` on the BSDs); build against it
 with `-DCMAKE_PREFIX_PATH=/opt/reaktor`, or `pkg-config` with
 `PKG_CONFIG_PATH=/opt/reaktor/lib/pkgconfig`. Remove it with the system's
-package manager: `libreaktor-dev` on Debian, `libreaktor-devel` on Fedora,
-`libreaktor` on the BSDs.
+package manager: it is `libreaktor-static` everywhere. With `-s` it also
+builds `libreaktor.so` and packs three packages instead: `libreaktor-sdl3-0`
+and `libreaktor0`, which an app needs to run, and `libreaktor-dev`
+(`libreaktor-devel` on Fedora, `libreaktor` on the BSDs) to build one. The
+two development packages conflict; install one or the other.
 
 ## Usage
 

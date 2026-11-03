@@ -320,6 +320,7 @@ jobs:
       # rather than fail the job. The app must run on the two runtime
       # packages alone once the development one is gone.
       - name: Pack and check the shared libreaktor packages
+        id: shared
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         continue-on-error: true
         run: |
@@ -329,7 +330,7 @@ jobs:
             freebsd) remove() { sudo pkg delete -y "$@"; } ;;
             *)       remove() { sudo pkg_delete "$@"; } ;;
           esac
-          remove libreaktor </dev/null
+          remove libreaktor-static </dev/null
           rm -rf build-pkg
           sh tools/libreaktor-pkg.sh -s -i -o dist-pkg-shared </dev/null
           cmake -S examples/consumer -B build-pkg-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -339,6 +340,11 @@ jobs:
           dbus-run-session -- build-pkg-shared/simple --theme light --video dummy \
             --shot check/lib-packaged-shared.bmp --a11y-dump check/lib-packaged-shared.txt </dev/null
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged-shared.$e"; done
+          version='${{ inputs.version || 'dev' }}'
+          name="libreaktor-shared-${version}-${{ matrix.os }}-${{ matrix.arch }}"
+          cmake --install build-pkg/build --prefix "dist/$name" --component libreaktor </dev/null
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          rm -rf "dist/$name"
 
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
@@ -363,7 +369,18 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-libreaktor-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/libreaktor-*.tar.gz
+          path: |
+            dist/libreaktor-*.tar.gz
+            !dist/libreaktor-shared-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the shared libreaktor
+        if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-shared-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/libreaktor-shared-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 

@@ -412,7 +412,10 @@ and SDL's license), `libreaktor0` (`libreaktor.so.0*`, the other licenses,
 name (`libreaktor-dev`, `libreaktor-devel`, `libreaktor` on the BSDs) with
 the headers, both archives, the `.so` links, `reaktor.pc`,
 `reaktor-shared.pc` and the CMake files; it needs both. Each file is in one
-package. A static build packs one package, as before. `/opt/reaktor/lib` is
+package. A static build packs one package, renamed `libreaktor-static` in
+every format (2026-11-03), so a release can carry both; it and the split's
+development package install the same headers and conflict with each other
+in a `.deb` and an rpm. `/opt/reaktor/lib` is
 not on the loader's path, so `reaktor-shared.pc` and `reaktor::shared` add
 an rpath to the install's `lib/`.
 
@@ -435,6 +438,19 @@ fails until it has passed there.
 2. The samples get a shared-linked variant to prove a package installs and
    runs as intended.
 3. BSD packages follow the same split.
+
+## In releases (2026-11-03)
+
+CI builds the shared library next to the static one, and a release carries
+both. Every Linux job (x86-64, x86, arm64, and armhf and riscv64 cross-built)
+builds `-DREAKTOR_SHARED=ON`, checks it with `check-libreaktor.sh` (natively,
+or on the emulated machine after the builder installs it) and uploads
+`libreaktor-shared-VERSION-linux-ARCH.tar.gz` and the three split `.deb`s;
+the rpm job adds the split rpms; the x86-64 BSD jobs add
+`libreaktor-shared-VERSION-OS-x86-64.tar.gz`. All of them are `package-*`
+artifacts, so `release.yml` publishes them with the rest, and its notes say
+how to use them. Not covered: the BSDs' arm64 (cross-built in `bsd-arm64`),
+Windows, macOS and the web.
 
 ## Later, lower priority
 

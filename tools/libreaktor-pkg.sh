@@ -97,7 +97,12 @@ as_root() {
     else doas "$@"; fi
 }
 
-# The development package keeps the name it has always had in each format.
+# A static build packs one package, libreaktor-static. A REAKTOR_SHARED build
+# packs three, the development one under the name each format expects. The
+# two development packages install the same headers, so each conflicts with
+# the other (in a .deb and an rpm; the BSD tools are not told).
+static=libreaktor-static
+conflicts=""
 case $format in
     rpm) dev=libreaktor-devel ;;
     deb) dev=libreaktor-dev ;;
@@ -120,10 +125,11 @@ pack() {
             echo "Version: $version"
             echo "Architecture: $arch"
             echo "Maintainer: $maintainer"
-            if [ "$name" = "$dev" ]; then echo "Section: libdevel"; else echo "Section: libs"; fi
+            case $name in "$dev"|"$static") echo "Section: libdevel" ;; *) echo "Section: libs" ;; esac
             echo "Priority: optional"
             echo "Homepage: $www"
             [ -z "$deps" ] || echo "Depends: $deps"
+            [ -z "$conflicts" ] || echo "Conflicts: $conflicts"
             echo "Description: $what"
         } >"$root/DEBIAN/control"
         dpkg-deb --root-owner-group --build "$root" "$pkg"
@@ -142,6 +148,7 @@ pack() {
             echo "URL: $www"
             echo "AutoReqProv: no"
             for d in "$@"; do echo "Requires: $d = $version-1"; done
+            [ -z "$conflicts" ] || echo "Conflicts: $conflicts"
             echo
             echo "%description"
             echo "$what."
@@ -226,7 +233,8 @@ split=0
 [ -f "$stage$prefix/lib/libreaktor.so" ] && split=1
 packed=""
 if [ "$split" = 0 ]; then
-    pack "$dev" "$stage" "$summary"
+    conflicts=$dev
+    pack "$static" "$stage" "$summary"
 else
     sdl="$work/split/sdl" lib="$work/split/lib"
     rm -rf "$work/split"
@@ -241,6 +249,7 @@ else
          "SDL 3 as Reaktor builds it, for apps linked against libreaktor.so"
     pack libreaktor0 "$lib" \
          "Reaktor, a C99 GUI library on Nuklear styled by CSS (shared library)" libreaktor-sdl3-0
+    conflicts=$static
     pack "$dev" "$stage" \
          "Reaktor, a C99 GUI library on Nuklear styled by CSS (headers, static and shared libraries)" \
          libreaktor0 libreaktor-sdl3-0
