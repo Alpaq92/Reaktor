@@ -822,7 +822,8 @@ chosen(void *userdata, SDL_TrayEntry *entry)
 int
 reaktor_tray_open(App *app, const reaktor_tray *spec)
 {
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || (defined(__unix__) && !defined(__APPLE__) && !defined(__ANDROID__))
+    /* Linux and the BSDs built without dbus-1: no tray, rather than SDL's and GTK. */
     (void)app; (void)spec;
     return 0;
 #else

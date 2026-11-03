@@ -444,7 +444,7 @@ if(REAKTOR_SETTINGS)
     endif()
 endif()
 # Linux and the BSDs speak StatusNotifierItem over libdbus rather than take
-# SDL's tray, which loads GTK; without dbus-1 they keep SDL's.
+# SDL's tray, which loads GTK; without dbus-1 they have none.
 if(REAKTOR_TRAY AND NOT WIN32 AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND AND NOT TARGET PkgConfig::REAKTOR_DBUS)
@@ -454,6 +454,8 @@ if(REAKTOR_TRAY AND NOT WIN32 AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
         target_compile_definitions(reaktor_tray INTERFACE REAKTOR_TRAY_DBUS)
         target_link_libraries(reaktor_tray INTERFACE PkgConfig::REAKTOR_DBUS)
         message(STATUS "tray: StatusNotifierItem over libdbus")
+    else()
+        message(STATUS "tray: no dbus-1; reaktor_tray_open answers 0")
     endif()
 endif()
 

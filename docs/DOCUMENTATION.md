@@ -604,8 +604,8 @@ reaktor_tray_open(app, &(reaktor_tray){
     .tooltip = "Notes", .items = items, .count = 3 });
 ```
 
-On Linux and the BSDs the tray is Reaktor's own, spoken over libdbus rather
-than SDL's, which loads AppIndicator and GTK 3. The icon is a
+On Linux, FreeBSD, OpenBSD and NetBSD the tray is Reaktor's own, spoken over
+libdbus rather than SDL's, which loads AppIndicator and GTK 3. The icon is a
 StatusNotifierItem (`org.kde.StatusNotifierItem`) registered with the
 session's `org.kde.StatusNotifierWatcher`, its image the app's SVG icon as
 `IconPixmap` at 22, 32, 48 and 64 pixels, its tooltip `.tooltip`; the menu is
@@ -617,7 +617,7 @@ show it; a desktop with no watcher on the bus, plain GNOME among them, gets
 none, and `reaktor_tray_open` answers 0. A watcher that starts or restarts
 later is told about the item again. One thread waits on the bus's socket and
 wakes the frame loop, which reads and answers the calls, so `.chosen` still
-runs on the main thread. Without dbus-1 at build time the tray is SDL's.
+runs on the main thread. Built without dbus-1, they have no tray, and Windows and macOS keep SDL's.
 
 ### Inspector
 
