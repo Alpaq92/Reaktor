@@ -45,8 +45,20 @@ fi
 mkdir -p check
 echo "$runs" | while read -r from; do
     set -- $from
+    rc=0
     $wrap "$2" --theme light --video dummy \
-        --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
+        --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null || rc=$?
+    if [ "$rc" != 0 ]; then
+        # Where it died, before giving up on it.
+        if command -v lldb >/dev/null 2>&1; then
+            lldb --batch -o run -o "bt all" -- "$2" --theme light --video dummy \
+                --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null || :
+        elif command -v gdb >/dev/null 2>&1; then
+            gdb -batch -ex run -ex "thread apply all bt" --args "$2" --theme light \
+                --video dummy --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null || :
+        fi
+        echo "$1: $2 exited with status $rc"; exit "$rc"
+    fi
 done
 for e in bmp txt; do
     cmp "check/lib-built.$e" "check/lib-linked.$e"

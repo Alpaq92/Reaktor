@@ -22,12 +22,14 @@ if(NOT TARGET reaktor::shared AND EXISTS "${_reaktor_prefix}/lib/libreaktor.so")
         INTERFACE_LINK_OPTIONS "-Wl,--export-dynamic;-Wl,-rpath,${_reaktor_prefix}/lib;@REAKTOR_LINK_OPTIONS@")
 endif()
 # On macOS, Reaktor.framework, with SDL inside. The rpath looks beside the
-# install first, then in /Library/Frameworks, where apps share one copy.
+# install first, then in /Library/Frameworks, where apps share one copy. The
+# modules archive is loaded whole: ld64 takes from an archive only what the
+# app calls, never what the framework calls back, as GNU ld does for a .so.
 if(NOT TARGET reaktor::shared AND EXISTS "${_reaktor_prefix}/Frameworks/Reaktor.framework")
     add_library(reaktor::shared INTERFACE IMPORTED)
     set_target_properties(reaktor::shared PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${_reaktor_prefix}/include"
-        INTERFACE_LINK_LIBRARIES "${_reaktor_prefix}/Frameworks/Reaktor.framework;${_reaktor_prefix}/lib/libreaktor-modules.a;@REAKTOR_LINK_LIBS@"
+        INTERFACE_LINK_LIBRARIES "${_reaktor_prefix}/Frameworks/Reaktor.framework;-Wl,-force_load,${_reaktor_prefix}/lib/libreaktor-modules.a;@REAKTOR_LINK_LIBS@"
         INTERFACE_LINK_DIRECTORIES "@REAKTOR_LINK_DIRS@"
         INTERFACE_LINK_OPTIONS "-Wl,-export_dynamic;-Wl,-rpath,${_reaktor_prefix}/Frameworks;-Wl,-rpath,/Library/Frameworks;@REAKTOR_LINK_OPTIONS@")
 endif()
