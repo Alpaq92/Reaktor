@@ -183,7 +183,7 @@ jobs:
           cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON $CROSS </dev/null
-          cmake --build build-shared </dev/null
+          cmake --build build-shared --target all libreaktor </dev/null
           if [ -n "$CROSS" ]; then
             cmake --install build-shared --prefix "dist/$LIBNAME" --component libreaktor --strip </dev/null
           else

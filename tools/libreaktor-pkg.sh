@@ -269,7 +269,9 @@ if [ $install -eq 1 ]; then
     # shellcheck disable=SC2086
     case $format in
         deb)     as_root dpkg -i $packed ;;
-        rpm)     as_root rpm -U --replacepkgs $packed ;;
+        # Packed here and never signed, as OpenBSD's below; rpm 6 refuses
+        # an unsigned package unless told.
+        rpm)     as_root rpm -U --replacepkgs --nosignature $packed ;;
         freebsd) for p in $packed; do as_root pkg add "$p"; done ;;
         openbsd) for p in $packed; do as_root pkg_add -D unsigned "$p"; done ;;
         netbsd)  for p in $packed; do as_root pkg_add -U "$p"; done ;;

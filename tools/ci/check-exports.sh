@@ -12,6 +12,11 @@ set -eu
 build=$1
 so="$build/lib/libreaktor.so"
 mods="$build/lib/libreaktor-modules.a"
+for f in "$so" "$mods"; do
+    if [ ! -f "$f" ]; then
+        echo "no $f: build the libreaktor target first" >&2; exit 1
+    fi
+done
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 fail=0
