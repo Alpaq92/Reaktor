@@ -38,3 +38,4 @@ build-pkg-shared/
 dist-pkg*/
 dist/
 smoke/
+build-static/

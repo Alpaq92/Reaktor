@@ -60,7 +60,7 @@ jobs:
       - name: Build a release from scratch, keeping only ccache
         if: ${{ inputs.version != '' }}
         shell: bash
-        run: rm -rf build build-arm64
+        run: rm -rf build build-arm64 build-arm64-shared
 
       # ninja rebuilds by mtime, and a checkout dates every file now. Date them
       # before the cached objects instead, and only what changed since the
@@ -192,10 +192,23 @@ jobs:
           if grep -rq "$sysroot" "dist/$name/lib/cmake" "dist/$name/lib/pkgconfig"; then
             echo "the package carries the sysroot's path"; exit 1
           fi
+          # The shared libreaktor too; the arm64 machine checks it below.
+          cmake -S . -B build-arm64-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/cross/${{ matrix.os }}-aarch64.cmake" \
+                -DREAKTOR_SYSROOT="$sysroot" -DREAKTOR_SHARED=ON \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          cmake --build build-arm64-shared --parallel 4 --target libreaktor </dev/null
+          shared="libreaktor-${version}-${{ matrix.os }}-arm64"
+          cmake --install build-arm64-shared --prefix "dist/$shared" --component libreaktor --strip </dev/null
+          file "dist/$shared"/lib/libreaktor.so.0.* | grep -qi aarch64
+          if grep -rq "$sysroot" "dist/$shared/lib/cmake" "dist/$shared/lib/pkgconfig"; then
+            echo "the shared package carries the sysroot's path"; exit 1
+          fi
           tar -cf cross-${{ matrix.os }}-arm64.tar \
             $(sed 's|^|build-arm64/|' tools/ci/tests.txt) \
             build-arm64/showcase build-arm64/notepad build-arm64/simple build-arm64/bench \
-            build-arm64/licenses build-arm64/CMakeCache.txt "dist/$name"
+            build-arm64/licenses build-arm64/CMakeCache.txt "dist/$name" "dist/$shared"
 
       # Back to the runner now, so the next run finds this build in the cache
       # while this one is still testing.
@@ -209,7 +222,7 @@ jobs:
       - name: Drop an unfinished cross build
         if: ${{ always() && steps.cross.outcome == 'failure' }}
         shell: bash
-        run: rm -rf build-arm64
+        run: rm -rf build-arm64 build-arm64-shared
 
       - name: Note which commit the cached build is from
         if: ${{ always() && steps.build.outcome == 'success' }}
@@ -538,6 +551,17 @@ jobs:
           version='${{ inputs.version || 'dev' }}'
           sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-static-${version}-${{ matrix.os }}-arm64"
 
+      # New and not yet proven, so it warns rather than fails the job.
+      - name: Check the shared libreaktor
+        id: shared
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          version='${{ inputs.version || 'dev' }}'
+          sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-${version}-${{ matrix.os }}-arm64"
+
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
         shell: cpa.sh {0} --sync-files vm-to-runner
@@ -560,6 +584,17 @@ jobs:
         with:
           name: package-libreaktor-static-${{ matrix.os }}-arm64
           path: dist/libreaktor-static-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the shared libreaktor
+        if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-${{ matrix.os }}-arm64
+          path: |
+            dist/libreaktor-*.tar.gz
+            !dist/libreaktor-static-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 

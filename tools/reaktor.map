@@ -40,6 +40,7 @@ LIBREAKTOR_0 {
     reaktor_field_select;
     reaktor_field_text;
     reaktor_file_dialog_open;
+    reaktor_fill_gradient;
     reaktor_fill_round;
     reaktor_floater_close;
     reaktor_floater_is_open;
