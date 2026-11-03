@@ -329,13 +329,11 @@ jobs:
             --shot check/lib-packaged.bmp --a11y-dump check/lib-packaged.txt </dev/null
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged.$e"; done
 
-      # The split packages, new and not yet proven on the BSDs, so they warn
-      # rather than fail the job. The app must run on the two runtime
-      # packages alone once the development one is gone.
+      # The split packages. The app must run on the two runtime packages
+      # alone once the development one is gone.
       - name: Pack and check the shared libreaktor packages
         id: shared
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
-        continue-on-error: true
         run: |
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
@@ -551,11 +549,9 @@ jobs:
           version='${{ inputs.version || 'dev' }}'
           sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-static-${version}-${{ matrix.os }}-arm64"
 
-      # New and not yet proven, so it warns rather than fails the job.
       - name: Check the shared libreaktor
         id: shared
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
-        continue-on-error: true
         run: |
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
