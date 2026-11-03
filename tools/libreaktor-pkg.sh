@@ -83,7 +83,8 @@ if [ -z "$build" ]; then
 fi
 cmake --build "$build" --parallel "$ncpu" --target libreaktor
 rm -rf "$stage"
-DESTDIR="$stage" cmake --install "$build" --component libreaktor --prefix "$prefix"
+# --strip reaches the shared libraries only; the archives are installed as files.
+DESTDIR="$stage" cmake --install "$build" --component libreaktor --prefix "$prefix" --strip
 
 listing() {
     (cd "$1$prefix" &&

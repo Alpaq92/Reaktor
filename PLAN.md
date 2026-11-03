@@ -449,7 +449,12 @@ or on the emulated machine after the builder installs it) and uploads
 the rpm job adds the split rpms; the x86-64 BSD jobs add
 `libreaktor-VERSION-OS-x86-64.tar.gz`. The static tarballs beside them, on
 Linux and the BSDs, are now `libreaktor-static-VERSION-OS-ARCH.tar.gz`,
-matching the `libreaktor-static` package. All of them are `package-*`
+matching the `libreaktor-static` package; Windows, macOS and the web, which
+have only the static library, are named `libreaktor-static-` too. Installs
+that ship (`check-libreaktor.sh`, `libreaktor-pkg.sh`, CI's own) pass
+`--strip`, which strips the two shared libraries and leaves the archives:
+`libreaktor.so.0` 2.04 to 1.87 MB, `libreaktor-sdl3.so.0` 2.92 to 2.66 MB,
+exports unchanged. All of them are `package-*`
 artifacts, so `release.yml` publishes them with the rest, and its notes say
 how to use them. Not covered: the BSDs' arm64 (cross-built in `bsd-arm64`),
 Windows, macOS and the web.

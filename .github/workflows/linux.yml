@@ -185,7 +185,7 @@ jobs:
             -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON $CROSS </dev/null
           cmake --build build-shared </dev/null
           if [ -n "$CROSS" ]; then
-            cmake --install build-shared --prefix "dist/$LIBNAME" --component libreaktor </dev/null
+            cmake --install build-shared --prefix "dist/$LIBNAME" --component libreaktor --strip </dev/null
           else
             sh tools/ci/check-exports.sh build-shared </dev/null
           fi

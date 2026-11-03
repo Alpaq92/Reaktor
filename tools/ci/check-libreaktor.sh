@@ -23,7 +23,7 @@ name=$2
 
 if [ "$installed" = 0 ]; then
     cmake --build "$build" --target libreaktor </dev/null
-    cmake --install "$build" --prefix "dist/$name" --component libreaktor </dev/null
+    cmake --install "$build" --prefix "dist/$name" --component libreaktor --strip </dev/null
 fi
 cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
       "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" </dev/null

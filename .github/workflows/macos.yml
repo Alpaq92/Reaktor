@@ -137,7 +137,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version}-macos-${{ matrix.arch }}"
+          name="libreaktor-static-${version}-macos-${{ matrix.arch }}"
           cmake --build build --target libreaktor </dev/null
           cmake --install build --prefix "dist/$name" --component libreaktor </dev/null
           cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -174,8 +174,8 @@ jobs:
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-macos-${{ matrix.arch }}
-          path: dist/libreaktor-*.zip
+          name: package-libreaktor-static-macos-${{ matrix.arch }}
+          path: dist/libreaktor-static-*.zip
           if-no-files-found: error
           retention-days: 14
 

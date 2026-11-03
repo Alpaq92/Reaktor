@@ -135,9 +135,9 @@ jobs:
           ### libreaktor
 
           The library itself, for building your own applications: the same
-          systems and architectures, \`libreaktor-static-$v-<system>-<arch>.tar.gz\`
-          on Linux and the BSDs, \`libreaktor-$v-<system>-<arch>.zip\` on Windows
-          and macOS, and \`libreaktor-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
+          systems and architectures, \`libreaktor-static-$v-<system>-<arch>\` (a
+          \`.zip\` on Windows and macOS, a \`.tar.gz\` elsewhere), and
+          \`libreaktor-static-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
           on Windows, built against the DLL C runtime; \`libreaktor.a\` elsewhere)
           with SDL, FreeType, plutosvg, Onlay, NukAnim, mojibake and kb_text_shape
           inside it, the public headers (\`#include "reaktor/reaktor.h"\`, with

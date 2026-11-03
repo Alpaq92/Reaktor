@@ -342,7 +342,7 @@ jobs:
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged-shared.$e"; done
           version='${{ inputs.version || 'dev' }}'
           name="libreaktor-${version}-${{ matrix.os }}-${{ matrix.arch }}"
-          cmake --install build-pkg/build --prefix "dist/$name" --component libreaktor </dev/null
+          cmake --install build-pkg/build --prefix "dist/$name" --component libreaktor --strip </dev/null
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           rm -rf "dist/$name"
 
