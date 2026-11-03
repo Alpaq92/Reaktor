@@ -838,13 +838,7 @@ reaktor_tray_open(App *app, const reaktor_tray *spec)
     if (!drv || SDL_strcmp(drv, "dummy") == 0 || SDL_strcmp(drv, "offscreen") == 0)
         return 0;
     icon   = reaktor_icon_surface(reaktor_launch_icon(), 32);
-    {
-        /* GTK, under the tray on Linux and the BSDs, sets the user's locale. */
-        char *was = reaktor_c_locale_keep(0);
-
-        g_tray = SDL_CreateTray(icon, spec->tooltip);
-        reaktor_c_locale_put(0, was);
-    }
+    g_tray = SDL_CreateTray(icon, spec->tooltip);
     if (icon) SDL_DestroySurface(icon);
     if (!g_tray) {
         SDL_Log("tray: %s", SDL_GetError());

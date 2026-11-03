@@ -170,8 +170,6 @@ LIBREAKTOR_PRIVATE_0 {
     reaktor_asset_load;
     reaktor_asset_register;
     reaktor_capturing;
-    reaktor_c_locale_keep;
-    reaktor_c_locale_put;
     reaktor_font_glyph;
     reaktor_font_valid;
     reaktor_frame_settled;
