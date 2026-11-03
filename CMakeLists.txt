@@ -224,6 +224,10 @@ add_library(reaktor_core STATIC
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
 target_link_libraries(reaktor_core PUBLIC plutosvg freetype reaktor_headers ${REAKTOR_SDL})
+# Nuklear built for size: 139 KB less of the library, at no measurable cost a
+# frame (PERFORMANCE.md). A debug build keeps its own -O0.
+set_property(SOURCE core/render/nk_impl.c APPEND PROPERTY COMPILE_OPTIONS
+    "$<$<NOT:$<CONFIG:Debug>>:$<IF:$<C_COMPILER_ID:MSVC>,/O1,-Os>>")
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")
@@ -892,7 +896,7 @@ endif()
 
 if(MSVC)
     # Nuklear's NK_ALIGNOF takes the offset of a member of an unnamed struct.
-    set_source_files_properties(core/render/nk_impl.c PROPERTIES COMPILE_OPTIONS /wd4116)
+    set_property(SOURCE core/render/nk_impl.c APPEND PROPERTY COMPILE_OPTIONS /wd4116)
     # nuklear.h combines constants of different enums in its own declarations.
     target_compile_options(reaktor_headers INTERFACE /wd5287)
     target_compile_options(showcase PRIVATE /wd4101)

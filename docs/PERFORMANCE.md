@@ -110,6 +110,19 @@ stylesheets with its own engine in place of libcss. The Windows
 binary's icon is a 125 KB resource of nine sizes, built from the SVG by
 `tools/mkicon.c`.
 
+Nuklear is compiled with `-Os` (`/O1` with MSVC): the stripped shared
+libreaktor on Linux x86-64 goes from 1,880,624 bytes at `-O3` to 1,737,264,
+and Nuklear's own code from 306,649 to 168,042. `bench --no-vsync --video
+dummy` on the Linux desktop below, median of seven runs, CPU time a frame:
+
+| Build | `-O3` | `-Os`, three rounds |
+| --- | --- | --- |
+| shared | 563 µs | 574, 563, 528 µs |
+| static | 527 µs | 548, 523, 511 µs |
+
+The rounds spread wider than the change. Every showcase tab in both themes,
+`notepad` and `simple` draw and dump byte for byte as they did at `-O3`.
+
 ### Modules
 
 `showcase`, each module off in turn; native on the Windows machine below, web
