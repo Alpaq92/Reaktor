@@ -101,8 +101,9 @@ as_root() {
 # A static build packs one package, libreaktor-static. A REAKTOR_SHARED build
 # packs three, the development one under the name each format expects. The
 # two development packages install the same headers, so each conflicts with
-# the other: a Conflicts line, a manifest's conflicts, @conflict in OpenBSD's
-# packing list, -C for NetBSD's pkg_create.
+# the other: a Conflicts line, @conflict in OpenBSD's packing list, -C for
+# NetBSD's pkg_create. FreeBSD's pkg fails on a manifest conflict with a
+# package that is not installed, and refuses a second owner of a file anyway.
 static=libreaktor-static
 conflicts=""
 case $format in
@@ -179,7 +180,6 @@ pack() {
             echo "maintainer: \"$maintainer\""
             echo "www: \"$www\""
             echo "prefix: \"$prefix\""
-            [ -z "$conflicts" ] || echo "conflicts: [ \"$conflicts-*\" ]"
             if [ $# -gt 0 ]; then
                 echo "deps: {"
                 for d in "$@"; do echo "  $d: { origin: \"devel/$d\", version: \"$version\" }"; done

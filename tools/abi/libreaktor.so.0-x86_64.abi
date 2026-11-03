@@ -263,9 +263,12 @@ type = struct reaktor_launch {
 /*    592      |       4 */    int skip_same_frames;
 /*    596      |       4 */    reaktor_save save_settings;
 /*    600      |       4 */    int save_ms;
+/* XXX  4-byte hole      */
+/*    608      |       8 */    const char *renderer;
+/*    616      |       4 */    int hdr;
 /* XXX  4-byte padding   */
 
-                               /* total size (bytes):  608 */
+                               /* total size (bytes):  624 */
                              }
 type = struct reaktor_link_spec {
 /*      0      |       8 */    const char *text;
@@ -307,18 +310,6 @@ type = struct reaktor_menu {
 
                                /* total size (bytes):   24 */
                              }
-type = struct reaktor_menubar_spec {
-/*      0      |       8 */    const reaktor_menu *menus;
-/*      8      |       4 */    int count;
-/* XXX  4-byte hole      */
-/*     16      |       8 */    const char *name;
-/*     24      |      64 */    reaktor_box box;
-/*     88      |       8 */    int *picked_menu;
-/*     96      |       8 */    int *picked_item;
-/*    104      |       8 */    const reaktor_menu_entry **picked;
-
-                               /* total size (bytes):  112 */
-                             }
 type = struct reaktor_menu_entry {
 /*      0      |       8 */    const char *label;
 /*      8      |       8 */    const char *icon;
@@ -335,6 +326,18 @@ type = struct reaktor_menu_entry {
 /*     84      |       4 */    float width;
 
                                /* total size (bytes):   88 */
+                             }
+type = struct reaktor_menubar_spec {
+/*      0      |       8 */    const reaktor_menu *menus;
+/*      8      |       4 */    int count;
+/* XXX  4-byte hole      */
+/*     16      |       8 */    const char *name;
+/*     24      |      64 */    reaktor_box box;
+/*     88      |       8 */    int *picked_menu;
+/*     96      |       8 */    int *picked_item;
+/*    104      |       8 */    const reaktor_menu_entry **picked;
+
+                               /* total size (bytes):  112 */
                              }
 type = struct reaktor_nav_spec {
 /*      0      |       8 */    const char * const *items;
@@ -503,8 +506,11 @@ type = struct reaktor_style {
 /*    124      |       4 */    int font_px;
 /*    128      |       4 */    int bold;
 /*    132      |       4 */    int matched;
+/*    136      |       4 */    unsigned char gradient_from[4];
+/*    140      |       4 */    unsigned char gradient_to[4];
+/*    144      |       4 */    int gradient;
 
-                               /* total size (bytes):  136 */
+                               /* total size (bytes):  148 */
                              }
 type = struct reaktor_style_frame {
 /*      0      |       4 */    int items;

@@ -662,6 +662,9 @@ if(REAKTOR_SHARED)
                 string(APPEND _exp "_${_n}\n")
             endforeach()
         endforeach()
+        # SDL is linked in here rather than beside the framework, and apps
+        # and their modules call it directly.
+        string(APPEND _exp "_SDL_*\n")
         file(WRITE "${CMAKE_BINARY_DIR}/reaktor.exp" "${_exp}")
         set(_force "")
         foreach(_f IN LISTS _so_files)

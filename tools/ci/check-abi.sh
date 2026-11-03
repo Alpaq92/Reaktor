@@ -10,6 +10,9 @@
 # yet, and the one written to smoke/abi/ can be checked in.
 #   check-abi.sh [-u] [-c CC]
 set -eu
+# The types in one order whatever the machine's locale.
+LC_ALL=C
+export LC_ALL
 
 update=0
 cc=${CC:-cc}
