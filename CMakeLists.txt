@@ -56,15 +56,21 @@ endforeach()
 # Off: the software renderer is the default, and with the GPU API built in,
 # SDL loads Vulkan and its drivers even for that renderer (PERFORMANCE.md).
 # An application that runs its own shaders turns it on.
-option(REAKTOR_SDL_GPU "Build SDL's GPU API and its renderer, --renderer sdl-gpu" OFF)
-set(SDL_GPU ${REAKTOR_SDL_GPU} CACHE BOOL "" FORCE)
+option(REAKTOR_SHADERS "An application's own shaders: SDL's GPU API and its renderer, --renderer sdl-gpu" OFF)
+# Its name until 0.8: still read once, with a warning.
+if(DEFINED REAKTOR_SDL_GPU)
+    message(WARNING "REAKTOR_SDL_GPU is now REAKTOR_SHADERS")
+    set(REAKTOR_SHADERS ${REAKTOR_SDL_GPU} CACHE BOOL "" FORCE)
+    unset(REAKTOR_SDL_GPU CACHE)
+endif()
+set(SDL_GPU ${REAKTOR_SHADERS} CACHE BOOL "" FORCE)
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
 
 foreach(drv RENDER_D3D RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
 # SDL's GPU API runs on Vulkan where there is no Direct3D 12 or Metal.
-if(REAKTOR_SDL_GPU AND UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+if(REAKTOR_SHADERS AND UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     set(SDL_VULKAN ON CACHE BOOL "" FORCE)
 endif()
 option(REAKTOR_SDL_D3D "Build SDL's Direct3D 11 and 12 renderers on Windows" ON)
