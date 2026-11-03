@@ -100,7 +100,7 @@ jobs:
             cross="-DCMAKE_TOOLCHAIN_FILE=/src/tools/cross/linux-cross.cmake -DREAKTOR_CROSS_TRIPLE=${{ matrix.triple }}"
           fi
           version='${{ inputs.version || 'dev' }}'
-          docker exec -i -e CROSS="$cross" -e TRIPLE="${{ matrix.triple }}"             -e LIBNAME="libreaktor-static-${version}-linux-${{ matrix.arch }}" "$ctr" sh -eu <<'EOF'
+          docker exec -i -e CROSS="$cross" -e TRIPLE="${{ matrix.triple }}"             -e LIBNAME="libreaktor-${version}-linux-${{ matrix.arch }}" "$ctr" sh -eu <<'EOF'
           uname -a
           cmake --version
           export CCACHE_DIR=/src/.ccache CCACHE_BASEDIR=/src CCACHE_MAXSIZE=500M
@@ -163,7 +163,7 @@ jobs:
 
       # libreaktor.so beside the static library, on every architecture, and
       # released as libreaktor-VERSION-linux-ARCH.tar.gz; the static one is
-      # libreaktor-static-VERSION-linux-ARCH.tar.gz. An emulated
+      # libreaktor-VERSION-linux-ARCH.tar.gz. An emulated
       # machine has none of the cross compiler's headers, so it is built and
       # installed on the builder and only checked on the emulated machine.
       - name: Shared libreaktor
@@ -177,7 +177,7 @@ jobs:
             cross="-DCMAKE_TOOLCHAIN_FILE=/src/tools/cross/linux-cross.cmake -DREAKTOR_CROSS_TRIPLE=${{ matrix.triple }}"
           fi
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version}-linux-${{ matrix.arch }}"
+          name="libreaktor-shared-${version}-linux-${{ matrix.arch }}"
           docker exec -i -e CROSS="$cross" -e LIBNAME="$name" "$ctr" sh -eu <<'EOF'
           export CCACHE_DIR=/src/.ccache CCACHE_BASEDIR=/src CCACHE_MAXSIZE=500M
           cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON \
@@ -198,10 +198,9 @@ jobs:
         if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-linux-${{ matrix.arch }}
+          name: package-libreaktor-shared-linux-${{ matrix.arch }}
           path: |
-            dist/libreaktor-*.tar.gz
-            !dist/libreaktor-static-*.tar.gz
+            dist/libreaktor-shared-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -246,7 +245,7 @@ jobs:
           version='${{ inputs.version || 'dev' }}'
           installed=""
           if [ "${{ matrix.emulated }}" = true ]; then installed=-i; fi
-          docker exec -i debian sh -eu tools/ci/check-libreaktor.sh $installed -w "timeout 600" build "libreaktor-static-${version}-linux-${{ matrix.arch }}" </dev/null
+          docker exec -i debian sh -eu tools/ci/check-libreaktor.sh $installed -w "timeout 600" build "libreaktor-${version}-linux-${{ matrix.arch }}" </dev/null
 
       - name: Pack libreaktor as a .deb
         id: deb
@@ -272,7 +271,7 @@ jobs:
         run: |
           docker exec -i debian sh -eu <<'EOF'
           dpkg -i dist-pkg/*.deb </dev/null
-          dpkg -s libreaktor-static | grep -q '^Status: install ok installed'
+          dpkg -s libreaktor | grep -q '^Status: install ok installed'
           cmake -S examples/consumer -B build-pkg-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_PREFIX_PATH=/opt/reaktor </dev/null
           cmake --build build-pkg-consumer </dev/null
@@ -282,7 +281,7 @@ jobs:
           EOF
 
       # The shared build splits in three: libreaktor-sdl3-0, libreaktor0 and
-      # libreaktor-dev, on every architecture.
+      # libreaktor-shared, on every architecture.
       - name: Pack the shared libreaktor as .debs
         id: shareddeb
         if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
@@ -308,12 +307,12 @@ jobs:
         if: ${{ !cancelled() && steps.shareddeb.outcome == 'success' && steps.libcheck.outcome == 'success' && matrix.arch == 'x86-64' }}
         run: |
           docker exec -i debian sh -eu <<'EOF'
-          dpkg -r libreaktor-static </dev/null
+          dpkg -r libreaktor </dev/null
           dpkg -i dist-pkg-shared/*.deb </dev/null
           cmake -S examples/consumer -B build-pkg-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_PREFIX_PATH=/opt/reaktor -DCONSUMER_SHARED=ON </dev/null
           cmake --build build-pkg-shared </dev/null
-          dpkg -r libreaktor-dev </dev/null
+          dpkg -r libreaktor-shared </dev/null
           dpkg -s libreaktor0 libreaktor-sdl3-0 | grep -c '^Status: install ok installed' | grep -q 2
           timeout 600 build-pkg-shared/simple --theme light --video dummy \
             --shot check/lib-packaged-shared.bmp --a11y-dump check/lib-packaged-shared.txt </dev/null
@@ -341,8 +340,10 @@ jobs:
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-static-linux-${{ matrix.arch }}
-          path: dist/libreaktor-static-*.tar.gz
+          name: package-libreaktor-linux-${{ matrix.arch }}
+          path: |
+            dist/libreaktor-*.tar.gz
+            !dist/libreaktor-shared-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -403,18 +404,18 @@ jobs:
             libXrandr-devel libXrender-devel libXtst-devel libxkbcommon-devel \
             wayland-devel wayland-protocols-devel libglvnd-devel dbus-devel </dev/null
           sh tools/libreaktor-pkg.sh -i -o dist-pkg </dev/null
-          rpm -q libreaktor-static
+          rpm -q libreaktor
           cmake -S examples/consumer -B build-pkg-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_PREFIX_PATH=/opt/reaktor </dev/null
           cmake --build build-pkg-consumer </dev/null
-          rpm -e libreaktor-static
+          rpm -e libreaktor
           rm -rf build-pkg
           sh tools/libreaktor-pkg.sh -s -i -o dist-pkg-shared </dev/null
-          rpm -q libreaktor0 libreaktor-sdl3-0 libreaktor-devel
+          rpm -q libreaktor0 libreaktor-sdl3-0 libreaktor-shared
           cmake -S examples/consumer -B build-pkg-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_PREFIX_PATH=/opt/reaktor -DCONSUMER_SHARED=ON </dev/null
           cmake --build build-pkg-shared </dev/null
-          rpm -e libreaktor-devel
+          rpm -e libreaktor-shared
           build-pkg-shared/simple --theme light --video dummy --shot check-shared.bmp </dev/null
           EOF
 

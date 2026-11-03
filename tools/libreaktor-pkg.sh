@@ -98,19 +98,15 @@ as_root() {
     else doas "$@"; fi
 }
 
-# A static build packs one package, libreaktor-static. A REAKTOR_SHARED build
-# packs three, the development one under the name each format expects. The
-# two development packages install the same headers, so each conflicts with
-# the other: a Conflicts line, @conflict in OpenBSD's packing list, -C for
-# NetBSD's pkg_create. FreeBSD's pkg fails on a manifest conflict with a
-# package that is not installed, and refuses a second owner of a file anyway.
-static=libreaktor-static
+# A static build packs one package, libreaktor. A REAKTOR_SHARED build packs
+# three, the development one libreaktor-shared. Those two install the same
+# headers, so each conflicts with the other: a Conflicts line, @conflict in
+# OpenBSD's packing list, -C for NetBSD's pkg_create. FreeBSD's pkg fails on a
+# manifest conflict with a package that is not installed, and refuses a second
+# owner of a file anyway.
+static=libreaktor
+dev=libreaktor-shared
 conflicts=""
-case $format in
-    rpm) dev=libreaktor-devel ;;
-    deb) dev=libreaktor-dev ;;
-    *)   dev=libreaktor ;;
-esac
 
 # pack NAME ROOT SUMMARY [DEPENDENCY...]: one package of the files under ROOT.
 pack() {
@@ -192,7 +188,7 @@ pack() {
         ;;
     openbsd)
         {
-            [ -z "$conflicts" ] || echo "@conflict $conflicts-*"
+            [ -z "$conflicts" ] || echo "@conflict $conflicts-[0-9]*"
             listing "$root"
         } >"$work/plist"
         pkg="$out/$name-$version.tgz"

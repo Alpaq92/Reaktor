@@ -223,7 +223,7 @@ jobs:
         if: ${{ !cancelled() && steps.lib.outcome == 'success' }}
         run: |
           $version = '${{ inputs.version || 'dev' }}'
-          $name = "libreaktor-static-$version-windows-${{ matrix.arch }}"
+          $name = "libreaktor-$version-windows-${{ matrix.arch }}"
           cmake --install build-lib --prefix "dist/$name" --component libreaktor
           if ($LASTEXITCODE -ne 0) { throw "install failed" }
           ./build.ps1 -Arch ${{ matrix.arch }} -Source examples/consumer -Out build-consumer `
@@ -249,8 +249,8 @@ jobs:
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-static-windows-${{ matrix.arch }}
-          path: dist/libreaktor-static-*.zip
+          name: package-libreaktor-windows-${{ matrix.arch }}
+          path: dist/libreaktor-*.zip
           if-no-files-found: error
           retention-days: 14
 
