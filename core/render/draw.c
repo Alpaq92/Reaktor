@@ -549,36 +549,189 @@ draw_corners(struct nk_command_buffer *cv, struct nk_image mask, int m,
     }
 }
 
+typedef struct ramp {
+    struct nk_rect  b;
+    struct nk_color from, to;
+    int             across, flat;
+} ramp;
+
+static struct nk_color
+ramp_at(const ramp *g, float at)
+{
+    float span = g->across ? g->b.w : g->b.h;
+    float t = (at - (g->across ? g->b.x : g->b.y)) / span;
+
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return nk_rgba((int)(g->from.r + (g->to.r - g->from.r) * t + 0.5f),
+                   (int)(g->from.g + (g->to.g - g->from.g) * t + 0.5f),
+                   (int)(g->from.b + (g->to.b - g->from.b) * t + 0.5f),
+                   (int)(g->from.a + (g->to.a - g->from.a) * t + 0.5f));
+}
+
+/* The largest step, in levels of one channel, between the ramp's two ends. */
+static int
+ramp_levels(const ramp *g)
+{
+    int d[4] = { g->to.r - g->from.r, g->to.g - g->from.g, g->to.b - g->from.b,
+                 g->to.a - g->from.a };
+    int i, most = 0;
+
+    for (i = 0; i < 4; i++)
+        if (SDL_abs(d[i]) > most) most = SDL_abs(d[i]);
+    return most;
+}
+
+/* A run in solid bands, one per level the ramp changes by across it: SDL fills
+   a solid rectangle far faster than it shades one from its corners. */
+static void
+ramp_rect(struct nk_command_buffer *cv, const ramp *g, struct nk_rect r)
+{
+    float at = g->across ? r.x : r.y, len = g->across ? r.w : r.h;
+    int   n, j;
+
+    if (g->flat) { nk_fill_rect(cv, r, 0.0f, g->from); return; }
+    n = (int)SDL_ceilf((float)ramp_levels(g) * len / (g->across ? g->b.w : g->b.h));
+    if (n > (int)len) n = (int)len;
+    if (n < 1) n = 1;
+    /* Whole pixels, so neighbors share an edge the renderer cannot round apart. */
+    for (j = 0; j < n; j++) {
+        float s0 = at + (float)(int)(len * (float)j / (float)n + 0.5f);
+        float s1 = at + (float)(int)(len * (float)(j + 1) / (float)n + 0.5f);
+        struct nk_color c = ramp_at(g, (s0 + s1) * 0.5f);
+
+        if (s1 <= s0) continue;
+
+        nk_fill_rect(cv, g->across ? nk_rect(s0, r.y, s1 - s0, r.h)
+                                   : nk_rect(r.x, s0, r.w, s1 - s0), 0.0f, c);
+    }
+}
+
+/* A corner is cut into texel-wide strips along the ramp, each tinted where it sits. */
+static void
+ramp_corners(struct nk_command_buffer *cv, const ramp *g, struct nk_image mask, int m,
+             int r)
+{
+    float M = (float)m, D = (float)(2 * m + 1), R = (float)r;
+    int i, k;
+
+    if (g->flat) { draw_corners(cv, mask, m, g->b, r, g->from); return; }
+    for (i = 0; i < 4; i++) {
+        float x = (i & 1) ? g->b.x + g->b.w - R : g->b.x;
+        float y = (i & 2) ? g->b.y + g->b.h - R : g->b.y;
+        float u = (i & 1) ? M + 1.0f : 0.0f;
+        float v = (i & 2) ? M + 1.0f : 0.0f;
+
+        for (k = 0; k < m; k++) {
+            float s0 = R * (float)k / M, s1 = R * (float)(k + 1) / M;
+            struct nk_rect  at = g->across ? nk_rect(x + s0, y, s1 - s0, R)
+                                           : nk_rect(x, y + s0, R, s1 - s0);
+            struct nk_rect  src = g->across ? nk_rect(u + (float)k, v, 1.0f, M)
+                                            : nk_rect(u, v + (float)k, M, 1.0f);
+            struct nk_image q = nk_subimage_handle(mask.handle, (nk_ushort)D,
+                                                   (nk_ushort)D, src);
+
+            nk_draw_image(cv, at, &q,
+                          ramp_at(g, g->across ? at.x + at.w * 0.5f
+                                               : at.y + at.h * 0.5f));
+        }
+    }
+}
+
+/* Four corner masks and the three runs between them, over whole pixels. */
+static void
+fill_shape(App *app, struct nk_command_buffer *cv, float rounding, const ramp *g)
+{
+    struct nk_rect  b = g->b;
+    struct nk_image disc;
+    float R, D;
+    int r, m;
+
+    r = corner_px(b, rounding);
+    if (r < 1) { ramp_rect(cv, g, b); return; }
+    m = mask_px((float)r);
+    disc = round_mask(app, m, 0);
+    if (!disc.handle.ptr) {
+        if (g->flat) nk_fill_rect(cv, b, (float)r, g->from);
+        else ramp_rect(cv, g, b);
+        return;
+    }
+
+    ramp_corners(cv, g, disc, m, r);
+    R = (float)r;
+    D = 2.0f * R;
+    /* The long run lies across the ramp, so each band is drawn once. */
+    if (!g->flat && g->across) {
+        if (b.w > D)
+            ramp_rect(cv, g, nk_rect(b.x + R, b.y, b.w - D, b.h));
+        if (b.h > D) {
+            ramp_rect(cv, g, nk_rect(b.x, b.y + R, R, b.h - D));
+            ramp_rect(cv, g, nk_rect(b.x + b.w - R, b.y + R, R, b.h - D));
+        }
+        return;
+    }
+    if (b.h > D)
+        ramp_rect(cv, g, nk_rect(b.x, b.y + R, b.w, b.h - D));
+    if (b.w > D) {
+        ramp_rect(cv, g, nk_rect(b.x + R, b.y, b.w - D, R));
+        ramp_rect(cv, g, nk_rect(b.x + R, b.y + b.h - R, b.w - D, R));
+    }
+}
+
 void
 reaktor_fill_round(App *app, struct nk_command_buffer *cv, struct nk_rect b,
                    float rounding, struct nk_color col)
 {
-    struct nk_image disc;
-    float R, D;
-    int r, m;
+    ramp g;
 
     if (b.w <= 0.0f || b.h <= 0.0f || !col.a) return;
     if (app) {
         app->surface_at = b;
         app->surface    = col;
     }
-    b = whole_px(b);
-    if (b.w <= 0.0f || b.h <= 0.0f) return;
-    r = corner_px(b, rounding);
-    if (r < 1) { nk_fill_rect(cv, b, 0.0f, col); return; }
-    m = mask_px((float)r);
-    disc = round_mask(app, m, 0);
-    if (!disc.handle.ptr) { nk_fill_rect(cv, b, (float)r, col); return; }
+    g.b    = whole_px(b);
+    g.from = g.to = col;
+    g.across = 1;
+    g.flat   = 1;
+    if (g.b.w <= 0.0f || g.b.h <= 0.0f) return;
+    fill_shape(app, cv, rounding, &g);
+}
 
-    draw_corners(cv, disc, m, b, r, col);
-    R = (float)r;
-    D = 2.0f * R;
-    if (b.h > D)
-        nk_fill_rect(cv, nk_rect(b.x, b.y + R, b.w, b.h - D), 0.0f, col);
-    if (b.w > D) {
-        nk_fill_rect(cv, nk_rect(b.x + R, b.y, b.w - D, R), 0.0f, col);
-        nk_fill_rect(cv, nk_rect(b.x + R, b.y + b.h - R, b.w - D, R), 0.0f, col);
+void
+reaktor_fill_gradient(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                      float rounding, struct nk_color from, struct nk_color to,
+                      int axis)
+{
+    ramp g;
+
+    if (axis == REAKTOR_GRADIENT_NONE || !memcmp(&from, &to, sizeof from)) {
+        reaktor_fill_round(app, cv, b, rounding, from);
+        return;
     }
+    if (b.w <= 0.0f || b.h <= 0.0f || (!from.a && !to.a)) return;
+    g.b      = whole_px(b);
+    g.from   = from;
+    g.to     = to;
+    g.across = axis == REAKTOR_GRADIENT_ACROSS;
+    g.flat   = 0;
+    if (g.b.w <= 0.0f || g.b.h <= 0.0f) return;
+    if (app) {
+        app->surface_at = b;
+        app->surface    = ramp_at(&g, g.across ? g.b.x + g.b.w * 0.5f
+                                               : g.b.y + g.b.h * 0.5f);
+    }
+    fill_shape(app, cv, rounding, &g);
+}
+
+void
+reaktor_fill_style(App *app, struct nk_command_buffer *cv, struct nk_rect b,
+                   float rounding, const reaktor_style *s)
+{
+    if (s->gradient)
+        reaktor_fill_gradient(app, cv, b, rounding, nk_rgba_bv(s->gradient_from),
+                              nk_rgba_bv(s->gradient_to), s->gradient);
+    else
+        reaktor_fill_round(app, cv, b, rounding, nk_rgba_bv(s->bg));
 }
 
 

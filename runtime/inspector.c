@@ -299,6 +299,12 @@ tab_style(void)
     row("Selector", "%s%s", sel, st.matched ? "" : "  (no rule matches)");
     color_row("color", st.fg);
     color_row("background", st.bg);
+    if (st.gradient)
+        row("background-image", "%s #%02x%02x%02x%02x to #%02x%02x%02x%02x",
+            st.gradient == REAKTOR_GRADIENT_ACROSS ? "across" : "down",
+            st.gradient_from[0], st.gradient_from[1], st.gradient_from[2],
+            st.gradient_from[3], st.gradient_to[0], st.gradient_to[1],
+            st.gradient_to[2], st.gradient_to[3]);
     color_row("border-color", st.border_col);
     row("border-width", "%.0f %.0f %.0f %.0f", st.border_w[0], st.border_w[1],
         st.border_w[2], st.border_w[3]);

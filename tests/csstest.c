@@ -132,6 +132,23 @@ generated(const char *name)
                       "u { border-top-left-radius: 4px 8px; }\n"
                       "a { color: #ff0000; } a { color: var(--missing); }\n"
                       "s { color: color-mix(in oklch, red, blue); }\n");
+    } else if (strcmp(name, "gradients.css") == 0) {
+        s = append(s, "a { background: linear-gradient(to right, #ff3d6e, #ff7a45); }\n"
+                      "b { background: linear-gradient(to left, #010101, #020202); }\n"
+                      "h1 { background: linear-gradient(to bottom, #0f0f0f, #101010); }\n"
+                      "h2 { background: linear-gradient(to middle, #0f0f0f, #101010); }\n"
+                      "i { background: linear-gradient(#030303, rgba(0, 0, 0, 0.5)); }\n"
+                      "q { background: linear-gradient(0deg, #040404, #050505); }\n"
+                      "u { background: linear-gradient(-90deg, #060606, #070707) #080808; }\n"
+                      "p { background: linear-gradient(45deg, #090909, #0a0a0a); }\n"
+                      "s { background: linear-gradient(to right, red, lime, blue); }\n"
+                      "em { background: linear-gradient(to right, red, blue); }\n"
+                      "em { background-color: #0b0b0b; }\n"
+                      "dl { background: linear-gradient(to right, red, blue); }\n"
+                      "dl { background: #0c0c0c; }\n"
+                      "dt { background-image: linear-gradient(to top, #0d0d0d, #0e0e0e); }\n"
+                      "dd { background: linear-gradient(red, blue); background-image: none; }\n"
+                      "ol { background: linear-gradient(to right, currentcolor, red); }\n");
     } else if (strcmp(name, "roles.css") == 0) {
         s = append(s, ":root { --c: #123123; }\n");
     } else if (strcmp(name, "star.css") == 0) {
@@ -437,6 +454,42 @@ main(void)
     check("a corner radius with two values", (long)get("u").radius[0], 4);
     check("an undefined var() unsets, not skips", fg("a"), 0);
     ok("color-mix() outside srgb is dropped", !get("s").matched);
+    reaktor_sheet_free(g);
+
+    g = load1("gradients.css", "light");
+    s = get("a");
+    check("to right runs across", s.gradient, REAKTOR_GRADIENT_ACROSS);
+    check("its first stop", rgb(s.gradient_from), 0xff3d6e);
+    check("its last stop", rgb(s.gradient_to), 0xff7a45);
+    check("the first stop stands in for the color", rgb(s.bg), 0xff3d6e);
+    s = get("b");
+    ok("to left is across, turned round",
+       s.gradient == REAKTOR_GRADIENT_ACROSS && rgb(s.gradient_from) == 0x020202 &&
+       rgb(s.gradient_to) == 0x010101);
+    s = get("h1");
+    ok("to bottom runs down",
+       s.gradient == REAKTOR_GRADIENT_DOWN && rgb(s.gradient_from) == 0x0f0f0f);
+    check("an unknown side is not drawn", get("h2").gradient, REAKTOR_GRADIENT_NONE);
+    s = get("i");
+    ok("no direction runs down", s.gradient == REAKTOR_GRADIENT_DOWN);
+    check("a stop keeps its alpha", s.gradient_to[3], 128);
+    s = get("q");
+    ok("0deg runs up", s.gradient == REAKTOR_GRADIENT_DOWN && rgb(s.gradient_from) == 0x050505);
+    s = get("u");
+    ok("-90deg runs to the left",
+       s.gradient == REAKTOR_GRADIENT_ACROSS && rgb(s.gradient_from) == 0x070707);
+    check("a color beside it is the color", rgb(s.bg), 0x080808);
+    check("45deg is not drawn", get("p").gradient, REAKTOR_GRADIENT_NONE);
+    check("three stops are not drawn", get("s").gradient, REAKTOR_GRADIENT_NONE);
+    s = get("em");
+    ok("background-color leaves the gradient",
+       s.gradient == REAKTOR_GRADIENT_ACROSS && rgb(s.bg) == 0x0b0b0b);
+    s = get("dl");
+    ok("background resets it", s.gradient == REAKTOR_GRADIENT_NONE && rgb(s.bg) == 0x0c0c0c);
+    ok("background-image sets one",
+       get("dt").gradient == REAKTOR_GRADIENT_DOWN && rgb(get("dt").gradient_from) == 0x0e0e0e);
+    check("background-image: none clears it", get("dd").gradient, REAKTOR_GRADIENT_NONE);
+    check("currentcolor is not a stop", get("ol").gradient, REAKTOR_GRADIENT_NONE);
     reaktor_sheet_free(g);
 
     return test_done("css");

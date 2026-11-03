@@ -48,6 +48,7 @@ static struct {
     float                *border, border_was;
     int                   edges;
     struct nk_color       edge_hover, edge_active;
+    struct { struct nk_color from, to; int axis; } ramp[3];
 } g_chrome;
 
 static void
@@ -76,6 +77,7 @@ reaktor_chrome_disarm(void)
 {
     g_chrome.armed = 0;
     g_chrome.edges = 0;
+    g_chrome.ramp[0].axis = g_chrome.ramp[1].axis = g_chrome.ramp[2].axis = 0;
 }
 
 static int
@@ -97,19 +99,25 @@ button_chrome_begin(struct nk_command_buffer *out, nk_handle user)
     struct nk_style_button *st = &app->ctx->style.button;
     nk_flags state = app->ctx->last_widget_state;
     struct nk_color col, edge = st->border_color;
+    float k = st->color_factor_background;
+    int at = (state & NK_WIDGET_STATE_HOVER) ? 1 : (state & NK_WIDGET_STATE_ACTIVED) ? 2 : 0;
 
     if (!g_chrome.armed ||
-        !chrome_take((state & NK_WIDGET_STATE_HOVER)   ? &st->hover
-                   : (state & NK_WIDGET_STATE_ACTIVED) ? &st->active
-                                                       : &st->normal, &col))
+        !chrome_take(at == 1 ? &st->hover : at == 2 ? &st->active : &st->normal, &col))
         return;
     if (g_chrome.edges)
-        edge = (state & NK_WIDGET_STATE_HOVER)   ? g_chrome.edge_hover
-             : (state & NK_WIDGET_STATE_ACTIVED) ? g_chrome.edge_active : edge;
-    reaktor_paint_surface(app, out, g_chrome.b, &(reaktor_surface){
-        nk_rgb_factor(col, st->color_factor_background),
-        nk_rgb_factor(edge, st->color_factor_background),
-        st->border, st->rounding });
+        edge = at == 1 ? g_chrome.edge_hover : at == 2 ? g_chrome.edge_active : edge;
+    if (g_chrome.ramp[at].axis) {
+        reaktor_fill_gradient(app, out, g_chrome.b, st->rounding,
+                              nk_rgb_factor(g_chrome.ramp[at].from, k),
+                              nk_rgb_factor(g_chrome.ramp[at].to, k),
+                              g_chrome.ramp[at].axis);
+        reaktor_edge_round(app, out, g_chrome.b, st->rounding, st->border,
+                           nk_rgb_factor(edge, k));
+    } else {
+        reaktor_paint_surface(app, out, g_chrome.b, &(reaktor_surface){
+            nk_rgb_factor(col, k), nk_rgb_factor(edge, k), st->border, st->rounding });
+    }
     g_chrome.border     = &st->border;
     g_chrome.border_was = st->border;
     st->border = 0.0f;
@@ -181,6 +189,28 @@ push_button_look(App *app, struct nk_context *ctx, const reaktor_button_look *k)
     g_chrome.edges       = 1;
     g_chrome.edge_hover  = nk_rgba_bv(hov->matched ? hov->border_col : s.border_col);
     g_chrome.edge_active = nk_rgba_bv(act->matched ? act->border_col : s.border_col);
+    {
+        const reaktor_style *by[3];
+        int i;
+
+        by[0] = &s;
+        by[1] = hov->matched ? hov : &s;
+        by[2] = act->matched ? act : by[1];
+        for (i = 0; i < 3; i++) {
+            unsigned char from[4], to[4];
+
+            g_chrome.ramp[i].axis = by[i]->gradient;
+            if (!by[i]->gradient) continue;
+            memcpy(from, by[i]->gradient_from, 4);
+            memcpy(to, by[i]->gradient_to, 4);
+            if (i == 2 && !act->matched) {
+                reaktor_style_darken(from, 0.10f);
+                reaktor_style_darken(to, 0.10f);
+            }
+            g_chrome.ramp[i].from = nk_rgba_bv(from);
+            g_chrome.ramp[i].to   = nk_rgba_bv(to);
+        }
+    }
 
     nk_style_push_float(ctx, &ctx->style.button.rounding, s.rounding);
     nk_style_push_float(ctx, &ctx->style.button.border, s.border);

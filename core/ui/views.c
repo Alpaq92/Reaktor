@@ -376,9 +376,6 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
     even    = reaktor_token("--table-bg-alt", odd);
     head_bg = thead.matched && thead.bg[3] ? reaktor_col(thead.bg)
             : reaktor_token("--table", g_frame_app->accent);
-    head_bg = reaktor_visible(reaktor_visible(head_bg, reaktor_page_color(g_frame_app),
-                                              g_frame_app->accent),
-                              odd, g_frame_app->accent);
 
     box = s->box;
     if (!box.name) box.name = s->name;

@@ -59,6 +59,10 @@ void reaktor_style_frame_pop(struct reaktor_context *ctx, reaktor_style_frame f)
 void reaktor_fill_round(App *app, struct reaktor_command_buffer *cv,
                         struct reaktor_rect b, float rounding,
                         struct reaktor_color col);
+void reaktor_fill_gradient(App *app, struct reaktor_command_buffer *cv,
+                           struct reaktor_rect b, float rounding,
+                           struct reaktor_color from, struct reaktor_color to,
+                           int axis);
 void reaktor_edge_round(App *app, struct reaktor_command_buffer *cv,
                         struct reaktor_rect b, float rounding, float width,
                         struct reaktor_color col);

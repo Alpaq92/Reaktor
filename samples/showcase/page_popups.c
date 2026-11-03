@@ -456,7 +456,7 @@ settings_demo(App *app, struct reaktor_context *ctx)
         if (note_len >= (int)sizeof note) note_len = (int)sizeof note - 1;
     }
     section(app, ctx, "Settings",
-            "A setting is a string kept between runs in settings.conf, an INI "
+            "A setting is a string kept between runs in settings.toml, a TOML "
             "file in the user's preference folder; on the web the same file "
             "lives in the browser's IndexedDB. The application picks when it is written - never, on quit, "
             "on every change or after a delay - and can save or clear it at "
@@ -481,7 +481,7 @@ settings_demo(App *app, struct reaktor_context *ctx)
                                                         .box = { .w = 96 } })) {
                 reaktor_settings_clear();
                 note_len = 0;
-                SDL_strlcpy(said, "Cleared: settings.conf is gone.", sizeof said);
+                SDL_strlcpy(said, "Cleared: settings.toml is gone.", sizeof said);
             }
         }
         reaktor_label(&(reaktor_label_spec){ .text = said, .name = "Settings status",

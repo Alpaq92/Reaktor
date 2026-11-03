@@ -225,6 +225,14 @@ void
 reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
             float lo, float hi, float step)
 {
+    reaktor_slider_ramp(app, ctx, id, val, lo, hi, step, NULL);
+}
+
+/* With a rule that has a gradient, the filled part is that gradient. */
+void
+reaktor_slider_ramp(App *app, struct nk_context *ctx, unsigned id, float *val,
+                    float lo, float hi, float step, const reaktor_style *fill)
+{
     const struct nk_style_slider *st = &ctx->style.slider;
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
@@ -281,7 +289,10 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
                   st->cursor_size.x, st->cursor_size.y);
 
     reaktor_fill_round(app, cv, bar, cap, track);
-    if (fl.w >= 1.0f) reaktor_fill_round(app, cv, fl, cap, filled);
+    if (fl.w >= 1.0f) {
+        if (fill && fill->gradient) reaktor_fill_style(app, cv, fl, cap, fill);
+        else reaktor_fill_round(app, cv, fl, cap, filled);
+    }
     reaktor_glyph_at(app, ctx, kn, REAKTOR_DISC_ROUND, knob,
              (int)(st->cursor_size.x < st->cursor_size.y ? st->cursor_size.x
                                                          : st->cursor_size.y),
@@ -290,11 +301,11 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
 
 void
 reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id, int *val,
-                int lo, int hi, int step)
+                int lo, int hi, int step, const reaktor_style *fill)
 {
     float f = (float)*val;
 
-    reaktor_slider_bar(app, ctx, id, &f, (float)lo, (float)hi, (float)step);
+    reaktor_slider_ramp(app, ctx, id, &f, (float)lo, (float)hi, (float)step, fill);
     *val = (int)(f + (f < 0.0f ? -0.5f : 0.5f));
 }
 

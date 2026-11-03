@@ -50,14 +50,20 @@ set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES     OFF CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
-foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER GPU OFFSCREEN)
+foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER OFFSCREEN)
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
 endforeach()
+option(REAKTOR_SDL_GPU "Build SDL's GPU API and its renderer, --renderer sdl-gpu" ON)
+set(SDL_GPU ${REAKTOR_SDL_GPU} CACHE BOOL "" FORCE)
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
 
 foreach(drv RENDER_D3D RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
+# SDL's GPU API runs on Vulkan where there is no Direct3D 12 or Metal.
+if(REAKTOR_SDL_GPU AND UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+    set(SDL_VULKAN ON CACHE BOOL "" FORCE)
+endif()
 option(REAKTOR_SDL_D3D "Build SDL's Direct3D 11 and 12 renderers on Windows" ON)
 if(WIN32)
     set(SDL_RENDER_D3D11 ${REAKTOR_SDL_D3D} CACHE BOOL "" FORCE)
@@ -435,7 +441,7 @@ else()
     endif()
 endif()
 
-option(REAKTOR_SETTINGS "Settings kept between runs, in settings.conf" ON)
+option(REAKTOR_SETTINGS "Settings kept between runs, in settings.toml" ON)
 option(REAKTOR_TRAY "A tray icon with a menu" ON)
 option(REAKTOR_POPUP_WINDOWS "Menus in windows of their own, past the main window's edge" ON)
 option(REAKTOR_INSPECTOR "The Inspector: tree, box, style, frame and log of a running app" ON)
@@ -459,7 +465,8 @@ foreach(_m settings:REAKTOR_SETTINGS:settings tray:REAKTOR_TRAY:tray
     endif()
 endforeach()
 if(REAKTOR_SETTINGS)
-    target_include_directories(reaktor_settings INTERFACE "${TP}/mglibs")
+    target_sources(reaktor_settings INTERFACE "${TP}/toml-c/toml.c")
+    target_include_directories(reaktor_settings INTERFACE "${TP}/toml-c")
     if(EMSCRIPTEN)
         target_link_options(reaktor_settings INTERFACE -lidbfs.js
             "SHELL:--pre-js ${CMAKE_CURRENT_SOURCE_DIR}/tools/web-pre.js")
@@ -597,8 +604,8 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/plutosvg/plutovg/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/plutovg.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/freetype/docs/FTL.TXT"
                "${CMAKE_BINARY_DIR}/licenses/freetype.txt" COPYONLY)
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/mglibs/ini.h"
-               "${CMAKE_BINARY_DIR}/licenses/ini.h.txt" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/toml-c/LICENSE"
+               "${CMAKE_BINARY_DIR}/licenses/toml-c.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")

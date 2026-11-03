@@ -1,19 +1,19 @@
 #include "internal.h"
 
-#define INI_IMPLEMENTATION
-#define INI_MALLOC(ctx, size)        ((void)(ctx), SDL_malloc(size))
-#define INI_FREE(ctx, ptr)           ((void)(ctx), SDL_free(ptr))
-#define INI_MEMCPY(dst, src, cnt)    SDL_memcpy(dst, src, cnt)
-#define INI_STRLEN(s)                SDL_strlen(s)
-#define INI_STRNICMP(s1, s2, cnt)    SDL_strncasecmp(s1, s2, cnt)
-#include "ini.h"
+#include "toml.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
 
-static ini_t   *g_ini;
-static int      g_ini_dirty;
+/* Settings live here as flat dotted keys, in the order they were added; the
+   file is TOML, every key quoted at the top level, so `window` and
+   `window.maximized` can both be strings. */
+typedef struct { char *key, *value; } setting;
+
+static setting *g_set;
+static int      g_count, g_cap, g_loaded;
+static int      g_dirty;
 static unsigned g_save_timer;
 
 #ifdef __EMSCRIPTEN__
@@ -30,70 +30,139 @@ settings_path(void)
     char *dir = SDL_GetPrefPath(NULL, reaktor_app_ident());
     char *path = NULL;
 
-    if (dir) SDL_asprintf(&path, "%ssettings.conf", dir);
+    if (dir) SDL_asprintf(&path, "%ssettings.toml", dir);
     SDL_free(dir);
     return path;
 }
 
-static ini_t *
-settings(void)
+static int
+setting_index(const char *key)
 {
-    char *text;
+    int i;
 
-    if (g_ini) return g_ini;
-    if (reaktor_capturing()) return g_ini = ini_create(NULL);
-    {
-        char *path = settings_path();
-
-        text = path ? (char *)SDL_LoadFile(path, NULL) : NULL;
-        SDL_free(path);
-    }
-    g_ini = text ? ini_load(text, NULL) : ini_create(NULL);
-    SDL_free(text);
-    return g_ini;
+    for (i = 0; i < g_count; i++)
+        if (SDL_strcmp(g_set[i].key, key) == 0) return i;
+    return -1;
 }
 
-static int
-setting_find(const char *key, int *section, int add)
+static void
+setting_put(char *key, char *value)
 {
-    const char *dot = SDL_strrchr(key, '.');
-    ini_t      *ini = settings();
+    int i = setting_index(key);
 
-    *section = INI_GLOBAL_SECTION;
-    if (!ini) return INI_NOT_FOUND;
-    if (dot) {
-        *section = ini_find_section(ini, key, (int)(dot - key));
-        if (*section == INI_NOT_FOUND && add)
-            *section = ini_section_add(ini, key, (int)(dot - key));
-        if (*section == INI_NOT_FOUND) return INI_NOT_FOUND;
-        key = dot + 1;
+    if (i >= 0) {
+        SDL_free(key);
+        SDL_free(g_set[i].value);
+        g_set[i].value = value;
+        return;
     }
-    return ini_find_property(ini, *section, key, 0);
+    if (!reaktor_grow((void **)&g_set, &g_cap, g_count + 1, sizeof *g_set)) {
+        SDL_free(key);
+        SDL_free(value);
+        return;
+    }
+    g_set[g_count].key     = key;
+    g_set[g_count++].value = value;
+}
+
+/* A table nested in a hand-written file reads as dotted keys, and a number or
+   a boolean as its text, so `maximized = 1` reads as "1"; an array is skipped. */
+static void
+settings_take(const toml_table_t *t, const char *prefix)
+{
+    int i, len, n = toml_table_len(t);
+
+    for (i = 0; i < n; i++) {
+        const char   *name = toml_table_key(t, i, &len);
+        toml_value_t  v;
+        toml_table_t *sub;
+        char         *key = NULL, *value = NULL;
+
+        SDL_asprintf(&key, "%s%s", prefix, name);
+        if (!key) continue;
+        if ((sub = toml_table_table(t, name)) != NULL) {
+            SDL_asprintf(&value, "%s.", key);
+            if (value) settings_take(sub, value);
+            SDL_free(value);
+            SDL_free(key);
+            continue;
+        }
+        if ((v = toml_table_string(t, name)).ok) {
+            value = SDL_strdup(v.u.s);
+            free(v.u.s);
+        } else if ((v = toml_table_int(t, name)).ok) {
+            SDL_asprintf(&value, "%lld", (long long)v.u.i);
+        } else if ((v = toml_table_double(t, name)).ok) {
+            SDL_asprintf(&value, "%g", v.u.d);
+        } else if ((v = toml_table_bool(t, name)).ok) {
+            value = SDL_strdup(v.u.b ? "true" : "false");
+        }
+        if (value) setting_put(key, value);
+        else SDL_free(key);
+    }
+}
+
+static void
+settings_load(void)
+{
+    char *text, *path;
+
+    if (g_loaded) return;
+    g_loaded = 1;
+    if (reaktor_capturing()) return;
+    path = settings_path();
+    text = path ? (char *)SDL_LoadFile(path, NULL) : NULL;
+    SDL_free(path);
+    if (text) {
+        char          err[200];
+        toml_table_t *root = toml_parse(text, err, sizeof err);
+
+        if (root) settings_take(root, "");
+        else SDL_Log("settings not read: %s", err);
+        toml_free(root);
+    }
+    SDL_free(text);
+}
+
+static void
+put_string(SDL_IOStream *out, const char *s)
+{
+    SDL_WriteU8(out, '"');
+    for (; *s; s++) {
+        unsigned char c = (unsigned char)*s;
+
+        if (c == '"' || c == '\\') SDL_IOprintf(out, "\\%c", c);
+        else if (c == '\n') SDL_IOprintf(out, "\\n");
+        else if (c == '\t') SDL_IOprintf(out, "\\t");
+        else if (c < 0x20 || c == 0x7f) SDL_IOprintf(out, "\\u%04X", c);
+        else SDL_WriteU8(out, c);
+    }
+    SDL_WriteU8(out, '"');
 }
 
 void
 reaktor_settings_save(void)
 {
-    int   size;
-    char *text;
+    char         *path, *tmp = NULL;
+    SDL_IOStream *out;
+    int           i, ok;
 
-    if (!g_ini_dirty || !g_ini || reaktor_capturing()) return;
-    size = ini_save(g_ini, NULL, 0);
-    text = (char *)SDL_malloc((size_t)size);
-    if (!text) return;
-    ini_save(g_ini, text, size);
-    {
-        char *path = settings_path(), *tmp = NULL;
-
-        if (path) SDL_asprintf(&tmp, "%s.new", path);
-        if (!tmp || !SDL_SaveFile(tmp, text, (size_t)size - 1) || !SDL_RenamePath(tmp, path))
-            SDL_Log("settings not saved: %s", SDL_GetError());
-        SDL_free(tmp);
-        SDL_free(path);
+    if (!g_dirty || reaktor_capturing()) return;
+    path = settings_path();
+    if (path) SDL_asprintf(&tmp, "%s.new", path);
+    out = tmp ? SDL_IOFromFile(tmp, "wb") : NULL;
+    for (i = 0; out && i < g_count; i++) {
+        put_string(out, g_set[i].key);
+        SDL_IOprintf(out, " = ");
+        put_string(out, g_set[i].value);
+        SDL_WriteU8(out, '\n');
     }
+    ok = out && SDL_CloseIO(out) && SDL_RenamePath(tmp, path);
+    if (!ok) SDL_Log("settings not saved: %s", SDL_GetError());
+    SDL_free(tmp);
+    SDL_free(path);
     settings_persist();
-    SDL_free(text);
-    g_ini_dirty = 0;
+    g_dirty = 0;
 }
 
 static void
@@ -110,7 +179,7 @@ settings_changed(void)
     int          ms;
     reaktor_save mode = reaktor_save_mode(&ms);
 
-    g_ini_dirty = 1;
+    g_dirty = 1;
 #ifdef __EMSCRIPTEN__
     if (mode == REAKTOR_SAVE_ON_QUIT) mode = REAKTOR_SAVE_ON_CHANGE;
 #endif
@@ -123,61 +192,74 @@ settings_changed(void)
 const char *
 reaktor_setting(const char *key)
 {
-    int section, property = key ? setting_find(key, &section, 0) : INI_NOT_FOUND;
+    int i;
 
-    return property == INI_NOT_FOUND ? NULL
-                                     : ini_property_value(g_ini, section, property);
+    if (!key) return NULL;
+    settings_load();
+    i = setting_index(key);
+    return i < 0 ? NULL : g_set[i].value;
 }
 
 void
 reaktor_setting_set(const char *key, const char *value)
 {
-    const char *name;
-    int         section, property;
+    int i;
 
-    if (!key || !*key || SDL_strpbrk(key, "=[]\n") || (value && SDL_strchr(value, '\n')))
-        return;
-    property = setting_find(key, &section, value != NULL);
-    name     = SDL_strrchr(key, '.') ? SDL_strrchr(key, '.') + 1 : key;
-    if (property != INI_NOT_FOUND && value &&
-        SDL_strcmp(ini_property_value(g_ini, section, property), value) == 0)
-        return;
-    if (!value && property == INI_NOT_FOUND) return;
-    if (!value)
-        ini_property_remove(g_ini, section, property);
-    else if (property != INI_NOT_FOUND)
-        ini_property_value_set(g_ini, section, property, value, 0);
-    else if (section != INI_NOT_FOUND)
-        ini_property_add(g_ini, section, name, 0, value, 0);
-    else
-        return;
+    if (!key || !*key) return;
+    settings_load();
+    i = setting_index(key);
+    if (i < 0 && !value) return;
+    if (i >= 0 && value && SDL_strcmp(g_set[i].value, value) == 0) return;
+    if (i >= 0 && value) {
+        SDL_free(g_set[i].value);
+        g_set[i].value = SDL_strdup(value);
+    } else if (value) {
+        setting_put(SDL_strdup(key), SDL_strdup(value));
+    } else {
+        SDL_free(g_set[i].key);
+        SDL_free(g_set[i].value);
+        SDL_memmove(&g_set[i], &g_set[i + 1], (size_t)(g_count - i - 1) * sizeof *g_set);
+        g_count--;
+    }
     settings_changed();
+}
+
+static void
+settings_empty(void)
+{
+    int i;
+
+    for (i = 0; i < g_count; i++) {
+        SDL_free(g_set[i].key);
+        SDL_free(g_set[i].value);
+    }
+    SDL_free(g_set);
+    g_set   = NULL;
+    g_count = g_cap = 0;
+    g_dirty = 0;
 }
 
 void
 reaktor_settings_clear(void)
 {
-    ini_destroy(g_ini);
-    g_ini       = ini_create(NULL);
-    g_ini_dirty = 0;
+    char *path;
+
+    settings_empty();
+    g_loaded = 1;
     if (g_save_timer) reaktor_timer_stop(g_save_timer);
     g_save_timer = 0;
     if (reaktor_capturing()) return;
-    {
-        char *path = settings_path();
-
-        if (path) SDL_RemovePath(path);
-        SDL_free(path);
-    }
+    path = settings_path();
+    if (path) SDL_RemovePath(path);
+    SDL_free(path);
     settings_persist();
 }
 
 void
 reaktor_settings_free(void)
 {
-    ini_destroy(g_ini);
-    g_ini        = NULL;
-    g_ini_dirty  = 0;
+    settings_empty();
+    g_loaded     = 0;
     g_save_timer = 0;
 }
 

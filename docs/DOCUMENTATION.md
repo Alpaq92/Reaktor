@@ -98,12 +98,14 @@ followed by a frame.
 | `reaktor_timer(app, ms, repeat, fn, user)` | `fn(app, user)` after `ms`, every `ms` with `repeat`; answers an id. Stops when the window closes |
 | `reaktor_timer_stop(id)` | Stop one |
 | `reaktor_post(app, fn, user)` | `fn(app, user)` on the main thread. Any thread; immediate on the main one |
-| `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. `window.maximized` is key `maximized` in section `[window]`. No newlines; no `=`, `[` or `]` in a key |
+| `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. A key is any non-empty string; `window` and `window.maximized` are two keys |
 | `reaktor_settings_save()`, `reaktor_settings_clear()` | Write the settings now, whatever the mode; empty them and delete the file |
 
-Settings are an INI file, `settings.conf` in SDL's preference folder for `.id`
-(or `.name`), read and written by [`ini.h`](https://github.com/mattiasgustavsson/libs);
-names match case-insensitively. `.save_settings` says when it is written:
+Settings are a TOML file, `settings.toml` in SDL's preference folder for `.id`
+(or `.name`), read by [toml-c](https://github.com/arp242/toml-c) and written by
+the runtime: one quoted key and string per line, `"window.maximized" = "1"`.
+A hand-written table reads as dotted keys, so `[window]` with `maximized = 1`
+is the same setting; names match case-sensitively. `.save_settings` says when it is written:
 
 | `.save_settings` | Written |
 | --- | --- |
@@ -113,7 +115,7 @@ names match case-insensitively. `.save_settings` says when it is written:
 | `REAKTOR_SAVE_ON_TIMER` | `.save_ms` (1000) after a change, and on quit |
 
 Each write goes to a new file renamed over the old, so a crash mid-write
-leaves the last one whole. On the web the same `settings.conf` lives in the
+leaves the last one whole. On the web the same `settings.toml` lives in the
 browser's IndexedDB: `tools/web-pre.js` mounts it with Emscripten's IDBFS and
 loads it before `main` runs, every write is synced back, and saving on quit
 means saving on change. Clearing site data, or a private window closing,
@@ -299,8 +301,9 @@ first column names the row. With `.selected`, a click picks a row and the
 selection follows keyboard focus; the arrow keys move it, scrolling the row
 into view. Without it the rows are plain text. Unsized, a list shows up to
 eight rows and fills its row. Colors come from `thead`, `th`, `td`,
-`--table-bg` and `--table-bg-alt`, which reaktor.css takes from Water.css's
-`--links`, `--background-body` and `--background-alt`.
+`--table`, `--table-bg` and `--table-bg-alt`, which reaktor.css takes from
+Water.css's `--links`, `--background-body` and `--background-alt`. The header
+row is `thead`'s background, or `--table` without one, as the sheet writes it.
 
 **A row can be dragged** out of a list that names a `.drag` kind, a string.
 Its first column follows the pointer as a tooltip would, and any list of the
@@ -657,7 +660,7 @@ Nuklear's default:
 ```c
 reaktor_style s;
 reaktor_style_get("button", &s);
-if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
+if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px, s.gradient */ }
 ```
 
 | Widget | Reads |
@@ -672,7 +675,7 @@ if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px */ }
 | Floater | `dialog` |
 | Toast | `.toast`, `.toast-button`, `.toast-close` |
 | Tooltip | `.tooltip` |
-| List | `thead`, `th`, `td`; `--table-bg`, `--table-bg-alt` |
+| List | `thead`, `th`, `td`; `--table`, `--table-bg`, `--table-bg-alt` |
 | Sidebar, tabs | `.sidebar-item`, `.sidebar-current`, `.sidebar-edge`; `.tab`, `.tab-current`, `.tab-edge` |
 
 With `:hover` and `:active` where a widget has those states, a button's
@@ -774,7 +777,8 @@ open at its end, in a comment, string or block, is closed there.
 | Property | Notes |
 | --- | --- |
 | `color`, `background-color` | |
-| `background` | Its color, wherever it stands among the layers; one with none is transparent |
+| `background` | Its color, wherever it stands among the layers, and a `linear-gradient()` among them; one with neither is transparent, and a gradient alone stands in as its first stop where a color is read |
+| `background-image` | `linear-gradient()` or `none`. Two stops, run `to right`, `to left`, `to top`, `to bottom` or a multiple of `90deg`; any other gradient is not drawn. It fills a button (in each state) and a slider's filled part when that slider's rule has one; `background-color` leaves it in place, as in CSS |
 | `border`, `border-top`, `-right`, `-bottom`, `-left` | Width, style and color in any order. A side with no style has no width; one with no color takes the text's |
 | `border-width`, `border-style`, and each side's | One to four values; `thin`, `medium` and `thick` are 1, 3 and 5 px |
 | `border-color`, `border-top-color` | The top color is the one a widget draws |
@@ -886,7 +890,7 @@ out by hand inside a declared page. [`include/reaktor/ui.h`](../include/reaktor/
 | `reaktor_image_file`, `REAKTOR_MARK` | Any image asset: an SVG, recolored by `?stroke=#rrggbb&fill=&sw=`, or a PNG or JPEG; the mark's name |
 | `reaktor_image_centered` | An image at its own size, centered in the next widget slot |
 | `reaktor_style_frame`, `reaktor_style_frame_pop` | Counts of style pushes, popped together |
-| `reaktor_fill_round`, `reaktor_edge_round` | Rounded fills and borders, smooth on the software renderer |
+| `reaktor_fill_round`, `reaktor_fill_gradient`, `reaktor_edge_round` | Rounded fills, two-stop gradients (`REAKTOR_GRADIENT_ACROSS` left to right, `_DOWN` top to bottom) and borders, smooth on the software renderer |
 | `reaktor_hot`, `reaktor_hot_top`, `reaktor_hot_follow` | A rectangle that redraws on hover ([the frame loop](#the-frame-loop)), with a `REAKTOR_CURSOR_*` over it: default, pointer, text, or a horizontal or vertical resize |
 | `reaktor_tip(app, rect, text)` | A tooltip over a rectangle you drew yourself, such as a bar of a chart; the text is copied, and the rectangle redraws as the pointer crosses it |
 | `reaktor_button_label`, `reaktor_button_icon`, `reaktor_button_accent`, `reaktor_button_accent_icon`, `reaktor_field_text`, `reaktor_slider_bar`, `reaktor_progress_bar`, `reaktor_chevron_at` | Styled controls inside hand-laid rows |
@@ -1137,14 +1141,15 @@ Passed to CMake, through either script:
 | `REAKTOR_LOCALE` | `ON` | Translations and formatting — [Localization](#localization) |
 | `REAKTOR_LOCALE_EMBED` | `OFF` | Compile the catalogs in rather than read them at startup |
 | `REAKTOR_TEXT` | `ON` | Direction, shaping, fallback glyphs and Unicode line breaks — [Text](#text) |
-| `REAKTOR_SETTINGS` | `ON` | Settings kept between runs, in `settings.conf` |
+| `REAKTOR_SETTINGS` | `ON` | Settings kept between runs, in `settings.toml` |
 | `REAKTOR_TRAY` | `ON` | The tray icon |
 | `REAKTOR_POPUP_WINDOWS` | `ON` | Menus in windows of their own |
 | `REAKTOR_NOTIFY` | `ON` | System notifications |
 | `REAKTOR_PRINT` | `ON` | Printing and PDF export |
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
 | `REAKTOR_SDL_D3D` | `ON` | Build SDL's Direct3D 11 and 12 renderers on Windows; off, a program is 105 KB smaller and draws in software only |
-| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs |
+| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs; macOS builds them either way |
+| `REAKTOR_SDL_GPU` | `ON` | Build SDL's GPU API and its renderer, `--renderer sdl-gpu`: Direct3D 12 on Windows, Metal on macOS, Vulkan on Linux and the BSDs; off, a program is 184 KB smaller on Windows |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
@@ -1179,7 +1184,7 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 - **`REAKTOR_TEXT=OFF`** leaves mojibake and kb_text_shape out. Nothing is
   reordered, shaped or taken from another font, and a line breaks after a
   space: Polish is untouched, Japanese comes out as boxes.
-- **`REAKTOR_SETTINGS=OFF`** leaves `ini.h` and the web's IndexedDB out:
+- **`REAKTOR_SETTINGS=OFF`** leaves toml-c and the web's IndexedDB out:
   `reaktor_setting` answers `NULL`, saving and clearing do nothing, and
   `.remember_window` is ignored.
 - **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, so AppIndicator
@@ -1206,7 +1211,8 @@ removes them from `argv` before the application sees it:
 | `--theme <system\|light\|dark>` | Open in that scheme; on OpenBSD `system` reads as light |
 | `--lang <code>` | Open in that catalog: `en`, `pl`, `ja` |
 | `--font-fallback <path>` | A font for the Text module, before the application's; repeatable |
-| `--renderer <name>` | `software` (default), `auto`, `directx`, or a driver name; see [The renderer](#the-renderer) |
+| `--renderer <name>` | `software` (default), `auto`, `gpu`, `sdl-gpu`, `directx`, or a driver name; see [The renderer](#the-renderer) |
+| `--hdr <on\|off>` | Make the renderer with an HDR output, as `.hdr` does; see [The renderer](#the-renderer) |
 | `--aa <auto\|on\|off>` | Override `.anti_aliasing` |
 | `--video <name>` | SDL's video driver: `x11`, `wayland`, `dummy` |
 | `--popups inline` | Menus inside the window, not in windows of their own |
@@ -1328,13 +1334,29 @@ command line names one, and `--new-instance` is passed for it.
 
 | Name | Where | For | Against |
 | --- | --- | --- | --- |
+| `gpu` | Everywhere | `metal` on macOS; `opengl`, else `direct3d12`, else `direct3d11` on Windows; `opengl`, else `opengles2` on Linux and the BSDs; `opengles2` on the web | A driver left out of the build is skipped, so without `-DREAKTOR_SDL_GL=ON` it is `directx` on Windows; on Linux with no GPU, `opengl` runs on the CPU through Mesa |
 | `directx` | Windows | Direct3D 12 where it starts, else 11 | As below |
 | `direct3d12` | Windows 10 and later | Least CPU once running | Most memory, slowest start |
 | `direct3d11` | Windows | Any Windows GPU | Most CPU of the GPU renderers measured; neither Direct3D renderer is built with `-DREAKTOR_SDL_D3D=OFF` |
-| `opengl` | Windows, Linux, BSDs | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`; on Linux without a GPU it loads Mesa and LLVM |
+| `opengl` | Windows, Linux, BSDs, macOS | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`, except on macOS; on Linux without a GPU it loads Mesa and LLVM; macOS deprecates it in favor of Metal |
 | `opengles2` | Where the driver offers it | | Built only with `-DREAKTOR_SDL_GL=ON`; not measured |
 | `metal` | macOS | | |
+| `sdl-gpu` | Windows, macOS, Linux, BSDs | SDL's GPU API: Direct3D 12, Metal or Vulkan, and an application's own shaders through `SDL_CreateGPURenderState` | Not built with `-DREAKTOR_SDL_GPU=OFF`; not measured |
 | `auto` | Everywhere | SDL chooses | |
+
+**An application names its renderer** with the launch's `.renderer`, read as
+`--renderer` is when the flag is not given, so `"sdl-gpu"` lets it draw with
+its own shaders: `reaktor_sdl_renderer(app)` hands it the renderer, and the
+renderer's `SDL_PROP_RENDERER_GPU_DEVICE_POINTER` the device they are made for.
+
+**HDR output** is the launch's `.hdr`, or `--hdr on`. The renderer is then made
+with a linear (scRGB) output, which SDL scales so sRGB drawing looks as before
+while an HDR texture can go past white. The colorspace is fixed when the
+renderer is made, so the software renderer, a display without HDR under
+`sdl-gpu`, or a renderer that refuses it gets an SDR one as before, and turning
+the system's HDR on or off takes effect at the next launch. On an SDR display a
+GPU renderer other than `sdl-gpu` keeps the linear output, which blends in
+linear light: edges and text come out slightly different from an SDR renderer.
 
 **Prefer `directx` or `direct3d12` to `direct3d11`.** Once running,
 `direct3d11` took 13.4% of a core where `direct3d12` and `opengl` took 5.6%,

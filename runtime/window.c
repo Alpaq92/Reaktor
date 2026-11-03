@@ -181,7 +181,12 @@ reaktor_window_spawn(const reaktor_window *spec, const struct nk_rect *popup)
         SDL_SetWindowParent(a->win, m->win);
         SDL_SetWindowModal(a->win, true);
     }
-    if (a->win) a->ren = SDL_CreateRenderer(a->win, SDL_GetRendererName(m->ren));
+    if (a->win)
+        a->ren = reaktor_renderer_for(
+            a->win, SDL_GetRendererName(m->ren),
+            SDL_GetNumberProperty(SDL_GetRendererProperties(m->ren),
+                                  SDL_PROP_RENDERER_OUTPUT_COLORSPACE_NUMBER,
+                                  SDL_COLORSPACE_SRGB) == SDL_COLORSPACE_SRGB_LINEAR);
     if (a->ren) a->ctx = nk_sdl_init(a->win, a->ren, nk_sdl_allocator());
     if (!a->ctx) {
         SDL_Log("window: %s", SDL_GetError());

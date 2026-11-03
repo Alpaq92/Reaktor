@@ -3,6 +3,7 @@
 
 enum { REAKTOR_SIDE_TOP = 0, REAKTOR_SIDE_RIGHT, REAKTOR_SIDE_BOTTOM, REAKTOR_SIDE_LEFT };
 enum { REAKTOR_CORNER_TL = 0, REAKTOR_CORNER_TR, REAKTOR_CORNER_BR, REAKTOR_CORNER_BL };
+enum { REAKTOR_GRADIENT_NONE = 0, REAKTOR_GRADIENT_ACROSS, REAKTOR_GRADIENT_DOWN };
 
 typedef struct reaktor_style {
     unsigned char bg[4];
@@ -27,6 +28,10 @@ typedef struct reaktor_style {
     int           font_px;
     int           bold;
     int           matched;
+
+    unsigned char gradient_from[4];
+    unsigned char gradient_to[4];
+    int           gradient;
 } reaktor_style;
 
 void reaktor_style_get(const char *selector, reaktor_style *out);
