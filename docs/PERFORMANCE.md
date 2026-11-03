@@ -241,6 +241,22 @@ cores. `showcase` grows to 14,224 KB there, while the library pages barely
 move. Counting every clean page of a binary, sharing saves 4,602 KB of
 24,157 KB, or 19.0%; counted page by page, 4,176 KB of 24,200 KB, or 17.3%.
 
+### The tray on Linux
+
+The same Linux Mint desktop, `showcase` idle on the Login page, five to eight
+launches each, before and after the tray moved from SDL's to libdbus:
+
+| | SDL's tray | Over libdbus | No tray |
+| --- | --- | --- | --- |
+| Shared libraries mapped | 110 | 57 | 57 |
+| GTK, GDK, ATK, dbusmenu-gtk3, AppIndicator | mapped | none | none |
+| `reaktor_tray_open` | 79–133 ms | 7–23 ms | |
+| First frame, Diagnostics "startup" | 762–963 ms | 794–950 ms | 740–861 ms |
+| Private dirty | 68.9–72.0 MB | 68.1–76.8 MB | 65.0–73.0 MB |
+
+`simple` maps 57 too. The first frame and private memory vary more between
+launches than the tray moves them; the open itself is the measured saving.
+
 ## CPU
 
 **At rest: 0% of a core** on Windows, Linux and GhostBSD, on every page; macOS
