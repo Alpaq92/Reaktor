@@ -140,7 +140,8 @@ EOF
     pkg=$(find "$top/RPMS" -name '*.rpm' | head -n 1)
     cp "$pkg" "$out/"
     pkg="$out/$(basename "$pkg")"
-    [ $install -eq 0 ] || as_root rpm -U --replacepkgs "$pkg"
+    # Packed here and never signed; rpm 6 refuses an unsigned package unless told.
+    [ $install -eq 0 ] || as_root rpm -U --replacepkgs --nosignature "$pkg"
     ;;
 freebsd)
     cat >"$work/manifest" <<EOF
