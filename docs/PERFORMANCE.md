@@ -123,6 +123,21 @@ dummy` on the Linux desktop below, median of seven runs, CPU time a frame:
 The rounds spread wider than the change. Every showcase tab in both themes,
 `notepad` and `simple` draw and dump byte for byte as they did at `-O3`.
 
+SDL's GPU API is left out unless `REAKTOR_SDL_GPU` is on. Built in, it costs
+the software renderer too: SDL then loads the Vulkan loader, every installed
+Vulkan driver and LLVM, and the Diagnostics page's "window and renderer" step
+goes from +0.2 MB private to +34.4 MB. On the Linux desktop below, the shared
+build, `bench --no-vsync`, five runs each, both on the software backend:
+
+| `REAKTOR_SDL_GPU` | A frame on the display | Private |
+| --- | --- | --- |
+| `OFF` | 2.08–2.35 ms | 5.0 MB |
+| `ON` | 13.59–16.31 ms | 63.1 MB |
+
+The stripped `libreaktor-sdl3.so` is 2,659,344 bytes without it and 2,950,704
+with it. With `--video dummy`, where nothing reaches a display, the frame costs
+563–622 µs of CPU without it and 588–740 µs with it.
+
 ### Modules
 
 `showcase`, each module off in turn; native on the Windows machine below, web
