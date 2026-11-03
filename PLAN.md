@@ -415,7 +415,7 @@ the headers, both archives, the `.so` links, `reaktor.pc`,
 package. A static build packs one package, renamed `libreaktor-static` in
 every format (2026-11-03), so a release can carry both; it and the split's
 development package install the same headers and conflict with each other
-in a `.deb` and an rpm. `/opt/reaktor/lib` is
+in every format. `/opt/reaktor/lib` is
 not on the loader's path, so `reaktor-shared.pc` and `reaktor::shared` add
 an rpath to the install's `lib/`.
 

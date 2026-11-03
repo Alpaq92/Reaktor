@@ -100,7 +100,8 @@ as_root() {
 # A static build packs one package, libreaktor-static. A REAKTOR_SHARED build
 # packs three, the development one under the name each format expects. The
 # two development packages install the same headers, so each conflicts with
-# the other (in a .deb and an rpm; the BSD tools are not told).
+# the other: a Conflicts line, a manifest's conflicts, @conflict in OpenBSD's
+# packing list, -C for NetBSD's pkg_create.
 static=libreaktor-static
 conflicts=""
 case $format in
@@ -177,6 +178,7 @@ pack() {
             echo "maintainer: \"$maintainer\""
             echo "www: \"$www\""
             echo "prefix: \"$prefix\""
+            [ -z "$conflicts" ] || echo "conflicts: [ \"$conflicts-*\" ]"
             if [ $# -gt 0 ]; then
                 echo "deps: {"
                 for d in "$@"; do echo "  $d: { origin: \"devel/$d\", version: \"$version\" }"; done
@@ -188,7 +190,10 @@ pack() {
         pkg="$out/$name-$version.pkg"
         ;;
     openbsd)
-        listing "$root" >"$work/plist"
+        {
+            [ -z "$conflicts" ] || echo "@conflict $conflicts-*"
+            listing "$root"
+        } >"$work/plist"
         pkg="$out/$name-$version.tgz"
         deps=""
         for d in "$@"; do deps="$deps -P devel/$d:$d-$version:$d-$version"; done
@@ -209,9 +214,13 @@ pack() {
         pkg="$out/$name-$version.tgz"
         deps=""
         for d in "$@"; do deps="$deps -P $d>=$version"; done
+        [ -z "$conflicts" ] || deps="$deps -C $conflicts-[0-9]*"
+        # Unquoted for the splitting, with globbing off for the -C pattern.
         # shellcheck disable=SC2086
+        set -f
         pkg_create -B "$work/build-info" -c "-$comment" -d "-$what." \
                    -f "$work/plist" -I "$prefix" -p "$root$prefix" $deps "$pkg"
+        set +f
         ;;
     tar)
         pkg="$out/$name-$version-$(uname -s | tr 'A-Z' 'a-z')-$(uname -m).tar.gz"

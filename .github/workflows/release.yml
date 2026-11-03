@@ -173,6 +173,12 @@ jobs:
           \`libreaktor0_${v}_<arch>.deb\`, \`libreaktor-sdl3-0_${v}_<arch>.deb\` and
           the \`.rpm\`s beside them. The static library stays the default.
 
+          **Upgrading:** the static system package is now \`libreaktor-static\`;
+          \`libreaktor-dev\` (\`libreaktor-devel\`, and \`libreaktor\` on the
+          BSDs) is the shared one and needs the two runtime packages, about 5 MB.
+          To stay static, remove \`libreaktor-dev\` and install
+          \`libreaktor-static\`; the two conflict, since both install the headers.
+
           \`SHA256SUMS\` lists every download's checksum. GitHub's own source
           archives below leave the submodules out; the \`-source.tar.gz\` above has
           them.
