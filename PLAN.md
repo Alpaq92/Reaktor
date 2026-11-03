@@ -489,7 +489,16 @@ Windows, macOS and the web.
   `libreaktor-modules.a`, with an rpath to the install and to
   `/Library/Frameworks`. `macos.yml` builds it on both runners, runs
   `check-libreaktor.sh` on it and uploads `libreaktor-VERSION-macos-ARCH.zip`.
-  Per architecture, signed ad hoc, as today; a universal build is still open.
+  Per architecture, signed ad hoc, as today.
+
+  **Universal too (2026-11-03).** A third job in `macos.yml` takes the two
+  per-architecture zips, joins every Mach-O file and archive in them with
+  `lipo` (the framework, `libreaktor-modules.a`, `libreaktor.a`), requires
+  every other file to be the same in both, signs the framework again ad hoc,
+  builds the shared consumer for `arm64;x86_64` against it, runs it, and
+  uploads `libreaktor-VERSION-macos-universal.zip`. If CMake writes a path
+  that differs between the two runners into the config or `.pc` files, that
+  check fails and the file needs one form for both.
 
   **No Developer ID (2026-11-03), and none soon.** So the framework stays
   signed ad hoc and is not notarized, like the rest of the macOS release.

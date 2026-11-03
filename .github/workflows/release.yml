@@ -161,8 +161,9 @@ jobs:
           #### Shared
 
           On macOS it also comes as \`Reaktor.framework\`, with SDL inside, in
-          \`libreaktor-$v-macos-<arch>.zip\` beside \`libreaktor-modules.a\` and the
-          static files: link \`reaktor::shared\`. Apps share it from
+          \`libreaktor-$v-macos-<arch>.zip\` (arm64, x86_64, or \`universal\` with
+          both in every binary) beside \`libreaktor-modules.a\` and the static
+          files: link \`reaktor::shared\`. Apps share it from
           \`/Library/Frameworks\`, which their rpath searches. It is signed ad
           hoc and not notarized, like everything here, so an app that turns on
           the hardened runtime cannot load it, and a downloaded copy needs
