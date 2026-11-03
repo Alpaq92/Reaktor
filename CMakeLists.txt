@@ -53,7 +53,9 @@ set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
 foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER OFFSCREEN)
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
 endforeach()
-option(REAKTOR_SDL_GPU "Build SDL's GPU API and its renderer, --renderer sdl-gpu" ON)
+# Off: the software renderer is the default, and SDL's GPU API is 291 KB of
+# it on Linux. An application that runs its own shaders turns it on.
+option(REAKTOR_SDL_GPU "Build SDL's GPU API and its renderer, --renderer sdl-gpu" OFF)
 set(SDL_GPU ${REAKTOR_SDL_GPU} CACHE BOOL "" FORCE)
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
 

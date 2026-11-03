@@ -54,8 +54,8 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
-          restore-keys: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
+          key: build-v3-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: build-v3-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
 
       - name: Build a release from scratch, keeping only ccache
         if: ${{ inputs.version != '' }}
@@ -237,7 +237,7 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          key: build-v3-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
 
       - name: Save the package cache
         if: ${{ always() && steps.vm.outcome == 'success' }}
