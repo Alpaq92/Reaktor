@@ -26,7 +26,8 @@ set(TP "${CMAKE_CURRENT_SOURCE_DIR}/external")
 # copy (PLAN.md). On Linux and the BSDs it is libreaktor.so, with SDL in
 # libreaktor-sdl3.so, built here as now. On macOS it is Reaktor.framework,
 # with SDL inside it: no system SDL stands to be confused with ours, and apps
-# under one Team ID share it from /Library/Frameworks. The samples link it.
+# that leave the hardened runtime off share it, signed ad hoc, from
+# /Library/Frameworks. The samples link it.
 option(REAKTOR_SHARED "Also build a shared libreaktor, and link the samples to it" OFF)
 set(REAKTOR_SHARED_SDL OFF)
 if(REAKTOR_SHARED)

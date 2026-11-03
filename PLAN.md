@@ -489,8 +489,16 @@ Windows, macOS and the web.
   `libreaktor-modules.a`, with an rpath to the install and to
   `/Library/Frameworks`. `macos.yml` builds it on both runners, runs
   `check-libreaktor.sh` on it and uploads `libreaktor-VERSION-macos-ARCH.zip`.
-  Per architecture, signed ad hoc, as today; Developer ID signing and a
-  universal build are still open.
+  Per architecture, signed ad hoc, as today; a universal build is still open.
+
+  **No Developer ID (2026-11-03), and none soon.** So the framework stays
+  signed ad hoc and is not notarized, like the rest of the macOS release.
+  Without a Team ID, "apps under one Team ID" means apps that do not turn on
+  the hardened runtime: its library validation is what refuses a framework
+  from another signer, and an ad hoc one has no signer to match. Reaktor's
+  own apps do not turn it on. A framework downloaded from the release carries
+  the quarantine flag, so the person installing it clears that once
+  (`xattr -dr com.apple.quarantine`) before apps can load it.
 
 ## Open questions
 
