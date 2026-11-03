@@ -588,7 +588,7 @@ the icon. There is one tray, of up to sixteen entries.
 `reaktor_tray_hide_on_minimize(app, 1)` makes minimizing the main window hide
 it while the icon is there, so it leaves the taskbar; `reaktor_set_visible(app,
 1)` brings it back, unminimized. Closing the tray leaves a hidden window
-hidden, so show it first. SDL's tray has no click of its own, so a Show entry
+hidden, so show it first. The tray has no click of its own, so a Show entry
 in the menu is the way back. Wayland tells a window nothing when it is minimized, so
 there it stays in the taskbar. To close to the tray instead, have `closing`
 hide the window and refuse `REAKTOR_QUIT_WINDOW`.
@@ -604,10 +604,20 @@ reaktor_tray_open(app, &(reaktor_tray){
     .tooltip = "Notes", .items = items, .count = 3 });
 ```
 
-On Linux and the BSDs, SDL loads AppIndicator (Ayatana's or the original)
-and GTK 3 when the tray opens; nothing links them, and without them there is
-no tray. GTK sets the user's locale as it starts, and the runtime puts the C
-library's back.
+On Linux and the BSDs the tray is Reaktor's own, spoken over libdbus rather
+than SDL's, which loads AppIndicator and GTK 3. The icon is a
+StatusNotifierItem (`org.kde.StatusNotifierItem`) registered with the
+session's `org.kde.StatusNotifierWatcher`, its image the app's SVG icon as
+`IconPixmap` at 22, 32, 48 and 64 pixels, its tooltip `.tooltip`; the menu is
+`com.canonical.dbusmenu`, with the entries as labels, separators and
+checkmark items. The item sets `ItemIsMenu`, so a host opens the menu itself
+and a left click chooses nothing. KDE Plasma, Cinnamon and MATE (through
+xapp-sn-watcher), Xfce, LXQt, Budgie and GNOME with the AppIndicator extension
+show it; a desktop with no watcher on the bus, plain GNOME among them, gets
+none, and `reaktor_tray_open` answers 0. A watcher that starts or restarts
+later is told about the item again. One thread waits on the bus's socket and
+wakes the frame loop, which reads and answers the calls, so `.chosen` still
+runs on the main thread. Without dbus-1 at build time the tray is SDL's.
 
 ### Inspector
 
