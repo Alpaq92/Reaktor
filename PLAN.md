@@ -369,20 +369,26 @@ of its own (`Shared libreaktor`) on a `-DREAKTOR_SHARED=ON` build:
   union and enum in `include/reaktor/`, `nk_window` and `nk_input`, every
   Nuklear type `reaktor/nuklear.h` renames, and the value of every `NK_`
   constant it renames. Nothing is copied out of Nuklear by hand. The output
-  must match `tools/abi/libreaktor.so.0-x86_64.abi` (12,266 lines); otherwise
-  the soname must go up and the table be rewritten with `-u`. Adding one field
-  to `reaktor_shortcut` fails it. Only x86-64 has a table. gdb lays its output
-  out a little differently between versions, so the table may need writing
-  again from CI's Debian 12: the script keeps its output in `smoke/abi/`, and
-  CI uploads that when the step fails.
+  must match `tools/abi/libreaktor.so.0-ARCH.abi`, ARCH being the compiler's
+  target (`cc -dumpmachine`); otherwise the soname must go up and the table be
+  rewritten with `-u`. Adding one field to `reaktor_shortcut` fails it. Only
+  x86_64 has a table so far (12,266 lines, made here). Every native Linux job
+  (x86-64, x86, arm64) runs the check in a step of its own and uploads what it
+  wrote to `smoke/abi/`; a missing table is a warning, exit status 3, so the
+  x86 and arm64 tables, and the x86_64 one if CI's older gdb lays it out
+  differently, come from CI's artifact.
 - `tools/ci/check-exports.sh` holds the built library to `tools/reaktor.map`,
-  which now lists Reaktor's names instead of `reaktor_*`: the 149 public
-  functions the library defines, the 34 non-public ones the modules call,
-  three that `tests/launchtest.c` calls, and five FreeType and plutovg calls.
-  It fails on a name exported but not listed, listed but not exported, public
-  but in neither the library nor the modules, exported without being public
-  or under a "Not public" comment, or under one and no longer called. Exports
-  fell from 1,185 to 1,033: 154 internals are no longer exported.
+  which lists Reaktor's names instead of `reaktor_*`. Two symbol versions:
+  `LIBREAKTOR_0` holds the 149 public functions the library defines and
+  Nuklear's and nukanim's APIs; `LIBREAKTOR_PRIVATE_0` the 34 non-public calls
+  the modules make and five FreeType and plutovg ones. It fails on a name
+  exported but not listed, listed but not exported, public but in neither the
+  library nor the modules, under `LIBREAKTOR_0` without being public, private
+  and no longer called by the modules, private and called by an app's own
+  code (samples and tests linked to the library), or under the wrong version.
+  `tests/launchtest.c`, which reaches past `include/reaktor/`, links the
+  archives in a shared build (`reaktor_add_app(... STATIC ...)`), so nothing
+  is exported for a test. Exports fell from 1,185 to 1,030.
 - `check-libreaktor.sh` links `examples/consumer` against `libreaktor.so`
   too, where the install has it, checks the program needs it, and requires
   the same pixels and accessibility tree as the built `simple`.
@@ -418,7 +424,9 @@ build as `.deb`s on x86-64, installs them, builds the shared consumer,
 removes `libreaktor-dev` and runs it on the two runtime packages alone; the
 rpm job does the same with `-s`. The rpm, FreeBSD, OpenBSD and NetBSD
 branches are written but have not run: rpmbuild and the BSD tools are not on
-this machine, and `bsd.yml` does not pack the shared build yet.
+this machine. `bsd.yml` packs the shared build on each BSD and runs the shared
+consumer on the runtime packages alone, in a step that warns rather than
+fails until it has passed there.
 
 
 1. `tools/libreaktor-pkg.sh` packs the shared library and SDL as their own

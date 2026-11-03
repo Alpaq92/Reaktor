@@ -152,7 +152,14 @@ LIBREAKTOR_0 {
     reaktor_window_close;
     reaktor_window_is_open;
     reaktor_window_open;
-    # Not public, but the modules, which live in each app, call them.
+  local: *;
+};
+
+# Not public: what the modules, which live in each app, call in the library.
+# A version of its own keeps them apart from the API: an app's own code must
+# not reach them, and check-exports.sh says so if it does.
+LIBREAKTOR_PRIVATE_0 {
+  global:
     reaktor_a11y_changes;
     reaktor_a11y_role_name;
     reaktor_a11y_tree;
@@ -187,13 +194,8 @@ LIBREAKTOR_0 {
     reaktor_window_app;
     reaktor_window_points;
     reaktor_window_spawn;
-    # Not public; tests/launchtest.c reaches them.
-    reaktor_floaters_modal;
-    reaktor_fopen;
-    reaktor_link_label;
-    # Not public: the FreeType and plutovg calls the modules make.
+    # The FreeType and plutovg calls the modules make.
     plutovg_surface_create_for_data; plutovg_surface_destroy;
     plutovg_surface_write_to_jpg_stream;
     FT_Done_Face; FT_Load_Glyph;
-  local: *;
-};
+} LIBREAKTOR_0;

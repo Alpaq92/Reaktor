@@ -171,12 +171,22 @@ jobs:
             -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
           cmake --build build-shared </dev/null
           sh tools/ci/check-exports.sh build-shared </dev/null
-          sh tools/ci/check-abi.sh </dev/null
           sh tools/ci/check-libreaktor.sh -w "timeout 600" build-shared libreaktor-shared-check </dev/null
           EOF
 
+      # Every native job, so each architecture's table comes from a machine
+      # like CI's. One not written yet is a warning, and the upload has it.
+      - name: ABI table
+        id: abi
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && !matrix.emulated }}
+        run: |
+          rc=0
+          docker exec -i debian sh tools/ci/check-abi.sh </dev/null || rc=$?
+          if [ "$rc" = 3 ]; then echo "::warning::no ABI table for linux ${{ matrix.arch }} yet; see the abi artifact"; rc=0; fi
+          exit "$rc"
+
       - name: Upload the ABI table
-        if: ${{ !cancelled() && steps.shared.outcome == 'failure' }}
+        if: ${{ !cancelled() && hashFiles('smoke/abi/*.abi') != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: abi-linux-${{ matrix.arch }}

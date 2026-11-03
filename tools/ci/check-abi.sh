@@ -4,8 +4,10 @@
 # nk_window and nk_input, which apps reach through the context) and the
 # value of every constant reaktor/nuklear.h renames. gdb reads them from the
 # debug types of tools/abi/abi.c, so nothing is copied out of Nuklear. The
-# result must match tools/abi/libreaktor.so.SOVERSION-ARCH.abi; a change means
-# a new SOVERSION in CMakeLists.txt and a new table, written with -u.
+# result must match tools/abi/libreaktor.so.SOVERSION-ARCH.abi, ARCH being the
+# compiler's target; a change means a new SOVERSION in CMakeLists.txt and a
+# new table, written with -u. Exit status 3: there is no table for this ARCH
+# yet, and the one written to smoke/abi/ can be checked in.
 #   check-abi.sh [-u] [-c CC]
 set -eu
 
@@ -21,7 +23,7 @@ done
 
 so=$(sed -n 's/.*SOVERSION \([0-9][0-9]*\).*/\1/p' CMakeLists.txt | head -n 1)
 [ -n "$so" ] || { echo "no SOVERSION in CMakeLists.txt"; exit 1; }
-arch=$(uname -m)
+arch=$("$cc" -dumpmachine | cut -d- -f1)
 table="tools/abi/libreaktor.so.$so-$arch.abi"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -57,7 +59,7 @@ if [ "$update" = 1 ]; then
     cp "$work/abi.txt" "$table"
     echo "wrote $table"
 elif [ ! -f "$table" ]; then
-    echo "no $table: write it with -u"; exit 1
+    echo "no $table yet: smoke/abi/ has it, or write it with -u"; exit 3
 elif ! diff -u "$table" "$work/abi.txt"; then
     echo "libreaktor's ABI changed: bump SOVERSION in CMakeLists.txt and run check-abi.sh -u"
     exit 1
