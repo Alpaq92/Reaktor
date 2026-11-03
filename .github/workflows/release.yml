@@ -135,8 +135,9 @@ jobs:
           ### libreaktor
 
           The library itself, for building your own applications: the same
-          systems and architectures, \`libreaktor-$v-<system>-<arch>\`, and
-          \`libreaktor-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
+          systems and architectures, \`libreaktor-static-$v-<system>-<arch>.tar.gz\`
+          on Linux and the BSDs, \`libreaktor-$v-<system>-<arch>.zip\` on Windows
+          and macOS, and \`libreaktor-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
           on Windows, built against the DLL C runtime; \`libreaktor.a\` elsewhere)
           with SDL, FreeType, plutosvg, Onlay, NukAnim, mojibake and kb_text_shape
           inside it, the public headers (\`#include "reaktor/reaktor.h"\`, with
@@ -161,7 +162,7 @@ jobs:
 
           On Linux and the BSDs (x86-64) the library also comes shared, so
           several apps can share one copy in memory:
-          \`libreaktor-shared-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.0\`,
+          \`libreaktor-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.0\`,
           our own SDL as \`libreaktor-sdl3.so.0\`, \`libreaktor-modules.a\` (the
           modules, which go into each app), everything the static one has, and
           \`reaktor-shared.pc\`. Link with \`reaktor::shared\` in CMake or

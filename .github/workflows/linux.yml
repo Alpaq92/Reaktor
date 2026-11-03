@@ -100,7 +100,7 @@ jobs:
             cross="-DCMAKE_TOOLCHAIN_FILE=/src/tools/cross/linux-cross.cmake -DREAKTOR_CROSS_TRIPLE=${{ matrix.triple }}"
           fi
           version='${{ inputs.version || 'dev' }}'
-          docker exec -i -e CROSS="$cross" -e TRIPLE="${{ matrix.triple }}"             -e LIBNAME="libreaktor-${version}-linux-${{ matrix.arch }}" "$ctr" sh -eu <<'EOF'
+          docker exec -i -e CROSS="$cross" -e TRIPLE="${{ matrix.triple }}"             -e LIBNAME="libreaktor-static-${version}-linux-${{ matrix.arch }}" "$ctr" sh -eu <<'EOF'
           uname -a
           cmake --version
           export CCACHE_DIR=/src/.ccache CCACHE_BASEDIR=/src CCACHE_MAXSIZE=500M
@@ -162,7 +162,8 @@ jobs:
         run: docker exec -i debian sh tools/ci/pss-pages.sh -x Xvfb -w "dbus-run-session -- timeout 120" </dev/null
 
       # libreaktor.so beside the static library, on every architecture, and
-      # released as libreaktor-shared-VERSION-linux-ARCH.tar.gz. An emulated
+      # released as libreaktor-VERSION-linux-ARCH.tar.gz; the static one is
+      # libreaktor-static-VERSION-linux-ARCH.tar.gz. An emulated
       # machine has none of the cross compiler's headers, so it is built and
       # installed on the builder and only checked on the emulated machine.
       - name: Shared libreaktor
@@ -176,7 +177,7 @@ jobs:
             cross="-DCMAKE_TOOLCHAIN_FILE=/src/tools/cross/linux-cross.cmake -DREAKTOR_CROSS_TRIPLE=${{ matrix.triple }}"
           fi
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-shared-${version}-linux-${{ matrix.arch }}"
+          name="libreaktor-${version}-linux-${{ matrix.arch }}"
           docker exec -i -e CROSS="$cross" -e LIBNAME="$name" "$ctr" sh -eu <<'EOF'
           export CCACHE_DIR=/src/.ccache CCACHE_BASEDIR=/src CCACHE_MAXSIZE=500M
           cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON \
@@ -197,8 +198,10 @@ jobs:
         if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-shared-linux-${{ matrix.arch }}
-          path: dist/libreaktor-shared-*.tar.gz
+          name: package-libreaktor-linux-${{ matrix.arch }}
+          path: |
+            dist/libreaktor-*.tar.gz
+            !dist/libreaktor-static-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -243,7 +246,7 @@ jobs:
           version='${{ inputs.version || 'dev' }}'
           installed=""
           if [ "${{ matrix.emulated }}" = true ]; then installed=-i; fi
-          docker exec -i debian sh -eu tools/ci/check-libreaktor.sh $installed -w "timeout 600" build "libreaktor-${version}-linux-${{ matrix.arch }}" </dev/null
+          docker exec -i debian sh -eu tools/ci/check-libreaktor.sh $installed -w "timeout 600" build "libreaktor-static-${version}-linux-${{ matrix.arch }}" </dev/null
 
       - name: Pack libreaktor as a .deb
         id: deb
@@ -338,10 +341,8 @@ jobs:
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-linux-${{ matrix.arch }}
-          path: |
-            dist/libreaktor-*.tar.gz
-            !dist/libreaktor-shared-*.tar.gz
+          name: package-libreaktor-static-linux-${{ matrix.arch }}
+          path: dist/libreaktor-static-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 

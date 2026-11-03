@@ -187,7 +187,7 @@ jobs:
             echo "the program carries the sysroot's path"; exit 1
           fi
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-${version}-${{ matrix.os }}-arm64"
+          name="libreaktor-static-${version}-${{ matrix.os }}-arm64"
           cmake --install build-arm64 --prefix "dist/$name" --component libreaktor </dev/null
           if grep -rq "$sysroot" "dist/$name/lib/cmake" "dist/$name/lib/pkgconfig"; then
             echo "the package carries the sysroot's path"; exit 1
@@ -301,7 +301,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          sh tools/ci/check-libreaktor.sh -w "dbus-run-session --" build "libreaktor-${version}-${{ matrix.os }}-${{ matrix.arch }}"
+          sh tools/ci/check-libreaktor.sh -w "dbus-run-session --" build "libreaktor-static-${version}-${{ matrix.os }}-${{ matrix.arch }}"
 
       - name: Check the libreaktor system package
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
@@ -341,7 +341,7 @@ jobs:
             --shot check/lib-packaged-shared.bmp --a11y-dump check/lib-packaged-shared.txt </dev/null
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged-shared.$e"; done
           version='${{ inputs.version || 'dev' }}'
-          name="libreaktor-shared-${version}-${{ matrix.os }}-${{ matrix.arch }}"
+          name="libreaktor-${version}-${{ matrix.os }}-${{ matrix.arch }}"
           cmake --install build-pkg/build --prefix "dist/$name" --component libreaktor </dev/null
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           rm -rf "dist/$name"
@@ -368,10 +368,8 @@ jobs:
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            dist/libreaktor-*.tar.gz
-            !dist/libreaktor-shared-*.tar.gz
+          name: package-libreaktor-static-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/libreaktor-static-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -379,8 +377,10 @@ jobs:
         if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-shared-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/libreaktor-shared-*.tar.gz
+          name: package-libreaktor-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/libreaktor-*.tar.gz
+            !dist/libreaktor-static-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -536,7 +536,7 @@ jobs:
           PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
           export PATH
           version='${{ inputs.version || 'dev' }}'
-          sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-${version}-${{ matrix.os }}-arm64"
+          sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-static-${version}-${{ matrix.os }}-arm64"
 
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
@@ -558,8 +558,8 @@ jobs:
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: package-libreaktor-${{ matrix.os }}-arm64
-          path: dist/libreaktor-*.tar.gz
+          name: package-libreaktor-static-${{ matrix.os }}-arm64
+          path: dist/libreaktor-static-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 

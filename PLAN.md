@@ -445,9 +445,11 @@ CI builds the shared library next to the static one, and a release carries
 both. Every Linux job (x86-64, x86, arm64, and armhf and riscv64 cross-built)
 builds `-DREAKTOR_SHARED=ON`, checks it with `check-libreaktor.sh` (natively,
 or on the emulated machine after the builder installs it) and uploads
-`libreaktor-shared-VERSION-linux-ARCH.tar.gz` and the three split `.deb`s;
+`libreaktor-VERSION-linux-ARCH.tar.gz` and the three split `.deb`s;
 the rpm job adds the split rpms; the x86-64 BSD jobs add
-`libreaktor-shared-VERSION-OS-x86-64.tar.gz`. All of them are `package-*`
+`libreaktor-VERSION-OS-x86-64.tar.gz`. The static tarballs beside them, on
+Linux and the BSDs, are now `libreaktor-static-VERSION-OS-ARCH.tar.gz`,
+matching the `libreaktor-static` package. All of them are `package-*`
 artifacts, so `release.yml` publishes them with the rest, and its notes say
 how to use them. Not covered: the BSDs' arm64 (cross-built in `bsd-arm64`),
 Windows, macOS and the web.
