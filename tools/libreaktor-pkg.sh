@@ -188,7 +188,7 @@ pack() {
         ;;
     openbsd)
         {
-            [ -z "$conflicts" ] || echo "@conflict $conflicts-[0-9]*"
+            [ -z "$conflicts" ] || echo "@conflict $conflicts-*"
             listing "$root"
         } >"$work/plist"
         pkg="$out/$name-$version.tgz"
