@@ -13,6 +13,8 @@ build-lib/
 build-consumer/
 build-embedded/
 build-map/
+build-proto*/
+build-shared/
 .claude/settings.local.json
 .dart_tool/
 .gradle/
@@ -32,5 +34,8 @@ benchmarks/flutter-bench/.idea/
 benchmarks/flutter-bench/*.iml
 build-pkg/
 build-pkg-consumer/
+build-pkg-shared/
+dist-pkg*/
 dist/
 smoke/
+build-static/

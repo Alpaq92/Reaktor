@@ -22,7 +22,26 @@ endif()
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
-set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
+# A shared libreaktor beside libreaktor.a, so several apps share one copy:
+# libreaktor.so, with SDL as libreaktor-sdl3.so, on Linux and the BSDs, and
+# Reaktor.framework, with SDL inside, on macOS. The samples link it.
+option(REAKTOR_SHARED "Also build a shared libreaktor, and link the samples to it" OFF)
+set(REAKTOR_SHARED_SDL OFF)
+if(REAKTOR_SHARED)
+    if(NOT UNIX OR EMSCRIPTEN)
+        message(FATAL_ERROR "REAKTOR_SHARED is for Linux, the BSDs and macOS")
+    endif()
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    if(NOT APPLE)
+        set(REAKTOR_SHARED_SDL ON)
+    endif()
+endif()
+if(REAKTOR_SHARED_SDL)
+    set(REAKTOR_SDL SDL3::SDL3-shared)
+else()
+    set(REAKTOR_SDL SDL3::SDL3-static)
+endif()
+set(SDL_SHARED       ${REAKTOR_SHARED_SDL} CACHE BOOL "" FORCE)
 set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
 set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES     OFF CACHE BOOL "" FORCE)
@@ -31,15 +50,18 @@ set(SDL_INSTALL      OFF CACHE BOOL "" FORCE)
 foreach(sub AUDIO JOYSTICK HAPTIC HIDAPI SENSOR CAMERA POWER OFFSCREEN)
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
 endforeach()
-option(REAKTOR_SDL_GPU "Build SDL's GPU API and its renderer, --renderer sdl-gpu" ON)
-set(SDL_GPU ${REAKTOR_SDL_GPU} CACHE BOOL "" FORCE)
+# Off: the software renderer is the default, and with the GPU API built in,
+# SDL loads Vulkan and its drivers even for that renderer (PERFORMANCE.md).
+# An application that runs its own shaders turns it on.
+option(REAKTOR_SHADERS "An application's own shaders: SDL's GPU API and its renderer, --renderer sdl-gpu" OFF)
+set(SDL_GPU ${REAKTOR_SHADERS} CACHE BOOL "" FORCE)
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
 
 foreach(drv RENDER_D3D RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
 # SDL's GPU API runs on Vulkan where there is no Direct3D 12 or Metal.
-if(REAKTOR_SDL_GPU AND UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+if(REAKTOR_SHADERS AND UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     set(SDL_VULKAN ON CACHE BOOL "" FORCE)
 endif()
 option(REAKTOR_SDL_D3D "Build SDL's Direct3D 11 and 12 renderers on Windows" ON)
@@ -98,6 +120,13 @@ if(MSVC)
 else()
     target_compile_options(SDL3-static PRIVATE
         -include "${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
+endif()
+if(REAKTOR_SHARED_SDL)
+    target_compile_options(SDL3-shared PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/core/sdl/no_dynapi.h")
+    # Our own SDL under its own name, never the distro's libSDL3.
+    set_target_properties(SDL3-shared PROPERTIES OUTPUT_NAME reaktor-sdl3
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 if(UNIX AND NOT EMSCRIPTEN)
@@ -194,7 +223,11 @@ add_library(reaktor_core STATIC
     core/render/svg.c
     "${_builtins}")
 target_include_directories(reaktor_core PUBLIC core/base core/render)
-target_link_libraries(reaktor_core PUBLIC plutosvg freetype reaktor_headers SDL3::SDL3-static)
+target_link_libraries(reaktor_core PUBLIC plutosvg freetype reaktor_headers ${REAKTOR_SDL})
+# Nuklear built for size: 139 KB less of the library, at no measurable cost a
+# frame (PERFORMANCE.md). A debug build keeps its own -O0.
+set_property(SOURCE core/render/nk_impl.c APPEND PROPERTY COMPILE_OPTIONS
+    "$<$<NOT:$<CONFIG:Debug>>:$<IF:$<C_COMPILER_ID:MSVC>,/O1,-Os>>")
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")
@@ -206,23 +239,23 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(keytest tests/keytest.c core/ui/keys.c)
     target_link_libraries(keytest PRIVATE reaktor_headers)
     target_include_directories(keytest PRIVATE core/ui)
-    target_link_libraries(keytest PRIVATE SDL3::SDL3-static)
+    target_link_libraries(keytest PRIVATE ${REAKTOR_SDL})
 
     add_executable(a11ytest tests/a11ytest.c core/a11y/a11y.c
         platform/a11y/a11y_snapshot.c core/base/utf8.c)
-    target_link_libraries(a11ytest PRIVATE reaktor_headers SDL3::SDL3-static)
+    target_link_libraries(a11ytest PRIVATE reaktor_headers ${REAKTOR_SDL})
     target_include_directories(a11ytest PRIVATE core/a11y core/render
         platform/a11y core/base)
 
     add_executable(animtest tests/animtest.c core/anim/anim.c)
     target_include_directories(animtest PRIVATE core/anim core/render
                                                 "${TP}/nuklear/demo/sdl3_renderer")
-    target_link_libraries(animtest PRIVATE reaktor_core SDL3::SDL3-static)
+    target_link_libraries(animtest PRIVATE reaktor_core ${REAKTOR_SDL})
 
     add_executable(localetest tests/localetest.c
                    core/locale/locale.c core/locale/plural.c
                    core/locale/format.c)
-    target_link_libraries(localetest PRIVATE reaktor_headers SDL3::SDL3-static)
+    target_link_libraries(localetest PRIVATE reaktor_headers ${REAKTOR_SDL})
     target_include_directories(localetest PRIVATE core/locale)
     target_compile_definitions(localetest PRIVATE REAKTOR_LOCALE_EMBEDDED)
 
@@ -239,7 +272,7 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
 
     add_executable(basetest tests/basetest.c core/base/url.c core/base/utf8.c)
     target_include_directories(basetest PRIVATE core/base)
-    target_link_libraries(basetest PRIVATE SDL3::SDL3-static)
+    target_link_libraries(basetest PRIVATE ${REAKTOR_SDL})
 
     add_executable(imagetest tests/imagetest.c)
     target_link_libraries(imagetest PRIVATE plutovg)
@@ -408,7 +441,7 @@ else()
         target_link_libraries(texttest PRIVATE reaktor_headers)
         target_include_directories(texttest PRIVATE core/render core/text)
         target_link_libraries(texttest PRIVATE reaktor_text reaktor_core
-                              SDL3::SDL3-static)
+                              ${REAKTOR_SDL})
     endif()
 endif()
 
@@ -570,7 +603,7 @@ target_include_directories(reaktor_runtime PUBLIC
 
 target_link_libraries(reaktor_runtime PUBLIC
     reaktor_core
-    SDL3::SDL3-static
+    ${REAKTOR_SDL}
     onlay)
 
 if(WIN32 AND NOT EMSCRIPTEN)
@@ -596,8 +629,78 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
 
+if(REAKTOR_SHARED)
+    # The runtime, the core and the libraries under them; reaktor.map says
+    # what they export. The modules stay in each app, which exports them back.
+    # On macOS SDL goes in too, and ld64 takes the map as a list of names.
+    set(_so_parts reaktor_runtime reaktor_core plutosvg plutovg freetype onlay)
+    set(_so_files "")
+    foreach(_t IN LISTS _so_parts)
+        target_compile_options(${_t} PRIVATE -fno-semantic-interposition)
+    endforeach()
+    if(APPLE)
+        list(APPEND _so_parts SDL3-static)
+    endif()
+    foreach(_t IN LISTS _so_parts)
+        list(APPEND _so_files "$<TARGET_FILE:${_t}>")
+    endforeach()
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor_so.c" CONTENT "")
+    add_library(reaktor_shared SHARED "${CMAKE_BINARY_DIR}/reaktor_so.c")
+    set_target_properties(reaktor_shared PROPERTIES
+        VERSION ${PROJECT_VERSION} SOVERSION 0
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
+    add_dependencies(reaktor_shared ${_so_parts})
+    if(APPLE)
+        file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map" _map_lines)
+        set(_exp "")
+        foreach(_l IN LISTS _map_lines)
+            if(_l MATCHES "^ *#" OR _l MATCHES "[{}:]")
+                continue()
+            endif()
+            string(REGEX MATCHALL "[A-Za-z_][A-Za-z0-9_*]*" _names "${_l}")
+            foreach(_n IN LISTS _names)
+                string(APPEND _exp "_${_n}\n")
+            endforeach()
+        endforeach()
+        # SDL is linked in here rather than beside the framework, and apps
+        # and their modules call it directly.
+        string(APPEND _exp "_SDL_*\n")
+        file(WRITE "${CMAKE_BINARY_DIR}/reaktor.exp" "${_exp}")
+        set(_force "")
+        foreach(_f IN LISTS _so_files)
+            list(APPEND _force "-Wl,-force_load,${_f}")
+        endforeach()
+        set_target_properties(reaktor_shared PROPERTIES OUTPUT_NAME Reaktor
+            FRAMEWORK TRUE FRAMEWORK_VERSION A
+            MACOSX_FRAMEWORK_IDENTIFIER io.github.alpaq92.reaktor
+            MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${PROJECT_VERSION}
+            MACOSX_FRAMEWORK_BUNDLE_VERSION ${PROJECT_VERSION}
+            INSTALL_NAME_DIR "@rpath"
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Frameworks")
+        target_link_libraries(reaktor_shared PRIVATE ${_force}
+            $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_LINK_LIBRARIES>)
+        target_link_options(reaktor_shared PRIVATE
+            "-Wl,-exported_symbols_list,${CMAKE_BINARY_DIR}/reaktor.exp"
+            "-Wl,-undefined,dynamic_lookup")
+        target_link_libraries(reaktor_shared INTERFACE SDL3::Headers)
+    else()
+        set_target_properties(reaktor_shared PROPERTIES OUTPUT_NAME reaktor)
+        target_link_libraries(reaktor_shared PRIVATE
+            -Wl,--whole-archive ${_so_files} -Wl,--no-whole-archive
+            $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_LINK_LIBRARIES>)
+        target_link_options(reaktor_shared PRIVATE
+            "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
+        target_link_libraries(reaktor_shared INTERFACE ${REAKTOR_SDL})
+    endif()
+    target_include_directories(reaktor_shared INTERFACE
+        $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_compile_definitions(reaktor_shared INTERFACE
+        $<TARGET_PROPERTY:reaktor_runtime,INTERFACE_COMPILE_DEFINITIONS>)
+endif()
+
 function(reaktor_add_app name)
-    cmake_parse_arguments(RA "CONSOLE" "" "SOURCES;MODULES;ASSETS" ${ARGN})
+    cmake_parse_arguments(RA "CONSOLE;STATIC" "" "SOURCES;MODULES;ASSETS" ${ARGN})
     if(RA_CONSOLE)
         add_executable(${name} ${RA_SOURCES} ${REAKTOR_APP_RESOURCES})
     else()
@@ -614,7 +717,19 @@ function(reaktor_add_app name)
             list(APPEND _mods reaktor_${_m}_none)
         endif()
     endforeach()
-    target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
+    # STATIC: a test that reaches past include/reaktor/ links the archives even
+    # in a shared build, so libreaktor.so need not export what it reaches.
+    if(REAKTOR_SHARED AND NOT RA_STATIC)
+        # The modules stay in the app; the shared core calls them back.
+        target_link_libraries(${name} PRIVATE ${_mods} reaktor_shared)
+        set_target_properties(${name} PROPERTIES ENABLE_EXPORTS ON)
+        if(APPLE)
+            # Kept through -dead_strip and visible to the framework's lookups.
+            target_link_options(${name} PRIVATE -Wl,-export_dynamic)
+        endif()
+    else()
+        target_link_libraries(${name} PRIVATE reaktor_runtime ${_mods})
+    endif()
     if(MSVC)
         target_compile_options(${name} PRIVATE /we4013)
     elseif(APPLE)
@@ -678,7 +793,7 @@ reaktor_add_app(simple MODULES none SOURCES samples/simple/simple.c)
 reaktor_add_app(notepad MODULES settings popups print SOURCES samples/notepad/notepad.c)
 if(NOT EMSCRIPTEN)
     reaktor_add_app(bench MODULES none SOURCES samples/bench/bench.c)
-    reaktor_add_app(launchtest MODULES settings popups print SOURCES tests/launchtest.c)
+    reaktor_add_app(launchtest STATIC MODULES settings popups print SOURCES tests/launchtest.c)
     reaktor_add_app(uitest MODULES none SOURCES tests/uitest.c)
     set_target_properties(launchtest PROPERTIES EXCLUDE_FROM_ALL ON)
 endif()
@@ -794,7 +909,7 @@ endif()
 
 if(MSVC)
     # Nuklear's NK_ALIGNOF takes the offset of a member of an unnamed struct.
-    set_source_files_properties(core/render/nk_impl.c PROPERTIES COMPILE_OPTIONS /wd4116)
+    set_property(SOURCE core/render/nk_impl.c APPEND PROPERTY COMPILE_OPTIONS /wd4116)
     # nuklear.h combines constants of different enums in its own declarations.
     target_compile_options(reaktor_headers INTERFACE /wd5287)
     target_compile_options(showcase PRIVATE /wd4101)
@@ -854,7 +969,8 @@ function(reaktor_outside_links)
         if(_real)
             set(_t ${_real})
         endif()
-        if(_t IN_LIST _seen)
+        # libreaktor.a carries SDL3-static in the shared SDL's place.
+        if(_t IN_LIST _seen OR _t STREQUAL "SDL3-shared")
             continue()
         endif()
         list(APPEND _seen ${_t})
@@ -1050,6 +1166,54 @@ add_custom_command(OUTPUT "${_lib}"
     VERBATIM)
 add_custom_target(libreaktor DEPENDS "${_lib}")
 
+# Beside libreaktor.so, the modules as libreaktor-modules.a for apps built
+# outside the tree: an app links them in and exports them back to the library.
+if(REAKTOR_SHARED)
+    set(_mod_parts reaktor_modules)
+    foreach(_t mojibake_lib kb_text_shape)
+        if(TARGET ${_t})
+            list(APPEND _mod_parts ${_t})
+        endif()
+    endforeach()
+    set(_mod_lib "${CMAKE_BINARY_DIR}/lib/libreaktor-modules.a")
+    if(APPLE)
+        set(_mod_files "")
+        foreach(_t IN LISTS _mod_parts)
+            list(APPEND _mod_files "$<TARGET_FILE:${_t}>")
+        endforeach()
+        set(_mod_merge "${REAKTOR_LIBTOOL}" -static -o "${_mod_lib}" ${_mod_files})
+    else()
+        set(_mri "CREATE ${_mod_lib}\n")
+        foreach(_t IN LISTS _mod_parts)
+            string(APPEND _mri "ADDLIB $<TARGET_FILE:${_t}>\n")
+        endforeach()
+        string(APPEND _mri "SAVE\nEND\n")
+        file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor-modules.mri" CONTENT "${_mri}")
+        set(_mod_merge "${CMAKE_COMMAND}" "-DAR=${CMAKE_AR}"
+                       "-DMRI=${CMAKE_BINARY_DIR}/reaktor-modules.mri"
+                       -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/merge-lib.cmake")
+    endif()
+    add_custom_command(OUTPUT "${_mod_lib}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/lib"
+        COMMAND "${CMAKE_COMMAND}" -E remove -f "${_mod_lib}"
+        COMMAND ${_mod_merge}
+        DEPENDS ${_mod_parts}
+        COMMENT "Merging libreaktor-modules"
+        VERBATIM)
+    add_custom_target(libreaktor_modules DEPENDS "${_mod_lib}")
+    add_dependencies(libreaktor reaktor_shared libreaktor_modules)
+    if(REAKTOR_SHARED_SDL)
+        add_dependencies(libreaktor SDL3-shared)
+        # Both archives and libraries sit in one lib/: -l would pick the .so.
+        set(REAKTOR_PC_LINK "-l:libreaktor.a")
+    else()
+        # A framework is not found by -l, so libreaktor.a still is.
+        set(REAKTOR_PC_LINK "-lreaktor")
+    endif()
+else()
+    set(REAKTOR_PC_LINK "-lreaktor")
+endif()
+
 option(REAKTOR_INSTALL "Install libreaktor's files" ${_reaktor_top})
 if(REAKTOR_INSTALL)
     include(CMakePackageConfigHelpers)
@@ -1057,6 +1221,15 @@ if(REAKTOR_INSTALL)
     write_basic_package_version_file("${CMAKE_BINARY_DIR}/reaktorConfigVersion.cmake"
         COMPATIBILITY SameMinorVersion)
     install(FILES "${_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
+    if(REAKTOR_SHARED)
+        if(APPLE)
+            install(TARGETS reaktor_shared FRAMEWORK DESTINATION Frameworks COMPONENT libreaktor)
+        else()
+            install(TARGETS reaktor_shared SDL3-shared
+                    LIBRARY DESTINATION lib COMPONENT libreaktor NAMELINK_COMPONENT libreaktor)
+        endif()
+        install(FILES "${_mod_lib}" DESTINATION lib COMPONENT libreaktor OPTIONAL)
+    endif()
     install(DIRECTORY include/reaktor DESTINATION include COMPONENT libreaktor)
     install(FILES "${TP}/nuklear/nuklear.h" DESTINATION include COMPONENT libreaktor)
     install(FILES "${TP}/nukanim/nukanim.h" DESTINATION include COMPONENT libreaktor)
@@ -1068,6 +1241,11 @@ if(REAKTOR_INSTALL)
         configure_file(tools/reaktor.pc.in "${CMAKE_BINARY_DIR}/reaktor.pc" @ONLY)
         install(FILES "${CMAKE_BINARY_DIR}/reaktor.pc" DESTINATION lib/pkgconfig
                 COMPONENT libreaktor)
+        if(REAKTOR_SHARED_SDL)
+            configure_file(tools/reaktor-shared.pc.in "${CMAKE_BINARY_DIR}/reaktor-shared.pc" @ONLY)
+            install(FILES "${CMAKE_BINARY_DIR}/reaktor-shared.pc" DESTINATION lib/pkgconfig
+                    COMPONENT libreaktor)
+        endif()
     endif()
     install(DIRECTORY "${CMAKE_BINARY_DIR}/licenses/" DESTINATION share/reaktor/licenses
             COMPONENT libreaktor)

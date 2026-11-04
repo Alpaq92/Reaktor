@@ -154,6 +154,36 @@ jobs:
           done
           ditto -c -k --keepParent "dist/$name" "dist/$name.zip"
 
+      # Reaktor.framework, with SDL inside, beside the static library: built,
+      # linked from an outside app, and drawn the same; released as
+      # libreaktor-VERSION-macos-ARCH.zip.
+      - name: Shared libreaktor
+        id: shared
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          export CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=500M
+          version='${{ inputs.version || 'dev' }}'
+          name="libreaktor-shared-${version}-macos-${{ matrix.arch }}"
+          cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          cmake --build build-shared </dev/null
+          sh tools/ci/check-libreaktor.sh build-shared "$name" </dev/null
+          tar -C dist -xzf "dist/$name.tar.gz"
+          rm "dist/$name.tar.gz"
+          ditto -c -k --keepParent "dist/$name" "dist/$name.zip"
+          rm -rf "dist/$name"
+
+      - name: Upload the shared libreaktor
+        if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-shared-macos-${{ matrix.arch }}
+          path: |
+            dist/libreaktor-shared-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Check an app that embeds Reaktor
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
@@ -175,7 +205,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-libreaktor-macos-${{ matrix.arch }}
-          path: dist/libreaktor-*.zip
+          path: |
+            dist/libreaktor-*.zip
+            !dist/libreaktor-shared-*.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -186,4 +218,73 @@ jobs:
           name: macos-${{ matrix.arch }}
           path: smoke/
           if-no-files-found: warn
+          retention-days: 14
+
+  # One framework for both: the two per-architecture shared builds joined with
+  # lipo, released as libreaktor-VERSION-macos-universal.zip beside them.
+  universal:
+    name: macos universal
+    needs: macos
+    if: ${{ !cancelled() }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install packages
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: brew install ninja
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-libreaktor-shared-macos-arm64
+          path: dl/arm64
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-libreaktor-shared-macos-x86_64
+          path: dl/x86_64
+
+      - name: Join and check the universal libreaktor
+        run: |
+          v='${{ inputs.version || 'dev' }}'
+          for a in arm64 x86_64; do ditto -x -k "dl/$a/libreaktor-shared-$v-macos-$a.zip" "u/$a"; done
+          A="u/arm64/libreaktor-shared-$v-macos-arm64"
+          X="u/x86_64/libreaktor-shared-$v-macos-x86_64"
+          U="dist/libreaktor-shared-$v-macos-universal"
+          mkdir -p dist
+          ditto "$A" "$U"
+          # Every Mach-O file and archive becomes one with both; anything else
+          # must already be the same in the two.
+          (cd "$A" && find . -type f) | while read -r f; do
+            if file -b "$A/$f" | grep -q -E 'Mach-O|ar archive'; then
+              lipo -create "$A/$f" "$X/$f" -output "$U/$f"
+            else
+              cmp "$A/$f" "$X/$f"
+            fi
+          done
+          codesign --force --sign - "$U/Frameworks/Reaktor.framework"
+          lipo -info "$U/Frameworks/Reaktor.framework/Reaktor"
+          lipo "$U/Frameworks/Reaktor.framework/Reaktor" -verify_arch arm64 x86_64
+          lipo "$U/lib/libreaktor-modules.a" -verify_arch arm64 x86_64
+          cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                "-DCMAKE_PREFIX_PATH=$PWD/$U" -DCONSUMER_SHARED=ON \
+                "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" </dev/null
+          cmake --build build-consumer </dev/null
+          lipo build-consumer/simple -verify_arch arm64 x86_64
+          mkdir -p check
+          build-consumer/simple --theme light --video dummy \
+            --shot check/universal.bmp --a11y-dump check/universal.txt </dev/null
+          ditto -c -k --keepParent "$U" "$U.zip"
+
+      - name: Upload the universal libreaktor
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-shared-macos-universal
+          path: dist/libreaktor-shared-*-macos-universal.zip
+          if-no-files-found: error
           retention-days: 14

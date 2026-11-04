@@ -2,7 +2,7 @@
 # What a shared libreaktor would save: runs showcase, notepad and simple
 # together, idle, and reads each one's PSS and the clean pages of its own
 # binary, which are roughly libreaktor's resident code. Ten launches, medians.
-#   pss.sh [-x XVFB] [-w WRAP] [-n RUNS] BUILD
+#   pss.sh [-x XVFB] [-w WRAP] [-n RUNS] [-a "APP..."] BUILD
 # The estimate assumes the three apps would map one copy of the largest
 # binary's code: saved = sum(binary) - max(binary). App-specific code is
 # counted as library code, so the saving is an upper bound.
@@ -11,17 +11,18 @@ set -u
 xvfb=""
 wrap=""
 runs=10
-while getopts x:w:n: opt; do
+apps="showcase notepad simple"
+while getopts x:w:n:a: opt; do
     case $opt in
         x) xvfb=$OPTARG ;;
         w) wrap=$OPTARG ;;
         n) runs=$OPTARG ;;
-        *) echo "usage: pss.sh [-x XVFB] [-w WRAP] [-n RUNS] BUILD" >&2; exit 2 ;;
+        a) apps=$OPTARG ;;
+        *) echo "usage: pss.sh [-x XVFB] [-w WRAP] [-n RUNS] [-a \"APP...\"] BUILD" >&2; exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
 build=$(cd "$1" && pwd)
-apps="showcase notepad simple"
 
 mkdir -p smoke/pss
 if [ -n "$xvfb" ]; then
@@ -60,9 +61,11 @@ find_app() {
 rows=smoke/pss/runs.txt
 : >"$rows"
 i=0
+retries=0
 while [ "$i" -lt "$runs" ]; do
     i=$((i + 1))
     pids=""
+    missing=""
     for a in $apps; do
         $wrap "$build/$a" </dev/null >"smoke/pss/$a.log" 2>&1 &
         pids="$pids $!"
@@ -72,10 +75,22 @@ while [ "$i" -lt "$runs" ]; do
     found=""
     for a in $apps; do
         pid=$(find_app "$build/$a")
-        if [ -z "$pid" ]; then echo "run $i: $a is not running"; cat "smoke/pss/$a.log" 2>/dev/null; exit 1; fi
+        if [ -z "$pid" ]; then missing=$a; break; fi
         found="$found $pid"
         row="$row $(measure "$pid" "$build/$a")"
     done
+    # An app that quit early (a stray click or key on a live desktop does it)
+    # costs that run, not the measurement: say why, and launch the run again.
+    if [ -n "$missing" ]; then
+        echo "run $i: $missing is not running; its log:"
+        cat "smoke/pss/$missing.log" 2>/dev/null
+        kill $pids 2>/dev/null || :
+        for p in $pids; do wait "$p"; echo "  pid $p ended with status $?"; done
+        retries=$((retries + 1))
+        if [ "$retries" -gt 3 ]; then echo "giving up after $retries lost runs"; exit 1; fi
+        i=$((i - 1))
+        continue
+    fi
     echo "$row" >>"$rows"
     echo "run $i:$row"
     kill $found 2>/dev/null || :
@@ -92,8 +107,8 @@ for a in $apps; do
     printf '%-9s %10s %14s\n' "$a" "$(col $c)" "$(col $((c + 1)))"
     c=$((c + 2))
 done
-awk '{ p = $1 + $3 + $5; b = $2 + $4 + $6; m = $2
-       if ($4 > m) m = $4; if ($6 > m) m = $6
+awk '{ p = b = m = 0
+       for (k = 1; k < NF; k += 2) { p += $k; b += $(k + 1); if ($(k + 1) > m) m = $(k + 1) }
        print p, b - m, 100 * (b - m) / p }' "$rows" >smoke/pss/saving.txt
 echo
 echo "summed PSS:      $(awk '{ print $1 }' smoke/pss/saving.txt | median) kB"

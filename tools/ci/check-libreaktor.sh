@@ -1,7 +1,9 @@
 #!/bin/sh
 # Installs libreaktor from a build into dist/NAME, links examples/consumer
 # against it, checks that program draws what the built simple does, and
-# leaves dist/NAME.tar.gz.
+# leaves dist/NAME.tar.gz. Where the install has libreaktor.so or
+# Reaktor.framework (a REAKTOR_SHARED build), the consumer is linked against
+# that too, and must draw the same.
 #   check-libreaktor.sh [-i] [-w WRAP] BUILD NAME
 # -i: dist/NAME is installed already (a cross build ships it).
 set -eu
@@ -21,19 +23,43 @@ name=$2
 
 if [ "$installed" = 0 ]; then
     cmake --build "$build" --target libreaktor </dev/null
-    cmake --install "$build" --prefix "dist/$name" --component libreaktor </dev/null
+    cmake --install "$build" --prefix "dist/$name" --component libreaktor --strip </dev/null
 fi
 cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
       "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" </dev/null
 cmake --build build-consumer </dev/null
+runs="lib-built $build/simple
+lib-linked build-consumer/simple"
+if ls "dist/$name"/lib/libreaktor.so* >/dev/null 2>&1 || [ -d "dist/$name/Frameworks/Reaktor.framework" ]; then
+    cmake -S examples/consumer -B build-consumer-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
+          "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" -DCONSUMER_SHARED=ON </dev/null
+    cmake --build build-consumer-shared </dev/null
+    if command -v otool >/dev/null 2>&1; then
+        otool -L build-consumer-shared/simple | grep -q 'Reaktor\.framework/'
+    else
+        readelf -d build-consumer-shared/simple | grep -q 'NEEDED.*\[libreaktor\.so\.'
+    fi || { echo "the shared consumer does not link the shared libreaktor"; exit 1; }
+    runs="$runs
+lib-shared build-consumer-shared/simple"
+fi
 mkdir -p check
-for from in "lib-built $build/simple" "lib-linked build-consumer/simple"; do
-    set -- $from
-    $wrap "$2" --theme light --video dummy \
-        --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null
+echo "$runs" | while read -r out app; do
+    set -- --theme light --video dummy --shot "check/$out.bmp" --a11y-dump "check/$out.txt"
+    rc=0
+    $wrap "$app" "$@" </dev/null || rc=$?
+    if [ "$rc" != 0 ]; then
+        # Where it died, before giving up on it.
+        if command -v lldb >/dev/null 2>&1; then
+            $wrap lldb --batch -o run -o "bt all" -- "$app" "$@" </dev/null || :
+        elif command -v gdb >/dev/null 2>&1; then
+            $wrap gdb -batch -ex run -ex "thread apply all bt" --args "$app" "$@" </dev/null || :
+        fi
+        echo "$out: $app exited with status $rc"; exit "$rc"
+    fi
 done
 for e in bmp txt; do
     cmp "check/lib-built.$e" "check/lib-linked.$e"
+    if [ -f "check/lib-shared.$e" ]; then cmp "check/lib-built.$e" "check/lib-shared.$e"; fi
 done
 tar -C dist -czf "dist/$name.tar.gz" "$name"
-rm -rf "dist/$name" build-consumer
+rm -rf "dist/$name" build-consumer build-consumer-shared

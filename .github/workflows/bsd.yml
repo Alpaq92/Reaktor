@@ -54,13 +54,13 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
-          restore-keys: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
+          key: build-v3-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: build-v3-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-
 
       - name: Build a release from scratch, keeping only ccache
         if: ${{ inputs.version != '' }}
         shell: bash
-        run: rm -rf build build-arm64
+        run: rm -rf build build-arm64 build-arm64-shared
 
       # ninja rebuilds by mtime, and a checkout dates every file now. Date them
       # before the cached objects instead, and only what changed since the
@@ -192,10 +192,23 @@ jobs:
           if grep -rq "$sysroot" "dist/$name/lib/cmake" "dist/$name/lib/pkgconfig"; then
             echo "the package carries the sysroot's path"; exit 1
           fi
+          # The shared libreaktor too; the arm64 machine checks it below.
+          cmake -S . -B build-arm64-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/cross/${{ matrix.os }}-aarch64.cmake" \
+                -DREAKTOR_SYSROOT="$sysroot" -DREAKTOR_SHARED=ON \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          cmake --build build-arm64-shared --parallel 4 --target libreaktor </dev/null
+          shared="libreaktor-shared-${version}-${{ matrix.os }}-arm64"
+          cmake --install build-arm64-shared --prefix "dist/$shared" --component libreaktor --strip </dev/null
+          file "dist/$shared"/lib/libreaktor.so.0.* | grep -qi aarch64
+          if grep -rq "$sysroot" "dist/$shared/lib/cmake" "dist/$shared/lib/pkgconfig"; then
+            echo "the shared package carries the sysroot's path"; exit 1
+          fi
           tar -cf cross-${{ matrix.os }}-arm64.tar \
             $(sed 's|^|build-arm64/|' tools/ci/tests.txt) \
             build-arm64/showcase build-arm64/notepad build-arm64/simple build-arm64/bench \
-            build-arm64/licenses build-arm64/CMakeCache.txt "dist/$name"
+            build-arm64/licenses build-arm64/CMakeCache.txt "dist/$name" "dist/$shared"
 
       # Back to the runner now, so the next run finds this build in the cache
       # while this one is still testing.
@@ -209,7 +222,7 @@ jobs:
       - name: Drop an unfinished cross build
         if: ${{ always() && steps.cross.outcome == 'failure' }}
         shell: bash
-        run: rm -rf build-arm64
+        run: rm -rf build-arm64 build-arm64-shared
 
       - name: Note which commit the cached build is from
         if: ${{ always() && steps.build.outcome == 'success' }}
@@ -224,7 +237,7 @@ jobs:
             .ccache
             build
             build-arm64
-          key: build-v2-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
+          key: build-v3-${{ matrix.os }}-${{ matrix.version }}-${{ matrix.arch }}-${{ github.run_id }}
 
       - name: Save the package cache
         if: ${{ always() && steps.vm.outcome == 'success' }}
@@ -316,6 +329,34 @@ jobs:
             --shot check/lib-packaged.bmp --a11y-dump check/lib-packaged.txt </dev/null
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged.$e"; done
 
+      # The split packages. The app must run on the two runtime packages
+      # alone once the development one is gone.
+      - name: Pack and check the shared libreaktor packages
+        id: shared
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          case ${{ matrix.os }} in
+            freebsd) remove() { sudo pkg delete -y "$@"; } ;;
+            *)       remove() { sudo pkg_delete "$@"; } ;;
+          esac
+          remove libreaktor </dev/null
+          rm -rf build-pkg
+          sh tools/libreaktor-pkg.sh -s -i -o dist-pkg-shared </dev/null
+          cmake -S examples/consumer -B build-pkg-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH=/usr/local/reaktor -DCONSUMER_SHARED=ON </dev/null
+          cmake --build build-pkg-shared </dev/null
+          remove libreaktor-shared </dev/null
+          dbus-run-session -- build-pkg-shared/simple --theme light --video dummy \
+            --shot check/lib-packaged-shared.bmp --a11y-dump check/lib-packaged-shared.txt </dev/null
+          for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged-shared.$e"; done
+          version='${{ inputs.version || 'dev' }}'
+          name="libreaktor-shared-${version}-${{ matrix.os }}-${{ matrix.arch }}"
+          cmake --install build-pkg/build --prefix "dist/$name" --component libreaktor --strip </dev/null
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          rm -rf "dist/$name"
+
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
         shell: cpa.sh {0} --sync-files vm-to-runner
@@ -339,7 +380,19 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-libreaktor-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/libreaktor-*.tar.gz
+          path: |
+            dist/libreaktor-*.tar.gz
+            !dist/libreaktor-shared-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the shared libreaktor
+        if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-shared-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/libreaktor-shared-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -497,6 +550,15 @@ jobs:
           version='${{ inputs.version || 'dev' }}'
           sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-${version}-${{ matrix.os }}-arm64"
 
+      - name: Check the shared libreaktor
+        id: shared
+        if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
+        run: |
+          PATH=/usr/pkg/sbin:/usr/pkg/bin:/usr/local/sbin:/usr/local/bin:$PATH
+          export PATH
+          version='${{ inputs.version || 'dev' }}'
+          sh tools/ci/check-libreaktor.sh -i -w "dbus-run-session --" build-arm64 "libreaktor-shared-${version}-${{ matrix.os }}-arm64"
+
       - name: Collect the shots
         if: ${{ always() && steps.vm.outcome == 'success' }}
         shell: cpa.sh {0} --sync-files vm-to-runner
@@ -518,7 +580,19 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-libreaktor-${{ matrix.os }}-arm64
-          path: dist/libreaktor-*.tar.gz
+          path: |
+            dist/libreaktor-*.tar.gz
+            !dist/libreaktor-shared-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the shared libreaktor
+        if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-libreaktor-shared-${{ matrix.os }}-arm64
+          path: |
+            dist/libreaktor-shared-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 

@@ -4,130 +4,102 @@ C99. Widgets are declared; the look comes from CSS read at runtime.
 
 ## Build and run
 
-`./build.ps1` on Windows, `./build.sh` elsewhere — `cmake` is not on PATH, the
-script finds MSVC's. `./build.ps1 <target>` or `./build.sh <target>` builds one. Targets: `showcase`,
-`notepad`, `simple`, `bench`, plus the tests in `tests/`. `-Arch x86` (or
-`arm64`) builds that architecture into `build-<arch>`; ARM64 needs Visual
-Studio's ARM64 tools, which this machine lacks, so CI is its only check.
-`tools/package.sh <build> <folder> [.exe]` packs what a release ships; a
-version tag such as `1.2.3` publishes one through `release.yml`.
+`./build.sh [target]` (`./build.ps1` on Windows; `cmake` is not on PATH, the
+script finds it). Targets: `showcase`, `notepad`, `simple`, `bench`, the tests
+in `tests/`, and `libreaktor`. `-Arch x86|arm64` builds into `build-<arch>`;
+ARM64 is checked only by CI.
 
-CMake options pass straight through: `./build.ps1 -DREAKTOR_A11Y=OFF`,
-`./build.sh -- -DREAKTOR_A11Y=OFF`. The cache keeps an option, so a later build
-without the flag does not reset it — pass `=ON` to switch back.
+CMake options pass through: `./build.ps1 -DREAKTOR_A11Y=OFF`,
+`./build.sh -- -DREAKTOR_A11Y=OFF`. The cache keeps them, so pass `=OFF` or
+`=ON` again to switch back. Check `build/CMakeCache.txt` before measuring:
+`REAKTOR_SHARED=ON` left in `build/` makes every sample a shared one.
+
+Shipping: `tools/package.sh` packs a release folder, `tools/libreaktor-pkg.sh`
+a system package (`libreaktor` static; with `-s`, `libreaktor0`,
+`libreaktor-sdl3-0` and `libreaktor-shared`). A version tag such as `1.2.3`
+publishes through `release.yml`.
 
 ## Verify against pixels, not source
 
-Reasoning from a dependency's source about what it will draw has been wrong
-often enough to be a rule. Take the screenshot, diff the dump, read the
-framebuffer.
+Reasoning about what a dependency will draw has been wrong too often. Take the
+screenshot and diff the dump:
 
 ```bash
 ./build/showcase --tab 7 --theme dark --shot a.bmp --a11y-dump a.txt
 ```
 
-`--a11y-dump` writes one line per node with role, name, value, state and
-**bounds**. Diff two and anything that moved by a pixel says so. It is the
-regression oracle for every layout or style change.
+The dump has one line per node with role, name, value, state and bounds, so
+a one-pixel move shows. Lines marked `volatile` (Diagnostics timings) differ
+on every run.
 
 ## Traps that have cost real time
 
-- **A rule cannot resize a box the page already sized.** Any `.box = { .h = N }`
-  in a page locks CSS out of that axis. This is the usual reason a stylesheet
-  "only changes the color".
-- **`core/ui/style_map.c` is the only writer of `nk_style`.** Setting a widget
-  style anywhere else works until the next theme change reloads the sheets.
-- **A box is placed one frame late**, and found again by its **name**. A widget
-  whose label changes every frame needs a stable `.name` or it never gets a
-  rectangle.
-- **Hover is drawn only across a hot rectangle.** Pointer motion runs a frame
-  only when it crosses a rectangle `hot_push` registered the frame before, so a
-  widget that looks different under the pointer and registers none keeps its
-  old look until some other input.
-- **A percentage is not a length to the CSS engine.** `core/css/css.c` has no
-  box to resolve one against, so `width: 100%` is dropped and a lower rule's
-  value shows through. An attribute selector reads as a class: `[type=range]`
-  answers `input.type-range`.
-- **The renderer snaps every vertex to whole pixels.** Sub-pixel corrections
-  are discarded, and rects that abut can round apart into a visible seam.
-- **SDL redraws a software rectangle its own way.** Its software renderer
-  turns two triangles that make a rectangle into a fill or a copy, and
-  truncates the scaled position and size apart, so at a fractional scale a run
-  a whole number of device pixels wide loses one. `nk_sdl_quad` draws every
-  such rectangle from device pixels before SDL sees it.
-- **A one-pixel stroke is two pixels here.** `nk_stroke_rect` casts its rect to
-  `short`, so a half-pixel inset never reaches the draw list, and with line
-  anti-aliasing on a stroke of thickness one is always two half-alpha rows.
-  A border is `reaktor_edge_round`, inside the box: a ring mask for its
-  corners, and its runs cut from the mask's middle texels, which hold a
-  straight band so a run is sharp and as thick as its corners at any scale.
-- **A rounded fill is jagged unless it is a mask.** Fill anti-aliasing is off
-  on the software renderer, the default (`.anti_aliasing` and `--aa` decide;
-  a GPU renderer has it on), so a fill with corners goes through `reaktor_fill_round`,
-  and `reaktor_render` swaps each one Nuklear drew itself for masks, relinking
-  the built command list — whose end is wherever a `next` reaches
-  `ctx->memory.allocated`.
-- **Measure the present, not the draw.** On a machine with no GPU, most of a
-  frame is `SDL_RenderPresent`. `build/render/present` split is on the
-  Diagnostics page and in `bench --no-vsync`.
-- **Text the atlas cannot draw is not Nuklear's to draw.** A string with any
-  character the atlas lacks — Japanese, Arabic — is measured by
-  `core/text/text.c` and drawn from the custom command it swaps in for
-  Nuklear's text command, so a change to how Nuklear or the renderer places
-  glyphs does not reach it. Its bidi levels are matched to mojibake's by order:
-  mojibake 0.5.0 records `byte_offset` at a character's last byte.
-- **Only Nuklear's active window gets input.** Every other window carries a
-  sticky `NK_WINDOW_ROM` until a click or hover activates it inside
-  `nk_begin`. A layer that must not take input is begun
-  `NK_WINDOW_NOT_INTERACTIVE` with `ctx->input` blanked — `reaktor_layer_begin`
-  with `HOLD_ALL` — and focus is handed back with `reaktor_layer_focus`.
-- **A field's keys are its own, wherever it was declared.** Nuklear keeps
-  edit-active state on the window a widget sits in, so the page's window misses
-  every field inside a group; `app->editing` is what navigation asks before it
-  gives up the arrows, Home, End, Enter and Space. Home and End also scroll the
-  panel out from under the edit, so the runtime keeps those two.
-- **A field's value is not its buffer, and its length is the caller's.**
-  `nk_edit_string` leaves the bytes past the length alone, so the buffer read as
-  a string is the last, longer value; a length from anywhere but the field's own
-  last frame reseeds it empty every frame.
-- **An empty edit has no text pointer.** `nk_str_get_const` answers NULL while
-  `nk_str_len_char` still answers bytes, so that pair measures a null pointer
-  with a positive length.
-- **A tap focuses the canvas by itself.** The canvas is focusable, so a
-  touch's compatibility `mousedown` moves focus to it as its default action,
-  with no script involved. Only canceling the touch `pointerdown` stops it.
-- **SDL hands the app its events a frame late.** Its web handlers queue them
-  as they happen, but the app sees them only when the next iteration pumps, so
-  anything the page keeps in a queue of its own overtakes them. The page's
-  typing goes onto SDL's queue for that reason.
-- **A hidden web page runs no frames.** The web build's main loop waits on
-  `requestAnimationFrame`, which never fires in a background tab, a minimized
-  window or a browser pane that is not on screen. `#a11y` is made in `main()`,
-  so the root is there, but the canvas stays blank and the tree empty until
-  the page renders — and a scripted click or screenshot makes it render, so
-  it looks as if the tree waits for input. Check `document.visibilityState`.
+- **A rule cannot resize a box the page sized.** `.box = { .h = N }` locks CSS
+  out of that axis; usually why a stylesheet "only changes the color".
+- **`core/ui/style_map.c` is the only writer of `nk_style`.** Anything set
+  elsewhere is lost on the next theme change.
+- **A box is placed one frame late and found by its name.** A widget whose
+  label changes every frame needs a stable `.name`.
+- **Hover redraws only across a hot rectangle.** Motion runs a frame only when
+  it crosses a rectangle `hot_push` registered the frame before.
+- **A percentage is not a length to `core/css/css.c`.** `width: 100%` is
+  dropped and a lower rule shows through. `[type=range]` reads as
+  `input.type-range`.
+- **Vertices snap to whole pixels.** Sub-pixel corrections vanish; abutting
+  rects can round apart into a seam.
+- **SDL's software renderer redraws rectangles its own way**, truncating
+  position and size apart at fractional scales. `nk_sdl_quad` draws them from
+  device pixels first.
+- **A one-pixel stroke is two pixels.** `nk_stroke_rect` casts to `short` and
+  anti-aliasing splits it. Borders are `reaktor_edge_round`: a ring mask for
+  corners, runs cut from its middle texels.
+- **Rounded fills are masks.** Fill anti-aliasing is off on the software
+  renderer, so `reaktor_render` swaps each rounded fill for
+  `reaktor_fill_round`, relinking the command list (it ends where a `next`
+  reaches `ctx->memory.allocated`).
+- **Measure the present, not the draw.** Without a GPU most of a frame is
+  `SDL_RenderPresent`; the Diagnostics page and `bench --no-vsync` split it.
+- **Text the atlas lacks is not Nuklear's.** Strings with Japanese, Arabic and
+  the like are measured and drawn by `core/text/text.c` through a custom
+  command. mojibake 0.5.0 records `byte_offset` at a character's last byte.
+- **Only Nuklear's active window gets input.** Others carry a sticky
+  `NK_WINDOW_ROM`. A layer that must not take input uses `reaktor_layer_begin`
+  with `HOLD_ALL`; `reaktor_layer_focus` hands focus back.
+- **A field's keys are its own.** Edit state lives on the widget's window, so
+  navigation asks `app->editing` before taking arrows, Home, End, Enter or
+  Space. The runtime keeps Home and End, which would scroll the panel.
+- **A field's value is not its buffer.** `nk_edit_string` leaves bytes past
+  the length; a length not from the field's own last frame reseeds it empty.
+- **An empty edit has no text pointer.** `nk_str_get_const` is NULL while
+  `nk_str_len_char` is positive.
+- **Web: a tap focuses the canvas.** Only canceling the touch `pointerdown`
+  stops it.
+- **Web: SDL delivers events a frame late**, so the page's own typing goes
+  through SDL's queue to keep its order.
+- **Web: a hidden page runs no frames.** No `requestAnimationFrame` in a
+  background tab, so the canvas and a11y tree stay empty. Check
+  `document.visibilityState`.
+- **The shared library exports only `tools/reaktor.map`.** A new public call
+  goes in the map, or `check-exports.sh` fails; a struct an app sees that
+  changes needs a new SOVERSION and `check-abi.sh -u`. OpenBSD installs no
+  unversioned `libreaktor.so`.
 
 ## House rules
 
-- Dependencies are git submodules under `external/`, read as they ship. Never
-  transcribe a value out of one, and never generate a header from one. The one
-  exception is `REAKTOR_BUILTINS` in CMakeLists.txt: Water.css's two palettes
-  and its `src/parts/`, and the seven Ionicons the widgets draw (three chevrons, three discs, the
-  toast's close cross) are compiled in byte for byte, beside the Aileron
-  fonts, the mark and reaktor.css. Nothing else from a submodule is — not the
-  rest of Ionicons, not Simple.css. SDL is built with `core/sdl/no_dynapi.h`
-  forced in, which turns its dynamic API off; NOTICE.md says why.
-- Applications see only `include/reaktor/`. The samples include
-  `reaktor/reaktor.h` and `reaktor/main.h`, nothing from `core/`, and
-  `App` is opaque to them; what a sample needs becomes a public call there.
-  MSVC builds apps with implicit declarations as errors, which catches a miss.
-- American English, in code and prose.
-- No environment variables. Anything worth overriding is a command-line flag
-  the runtime strips from `argv`.
-- `docs/DOCUMENTATION.md` is the whole of it; `PERFORMANCE.md` holds measured
+- Dependencies are submodules under `external/`, used as they ship. Never
+  copy a value out of one or generate a header from one. The exception is
+  `REAKTOR_BUILTINS` in CMakeLists.txt: Water.css's palettes and `src/parts/`,
+  the seven Ionicons the widgets draw, the Aileron fonts, the mark and
+  reaktor.css, compiled in byte for byte. SDL is built with
+  `core/sdl/no_dynapi.h`; NOTICE.md says why.
+- Applications see only `include/reaktor/`; `App` is opaque. What a sample
+  needs becomes a public call. MSVC treats implicit declarations as errors.
+- American English.
+- No environment variables: overrides are command-line flags the runtime
+  strips from `argv`.
+- `docs/DOCUMENTATION.md` is the only manual; `PERFORMANCE.md` holds measured
   numbers only, with the machine named.
-- An optional module is an interface library plus a `_none` twin defining the
-  same functions, and an application links one of the two; its
-  `REAKTOR_<NAME>` option, default `ON`, swaps in the twin. Localization and
-  text shaping are two modules, not one. A module that is off must leave pixels
-  and `--a11y-dump` byte-identical except for what the module itself produces.
+- An optional module is an interface library plus a `_none` twin, switched by
+  `REAKTOR_<NAME>` (default `ON`). Off, pixels and `--a11y-dump` must not
+  change beyond what the module draws. Localization and text shaping are
+  separate modules.

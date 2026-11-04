@@ -135,7 +135,8 @@ jobs:
           ### libreaktor
 
           The library itself, for building your own applications: the same
-          systems and architectures, \`libreaktor-$v-<system>-<arch>\`, and
+          systems and architectures, \`libreaktor-$v-<system>-<arch>\` (a
+          \`.zip\` on Windows and macOS, a \`.tar.gz\` elsewhere), and
           \`libreaktor-$v-wasm.tar.gz\`. Each holds one static library (\`reaktor.lib\`
           on Windows, built against the DLL C runtime; \`libreaktor.a\` elsewhere)
           with SDL, FreeType, plutosvg, Onlay, NukAnim, mojibake and kb_text_shape
@@ -153,9 +154,39 @@ jobs:
           \`PKG_CONFIG_PATH\` at its \`lib/pkgconfig\`.
 
           On Linux it also comes as a system package that installs into
-          \`/opt/reaktor\`: \`libreaktor-dev_${v}_<arch>.deb\` for Debian and Ubuntu
-          (amd64, i386, arm64, armhf, riscv64) and \`libreaktor-devel-${v}-1.<arch>.rpm\`
+          \`/opt/reaktor\`: \`libreaktor_${v}_<arch>.deb\` for Debian and Ubuntu
+          (amd64, i386, arm64, armhf, riscv64) and \`libreaktor-${v}-1.<arch>.rpm\`
           for Fedora and RHEL (x86_64, aarch64).
+
+          #### Shared
+
+          On macOS it also comes as \`Reaktor.framework\`, with SDL inside, in
+          \`libreaktor-shared-$v-macos-<arch>.zip\` (arm64, x86_64, or \`universal\` with
+          both in every binary) beside \`libreaktor-modules.a\` and the static
+          files: link \`reaktor::shared\`. Apps share it from
+          \`/Library/Frameworks\`, which their rpath searches. It is signed ad
+          hoc and not notarized, like everything here, so an app that turns on
+          the hardened runtime cannot load it, and a downloaded copy needs
+          \`xattr -dr com.apple.quarantine Reaktor.framework\` once.
+
+          On Linux and the BSDs (x86-64) the library also comes shared, so
+          several apps can share one copy in memory:
+          \`libreaktor-shared-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.0\`,
+          our own SDL as \`libreaktor-sdl3.so.0\`, \`libreaktor-modules.a\` (the
+          modules, which go into each app), everything the static one has, and
+          \`reaktor-shared.pc\`. Link with \`reaktor::shared\` in CMake or
+          \`pkg-config --cflags --libs reaktor-shared\`; the app records where the
+          libraries are. As system packages it splits in three:
+          \`libreaktor-sdl3-0\` and \`libreaktor0\`, all an app needs to run, and
+          \`libreaktor-shared\` to build one:
+          \`libreaktor0_${v}_<arch>.deb\`, \`libreaktor-sdl3-0_${v}_<arch>.deb\` and
+          the \`.rpm\`s beside them. The static library stays the default.
+
+          **Upgrading:** the static package was \`libreaktor-dev\` as a \`.deb\`
+          and \`libreaktor-devel\` as an \`.rpm\`; it is \`libreaktor\` now, as it
+          was already on the BSDs. Remove the old one first, since both install
+          the headers. \`libreaktor-shared\` is the shared one and conflicts with
+          it the same way.
 
           \`SHA256SUMS\` lists every download's checksum. GitHub's own source
           archives below leave the submodules out; the \`-source.tar.gz\` above has

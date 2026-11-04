@@ -15,9 +15,6 @@ char *reaktor_path_from_cwd(const char *path);
 int   reaktor_grow(void **p, int *cap, int need, size_t size);
 const char *reaktor_path_leaf(const char *path);
 
-char *reaktor_c_locale_keep(int numeric);
-void  reaktor_c_locale_put(int numeric, char *kept);
-
 char *reaktor_asset_load(const char *name, size_t *len);
 int   reaktor_asset_exists(const char *name);
 int   reaktor_asset_register(const char *name, const void *data, size_t size);

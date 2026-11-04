@@ -110,6 +110,34 @@ stylesheets with its own engine in place of libcss. The Windows
 binary's icon is a 125 KB resource of nine sizes, built from the SVG by
 `tools/mkicon.c`.
 
+Nuklear is compiled with `-Os` (`/O1` with MSVC): the stripped shared
+libreaktor on Linux x86-64 goes from 1,880,624 bytes at `-O3` to 1,737,264,
+and Nuklear's own code from 306,649 to 168,042. `bench --no-vsync --video
+dummy` on the Linux desktop below, median of seven runs, CPU time a frame:
+
+| Build | `-O3` | `-Os`, three rounds |
+| --- | --- | --- |
+| shared | 563 µs | 574, 563, 528 µs |
+| static | 527 µs | 548, 523, 511 µs |
+
+The rounds spread wider than the change. Every showcase tab in both themes,
+`notepad` and `simple` draw and dump byte for byte as they did at `-O3`.
+
+SDL's GPU API is left out unless `REAKTOR_SHADERS` is on. Built in, it costs
+the software renderer too: SDL then loads the Vulkan loader, every installed
+Vulkan driver and LLVM, and the Diagnostics page's "window and renderer" step
+goes from +0.2 MB private to +34.4 MB. On the Linux desktop below, the shared
+build, `bench --no-vsync`, five runs each, both on the software backend:
+
+| `REAKTOR_SHADERS` | A frame on the display | Private |
+| --- | --- | --- |
+| `OFF` | 2.08–2.35 ms | 5.0 MB |
+| `ON` | 13.59–16.31 ms | 63.1 MB |
+
+The stripped `libreaktor-sdl3.so` is 2,659,344 bytes without it and 2,950,704
+with it. With `--video dummy`, where nothing reaches a display, the frame costs
+563–622 µs of CPU without it and 588–740 µs with it.
+
 ### Modules
 
 `showcase`, each module off in turn; native on the Windows machine below, web
@@ -212,6 +240,21 @@ llvmpipe (no GPU passthrough), a KVM guest on an AMD Ryzen 5 4600H with 4
 cores. `showcase` grows to 14,224 KB there, while the library pages barely
 move. Counting every clean page of a binary, sharing saves 4,602 KB of
 24,157 KB, or 19.0%; counted page by page, 4,176 KB of 24,200 KB, or 17.3%.
+
+**Shared, it saves 19%.** The same three on that desktop, five launches each,
+static and then linked to `libreaktor.so` (`-DREAKTOR_SHARED=ON`):
+
+| | Static PSS | Shared PSS |
+| --- | --- | --- |
+| `showcase` | 8,528 KB | 7,323 KB |
+| `notepad` | 5,480 KB | 4,280 KB |
+| `simple` | 4,473 KB | 3,379 KB |
+| Together | 18,544 KB | 14,941 KB |
+
+3,603 KB less, 19.4%, near the estimate above. One app on its own pays for
+the split instead: its resident set is 0.6–0.9 MB larger shared (`simple`
+8.2 MB against 7.3, `showcase` 18.7 against 18.0), the library's relocations
+and a second SDL image that no other app is there to share.
 
 ### The tray on Linux
 
