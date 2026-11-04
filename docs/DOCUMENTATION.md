@@ -73,7 +73,7 @@ errors, so an internal function cannot slip back in.
 | `reaktor_lang_pref(app)` | The language `--lang` asked for, or `NULL` |
 | `reaktor_set_borderless(app, on)`, `reaktor_borderless(app)` | Switch the main window's frame off for a titlebar of your own, drawn with `.window.hit_test` |
 | `reaktor_set_visible(app, on)` | Show or hide that App's window; with `.window.hidden`, the main window waits for it |
-| `reaktor_version()` | Reaktor's version, such as `"0.8.0"` |
+| `reaktor_version()` | Reaktor's version, such as `"0.9.0"` |
 
 The `set` calls are for the main thread, take effect at the next frame, and do
 nothing when nothing changes.
@@ -1104,7 +1104,7 @@ mojibake and kb_text_shape, merged with `lib.exe`, Apple's `libtool` or an
 and SDL's, a CMake package, a pkg-config file and `share/reaktor/licenses`:
 
 ```cmake
-find_package(reaktor 0.8 REQUIRED)
+find_package(reaktor 0.9 REQUIRED)
 add_executable(app WIN32 main.c)
 target_link_libraries(app PRIVATE reaktor::reaktor)
 ```
@@ -1129,7 +1129,9 @@ stay in each app, from `libreaktor-modules.a`. Link `reaktor::shared`, or
 it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
 where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
 `-i` installs it, `-s` packs the shared library instead, as `libreaktor0`
-and `libreaktor-sdl3-0` to run an app and `libreaktor-shared` to build one,
+and `libreaktor-sdl3-0` to run an app (`libreaktor-sdl3` on OpenBSD, whose
+package names read a dash before a digit as the version) and
+`libreaktor-shared` to build one,
 `-p` sets the prefix, `-o` the output folder, `-b` packs
 from an existing build. On Linux the `deb` and `rpm` targets do the same from
 the current build, into `build/dist`; each release carries both, built by CI.
@@ -1166,8 +1168,7 @@ Passed to CMake, through either script:
 | `REAKTOR_NOTIFY` | `ON` | System notifications |
 | `REAKTOR_PRINT` | `ON` | Printing and PDF export |
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
-| `REAKTOR_SDL_D3D` | `ON` | Build SDL's Direct3D 11 and 12 renderers on Windows; off, a program is 105 KB smaller and draws in software only |
-| `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs; macOS builds them either way |
+| `REAKTOR_RENDERERS` | empty | The renderers built beside `software`, in `--renderer`'s words, with commas or semicolons between: `direct3d11`, `direct3d12`, `opengl`, `opengles2`. Empty is the platform's default, `direct3d11,direct3d12` on Windows and nothing on Linux and the BSDs; `none` is software only, and a Windows program is then 105 KB smaller. macOS builds `metal` and `opengl` either way, the web `opengles2` |
 | `REAKTOR_SHADERS` | `OFF` | Build SDL's GPU API and its renderer, `--renderer sdl-gpu`, for an application's own shaders: Direct3D 12 on Windows, Metal on macOS, Vulkan on Linux and the BSDs; on, a program is 184 KB larger on Windows, and on Linux loads the Vulkan drivers even to draw in software |
 | `REAKTOR_SHARED` | `OFF` | Also build the [shared library](#in-your-own-project), and link the samples to it; Linux, the BSDs and macOS |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
@@ -1354,12 +1355,12 @@ command line names one, and `--new-instance` is passed for it.
 
 | Name | Where | For | Against |
 | --- | --- | --- | --- |
-| `gpu` | Everywhere | `metal` on macOS; `opengl`, else `direct3d12`, else `direct3d11` on Windows; `opengl`, else `opengles2` on Linux and the BSDs; `opengles2` on the web | A driver left out of the build is skipped, so without `-DREAKTOR_SDL_GL=ON` it is `directx` on Windows; on Linux with no GPU, `opengl` runs on the CPU through Mesa |
+| `gpu` | Everywhere | `metal` on macOS; `opengl`, else `direct3d12`, else `direct3d11` on Windows; `opengl`, else `opengles2` on Linux and the BSDs; `opengles2` on the web | A driver left out of the build is skipped, so without `opengl` in `REAKTOR_RENDERERS` it is `directx` on Windows; on Linux with no GPU, `opengl` runs on the CPU through Mesa |
 | `directx` | Windows | Direct3D 12 where it starts, else 11 | As below |
 | `direct3d12` | Windows 10 and later | Least CPU once running | Most memory, slowest start |
-| `direct3d11` | Windows | Any Windows GPU | Most CPU of the GPU renderers measured; neither Direct3D renderer is built with `-DREAKTOR_SDL_D3D=OFF` |
-| `opengl` | Windows, Linux, BSDs, macOS | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`, except on macOS; on Linux without a GPU it loads Mesa and LLVM; macOS deprecates it in favor of Metal |
-| `opengles2` | Where the driver offers it | | Built only with `-DREAKTOR_SDL_GL=ON`; not measured |
+| `direct3d11` | Windows | Any Windows GPU | Most CPU of the GPU renderers measured; neither Direct3D renderer is built with `-DREAKTOR_RENDERERS=none` |
+| `opengl` | Windows, Linux, BSDs, macOS | Little CPU once running | Built only with `opengl` in `REAKTOR_RENDERERS`, except on macOS; on Linux without a GPU it loads Mesa and LLVM; macOS deprecates it in favor of Metal |
+| `opengles2` | Where the driver offers it | | Built only with `opengles2` in `REAKTOR_RENDERERS`; not measured |
 | `metal` | macOS | | |
 | `sdl-gpu` | Windows, macOS, Linux, BSDs | SDL's GPU API: Direct3D 12, Metal or Vulkan, and an application's own shaders through `SDL_CreateGPURenderState` | Built only with `-DREAKTOR_SHADERS=ON`; not measured |
 | `auto` | Everywhere | SDL chooses | |

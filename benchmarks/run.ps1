@@ -41,7 +41,7 @@ function Get-Arm([string]$name) {
             @{ exe  = Join-Path $root "build\bench.exe"
                args = @("--renderer", "opengl")
                dir  = $root
-               make = "./build.ps1 bench -DREAKTOR_SDL_GL=ON" }
+               make = "./build.ps1 bench -DREAKTOR_RENDERERS=direct3d11,direct3d12,opengl" }
         }
         "shaft" {
             @{ exe  = Join-Path $here "shaft-bench\.build\release\ShaftBench.exe"

@@ -207,7 +207,7 @@ the module drew. CMake keeps the option until you pass `=ON`. See
 ### How do I install libreaktor and link against it?
 
 Take the release's archive or the `.deb` or `.rpm`, or run
-`sh tools/libreaktor-pkg.sh -i`. Then `find_package(reaktor 0.8 REQUIRED)`
+`sh tools/libreaktor-pkg.sh -i`. Then `find_package(reaktor 0.9 REQUIRED)`
 and link `reaktor::reaktor`, or use `pkg-config --cflags --libs reaktor`. To
 build it into your tree instead, `add_subdirectory` the checkout and call
 `reaktor_add_app`. See [In your own project](DOCUMENTATION.md#in-your-own-project).
@@ -244,7 +244,7 @@ memory and starts fastest. A GPU
 renderer pays off in long, continuous animation: `--renderer gpu` takes
 Metal on macOS and OpenGL elsewhere where it is built, and `--renderer directx` takes
 Direct3D 12 on Windows where it starts, else 11, and `opengl` needs a build
-with `-DREAKTOR_SDL_GL=ON`. Expect six to thirteen times the memory. See
+that names it in `REAKTOR_RENDERERS`. Expect six to thirteen times the memory. See
 [The renderer](DOCUMENTATION.md#the-renderer).
 
 ### Why is the frame time high on a machine with no GPU?
