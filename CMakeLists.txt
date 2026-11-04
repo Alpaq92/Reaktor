@@ -492,7 +492,7 @@ if(REAKTOR_TRAY AND NOT WIN32 AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-option(REAKTOR_NOTIFY"System notifications: a toast, a D-Bus notification, the browser's" ON)
+option(REAKTOR_NOTIFY "System notifications: a toast, a D-Bus notification, the browser's" ON)
 
 set(_notify "${CMAKE_CURRENT_SOURCE_DIR}/platform/notify")
 add_library(reaktor_notify_none INTERFACE)
