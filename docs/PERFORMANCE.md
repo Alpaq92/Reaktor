@@ -56,6 +56,17 @@ plotted: it does not link on Windows.
 - **Startup counts.** A run that draws for only 0.2 s takes 0.16 s of CPU on
   `software` and 0.41–0.47 s on a GPU renderer (medians of five runs). Once running, `direct3d12` and
   `opengl` take two to three points less than `software`.
+- **About 2.2 MB of Reaktor's 8.9 is the antivirus.** Bitdefender puts two
+  components into every process on this machine, so every arm carries them.
+  Walked with VirtualQueryEx and a heap ledger on `bench`, they come to two
+  private heaps of 776 KB each (one the hook module's, one holding a 642 KB
+  table of the other's), 74 code pages patched with hooks (303 KB) and 56
+  more copied unchanged (229 KB), 53 KB of trampolines and about 180 KB of
+  pages beside. Subtract that to compare with a machine without it. The rest
+  of the 9.3 MB walked is 1.9 MB of window framebuffer, 1.75 MB of system DLL
+  data made private, about 0.9 MB of page tables and other commit a walk
+  cannot see, and 1.1 MB allocated by Reaktor, SDL, Nuklear and FreeType —
+  the glyph atlas, 537 KB, and its table, 143 KB, the largest.
 - **A GPU renderer's CPU depends on what else uses the GPU.** With another
   program keeping it busy, `direct3d11` and `opengl` missed 60 fps and took
   16–28% of a core. These runs had the GeForce RTX 2060 idle.
@@ -194,6 +205,9 @@ window of its own, and the first such window keeps its atlas for the next.
   table (281 KB) for eight sizes in two weights. Most of the rest is the heaps
   of the Windows components it loads: UI Automation, the shell, the input
   method.
+- **Bitdefender is in every Windows figure here**, about 2.2 MB of each;
+  [the chart's note](#against-the-others) has the split, measured on `bench`.
+  In the showcase its two heaps are the 776 KB pair among the heap segments.
 
 - **Linux started at 123.6 MB, almost none of it Reaktor's.** SDL's X11 driver
   set up OpenGL whatever the renderer, and with no GPU that loads Mesa's

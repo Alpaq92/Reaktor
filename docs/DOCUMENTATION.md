@@ -1129,7 +1129,9 @@ stay in each app, from `libreaktor-modules.a`. Link `reaktor::shared`, or
 it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
 where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
 `-i` installs it, `-s` packs the shared library instead, as `libreaktor0`
-and `libreaktor-sdl3-0` to run an app and `libreaktor-shared` to build one,
+and `libreaktor-sdl3-0` to run an app (`libreaktor-sdl3` on OpenBSD, whose
+package names read a dash before a digit as the version) and
+`libreaktor-shared` to build one,
 `-p` sets the prefix, `-o` the output folder, `-b` packs
 from an existing build. On Linux the `deb` and `rpm` targets do the same from
 the current build, into `build/dist`; each release carries both, built by CI.
