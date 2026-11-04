@@ -859,6 +859,12 @@ app_init(void **appstate, int argc, char *argv[])
     if (!SDL_Init(SDL_INIT_VIDEO)) return fail(app, "SDL could not start");
     /* SDL gives the first registration SDL_EVENT_USER, the type wakes push. */
     SDL_RegisterEvents(1);
+    /* SDL makes every window a drop target while a drop event is enabled; on
+       Windows that is COM's drag-and-drop, three DLLs and three threads. */
+    if (!g_launch.file_opened) {
+        SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, false);
+        SDL_SetEventEnabled(SDL_EVENT_DROP_TEXT, false);
+    }
     reaktor_signal_watch();
     if (g_launch.console == REAKTOR_CONSOLE_DEBUG)
         SDL_SetLogPriorities(SDL_LOG_PRIORITY_DEBUG);
