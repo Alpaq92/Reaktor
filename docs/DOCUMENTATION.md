@@ -1118,10 +1118,19 @@ the emscripten toolchain searches only its own sysroot.
 against an installed package: every CI job does, and checks it draws as the
 in-tree build does.
 
+**Shared.** On Linux, the BSDs and macOS, `-DREAKTOR_SHARED=ON` also builds
+the library shared, so several apps map one copy: `libreaktor.so` with SDL as
+`libreaktor-sdl3.so`, or `Reaktor.framework` with SDL inside. The modules
+stay in each app, from `libreaktor-modules.a`. Link `reaktor::shared`, or
+`pkg-config --cflags --libs reaktor-shared`. Releases carry it as
+`libreaktor-shared-<version>-<system>-<arch>`.
+
 **As a system package.** `tools/libreaktor-pkg.sh` builds libreaktor and packs
 it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
 where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
-`-i` installs it, `-p` sets the prefix, `-o` the output folder, `-b` packs
+`-i` installs it, `-s` packs the shared library instead, as `libreaktor0`
+and `libreaktor-sdl3-0` to run an app and `libreaktor-shared` to build one,
+`-p` sets the prefix, `-o` the output folder, `-b` packs
 from an existing build. On Linux the `deb` and `rpm` targets do the same from
 the current build, into `build/dist`; each release carries both, built by CI.
 
@@ -1160,6 +1169,7 @@ Passed to CMake, through either script:
 | `REAKTOR_SDL_D3D` | `ON` | Build SDL's Direct3D 11 and 12 renderers on Windows; off, a program is 105 KB smaller and draws in software only |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs; macOS builds them either way |
 | `REAKTOR_SHADERS` | `OFF` | Build SDL's GPU API and its renderer, `--renderer sdl-gpu`, for an application's own shaders: Direct3D 12 on Windows, Metal on macOS, Vulkan on Linux and the BSDs; on, a program is 184 KB larger on Windows, and on Linux loads the Vulkan drivers even to draw in software |
+| `REAKTOR_SHARED` | `OFF` | Also build the [shared library](#in-your-own-project), and link the samples to it; Linux, the BSDs and macOS |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
