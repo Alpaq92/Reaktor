@@ -198,7 +198,7 @@ window of its own, and the first such window keeps its atlas for the next.
 - **Linux started at 123.6 MB, almost none of it Reaktor's.** SDL's X11 driver
   set up OpenGL whatever the renderer, and with no GPU that loads Mesa's
   software OpenGL and LLVM: 53 MB of libLLVM, 10 of Mesa, 30 of heap.
-  Compiling SDL's GL drivers out brought it to 4.3 MB; `-DREAKTOR_SDL_GL=ON`
+  Compiling SDL's GL drivers out brought it to 4.3 MB; `-DREAKTOR_RENDERERS=opengl`
   puts them back.
 - **GhostBSD lands beside Linux.** Of its 5.1 MB, 2.5 MB is SDL's framebuffer
   (960×680×4), shared with the X server. Its figures come from `ps` and
