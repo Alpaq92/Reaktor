@@ -236,7 +236,7 @@ pack() {
 # alone: libreaktor-sdl3-0 (our SDL), libreaktor0 (libreaktor.so, which needs
 # it) and the development package with everything else, which needs both.
 split=0
-[ -f "$stage$prefix/lib/libreaktor.so" ] && split=1
+ls "$stage$prefix"/lib/libreaktor.so* >/dev/null 2>&1 && split=1
 packed=""
 if [ "$split" = 0 ]; then
     conflicts=$dev

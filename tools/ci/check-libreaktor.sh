@@ -30,7 +30,7 @@ cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-consumer </dev/null
 runs="lib-built $build/simple
 lib-linked build-consumer/simple"
-if [ -f "dist/$name/lib/libreaktor.so" ] || [ -d "dist/$name/Frameworks/Reaktor.framework" ]; then
+if ls "dist/$name"/lib/libreaktor.so* >/dev/null 2>&1 || [ -d "dist/$name/Frameworks/Reaktor.framework" ]; then
     cmake -S examples/consumer -B build-consumer-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
           "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" -DCONSUMER_SHARED=ON </dev/null
     cmake --build build-consumer-shared </dev/null
