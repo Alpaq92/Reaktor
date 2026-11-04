@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(consumer C)
 
-find_package(reaktor 0.8 REQUIRED)
+find_package(reaktor 0.9 REQUIRED)
 
 add_executable(simple WIN32 ../../samples/simple/simple.c)
 option(CONSUMER_SHARED "Link libreaktor.so instead of libreaktor.a" OFF)
