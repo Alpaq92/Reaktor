@@ -21,11 +21,14 @@ from the project's own license file at the pinned revision.
 | [kb_text_shape](https://github.com/JimmyLefevre/kb) | OpenType shaping, script segmentation and font coverage, for the Text module | zlib |
 | [toml-c](https://github.com/arp242/toml-c) | Reading `settings.toml`; a fork of [tomlc99](https://github.com/cktan/tomlc99), whose copyright notice it keeps | MIT |
 
-SDL is built static, without audio, joystick, haptic, HID, sensor, camera,
-power, GPU, offscreen, the render backends Reaktor never selects, or its
-dynamic API (see below). Its tray is built: on
-Linux and the BSDs it loads AppIndicator and GTK 3 when a tray opens, and
-nothing links them. mojibake is built without its collation, IDNA, security
+SDL is built static — and, in a `REAKTOR_SHARED` build on Linux and the BSDs,
+shared too, as `libreaktor-sdl3.so` — without audio, joystick, haptic, HID,
+sensor, camera, power, GPU, offscreen, the render backends Reaktor never
+selects, or its dynamic API (see below). Its tray is built, and opened on
+Windows and macOS; on Linux and the BSDs Reaktor's own tray speaks
+StatusNotifierItem and dbusmenu over libdbus, so SDL's, which would load
+AppIndicator and GTK 3, never opens there and nothing links them. mojibake is
+built without its collation, IDNA, security
 and character-name tables. NukAnim is one header, compiled in
 `core/anim/anim.c`; its own Nuklear submodule, which only its tests use, comes
 with a recursive checkout and is not built. kb_text_shape is one header, compiled in
@@ -42,9 +45,11 @@ Portions of this software are copyright © 2026 The FreeType Project
 
 ## The one dependency that is not a submodule
 
-`libdbus`, on Linux and the BSDs, when present: the AT-SPI bridge speaks
-D-Bus. CMake asks pkg-config for `dbus-1`; without it the bridge is not built,
-as on a desktop with no accessibility bus.
+`libdbus`, on Linux and the BSDs, when present: the AT-SPI bridge, the tray
+(StatusNotifierItem and dbusmenu) and notifications speak D-Bus. CMake asks
+pkg-config for `dbus-1`; without it the bridge is not built, as on a desktop
+with no accessibility bus, `reaktor_tray_open` answers 0 and notifications
+are not sent.
 
 | Component | License |
 | --- | --- |

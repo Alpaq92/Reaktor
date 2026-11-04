@@ -156,7 +156,7 @@ jobs:
 
       # Reaktor.framework, with SDL inside, beside the static library: built,
       # linked from an outside app, and drawn the same; released as
-      # libreaktor-VERSION-macos-ARCH.zip.
+      # libreaktor-shared-VERSION-macos-ARCH.zip.
       - name: Shared libreaktor
         id: shared
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

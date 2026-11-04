@@ -169,7 +169,7 @@ jobs:
           the hardened runtime cannot load it, and a downloaded copy needs
           \`xattr -dr com.apple.quarantine Reaktor.framework\` once.
 
-          On Linux and the BSDs (x86-64) the library also comes shared, so
+          On Linux and the BSDs the library also comes shared, so
           several apps can share one copy in memory:
           \`libreaktor-shared-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.0\`,
           our own SDL as \`libreaktor-sdl3.so.0\`, \`libreaktor-modules.a\` (the

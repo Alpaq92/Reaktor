@@ -162,7 +162,7 @@ jobs:
         run: docker exec -i debian sh tools/ci/pss-pages.sh -x Xvfb -w "dbus-run-session -- timeout 120" </dev/null
 
       # libreaktor.so beside the static library, on every architecture, and
-      # released as libreaktor-VERSION-linux-ARCH.tar.gz; the static one is
+      # released as libreaktor-shared-VERSION-linux-ARCH.tar.gz; the static one is
       # libreaktor-VERSION-linux-ARCH.tar.gz. An emulated
       # machine has none of the cross compiler's headers, so it is built and
       # installed on the builder and only checked on the emulated machine.

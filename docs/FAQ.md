@@ -78,7 +78,7 @@ directly. See [An application](DOCUMENTATION.md#an-application).
 
 ### Why C99 and an immediate-mode core instead of a retained toolkit like GTK or Qt?
 
-To stay small: a 2.2 MB binary, 7–13 MB of RAM, no GPU, and nothing to
+To stay small: a 2.1 MB binary, 7–13 MB of RAM, no GPU, and nothing to
 install beside it. A frame is drawn only when something changes, so the app
 idles at 0% of a core. See [The frame loop](DOCUMENTATION.md#the-frame-loop)
 and [PERFORMANCE.md](PERFORMANCE.md).
@@ -242,9 +242,10 @@ See [Command-line flags](DOCUMENTATION.md#command-line-flags).
 Usually not. `software`, the default, needs no GPU, uses about a tenth of the
 memory and starts fastest. A GPU
 renderer pays off in long, continuous animation: `--renderer gpu` takes
-Metal on macOS and OpenGL elsewhere where it is built, and `--renderer directx` takes
-Direct3D 12 on Windows where it starts, else 11, and `opengl` needs a build
-that names it in `REAKTOR_RENDERERS`. Expect six to thirteen times the memory. See
+Metal on macOS; on Windows OpenGL where the build has it, else Direct3D 12,
+else 11, so `directx` on a default build; on Linux and the BSDs OpenGL, else
+OpenGL ES 2, neither built unless `REAKTOR_RENDERERS` names it. Expect six
+to thirteen times the memory. See
 [The renderer](DOCUMENTATION.md#the-renderer).
 
 ### Why is the frame time high on a machine with no GPU?

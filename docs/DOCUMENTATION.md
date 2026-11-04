@@ -54,7 +54,7 @@ errors, so an internal function cannot slip back in.
 | `key(app, event)` | A key press in any window, with that window's App, before focus navigation; non-zero keeps the key and its text from everything else |
 | `closing(app, reason)` | Before quitting; non-zero refuses a close button (`REAKTOR_QUIT_WINDOW`), `reaktor_request_quit` or macOS's Quit (`_APP`) and a first Ctrl+C (`_CONSOLE`). SIGTERM (`_SIGNAL`) and logoff (`_SESSION`) ask but cannot be refused |
 | `stop(app)` | Once before teardown when `start` succeeded, at logoff and page unload too — the only place for cleanup |
-| `file_opened(app, path)` | A file dropped on a window, with that window's App; with `.single_instance`, also each file a later launch hands over |
+| `file_opened(app, path)` | A file dropped on a window, with that window's App; with `.single_instance`, also each file a later launch hands over. Unset, no window is a drop target, which on Windows spares COM's drag-and-drop: three DLLs and three threads |
 
 | Call | Effect |
 | --- | --- |
@@ -927,7 +927,7 @@ flowchart TB
     rt["<b>runtime/</b><br/>the windows, the event loop, the tray"]
     ui["<b>core/ui</b><br/>specs, layout, widgets, layers, keys, focus"]
     ren["<b>core/render</b><br/>Nuklear, then the SDL3 software rasterizer"]
-    sdl["<b>SDL3</b><br/>window, input, surface, dialogs, tray"]
+    sdl["<b>SDL3</b><br/>window, input, surface, dialogs, the tray on Windows and macOS"]
 
     css["<b>core/css</b><br/>the CSS engine, style_map"]
     tree["<b>core/a11y + core/anim</b><br/>the shadow tree, eased values"]
@@ -951,20 +951,22 @@ core/a11y        the shadow tree and its diff
 core/anim        NukAnim, a context a window
 core/locale      the Locale module
 core/text        the Text module
-platform/        theme, process lifecycle, the accessibility bridges, the web keyboard
+platform/        theme, process lifecycle, the accessibility bridges, notifications,
+                 the web keyboard
 runtime/         the main window's lifecycle and frame (app.c), input, services,
                  other windows, the tray
 samples/         showcase, notepad, simple, bench
 tests/           the console tests and launchtest
 tools/           packaging, the icon compiler, vmwalk
 benchmarks/      bench in four other frameworks, and the sampler
-external/        thirteen submodules, read as they ship
+external/        twelve submodules, read as they ship
 ```
 
 `runtime/` and `core/` build `reaktor_runtime`, a static library every
-program links. `core/locale`, `core/text` and the bridges are
-[modules](#build-options), compiled into the programs that take them. Nothing
-in `core/` knows which application it is in.
+program links. The nine [modules](#build-options) — the bridges,
+`core/locale`, `core/text`, `platform/notify`, and settings, the tray, popup
+windows, printing and the Inspector in `runtime/` — are compiled into the
+programs that take them. Nothing in `core/` knows which application it is in.
 
 **The default look is compiled in**: Aileron in both weights, the mark, the
 seven Ionicons the widgets draw (three chevrons, three discs and the toast's
@@ -1099,7 +1101,7 @@ cmake --install build --prefix libreaktor --component libreaktor
 
 It is one static library — `reaktor.lib` with MSVC, `libreaktor.a` elsewhere
 — holding Reaktor, every module, SDL, FreeType, plutosvg, Onlay, NukAnim,
-mojibake and kb_text_shape, merged with `lib.exe`, Apple's `libtool` or an
+mojibake, kb_text_shape and toml-c, merged with `lib.exe`, Apple's `libtool` or an
 `ar` MRI script. Beside it go the public headers with Nuklear's, NukAnim's
 and SDL's, a CMake package, a pkg-config file and `share/reaktor/licenses`:
 
@@ -1121,17 +1123,23 @@ in-tree build does.
 **Shared.** On Linux, the BSDs and macOS, `-DREAKTOR_SHARED=ON` also builds
 the library shared, so several apps map one copy: `libreaktor.so` with SDL as
 `libreaktor-sdl3.so`, or `Reaktor.framework` with SDL inside. The modules
-stay in each app, from `libreaktor-modules.a`. Link `reaktor::shared`, or
-`pkg-config --cflags --libs reaktor-shared`. Releases carry it as
-`libreaktor-shared-<version>-<system>-<arch>`.
+stay in each app, from `libreaktor-modules.a`. Link `reaktor::shared`, or on
+Linux and the BSDs `pkg-config --cflags --libs reaktor-shared`; the framework
+has no `.pc`. Releases carry it as
+`libreaktor-shared-<version>-<system>-<arch>`. Its soname is `libreaktor.so.0`
+(OpenBSD installs no unversioned `libreaktor.so`), and it exports only what
+`tools/reaktor.map` names: the public calls, with Nuklear's and NukAnim's,
+under `LIBREAKTOR_0`, and what the modules call under `LIBREAKTOR_PRIVATE_0`,
+which an application must not reach.
 
 **As a system package.** `tools/libreaktor-pkg.sh` builds libreaktor and packs
 it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
 where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
-`-i` installs it, `-s` packs the shared library instead, as `libreaktor0`
-and `libreaktor-sdl3-0` to run an app (`libreaktor-sdl3` on OpenBSD, whose
-package names read a dash before a digit as the version) and
-`libreaktor-shared` to build one,
+`-i` installs it, `-s` builds the shared library too and splits the package
+in three: `libreaktor0` and `libreaktor-sdl3-0` to run an app
+(`libreaktor-sdl3` on OpenBSD, whose package names read a dash before a digit
+as the version) and `libreaktor-shared`, with the headers and both
+libraries, to build one,
 `-p` sets the prefix, `-o` the output folder, `-b` packs
 from an existing build. On Linux the `deb` and `rpm` targets do the same from
 the current build, into `build/dist`; each release carries both, built by CI.
@@ -1144,8 +1152,11 @@ sh tools/libreaktor-pkg.sh -i
 The prefix is `/opt/reaktor` on Linux and `/usr/local/reaktor` on the BSDs,
 apart from the system's include directory, because the package carries SDL's
 and Nuklear's headers. Point `CMAKE_PREFIX_PATH` or `PKG_CONFIG_PATH` (its
-`lib/pkgconfig`) there. The package lists no dependencies: link the system
-libraries `pkg-config --libs reaktor` names.
+`lib/pkgconfig`) there. No package depends on a system library — link the
+ones `pkg-config --libs reaktor` names — only on the others of a split:
+`libreaktor0` needs `libreaktor-sdl3-0`, and `libreaktor-shared` both.
+`libreaktor` and `libreaktor-shared` install the same headers, so each
+conflicts with the other.
 
 ## Build options
 
@@ -1195,9 +1206,10 @@ windowed program unless `CONSOLE` is given, and on the web adds the link
 options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 
 - **`REAKTOR_A11Y=OFF`** drops the bridges and the libraries only they need:
-  `uiautomationcore`, `ole32` and `oleaut32` on Windows, `dbus-1` on Linux and
-  the BSDs. It saves few bytes ([PERFORMANCE.md](PERFORMANCE.md#modules)); the
-  reason to use it is not needing `dbus-1`.
+  `uiautomationcore`, `ole32` and `oleaut32` on Windows. It saves few bytes
+  ([PERFORMANCE.md](PERFORMANCE.md#modules)). On Linux and the BSDs `dbus-1`
+  stays linked for the tray and notifications; a program that links no
+  `dbus-1` turns `REAKTOR_TRAY` and `REAKTOR_NOTIFY` off too.
 - **`REAKTOR_LOCALE=OFF`** leaves every string as its key, bakes Latin-1
   alone, and stops the web build packing the catalogs and the Japanese font.
 - **`REAKTOR_LOCALE_EMBED=ON`** reads `assets/locale/*.txt` into the program
@@ -1208,9 +1220,9 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 - **`REAKTOR_SETTINGS=OFF`** leaves toml-c and the web's IndexedDB out:
   `reaktor_setting` answers `NULL`, saving and clearing do nothing, and
   `.remember_window` is ignored.
-- **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, so AppIndicator
-  and GTK 3 are never loaded on Linux and the BSDs, and minimizing never
-  hides the window.
+- **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, links no
+  `dbus-1` for the tray on Linux and the BSDs, and minimizing never hides
+  the window.
 - **`REAKTOR_PRINT=OFF`** leaves the print module out; `reaktor_print` and
   `reaktor_print_pdf` answer 0.
 - **`REAKTOR_INSPECTOR=OFF`** answers 0 from `reaktor_inspector_open` and
@@ -1342,9 +1354,9 @@ command line names one, and `--new-instance` is passed for it.
 `software` is the default on every platform:
 
 - **It needs no GPU.** Without one, Direct3D falls back to Microsoft's WARP
-  emulation: drawing `bench` flat out, SDL's software renderer took 0.74 ms
-  of CPU a frame where Direct3D on WARP took 1.70.
-- **It uses the least memory**, 8.5 MB in `bench` against 58–121 MB on a GPU
+  emulation: drawing `bench` flat out, SDL's software renderer took 0.75 ms
+  of CPU a frame where Direct3D on WARP took 1.78.
+- **It uses the least memory**, 9.1 MB in `bench` against 57–121 MB on a GPU
   renderer, most of that the graphics driver's.
 - **It starts fastest, and its cost does not depend on other programs** using
   the GPU.
