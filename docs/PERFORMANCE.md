@@ -241,6 +241,21 @@ cores. `showcase` grows to 14,224 KB there, while the library pages barely
 move. Counting every clean page of a binary, sharing saves 4,602 KB of
 24,157 KB, or 19.0%; counted page by page, 4,176 KB of 24,200 KB, or 17.3%.
 
+**Shared, it saves 19%.** The same three on that desktop, five launches each,
+static and then linked to `libreaktor.so` (`-DREAKTOR_SHARED=ON`):
+
+| | Static PSS | Shared PSS |
+| --- | --- | --- |
+| `showcase` | 8,528 KB | 7,323 KB |
+| `notepad` | 5,480 KB | 4,280 KB |
+| `simple` | 4,473 KB | 3,379 KB |
+| Together | 18,544 KB | 14,941 KB |
+
+3,603 KB less, 19.4%, near the estimate above. One app on its own pays for
+the split instead: its resident set is 0.6–0.9 MB larger shared (`simple`
+8.2 MB against 7.3, `showcase` 18.7 against 18.0), the library's relocations
+and a second SDL image that no other app is there to share.
+
 ### The tray on Linux
 
 The same Linux Mint desktop, `showcase` idle on the Login page, five to eight
