@@ -106,6 +106,12 @@ as_root() {
 # owner of a file anyway.
 static=libreaktor
 dev=libreaktor-shared
+# The runtime packages carry the SOVERSION, as Debian's do. OpenBSD reads a
+# package name's version from its first dash followed by a digit, so there
+# the SDL one has no dash before its 0.
+lib=libreaktor0
+sdl=libreaktor-sdl3-0
+[ "$format" = openbsd ] && sdl=libreaktor-sdl3
 conflicts=""
 
 # pack NAME ROOT SUMMARY [DEPENDENCY...]: one package of the files under ROOT.
@@ -242,23 +248,23 @@ if [ "$split" = 0 ]; then
     conflicts=$dev
     pack "$static" "$stage" "$summary"
 else
-    sdl="$work/split/sdl" lib="$work/split/lib"
+    sdl_root="$work/split/sdl" lib_root="$work/split/lib"
     rm -rf "$work/split"
-    mkdir -p "$sdl$prefix/lib" "$sdl$prefix/share/reaktor/licenses" "$lib$prefix/lib" \
-             "$lib$prefix/share/reaktor"
-    mv "$stage$prefix"/lib/libreaktor-sdl3.so.* "$sdl$prefix/lib/"
-    mv "$stage$prefix/share/reaktor/licenses/SDL.txt" "$sdl$prefix/share/reaktor/licenses/"
-    mv "$stage$prefix"/lib/libreaktor.so.* "$lib$prefix/lib/"
+    mkdir -p "$sdl_root$prefix/lib" "$sdl_root$prefix/share/reaktor/licenses" \
+             "$lib_root$prefix/lib" "$lib_root$prefix/share/reaktor"
+    mv "$stage$prefix"/lib/libreaktor-sdl3.so.* "$sdl_root$prefix/lib/"
+    mv "$stage$prefix/share/reaktor/licenses/SDL.txt" "$sdl_root$prefix/share/reaktor/licenses/"
+    mv "$stage$prefix"/lib/libreaktor.so.* "$lib_root$prefix/lib/"
     mv "$stage$prefix/share/reaktor/licenses" "$stage$prefix/share/reaktor/NOTICE.md" \
-       "$lib$prefix/share/reaktor/"
-    pack libreaktor-sdl3-0 "$sdl" \
+       "$lib_root$prefix/share/reaktor/"
+    pack "$sdl" "$sdl_root" \
          "SDL 3 as Reaktor builds it, for apps linked against libreaktor.so"
-    pack libreaktor0 "$lib" \
-         "Reaktor, a C99 GUI library on Nuklear styled by CSS (shared library)" libreaktor-sdl3-0
+    pack "$lib" "$lib_root" \
+         "Reaktor, a C99 GUI library on Nuklear styled by CSS (shared library)" "$sdl"
     conflicts=$static
     pack "$dev" "$stage" \
          "Reaktor, a C99 GUI library on Nuklear styled by CSS (headers, static and shared libraries)" \
-         libreaktor0 libreaktor-sdl3-0
+         "$lib" "$sdl"
 fi
 
 if [ $install -eq 1 ]; then
