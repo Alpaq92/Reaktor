@@ -11,9 +11,10 @@ queue and builds a frame only when the picture would differ. So **CPU is a
 count of frames, not a load**, and **memory is a floor, not a curve**: once the
 atlas and icons are baked, nothing grows.
 
-On Windows today, `showcase.exe` is 3,232,256 bytes, `notepad.exe` 2,280,960,
-`simple.exe` 2,160,640 and `bench.exe` 2,150,912. The showcase links all three
-optional modules and the others none; each carries the default look —
+On Windows today, `showcase.exe` is 3,215,360 bytes, `notepad.exe` 2,274,304,
+`simple.exe` 2,140,672 and `bench.exe` 2,130,944. The showcase links all nine
+optional modules, `notepad` three (settings, popup windows, printing) and the
+other two none; each carries the default look —
 Aileron, the mark, the sheets and seven icons, 73,123 bytes — compiled in. The
 four-platform figures below come from an older build that shipped one
 executable, at 1.00× scale in a 960×680 window; the runtime they measure is
@@ -22,10 +23,10 @@ the one all four programs share.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 8.9 MB, the same binary on D3D12 120.5 MB and on OpenGL
-69.5 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin
+Memory: Reaktor 9.1 MB, the same binary on D3D12 120.8 MB and on OpenGL
+69.0 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin
 Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor
-7.1%, D3D12 4.1%, OpenGL 5.0%, Flutter 15.3%, Electron 19.6%,
+7.1%, D3D12 4.1%, OpenGL 6.4%, Flutter 15.3%, Electron 19.6%,
 Kotlin Multiplatform 29.4%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
@@ -34,15 +35,16 @@ Lenovo laptop with a 6-core Ryzen 5 4600H, a GeForce RTX 2060 and a 1920×1080
 120 Hz display, on Windows 11 Pro. Each arm is its own app, built with its
 framework's toolchain; one script launches it and samples its whole process
 tree from outside. [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the
-projects and the runner. Reaktor appears once per `--renderer`. Shaft is not
-plotted: it does not link on Windows.
+projects and the runner. Reaktor appears once per `--renderer`; its arms are
+0.9.0, measured on 2026-11-04, the others from the pass of 2026-10-24. Shaft
+is not plotted: it does not link on Windows.
 
 | Arm | Memory | CPU, with startup | CPU, steady state |
 | --- | --- | --- | --- |
-| **Reaktor**, `software` | 8.9 MB | 8.8% | 7.1% |
-| **Reaktor**, `direct3d11` | 58.0 MB | 12.1% | 10.2% |
-| **Reaktor**, `direct3d12` | 120.5 MB | 11.4% | 4.1% |
-| **Reaktor**, `opengl` | 69.5 MB | 12.1% | 5.0% |
+| **Reaktor**, `software` | 9.1 MB | 8.1% | 7.1% |
+| **Reaktor**, `direct3d11` | 57.3 MB | 13.3% | 11.4% |
+| **Reaktor**, `direct3d12` | 120.8 MB | 8.5% | 4.1% |
+| **Reaktor**, `opengl` | 69.0 MB | 10.2% | 6.4% |
 | Flutter | 132.7 MB | 38.8% | 15.3% |
 | Electron | 156.3 MB | 36.5% | 19.6% |
 | Kotlin Multiplatform | 668.7 MB | 51.5% | 29.4% |
@@ -51,12 +53,12 @@ plotted: it does not link on Windows.
   startup or without, and about a seventy-fifth of Kotlin Multiplatform's
   memory.
 - **Every Reaktor renderer takes less CPU than every other framework.** On a
-  GPU renderer its memory is mostly the graphics driver's: 58–121 MB, below
+  GPU renderer its memory is mostly the graphics driver's: 57–121 MB, below
   Flutter's 133.
 - **Startup counts.** A run that draws for only 0.2 s takes 0.16 s of CPU on
-  `software` and 0.41–0.47 s on a GPU renderer (medians of five runs). Once running, `direct3d12` and
-  `opengl` take two to three points less than `software`.
-- **About 2.2 MB of Reaktor's 8.9 is the antivirus.** Bitdefender puts two
+  `software` and 0.41–0.47 s on a GPU renderer (medians of five runs). Once running, `direct3d12`
+  takes three points less than `software`, `opengl` under one.
+- **About 2.2 MB of Reaktor's 9.1 is the antivirus.** Bitdefender puts two
   components into every process on this machine, so every arm carries them.
   Walked with VirtualQueryEx and a heap ledger on `bench`, they come to two
   private heaps of 776 KB each (one the hook module's, one holding a 642 KB
@@ -157,9 +159,9 @@ replaced libcss.
 
 | `showcase` | Default | Module off | Saved |
 | --- | --- | --- | --- |
-| `.exe`, accessibility bridges | 3,232,256 | 3,216,896 | 15,360 (0.48%) |
-| `.exe`, Locale | 3,232,256 | 3,216,896 | 15,360 (0.48%) |
-| `.exe`, Text | 3,232,256 | 2,607,104 | 625,152 (19.3%) |
+| `.exe`, accessibility bridges | 3,215,360 | 3,200,000 | 15,360 (0.48%) |
+| `.exe`, Locale | 3,215,360 | 3,200,000 | 15,360 (0.48%) |
+| `.exe`, Text | 3,215,360 | 2,591,232 | 624,128 (19.4%) |
 | `.wasm` + `.js`, accessibility bridges | 2,308,781 | 2,305,843 | 2,938 (0.13%) |
 | `.wasm` + `.js`, Locale | 2,308,781 | 2,295,269 | 13,512 (0.59%) |
 | `.wasm` + `.js`, Text | 2,308,781 | 1,824,708 | 484,073 (21.0%) |
@@ -175,14 +177,14 @@ them.
 391 KB of tables, and mojibake 19 KB of code and 180 KB of line-breaking and
 bidirectional data; the `.data` it saves is M PLUS 1p, 1,758,688 bytes.
 Locale is 15 KB of the executable and 7,581 bytes of catalogs; compiled in
-(`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,239,936 bytes.
+(`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,222,528 bytes.
 
 **Text costs memory once it draws.** Medians of private bytes over ten
-launches: Diagnostics is 13.0 MB with every module, 12.7 MB without Locale and
-12.6 MB without Text — kb_text_shape's tables are not `const`, so they are
-committed untouched. Translations is 15.4 MB against 12.9 MB without Text: M PLUS 1p
-held open, what kb_text_shape parses from it, the glyph texture and the
-caches.
+launches: Diagnostics is 12.6 MB with every module, 12.6 MB without Locale and
+12.1 MB without Text — kb_text_shape's tables are not `const`, so they are
+committed untouched. Translations, in Japanese, is 12.3 MB against 11.8 MB
+without Text: M PLUS 1p held open, what kb_text_shape parses from it, the
+glyph texture and the caches.
 
 ## Memory
 
@@ -190,13 +192,14 @@ Idle on the Login page.
 
 | | Windows | Linux | macOS | GhostBSD |
 | --- | --- | --- | --- | --- |
-| Committed / private / footprint | **12.7 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
-| Resident / working set | **29.6 MB** | **11.4 MB** | **33–36 MB** | **11.9 MB** |
+| Committed / private / footprint | **12.3 MB** | **4.3 MB** | **~30 MB** | **5.1 MB** |
+| Resident / working set | **29.3 MB** | **11.4 MB** | **33–36 MB** | **11.9 MB** |
 
 Committed is what the process asked the system to back; resident is what is
 in RAM, shared library pages included. Windows is today's `showcase`, with
-every module; the others are the older single-executable build. Idle on
-Windows, `notepad` is 9.1 MB and `simple`, which links no module, 7.2 MB. The
+every module, medians of ten launches; the others are the older
+single-executable build. Idle on Windows, `notepad` is 8.9 MB and `simple`,
+which links no module, 7.4 MB. The
 showcase's figure includes a second copy of the glyph atlas: its splash is a
 window of its own, and the first such window keeps its atlas for the next.
 
@@ -304,8 +307,8 @@ Metal texture to present it. On GhostBSD most of a frame is the present, a
 software blit into VMware's framebuffer: 6.7 ms of Login's 7.1 ms, 11.1 ms of
 Buttons' 14.8.
 
-Today's Windows build, at its default 1100×680, redrawing continuously with
-vsync off, build, render and present, p10–p90 of 31 frames after 9 to warm up,
+The Windows build of 2026-10-24, at its default 1100×680, redrawing
+continuously with vsync off, build, render and present, p10–p90 of 31 frames after 9 to warm up,
 over three launches: Login takes **1.3–1.8 ms** a frame and Buttons
 **2.7–3.4 ms**; `direct3d11` takes 0.4–0.8 ms and 0.8–1.3 ms. In software the
 present is most of it: 1.08 ms of Login's frame.

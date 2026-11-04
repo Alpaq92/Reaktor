@@ -34,7 +34,8 @@ SDL's GPU drivers (`run.sh` adds `reaktor-metal` on macOS). The others draw on
 the GPU, so those three are the like-for-like comparison. SDL's OpenGL driver
 is built only when `REAKTOR_RENDERERS` names it, which the `reaktor-opengl`
 arm's build does. An arm whose renderer would not start is skipped, not measured
-under another renderer's name.
+under another renderer's name. The chart dates its arms: Reaktor's three are
+re-measured for a release, the others last on 2026-10-24.
 
 ## What every arm draws
 
@@ -150,13 +151,13 @@ MSVC 14.44 Release, the C runtime linked in:
 
 | Program | Bytes |
 | --- | --- |
-| `bench.exe` | 2,370,560 |
-| `simple.exe` | 2,380,288 |
-| `notepad.exe` | 2,499,584 |
-| `showcase.exe` | 3,486,720 |
+| `bench.exe` | 2,352,640 |
+| `simple.exe` | 2,362,880 |
+| `notepad.exe` | 2,497,536 |
+| `showcase.exe` | 3,438,592 |
 
-The C runtime is 220–260 KB of each; a default `./build.ps1` links its DLL
-instead. Only the showcase links the three optional modules, and Text is
+The C runtime is about 220 KB of each; a default `./build.ps1` links its DLL
+instead. The showcase links every module and `notepad` three, and Text is
 0.6 MB of the difference ([Modules](../docs/PERFORMANCE.md#modules)).
 
 The v0.2.0 downloads, as GitHub Actions built and published them:

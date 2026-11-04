@@ -11,7 +11,7 @@ Tired of C having no cross-platform GUI — nothing like
 [Shaft](https://github.com/ShaftUI/Shaft) or
 [Freya](https://github.com/marc2332/freya) — and of toolkits that want hundreds
 of megabytes to put a dialog on screen? No? But I was, so I wrote Reaktor:
-complete without being big. A 2.2 MB binary, 7–13 MB of RAM, and no GPU
+complete without being big. A 2.1 MB binary, 7–13 MB of RAM, and no GPU
 required.
 
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
@@ -23,7 +23,7 @@ yourself.
 > ⚠️ **Reaktor is in active development**, and breaking changes might occur.
 
 <p align="center">
-  <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 8.9 MB, the same binary on D3D12 120.5 MB and on OpenGL 69.5 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor 7.1%, D3D12 4.1%, OpenGL 5.0%, Flutter 15.3%, Electron 19.6%, Kotlin Multiplatform 29.4%"></a>
+  <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 9.1 MB, the same binary on D3D12 120.8 MB and on OpenGL 69.0 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor 7.1%, D3D12 4.1%, OpenGL 6.4%, Flutter 15.3%, Electron 19.6%, Kotlin Multiplatform 29.4%"></a>
 </p>
 
 How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
@@ -52,8 +52,9 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
   oscillators, noise and shakes; colors blended in five spaces; and text
   that arrives a glyph at a time, idle once everything settles.
 - **Modular** — accessibility, localization, text shaping, settings, the tray,
-  popup windows, notifications and printing each swap for a stub at build
-  time, and only what they drew stops being drawn; every other pixel stays.
+  popup windows, notifications, printing and the Inspector each swap for a
+  stub at build time, and only what they drew stops being drawn; every other
+  pixel stays.
 - **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources,
   on one software rasterizer, at any display scale: x86 and ARM everywhere,
   and RISC-V on Linux ([Platforms](docs/DOCUMENTATION.md#platforms)).
@@ -122,8 +123,10 @@ value and position.
 ## Made of
 
 [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) draws the widgets.
-[SDL3](https://github.com/libsdl-org/SDL) supplies the window, input, tray and
-software renderer. Reaktor's own CSS engine reads the stylesheets, and
+[SDL3](https://github.com/libsdl-org/SDL) supplies the window, input and
+software renderer, and the tray on Windows and macOS; on Linux and the BSDs
+the tray is Reaktor's, over libdbus. Reaktor's own CSS engine reads the
+stylesheets, and
 [Onlay](https://github.com/Alpaq92/Onlay), a fork of
 [randrew/layout](https://github.com/randrew/layout), computes the rectangles.
 [NukAnim](https://github.com/Alpaq92/NukAnim), a port of ImAnim, moves them.
