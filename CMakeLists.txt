@@ -22,12 +22,9 @@ endif()
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
-# Beside libreaktor.a, a shared libreaktor, where several apps can share one
-# copy (PLAN.md). On Linux and the BSDs it is libreaktor.so, with SDL in
-# libreaktor-sdl3.so, built here as now. On macOS it is Reaktor.framework,
-# with SDL inside it: no system SDL stands to be confused with ours, and apps
-# that leave the hardened runtime off share it, signed ad hoc, from
-# /Library/Frameworks. The samples link it.
+# A shared libreaktor beside libreaktor.a, so several apps share one copy:
+# libreaktor.so, with SDL as libreaktor-sdl3.so, on Linux and the BSDs, and
+# Reaktor.framework, with SDL inside, on macOS. The samples link it.
 option(REAKTOR_SHARED "Also build a shared libreaktor, and link the samples to it" OFF)
 set(REAKTOR_SHARED_SDL OFF)
 if(REAKTOR_SHARED)
@@ -57,12 +54,6 @@ endforeach()
 # SDL loads Vulkan and its drivers even for that renderer (PERFORMANCE.md).
 # An application that runs its own shaders turns it on.
 option(REAKTOR_SHADERS "An application's own shaders: SDL's GPU API and its renderer, --renderer sdl-gpu" OFF)
-# Its name until 0.8: still read once, with a warning.
-if(DEFINED REAKTOR_SDL_GPU)
-    message(WARNING "REAKTOR_SDL_GPU is now REAKTOR_SHADERS")
-    set(REAKTOR_SHADERS ${REAKTOR_SDL_GPU} CACHE BOOL "" FORCE)
-    unset(REAKTOR_SDL_GPU CACHE)
-endif()
 set(SDL_GPU ${REAKTOR_SHADERS} CACHE BOOL "" FORCE)
 set(SDL_TRAY ON CACHE BOOL "" FORCE)
 
@@ -639,13 +630,9 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
 
 if(REAKTOR_SHARED)
-    # libreaktor.so.0: the runtime, the core and the libraries under them,
-    # linking libreaktor-sdl3.so. reaktor.map exports Reaktor's, Nuklear's and
-    # nukanim's APIs and the few FreeType and plutovg calls the modules make;
-    # the rest binds inside the library. The modules stay in each app, which
-    # exports them back to it. On macOS the same parts and SDL make
-    # Reaktor.framework, exporting the same names (ld64 takes a list made from
-    # reaktor.map), and its calls into the modules bind when an app loads it.
+    # The runtime, the core and the libraries under them; reaktor.map says
+    # what they export. The modules stay in each app, which exports them back.
+    # On macOS SDL goes in too, and ld64 takes the map as a list of names.
     set(_so_parts reaktor_runtime reaktor_core plutosvg plutovg freetype onlay)
     set(_so_files "")
     foreach(_t IN LISTS _so_parts)
@@ -665,7 +652,6 @@ if(REAKTOR_SHARED)
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
     add_dependencies(reaktor_shared ${_so_parts})
     if(APPLE)
-        # ld64 has no version script: the same names, as a symbol list.
         file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map" _map_lines)
         set(_exp "")
         foreach(_l IN LISTS _map_lines)

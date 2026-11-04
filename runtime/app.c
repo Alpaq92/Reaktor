@@ -1225,17 +1225,6 @@ confirm_open(App *app)
 }
 
 static SDL_AppResult
-quitting(reaktor_quit_reason why)
-{
-    static const char *const names[] = {
-        "its window was closed", "the app asked", "Ctrl+C", "a signal (SIGTERM)",
-        "the session ended" };
-
-    SDL_Log("quitting: %s", (unsigned)why < SDL_arraysize(names) ? names[why] : "?");
-    return SDL_APP_SUCCESS;
-}
-
-static SDL_AppResult
 quit_asked(App *app, reaktor_quit_reason why)
 {
     int refused = app && g_started && g_launch.closing &&
@@ -1243,10 +1232,10 @@ quit_asked(App *app, reaktor_quit_reason why)
 
     if (why != REAKTOR_QUIT_WINDOW && why != REAKTOR_QUIT_APP &&
         why != REAKTOR_QUIT_CONSOLE)
-        return quitting(why);
+        return SDL_APP_SUCCESS;
     if (refused || (app && g_started && confirm_open(app)))
         return SDL_APP_CONTINUE;
-    return quitting(why);
+    return SDL_APP_SUCCESS;
 }
 
 static SDL_AppResult
@@ -1259,7 +1248,6 @@ bare_quit(App *app)
         return SDL_APP_SUCCESS;
     }
     if (r) return quit_asked(app, (reaktor_quit_reason)(r - 1));
-    SDL_Log("quitting: SDL's quit event, with no signal seen");
 #ifdef __APPLE__
     return quit_asked(app, REAKTOR_QUIT_APP);
 #else
@@ -1276,7 +1264,6 @@ app_event(void *appstate, SDL_Event *event)
     if (!(to = reaktor_windows_app(event))) {
         switch (event->type) {
         case SDL_EVENT_TERMINATING:
-            SDL_Log("quitting: the system is terminating the app");
             if (app) run_stop(app);
             return SDL_APP_SUCCESS;
         case SDL_EVENT_QUIT:

@@ -1159,7 +1159,7 @@ Passed to CMake, through either script:
 | `REAKTOR_INSPECTOR` | `ON` | The [Inspector](#inspector) |
 | `REAKTOR_SDL_D3D` | `ON` | Build SDL's Direct3D 11 and 12 renderers on Windows; off, a program is 105 KB smaller and draws in software only |
 | `REAKTOR_SDL_GL` | `OFF` | Build SDL's OpenGL and GLES drivers on Windows, Linux and the BSDs; macOS builds them either way |
-| `REAKTOR_SHADERS` | `OFF` | An application's own shaders: builds SDL's GPU API and its renderer, `--renderer sdl-gpu` (Direct3D 12 on Windows, Metal on macOS, Vulkan on Linux and the BSDs). It costs 184 KB on Windows and 291 KB of the shared SDL on Linux, and only `sdl-gpu` and `SDL_CreateGPURenderState` need it; the release packages are built without it |
+| `REAKTOR_SHADERS` | `OFF` | Build SDL's GPU API and its renderer, `--renderer sdl-gpu`, for an application's own shaders: Direct3D 12 on Windows, Metal on macOS, Vulkan on Linux and the BSDs; on, a program is 184 KB larger on Windows, and on Linux loads the Vulkan drivers even to draw in software |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
@@ -1351,13 +1351,14 @@ command line names one, and `--new-instance` is passed for it.
 | `opengl` | Windows, Linux, BSDs, macOS | Little CPU once running | Built only with `-DREAKTOR_SDL_GL=ON`, except on macOS; on Linux without a GPU it loads Mesa and LLVM; macOS deprecates it in favor of Metal |
 | `opengles2` | Where the driver offers it | | Built only with `-DREAKTOR_SDL_GL=ON`; not measured |
 | `metal` | macOS | | |
-| `sdl-gpu` | Windows, macOS, Linux, BSDs | SDL's GPU API: Direct3D 12, Metal or Vulkan, and an application's own shaders through `SDL_CreateGPURenderState` | Built only with `-DREAKTOR_SHADERS=ON`; without it the renderer falls back as one that would not start; not measured |
+| `sdl-gpu` | Windows, macOS, Linux, BSDs | SDL's GPU API: Direct3D 12, Metal or Vulkan, and an application's own shaders through `SDL_CreateGPURenderState` | Built only with `-DREAKTOR_SHADERS=ON`; not measured |
 | `auto` | Everywhere | SDL chooses | |
 
 **An application names its renderer** with the launch's `.renderer`, read as
-`--renderer` is when the flag is not given, so `"sdl-gpu"`, in a Reaktor built
-with `-DREAKTOR_SHADERS=ON`, lets it draw with its own shaders: `reaktor_sdl_renderer(app)` hands it the renderer, and the
-renderer's `SDL_PROP_RENDERER_GPU_DEVICE_POINTER` the device they are made for.
+`--renderer` is when the flag is not given, so `"sdl-gpu"`, in a build with
+`-DREAKTOR_SHADERS=ON`, lets it draw with its own shaders:
+`reaktor_sdl_renderer(app)` hands it the renderer, and the renderer's
+`SDL_PROP_RENDERER_GPU_DEVICE_POINTER` the device they are made for.
 
 **HDR output** is the launch's `.hdr`, or `--hdr on`. The renderer is then made
 with a linear (scRGB) output, which SDL scales so sRGB drawing looks as before

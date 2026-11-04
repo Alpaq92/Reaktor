@@ -43,21 +43,18 @@ if [ -f "dist/$name/lib/libreaktor.so" ] || [ -d "dist/$name/Frameworks/Reaktor.
 lib-shared build-consumer-shared/simple"
 fi
 mkdir -p check
-echo "$runs" | while read -r from; do
-    set -- $from
+echo "$runs" | while read -r out app; do
+    set -- --theme light --video dummy --shot "check/$out.bmp" --a11y-dump "check/$out.txt"
     rc=0
-    $wrap "$2" --theme light --video dummy \
-        --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null || rc=$?
+    $wrap "$app" "$@" </dev/null || rc=$?
     if [ "$rc" != 0 ]; then
         # Where it died, before giving up on it.
         if command -v lldb >/dev/null 2>&1; then
-            lldb --batch -o run -o "bt all" -- "$2" --theme light --video dummy \
-                --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null || :
+            $wrap lldb --batch -o run -o "bt all" -- "$app" "$@" </dev/null || :
         elif command -v gdb >/dev/null 2>&1; then
-            gdb -batch -ex run -ex "thread apply all bt" --args "$2" --theme light \
-                --video dummy --shot "check/$1.bmp" --a11y-dump "check/$1.txt" </dev/null || :
+            $wrap gdb -batch -ex run -ex "thread apply all bt" --args "$app" "$@" </dev/null || :
         fi
-        echo "$1: $2 exited with status $rc"; exit "$rc"
+        echo "$out: $app exited with status $rc"; exit "$rc"
     fi
 done
 for e in bmp txt; do

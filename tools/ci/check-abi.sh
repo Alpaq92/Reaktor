@@ -15,7 +15,7 @@ LC_ALL=C
 export LC_ALL
 
 update=0
-cc=${CC:-cc}
+cc=cc
 while getopts uc: opt; do
     case $opt in
         u) update=1 ;;
