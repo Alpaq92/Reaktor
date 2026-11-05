@@ -417,14 +417,15 @@ jobs:
           cmake --build build-pkg-shared </dev/null
           rpm -e libreaktor-shared
           build-pkg-shared/simple --theme light --video dummy --shot check-shared.bmp </dev/null
+          mv dist-pkg-shared/*.rpm dist-pkg/
           EOF
 
+      # One folder: two paths would keep dist-pkg/ and dist-pkg-shared/ in the
+      # artifact, and the release expects every package at the top.
       - name: Upload the .rpm
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-rpm-linux-${{ matrix.arch }}
-          path: |
-            dist-pkg/*.rpm
-            dist-pkg-shared/*.rpm
+          path: dist-pkg/*.rpm
           if-no-files-found: error
           retention-days: 14
