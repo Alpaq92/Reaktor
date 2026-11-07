@@ -643,7 +643,9 @@ target_compile_definitions(reaktor_runtime PRIVATE
     REAKTOR_VERSION_STRING="${PROJECT_VERSION}")
 if(TARGET reaktor_rdbus)
     target_sources(reaktor_runtime PRIVATE platform/dbus/rdbus_msg.c platform/dbus/rdbus_conn.c)
-    target_link_libraries(reaktor_runtime PRIVATE reaktor_rdbus)
+    # Its directory alone: a link would put $<LINK_ONLY:...> in what the shared
+    # library takes from the runtime's INTERFACE_LINK_LIBRARIES.
+    target_include_directories(reaktor_runtime PRIVATE platform/dbus)
     target_compile_definitions(reaktor_runtime PRIVATE REAKTOR_HAVE_RDBUS)
 endif()
 
