@@ -371,7 +371,8 @@ reaktor_windows_restyle(void)
         img_cache_clear(a);
         apply_widget_style(a);
         reaktor_window_set_dark(a->win, a->dark);
-        a->dirty = 1;
+        a->dirty     = 1;
+        a->must_draw = 1;
     }
 }
 

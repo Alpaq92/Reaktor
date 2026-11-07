@@ -859,6 +859,7 @@ if(NOT EMSCRIPTEN)
     reaktor_add_app(bench MODULES none SOURCES samples/bench/bench.c)
     reaktor_add_app(launchtest STATIC MODULES settings popups print SOURCES tests/launchtest.c)
     reaktor_add_app(uitest MODULES none SOURCES tests/uitest.c)
+    reaktor_add_app(skiptest MODULES none SOURCES tests/skiptest.c)
     set_target_properties(launchtest PROPERTIES EXCLUDE_FROM_ALL ON)
 endif()
 

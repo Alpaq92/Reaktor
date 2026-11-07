@@ -1001,7 +1001,8 @@ commands are hashed field by field, and one that matches the last presented
 frame is neither rendered nor presented. A key nothing takes, or a focus
 change that moves no ring, then costs the build and nothing more. A window
 uncovered, shown, resized, restored or moved to another scale is always drawn,
-and so is a frame a `--shot` or a capture waits for. It is off by default; the
+and so is a frame a `--shot` or a capture waits for. A tween that changes
+nothing on screen follows the display's refresh. It is off by default; the
 showcase turns it on, and its Diagnostics page counts the frames drawn and
 skipped.
 

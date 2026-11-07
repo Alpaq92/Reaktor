@@ -568,8 +568,9 @@ load_theme(App *app)
     img_cache_clear(app);
     apply_widget_style(app);
 
-    app->clear   = app->page;
-    app->dirty   = 1;
+    app->clear     = app->page;
+    app->dirty     = 1;
+    app->must_draw = 1;
     reaktor_windows_restyle();
 }
 
@@ -1574,6 +1575,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     struct nk_rect area = nk_rect(0, 0, (float)win_w, (float)win_h);
     int is_main = !app->secondary, shot = 0, shown;
     Uint64 now = SDL_GetTicks(), t_build0, t_render0, t_present0, t_end;
+    int busy;
 
     app->laid_w  = win_w;
     app->laid_h  = win_h;
@@ -1668,7 +1670,8 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
                                           reader_activate, reader_focus, app);
     }
 
-    if (app->anim && reaktor_anim_settle()) {
+    busy = app->anim && reaktor_anim_settle();
+    if (busy) {
         app->dirty = 1;
         reaktor_app_wake(app);
     }
@@ -1686,12 +1689,22 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
 
     t_render0 = SDL_GetPerformanceCounter();
     if (app->build_only || same_frame(app, ctx)) {
+        /* A drawn frame clears in nk_sdl_render_ex; kept, the next build's
+           popups and overlay never join the list. */
+        nk_clear(ctx);
         t_present0 = t_end = t_render0;
         app->frames_skipped++;
+        /* No present to wait on, so a tween that changes nothing would spin. */
+        if (busy) {
+            reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
+            if (!app->dragging && app->fling_v == 0.0f) app->restore_rate = 2;
+        }
     } else {
         app->frames_drawn++;
         if (is_main) reaktor_text_prepare(ctx, app->ren);
         reaktor_render(app);
+        /* SDL rasterizes its queue here, or inside the present. */
+        SDL_FlushRenderer(app->ren);
         t_present0 = SDL_GetPerformanceCounter();
         if (is_main) shot = take_shot(app);
         if (app->want_capture) {

@@ -303,15 +303,19 @@ Redrawing continuously at 960×680, p10–p90 of 31 samples:
 | Buttons (the busiest) | 11.5–12.2 ms/frame | 11.7–13.0 ms/frame | 29.6–30.2 ms/frame | 13.4–15.3 ms/frame |
 
 The same rasterizer runs on all four. macOS also uploads the bitmap to a
-Metal texture to present it. On GhostBSD most of a frame is the present, a
-software blit into VMware's framebuffer: 6.7 ms of Login's 7.1 ms, 11.1 ms of
-Buttons' 14.8.
+Metal texture to present it. On GhostBSD the timers put 6.7 ms of Login's
+7.1 ms and 11.1 ms of Buttons' 14.8 in the present, but those timers counted
+SDL's rasterizing as present too, so that is the raster and the blit into
+VMware's framebuffer together.
 
 The Windows build of 2026-10-24, at its default 1100×680, redrawing
 continuously with vsync off, build, render and present, p10–p90 of 31 frames after 9 to warm up,
 over three launches: Login takes **1.3–1.8 ms** a frame and Buttons
-**2.7–3.4 ms**; `direct3d11` takes 0.4–0.8 ms and 0.8–1.3 ms. In software the
-present is most of it: 1.08 ms of Login's frame.
+**2.7–3.4 ms**; `direct3d11` takes 0.4–0.8 ms and 0.8–1.3 ms. Rasterizing is
+most of a software frame. SDL does it when its queue is flushed, which then
+happened inside the present; flushing first, on 0.9.0 over three launches, it
+takes 1.07–1.23 ms of Login's 1.34–1.55 ms and 1.60–1.73 ms of Buttons'
+2.45–2.68 ms, and the copy to the window 14–22 µs and 18–65 µs.
 Without a GPU, `direct3d11` falls back to WARP, which rasterizes on threads of
 its own: drawing `bench` flat out, the process spends **1.78 ms** of CPU a
 frame on WARP against 0.75 ms on `software` (medians of five runs), which

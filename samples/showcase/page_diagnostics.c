@@ -139,9 +139,9 @@ page_diagnostics(App *app, struct reaktor_context *ctx, showcase_state *st)
 
     section(app, ctx, "Where a frame goes",
             "Split three ways because guessing which one dominates has been "
-            "wrong more than once. Building the UI and converting it to "
-            "geometry are both fractions of a millisecond; the wait on "
-            "present is the whole frame.");
+            "wrong more than once. Render holds the rasterizing on the "
+            "software renderer; present is the copy to the window, or the "
+            "wait for the display.");
 
     SDL_snprintf(v, sizeof(v), "%.2f ms", (double)d.build_ms);
     DIAG_ROWS(ctx) {

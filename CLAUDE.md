@@ -57,8 +57,12 @@ on every run.
   renderer, so `reaktor_render` swaps each rounded fill for
   `reaktor_fill_round`, relinking the command list (it ends where a `next`
   reaches `ctx->memory.allocated`).
-- **Measure the present, not the draw.** Without a GPU most of a frame is
-  `SDL_RenderPresent`; the Diagnostics page and `bench --no-vsync` split it.
+- **SDL draws when it flushes, not when it is asked.** Its calls only queue, so
+  without a GPU most of a frame is the flush the runtime makes before timing
+  the present; the Diagnostics page and `bench --no-vsync` split them. Vsync
+  sits in the present, so a total that matches the refresh rate measures it.
+- **`--shot` never skips a frame.** It and a capture force the draw, so a pixel
+  diff cannot see what `.skip_same_frames` breaks; `tests/skiptest.c` can.
 - **Text the atlas lacks is not Nuklear's.** Strings with Japanese, Arabic and
   the like are measured and drawn by `core/text/text.c` through a custom
   command. mojibake 0.5.0 records `byte_offset` at a character's last byte.
