@@ -36,8 +36,7 @@ Lenovo laptop with a 6-core Ryzen 5 4600H, a GeForce RTX 2060 and a 1920×1080
 framework's toolchain; one script launches it and samples its whole process
 tree from outside. [`benchmarks/`](../benchmarks/BENCHMARKS.md) has the
 projects and the runner. Reaktor appears once per `--renderer`; its arms are
-the build after 0.9.0, measured on 2026-11-07, the others from the pass of
-2026-10-24. Shaft
+0.10.0, measured on 2026-11-07, the others from the pass of 2026-10-24. Shaft
 is not plotted: it does not link on Windows.
 
 | Arm | Memory | CPU, with startup | CPU, steady state |
