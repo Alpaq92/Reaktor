@@ -1695,9 +1695,9 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
         t_present0 = t_end = t_render0;
         app->frames_skipped++;
         /* No present to wait on, so a tween that changes nothing would spin. */
-        if (busy) {
+        if (busy && !app->build_only) {
             reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
-            if (!app->dragging && app->fling_v == 0.0f) app->restore_rate = 2;
+            if (!reaktor_windows_holding()) app->restore_rate = 2;
         }
     } else {
         app->frames_drawn++;

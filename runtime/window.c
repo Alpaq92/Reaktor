@@ -376,6 +376,23 @@ reaktor_windows_restyle(void)
     }
 }
 
+/* The callback rate is the process's: a held button or a fling in any window
+   keeps it. */
+int
+reaktor_windows_holding(void)
+{
+    App *m = reaktor_main_app();
+    int i;
+
+    if (m && (m->dragging || m->fling_v != 0.0f)) return 1;
+    for (i = 0; i < g_win_n; i++) {
+        const App *a = g_win[i].app;
+
+        if (!g_win[i].closing && (a->dragging || a->fling_v != 0.0f)) return 1;
+    }
+    return 0;
+}
+
 void
 reaktor_windows_dirty(void)
 {
