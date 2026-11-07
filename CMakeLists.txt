@@ -299,6 +299,15 @@ set(APP_RESOURCES "")
 add_executable(mkicon EXCLUDE_FROM_ALL tools/mkicon.c)
 target_link_libraries(mkicon PRIVATE reaktor_core)
 
+# Linux and the BSDs speak D-Bus through platform/dbus, Reaktor's own client,
+# built into the runtime: the portal's settings there, and in the modules the
+# AT-SPI bridge, the tray and notifications.
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_library(reaktor_rdbus INTERFACE)
+    target_include_directories(reaktor_rdbus INTERFACE
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/dbus")
+endif()
+
 if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(keytest tests/keytest.c core/ui/keys.c)
     target_link_libraries(keytest PRIVATE reaktor_headers)
@@ -341,8 +350,17 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(imagetest tests/imagetest.c)
     target_link_libraries(imagetest PRIVATE plutovg)
 
+    # The message format everywhere; a live bus where there is one.
+    add_executable(dbustest tests/dbustest.c platform/dbus/rdbus_msg.c)
+    target_include_directories(dbustest PRIVATE platform/dbus)
+    target_link_libraries(dbustest PRIVATE ${REAKTOR_SDL})
+    if(TARGET reaktor_rdbus)
+        target_sources(dbustest PRIVATE platform/dbus/rdbus_conn.c)
+        target_compile_definitions(dbustest PRIVATE DBUSTEST_LIVE)
+    endif()
+
     if(MSVC)
-        foreach(_t keytest a11ytest animtest localetest laytest csstest basetest imagetest)
+        foreach(_t keytest a11ytest animtest localetest laytest csstest basetest imagetest dbustest)
             target_compile_options(${_t} PRIVATE /we4013)
         endforeach()
     endif()
@@ -404,21 +422,15 @@ elseif(APPLE)
         "$<TARGET_OBJECTS:reaktor_a11y_macos>")
     target_compile_definitions(reaktor_a11y INTERFACE REAKTOR_HAVE_NSACCESSIBILITY)
     target_link_libraries(reaktor_a11y INTERFACE "-framework Cocoa")
+elseif(TARGET reaktor_rdbus)
+    target_sources(reaktor_a11y INTERFACE
+        "${_a11y}/a11y_snapshot.c" "${_a11y}/a11y_window_none.c" "${_a11y}/a11y_atspi.c")
+    target_compile_definitions(reaktor_a11y INTERFACE REAKTOR_HAVE_ATSPI)
+    target_link_libraries(reaktor_a11y INTERFACE reaktor_rdbus)
+    message(STATUS "a11y: AT-SPI")
 else()
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(REAKTOR_DBUS QUIET IMPORTED_TARGET dbus-1)
-    endif()
-    if(REAKTOR_DBUS_FOUND)
-        target_sources(reaktor_a11y INTERFACE
-            "${_a11y}/a11y_snapshot.c" "${_a11y}/a11y_window_none.c" "${_a11y}/a11y_atspi.c")
-        target_compile_definitions(reaktor_a11y INTERFACE REAKTOR_HAVE_ATSPI)
-        target_link_libraries(reaktor_a11y INTERFACE PkgConfig::REAKTOR_DBUS)
-        message(STATUS "a11y: AT-SPI over libdbus ${REAKTOR_DBUS_VERSION}")
-    else()
-        target_link_libraries(reaktor_a11y INTERFACE reaktor_a11y_none)
-        message(STATUS "a11y: no dbus-1; the AT-SPI bridge is not built")
-    endif()
+    target_link_libraries(reaktor_a11y INTERFACE reaktor_a11y_none)
+    message(STATUS "a11y: no AT-SPI bridge on this system")
 endif()
 
 option(REAKTOR_LOCALE "Translations, from the catalogs in assets/locale" ON)
@@ -540,20 +552,12 @@ if(REAKTOR_SETTINGS)
             "SHELL:--pre-js ${CMAKE_CURRENT_SOURCE_DIR}/tools/web-pre.js")
     endif()
 endif()
-# Linux and the BSDs speak StatusNotifierItem over libdbus rather than take
-# SDL's tray, which loads GTK; without dbus-1 they have none.
-if(REAKTOR_TRAY AND NOT WIN32 AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND AND NOT TARGET PkgConfig::REAKTOR_DBUS)
-        pkg_check_modules(REAKTOR_DBUS QUIET IMPORTED_TARGET dbus-1)
-    endif()
-    if(TARGET PkgConfig::REAKTOR_DBUS)
-        target_compile_definitions(reaktor_tray INTERFACE REAKTOR_TRAY_DBUS)
-        target_link_libraries(reaktor_tray INTERFACE PkgConfig::REAKTOR_DBUS)
-        message(STATUS "tray: StatusNotifierItem over libdbus")
-    else()
-        message(STATUS "tray: no dbus-1; reaktor_tray_open answers 0")
-    endif()
+# Linux and the BSDs speak StatusNotifierItem rather than take SDL's tray,
+# which loads GTK.
+if(REAKTOR_TRAY AND TARGET reaktor_rdbus)
+    target_compile_definitions(reaktor_tray INTERFACE REAKTOR_TRAY_DBUS)
+    target_link_libraries(reaktor_tray INTERFACE reaktor_rdbus)
+    message(STATUS "tray: StatusNotifierItem")
 endif()
 
 option(REAKTOR_NOTIFY "System notifications: a toast, a D-Bus notification, the browser's" ON)
@@ -576,18 +580,12 @@ else()
         target_sources(reaktor_notify INTERFACE "$<TARGET_OBJECTS:reaktor_notify_macos>")
         target_link_libraries(reaktor_notify INTERFACE
             "-framework Foundation" "-framework UserNotifications")
+    elseif(TARGET reaktor_rdbus)
+        target_compile_definitions(reaktor_notify INTERFACE REAKTOR_HAVE_DBUS)
+        target_link_libraries(reaktor_notify INTERFACE reaktor_rdbus)
     elseif(NOT EMSCRIPTEN)
-        find_package(PkgConfig QUIET)
-        if(PkgConfig_FOUND AND NOT TARGET PkgConfig::REAKTOR_DBUS)
-            pkg_check_modules(REAKTOR_DBUS QUIET IMPORTED_TARGET dbus-1)
-        endif()
-        if(TARGET PkgConfig::REAKTOR_DBUS)
-            target_compile_definitions(reaktor_notify INTERFACE REAKTOR_HAVE_DBUS)
-            target_link_libraries(reaktor_notify INTERFACE PkgConfig::REAKTOR_DBUS)
-        else()
-            target_link_libraries(reaktor_notify INTERFACE reaktor_notify_none)
-            message(STATUS "notify: no dbus-1; notifications are not sent")
-        endif()
+        target_link_libraries(reaktor_notify INTERFACE reaktor_notify_none)
+        message(STATUS "notify: no D-Bus on this system; notifications are not sent")
     endif()
 endif()
 
@@ -643,6 +641,11 @@ add_library(reaktor_runtime STATIC
     runtime/window.c)
 target_compile_definitions(reaktor_runtime PRIVATE
     REAKTOR_VERSION_STRING="${PROJECT_VERSION}")
+if(TARGET reaktor_rdbus)
+    target_sources(reaktor_runtime PRIVATE platform/dbus/rdbus_msg.c platform/dbus/rdbus_conn.c)
+    target_link_libraries(reaktor_runtime PRIVATE reaktor_rdbus)
+    target_compile_definitions(reaktor_runtime PRIVATE REAKTOR_HAVE_RDBUS)
+endif()
 
 if(EMSCRIPTEN)
     target_sources(reaktor_runtime PRIVATE platform/web/keyboard_web.c)
@@ -687,6 +690,8 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/plutosvg/plutovg/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/plutovg.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/freetype/docs/FTL.TXT"
                "${CMAKE_BINARY_DIR}/licenses/freetype.txt" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/platform/dbus/LICENSE-minidbus"
+               "${CMAKE_BINARY_DIR}/licenses/minidbus.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/toml-c/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/toml-c.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"

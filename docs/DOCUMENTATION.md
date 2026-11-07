@@ -143,7 +143,7 @@ its files, through the same `file_opened`.
 was sent. On Windows it is a balloon from an icon of the app's own, which
 Windows 10 and 11 show as a toast headed by the program's name, and the icon
 goes ten seconds later; on Linux and the BSDs, a `Notify` call to
-`org.freedesktop.Notifications` over `dbus-1`; on macOS,
+`org.freedesktop.Notifications` over D-Bus; on macOS,
 `UNUserNotificationCenter`, which answers 0 outside an app bundle; on the web,
 the browser's `Notification`, after it asks for permission once. A click on
 one is not reported.
@@ -605,7 +605,7 @@ reaktor_tray_open(app, &(reaktor_tray){
 ```
 
 On Linux, FreeBSD, OpenBSD and NetBSD the tray is Reaktor's own, spoken over
-libdbus rather than SDL's, which loads AppIndicator and GTK 3. The icon is a
+D-Bus by `platform/dbus` rather than SDL's, which loads AppIndicator and GTK 3. The icon is a
 StatusNotifierItem (`org.kde.StatusNotifierItem`) registered with the
 session's `org.kde.StatusNotifierWatcher`, its image the app's SVG icon as
 `IconPixmap` at 22, 32, 48 and 64 pixels, its tooltip `.tooltip`; the menu is
@@ -617,7 +617,12 @@ show it; a desktop with no watcher on the bus, plain GNOME among them, gets
 none, and `reaktor_tray_open` answers 0. A watcher that starts or restarts
 later is told about the item again. One thread waits on the bus's socket and
 wakes the frame loop, which reads and answers the calls, so `.chosen` still
-runs on the main thread. Built without dbus-1, they have no tray, and Windows and macOS keep SDL's.
+runs on the main thread. Windows and macOS keep SDL's.
+
+The session bus is the one `DBUS_SESSION_BUS_ADDRESS` names, or else
+`$XDG_RUNTIME_DIR/bus`. A session that publishes its bus only through X11
+autolaunch, as libdbus would find it, has none: no tray, notifications, portal
+settings or AT-SPI bridge.
 
 ### Inspector
 
@@ -1208,9 +1213,10 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 
 - **`REAKTOR_A11Y=OFF`** drops the bridges and the libraries only they need:
   `uiautomationcore`, `ole32` and `oleaut32` on Windows. It saves few bytes
-  ([PERFORMANCE.md](PERFORMANCE.md#modules)). On Linux and the BSDs `dbus-1`
-  stays linked for the tray and notifications; a program that links no
-  `dbus-1` turns `REAKTOR_TRAY` and `REAKTOR_NOTIFY` off too.
+  ([PERFORMANCE.md](PERFORMANCE.md#modules)). On Linux and the BSDs the
+  D-Bus client is part of the runtime, which reads the desktop portal's
+  appearance settings through it; `REAKTOR_A11Y`, `REAKTOR_TRAY` and
+  `REAKTOR_NOTIFY` only drop their own use of it.
 - **`REAKTOR_LOCALE=OFF`** leaves every string as its key, bakes Latin-1
   alone, and stops the web build packing the catalogs and the Japanese font.
 - **`REAKTOR_LOCALE_EMBED=ON`** reads `assets/locale/*.txt` into the program
@@ -1221,15 +1227,14 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 - **`REAKTOR_SETTINGS=OFF`** leaves toml-c and the web's IndexedDB out:
   `reaktor_setting` answers `NULL`, saving and clearing do nothing, and
   `.remember_window` is ignored.
-- **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, links no
-  `dbus-1` for the tray on Linux and the BSDs, and minimizing never hides
-  the window.
+- **`REAKTOR_TRAY=OFF`** answers 0 from `reaktor_tray_open`, and minimizing
+  never hides the window.
 - **`REAKTOR_PRINT=OFF`** leaves the print module out; `reaktor_print` and
   `reaktor_print_pdf` answer 0.
 - **`REAKTOR_INSPECTOR=OFF`** answers 0 from `reaktor_inspector_open` and
   ignores `.inspector`, its shortcut and its flags.
 - **`REAKTOR_NOTIFY=OFF`** answers 0 from `reaktor_notify` and links nothing
-  for it: not `shell32`, `dbus-1` or the UserNotifications framework.
+  for it: not `shell32` or the UserNotifications framework.
 - **`REAKTOR_POPUP_WINDOWS=OFF`** draws menus inside the window, fitted to it,
   as the web does; `--popups inline` does the same without a rebuild.
 

@@ -125,7 +125,7 @@ value and position.
 [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) draws the widgets.
 [SDL3](https://github.com/libsdl-org/SDL) supplies the window, input and
 software renderer, and the tray on Windows and macOS; on Linux and the BSDs
-the tray is Reaktor's, over libdbus. Reaktor's own CSS engine reads the
+the tray is Reaktor's, over its own D-Bus client. Reaktor's own CSS engine reads the
 stylesheets, and
 [Onlay](https://github.com/Alpaq92/Onlay), a fork of
 [randrew/layout](https://github.com/randrew/layout), computes the rectangles.

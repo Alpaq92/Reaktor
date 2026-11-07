@@ -26,7 +26,7 @@ shared too, as `libreaktor-sdl3.so` — without audio, joystick, haptic, HID,
 sensor, camera, power, GPU, offscreen, the render backends Reaktor never
 selects, or its dynamic API (see below). Its tray is built, and opened on
 Windows and macOS; on Linux and the BSDs Reaktor's own tray speaks
-StatusNotifierItem and dbusmenu over libdbus, so SDL's, which would load
+StatusNotifierItem and dbusmenu over `platform/dbus`, so SDL's, which would load
 AppIndicator and GTK 3, never opens there and nothing links them. mojibake is
 built without its collation, IDNA, security
 and character-name tables. NukAnim is one header, compiled in
@@ -43,22 +43,23 @@ library is linked or copied.
 Portions of this software are copyright © 2026 The FreeType Project
 (https://freetype.org). All rights reserved.
 
-## The one dependency that is not a submodule
+## The one ported library
 
-`libdbus`, on Linux and the BSDs, when present: the AT-SPI bridge, the tray
-(StatusNotifierItem and dbusmenu) and notifications speak D-Bus. CMake asks
-pkg-config for `dbus-1`; without it the bridge is not built, as on a desktop
-with no accessibility bus, `reaktor_tray_open` answers 0 and notifications
-are not sent.
+On Linux and the BSDs the AT-SPI bridge, the tray (StatusNotifierItem and
+dbusmenu), notifications and the desktop portal's appearance settings speak
+D-Bus through `platform/dbus`, a client of Reaktor's own ported to C from
+[minidbus](https://codefloe.com/Honken/minidbus):
 
-| Component | License |
-| --- | --- |
-| [libdbus](https://gitlab.freedesktop.org/dbus/dbus) | **AFL-2.1** or GPL-2.0-or-later — taken under AFL-2.1 |
+| Component | Used for | License |
+| --- | --- | --- |
+| [minidbus](https://codefloe.com/Honken/minidbus) | The D-Bus client in `platform/dbus`: the connection, authentication and message format | MIT |
 
-AFL-2.1 is permissive, with an attribution requirement this table meets and a
-patent-termination clause. It is not GPL-compatible, which matters to GPL
-downstreams, not to an MIT project. The alternative was ATK: LGPL, and being
-retired in favor of speaking AT-SPI directly.
+MIT License, Copyright (c) 2026 Honken. Its full text is
+`platform/dbus/LICENSE-minidbus`, shipped as `licenses/minidbus.txt`.
+
+Nothing links libdbus. SDL still opens `libdbus-1.so.3` where the system has it,
+for input methods, portals and the screensaver, and goes without it where it
+does not.
 
 ## The one vendored source file
 

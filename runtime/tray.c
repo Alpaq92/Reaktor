@@ -5,9 +5,9 @@
 
 #ifdef REAKTOR_TRAY_DBUS
 /* Linux and the BSDs: a StatusNotifierItem with a com.canonical.dbusmenu menu,
-   spoken over libdbus. SDL's tray there builds its menu from GTK widgets, and
-   loading GTK cost the showcase hundreds of libraries and half a second. */
-#include <dbus/dbus.h>
+   spoken over platform/dbus. SDL's tray there builds its menu from GTK widgets,
+   and loading GTK cost the showcase hundreds of libraries and half a second. */
+#include "rdbus.h"
 #include <poll.h>
 #include <unistd.h>
 
@@ -16,9 +16,9 @@
 #define MENU_PATH   "/MenuBar"
 #define MENU_IFACE  "com.canonical.dbusmenu"
 #define WATCHER     "org.kde.StatusNotifierWatcher"
-#define PROPS_IFACE "org.freedesktop.DBus.Properties"
+#define PROPS_IFACE RDBUS_INTERFACE_PROPERTIES
 
-static DBusConnection    *g_bus;
+static rdbus_conn        *g_bus;
 static reaktor_tray_item  g_item[TRAY_ITEMS];
 static int                g_on[TRAY_ITEMS];
 static char              *g_label[TRAY_ITEMS];
@@ -30,16 +30,23 @@ static int                g_icon_px[4], g_icons;
 
 /* SDL has no way to wait on another descriptor, so one thread sleeps in
    poll() on the bus and wakes the frame loop, which reads and answers. It
-   never touches libdbus; it waits for the main thread to drain the bus. */
+   never touches the connection; it waits for the main thread to drain it. */
 static SDL_Thread    *g_thread;
 static SDL_Semaphore *g_drained;
 static SDL_AtomicInt  g_running;
 static int            g_stop[2] = { -1, -1 };
+static Sint32         g_gen;
+
+/* A menu callback may close the tray while pump() dispatches on its bus;
+   the connection is then given back once that pump() returns. */
+static rdbus_conn    *g_pumped;
+static int            g_pumped_closed;
 
 static int SDLCALL
 watch_bus(void *fdp)
 {
     struct pollfd p[2];
+    Sint32 gen = g_gen;
 
     p[0].fd = (int)(intptr_t)fdp;
     p[0].events = POLLIN;
@@ -54,6 +61,7 @@ watch_bus(void *fdp)
         SDL_zero(e);
         e.type = SDL_EVENT_USER;
         e.user.data1 = &g_tag;
+        e.user.code = gen;
         if (!SDL_PushEvent(&e)) break;
         SDL_WaitSemaphore(g_drained);
         /* A hung-up bus would wake us forever. */
@@ -63,104 +71,102 @@ watch_bus(void *fdp)
 }
 
 static void
-put_variant(DBusMessageIter *it, int type, const char *sig, const void *v)
+put_variant(rdbus_iter *it, int type, const char *sig, const void *v)
 {
-    DBusMessageIter var;
+    rdbus_iter var;
 
-    dbus_message_iter_open_container(it, DBUS_TYPE_VARIANT, sig, &var);
-    dbus_message_iter_append_basic(&var, type, v);
-    dbus_message_iter_close_container(it, &var);
+    rdbus_iter_open(it, RDBUS_TYPE_VARIANT, sig, &var);
+    rdbus_iter_append_basic(&var, type, v);
+    rdbus_iter_close(it, &var);
 }
 
 static void
-put_entry(DBusMessageIter *dict, const char *key, int type, const char *sig,
-          const void *v)
+put_entry(rdbus_iter *dict, const char *key, int type, const char *sig, const void *v)
 {
-    DBusMessageIter e;
+    rdbus_iter e;
 
-    dbus_message_iter_open_container(dict, DBUS_TYPE_DICT_ENTRY, NULL, &e);
-    dbus_message_iter_append_basic(&e, DBUS_TYPE_STRING, &key);
+    rdbus_iter_open(dict, RDBUS_TYPE_DICT_ENTRY, NULL, &e);
+    rdbus_iter_append_basic(&e, RDBUS_TYPE_STRING, &key);
     put_variant(&e, type, sig, v);
-    dbus_message_iter_close_container(dict, &e);
+    rdbus_iter_close(dict, &e);
 }
 
 static void
-put_empty(DBusMessageIter *it, const char *sig)
+put_empty(rdbus_iter *it, const char *sig)
 {
-    DBusMessageIter arr;
+    rdbus_iter arr;
 
-    dbus_message_iter_open_container(it, DBUS_TYPE_ARRAY, sig, &arr);
-    dbus_message_iter_close_container(it, &arr);
+    rdbus_iter_open(it, RDBUS_TYPE_ARRAY, sig, &arr);
+    rdbus_iter_close(it, &arr);
 }
 
 /* a(iiay): each size, ARGB32 in network byte order. */
 static void
-put_pixmaps(DBusMessageIter *it, int all)
+put_pixmaps(rdbus_iter *it, int all)
 {
-    DBusMessageIter arr, st, bytes;
+    rdbus_iter arr, st, bytes;
     int i;
 
-    dbus_message_iter_open_container(it, DBUS_TYPE_ARRAY, "(iiay)", &arr);
+    rdbus_iter_open(it, RDBUS_TYPE_ARRAY, "(iiay)", &arr);
     for (i = 0; all && i < g_icons; i++) {
-        dbus_int32_t px = g_icon_px[i];
-        const Uint8 *b = g_icon[i];
+        int32_t px = g_icon_px[i];
 
-        dbus_message_iter_open_container(&arr, DBUS_TYPE_STRUCT, NULL, &st);
-        dbus_message_iter_append_basic(&st, DBUS_TYPE_INT32, &px);
-        dbus_message_iter_append_basic(&st, DBUS_TYPE_INT32, &px);
-        dbus_message_iter_open_container(&st, DBUS_TYPE_ARRAY, "y", &bytes);
-        dbus_message_iter_append_fixed_array(&bytes, DBUS_TYPE_BYTE, &b, px * px * 4);
-        dbus_message_iter_close_container(&st, &bytes);
-        dbus_message_iter_close_container(&arr, &st);
+        rdbus_iter_open(&arr, RDBUS_TYPE_STRUCT, NULL, &st);
+        rdbus_iter_append_basic(&st, RDBUS_TYPE_INT32, &px);
+        rdbus_iter_append_basic(&st, RDBUS_TYPE_INT32, &px);
+        rdbus_iter_open(&st, RDBUS_TYPE_ARRAY, "y", &bytes);
+        rdbus_iter_append_fixed_array(&bytes, RDBUS_TYPE_BYTE, g_icon[i], px * px * 4);
+        rdbus_iter_close(&st, &bytes);
+        rdbus_iter_close(&arr, &st);
     }
-    dbus_message_iter_close_container(it, &arr);
+    rdbus_iter_close(it, &arr);
 }
 
 /* (sa(iiay)ss): icon name, pixmaps, title, text. */
 static void
-put_tooltip(DBusMessageIter *it)
+put_tooltip(rdbus_iter *it)
 {
-    DBusMessageIter var, st;
+    rdbus_iter var, st;
     const char *none = "", *tip = g_tip ? g_tip : "";
 
-    dbus_message_iter_open_container(it, DBUS_TYPE_VARIANT, "(sa(iiay)ss)", &var);
-    dbus_message_iter_open_container(&var, DBUS_TYPE_STRUCT, NULL, &st);
-    dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &none);
+    rdbus_iter_open(it, RDBUS_TYPE_VARIANT, "(sa(iiay)ss)", &var);
+    rdbus_iter_open(&var, RDBUS_TYPE_STRUCT, NULL, &st);
+    rdbus_iter_append_basic(&st, RDBUS_TYPE_STRING, &none);
     put_pixmaps(&st, 0);
-    dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &tip);
-    dbus_message_iter_append_basic(&st, DBUS_TYPE_STRING, &none);
-    dbus_message_iter_close_container(&var, &st);
-    dbus_message_iter_close_container(it, &var);
+    rdbus_iter_append_basic(&st, RDBUS_TYPE_STRING, &tip);
+    rdbus_iter_append_basic(&st, RDBUS_TYPE_STRING, &none);
+    rdbus_iter_close(&var, &st);
+    rdbus_iter_close(it, &var);
 }
 
 /* One property of the item into a variant; 0 when there is no such name. */
 static int
-sni_prop(DBusMessageIter *it, const char *name)
+sni_prop(rdbus_iter *it, const char *name)
 {
     const char *none = "", *menu = MENU_PATH, *id = reaktor_app_ident();
     const char *cat = "ApplicationStatus", *status = "Active";
     const char *title = g_tip ? g_tip : id;
-    dbus_bool_t yes = 1;
-    dbus_int32_t zero = 0;
-    DBusMessageIter var;
+    rdbus_bool yes = 1;
+    int32_t zero = 0;
+    rdbus_iter var;
 
-    if (!SDL_strcmp(name, "Category"))      put_variant(it, DBUS_TYPE_STRING, "s", &cat);
-    else if (!SDL_strcmp(name, "Id"))       put_variant(it, DBUS_TYPE_STRING, "s", &id);
-    else if (!SDL_strcmp(name, "Title"))    put_variant(it, DBUS_TYPE_STRING, "s", &title);
-    else if (!SDL_strcmp(name, "Status"))   put_variant(it, DBUS_TYPE_STRING, "s", &status);
-    else if (!SDL_strcmp(name, "WindowId")) put_variant(it, DBUS_TYPE_INT32, "i", &zero);
+    if (!SDL_strcmp(name, "Category"))      put_variant(it, RDBUS_TYPE_STRING, "s", &cat);
+    else if (!SDL_strcmp(name, "Id"))       put_variant(it, RDBUS_TYPE_STRING, "s", &id);
+    else if (!SDL_strcmp(name, "Title"))    put_variant(it, RDBUS_TYPE_STRING, "s", &title);
+    else if (!SDL_strcmp(name, "Status"))   put_variant(it, RDBUS_TYPE_STRING, "s", &status);
+    else if (!SDL_strcmp(name, "WindowId")) put_variant(it, RDBUS_TYPE_INT32, "i", &zero);
     else if (!SDL_strcmp(name, "IconName") || !SDL_strcmp(name, "OverlayIconName") ||
              !SDL_strcmp(name, "AttentionIconName") ||
              !SDL_strcmp(name, "AttentionMovieName"))
-        put_variant(it, DBUS_TYPE_STRING, "s", &none);
+        put_variant(it, RDBUS_TYPE_STRING, "s", &none);
     else if (!SDL_strcmp(name, "IconPixmap") || !SDL_strcmp(name, "OverlayIconPixmap") ||
              !SDL_strcmp(name, "AttentionIconPixmap")) {
-        dbus_message_iter_open_container(it, DBUS_TYPE_VARIANT, "a(iiay)", &var);
+        rdbus_iter_open(it, RDBUS_TYPE_VARIANT, "a(iiay)", &var);
         put_pixmaps(&var, name[0] == 'I');
-        dbus_message_iter_close_container(it, &var);
+        rdbus_iter_close(it, &var);
     } else if (!SDL_strcmp(name, "ToolTip"))    put_tooltip(it);
-    else if (!SDL_strcmp(name, "ItemIsMenu"))   put_variant(it, DBUS_TYPE_BOOLEAN, "b", &yes);
-    else if (!SDL_strcmp(name, "Menu"))         put_variant(it, DBUS_TYPE_OBJECT_PATH, "o", &menu);
+    else if (!SDL_strcmp(name, "ItemIsMenu"))   put_variant(it, RDBUS_TYPE_BOOLEAN, "b", &yes);
+    else if (!SDL_strcmp(name, "Menu"))         put_variant(it, RDBUS_TYPE_OBJECT_PATH, "o", &menu);
     else return 0;
     return 1;
 }
@@ -172,111 +178,142 @@ static const char *const sni_props[] = {
 };
 
 static int
-menu_prop(DBusMessageIter *it, const char *name)
+menu_prop(rdbus_iter *it, const char *name)
 {
     const char *dir = "ltr", *status = "normal";
-    dbus_uint32_t version = 3;
-    DBusMessageIter var;
+    uint32_t version = 3;
+    rdbus_iter var;
 
-    if (!SDL_strcmp(name, "Version"))            put_variant(it, DBUS_TYPE_UINT32, "u", &version);
-    else if (!SDL_strcmp(name, "TextDirection")) put_variant(it, DBUS_TYPE_STRING, "s", &dir);
-    else if (!SDL_strcmp(name, "Status"))        put_variant(it, DBUS_TYPE_STRING, "s", &status);
+    if (!SDL_strcmp(name, "Version"))            put_variant(it, RDBUS_TYPE_UINT32, "u", &version);
+    else if (!SDL_strcmp(name, "TextDirection")) put_variant(it, RDBUS_TYPE_STRING, "s", &dir);
+    else if (!SDL_strcmp(name, "Status"))        put_variant(it, RDBUS_TYPE_STRING, "s", &status);
     else if (!SDL_strcmp(name, "IconThemePath")) {
-        dbus_message_iter_open_container(it, DBUS_TYPE_VARIANT, "as", &var);
+        rdbus_iter_open(it, RDBUS_TYPE_VARIANT, "as", &var);
         put_empty(&var, "s");
-        dbus_message_iter_close_container(it, &var);
+        rdbus_iter_close(it, &var);
     } else return 0;
     return 1;
 }
 
 static const char *const menu_props[] = { "Version", "TextDirection", "Status", "IconThemePath" };
 
-/* An item's a{sv}; id 0 is the root, item i is id i + 1. */
+/* Where an item's properties go: every one as an a{sv} entry, or, with want
+   set, that one alone as a variant. */
+typedef struct item_out {
+    rdbus_iter *it;
+    const char *want;
+    int         found;
+} item_out;
+
 static void
-put_item_props(DBusMessageIter *it, int id)
+put_prop(item_out *o, const char *key, int type, const char *sig, const void *v)
 {
-    DBusMessageIter dict;
+    if (!o->want) {
+        put_entry(o->it, key, type, sig, v);
+    } else if (!o->found && !SDL_strcmp(key, o->want)) {
+        put_variant(o->it, type, sig, v);
+        o->found = 1;
+    }
+}
+
+/* Id 0 is the root, item i is id i + 1. */
+static void
+item_props(item_out *o, int id)
+{
     const reaktor_tray_item *t = id > 0 ? &g_item[id - 1] : NULL;
 
-    dbus_message_iter_open_container(it, DBUS_TYPE_ARRAY, "{sv}", &dict);
     if (!t) {
         const char *sub = "submenu";
 
-        put_entry(&dict, "children-display", DBUS_TYPE_STRING, "s", &sub);
+        put_prop(o, "children-display", RDBUS_TYPE_STRING, "s", &sub);
     } else if (!t->label) {
         const char *sep = "separator";
 
-        put_entry(&dict, "type", DBUS_TYPE_STRING, "s", &sep);
+        put_prop(o, "type", RDBUS_TYPE_STRING, "s", &sep);
     } else {
         const char *label = g_label[id - 1] ? g_label[id - 1] : "";
-        dbus_bool_t on = !t->disabled;
+        rdbus_bool on = !t->disabled;
 
-        put_entry(&dict, "label", DBUS_TYPE_STRING, "s", &label);
-        put_entry(&dict, "enabled", DBUS_TYPE_BOOLEAN, "b", &on);
+        put_prop(o, "label", RDBUS_TYPE_STRING, "s", &label);
+        put_prop(o, "enabled", RDBUS_TYPE_BOOLEAN, "b", &on);
         if (t->checkbox) {
             const char *mark = "checkmark";
-            dbus_int32_t state = g_on[id - 1];
+            int32_t state = g_on[id - 1];
 
-            put_entry(&dict, "toggle-type", DBUS_TYPE_STRING, "s", &mark);
-            put_entry(&dict, "toggle-state", DBUS_TYPE_INT32, "i", &state);
+            put_prop(o, "toggle-type", RDBUS_TYPE_STRING, "s", &mark);
+            put_prop(o, "toggle-state", RDBUS_TYPE_INT32, "i", &state);
         }
     }
-    dbus_message_iter_close_container(it, &dict);
+}
+
+/* An item's a{sv}. */
+static void
+put_item_props(rdbus_iter *it, int id)
+{
+    rdbus_iter dict;
+    item_out o;
+
+    rdbus_iter_open(it, RDBUS_TYPE_ARRAY, "{sv}", &dict);
+    o.it = &dict;
+    o.want = NULL;
+    o.found = 0;
+    item_props(&o, id);
+    rdbus_iter_close(it, &dict);
 }
 
 /* (ia{sv}av), the root holding every item when depth allows. */
 static void
-put_layout(DBusMessageIter *it, int id, int depth)
+put_layout(rdbus_iter *it, int id, int depth)
 {
-    DBusMessageIter st, kids, var;
-    dbus_int32_t i32 = id;
+    rdbus_iter st, kids, var;
+    int32_t i32 = id;
     int i;
 
-    dbus_message_iter_open_container(it, DBUS_TYPE_STRUCT, NULL, &st);
-    dbus_message_iter_append_basic(&st, DBUS_TYPE_INT32, &i32);
+    rdbus_iter_open(it, RDBUS_TYPE_STRUCT, NULL, &st);
+    rdbus_iter_append_basic(&st, RDBUS_TYPE_INT32, &i32);
     put_item_props(&st, id);
-    dbus_message_iter_open_container(&st, DBUS_TYPE_ARRAY, "v", &kids);
+    rdbus_iter_open(&st, RDBUS_TYPE_ARRAY, "v", &kids);
     for (i = 0; id == 0 && depth != 0 && i < g_n; i++) {
-        dbus_message_iter_open_container(&kids, DBUS_TYPE_VARIANT, "(ia{sv}av)", &var);
+        rdbus_iter_open(&kids, RDBUS_TYPE_VARIANT, "(ia{sv}av)", &var);
         put_layout(&var, i + 1, depth - 1);
-        dbus_message_iter_close_container(&kids, &var);
+        rdbus_iter_close(&kids, &var);
     }
-    dbus_message_iter_close_container(&st, &kids);
-    dbus_message_iter_close_container(it, &st);
+    rdbus_iter_close(&st, &kids);
+    rdbus_iter_close(it, &st);
 }
 
 /* (ia{sv}): an item with its properties. */
 static void
-put_item(DBusMessageIter *arr, dbus_int32_t id)
+put_item(rdbus_iter *arr, int32_t id)
 {
-    DBusMessageIter st;
+    rdbus_iter st;
 
-    dbus_message_iter_open_container(arr, DBUS_TYPE_STRUCT, NULL, &st);
-    dbus_message_iter_append_basic(&st, DBUS_TYPE_INT32, &id);
+    rdbus_iter_open(arr, RDBUS_TYPE_STRUCT, NULL, &st);
+    rdbus_iter_append_basic(&st, RDBUS_TYPE_INT32, &id);
     put_item_props(&st, id);
-    dbus_message_iter_close_container(arr, &st);
+    rdbus_iter_close(arr, &st);
 }
 
 static void
-send_and_free(DBusMessage *m)
+send_and_free(rdbus_msg *m)
 {
     if (!m) return;
-    dbus_connection_send(g_bus, m, NULL);
-    dbus_message_unref(m);
-    dbus_connection_flush(g_bus);
+    rdbus_send(g_bus, m, NULL);
+    rdbus_msg_free(m);
+    rdbus_flush(g_bus);
 }
 
 static void
 items_updated(int id)
 {
-    DBusMessage *m = dbus_message_new_signal(MENU_PATH, MENU_IFACE, "ItemsPropertiesUpdated");
-    DBusMessageIter it, arr;
+    rdbus_msg *m = rdbus_msg_signal(MENU_PATH, MENU_IFACE, "ItemsPropertiesUpdated");
+    rdbus_iter it, arr;
 
     if (!m) return;
-    dbus_message_iter_init_append(m, &it);
-    dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "(ia{sv})", &arr);
+    rdbus_iter_init_append(m, &it);
+    rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "(ia{sv})", &arr);
     put_item(&arr, id);
-    dbus_message_iter_close_container(&it, &arr);
+    rdbus_iter_close(&it, &arr);
     put_empty(&it, "(ias)");
     send_and_free(m);
 }
@@ -302,7 +339,7 @@ clicked(int id)
 }
 
 static const char sni_xml[] =
-    DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE
+    RDBUS_INTROSPECT_DOCTYPE
     "<node><interface name=\"" SNI_IFACE "\">"
     "<method name=\"Activate\"><arg type=\"i\" direction=\"in\"/><arg type=\"i\" direction=\"in\"/></method>"
     "<method name=\"SecondaryActivate\"><arg type=\"i\" direction=\"in\"/><arg type=\"i\" direction=\"in\"/></method>"
@@ -328,7 +365,7 @@ static const char sni_xml[] =
     "</interface></node>";
 
 static const char menu_xml[] =
-    DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE
+    RDBUS_INTROSPECT_DOCTYPE
     "<node><interface name=\"" MENU_IFACE "\">"
     "<method name=\"GetLayout\"><arg type=\"i\" direction=\"in\"/><arg type=\"i\" direction=\"in\"/>"
     "<arg type=\"as\" direction=\"in\"/><arg type=\"u\" direction=\"out\"/>"
@@ -354,196 +391,167 @@ static const char menu_xml[] =
     "</interface></node>";
 
 /* Properties.Get and GetAll, for either object. */
-static DBusMessage *
-properties(DBusMessage *m, int menu)
+static rdbus_msg *
+properties(rdbus_msg *m, int menu)
 {
-    int (*prop)(DBusMessageIter *, const char *) = menu ? menu_prop : sni_prop;
+    int (*prop)(rdbus_iter *, const char *) = menu ? menu_prop : sni_prop;
     const char *const *names = menu ? menu_props : sni_props;
     int count = menu ? (int)SDL_arraysize(menu_props) : (int)SDL_arraysize(sni_props);
     const char *iface = NULL, *name = NULL;
-    DBusMessage *r;
-    DBusMessageIter it, dict, e;
+    rdbus_msg *r;
+    rdbus_iter it, dict, e;
     int i;
 
-    if (dbus_message_is_method_call(m, PROPS_IFACE, "GetAll")) {
-        if (!dbus_message_get_args(m, NULL, DBUS_TYPE_STRING, &iface, DBUS_TYPE_INVALID))
-            return dbus_message_new_error(m, DBUS_ERROR_INVALID_ARGS, "GetAll(s)");
-        if (!(r = dbus_message_new_method_return(m))) return NULL;
-        dbus_message_iter_init_append(r, &it);
-        dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "{sv}", &dict);
+    if (rdbus_msg_is_call(m, PROPS_IFACE, "GetAll")) {
+        if (!rdbus_msg_get_args(m, NULL, RDBUS_TYPE_STRING, &iface, RDBUS_TYPE_INVALID))
+            return rdbus_msg_error(m, RDBUS_ERROR_INVALID_ARGS, "GetAll(s)");
+        if (!(r = rdbus_msg_return(m))) return NULL;
+        rdbus_iter_init_append(r, &it);
+        rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "{sv}", &dict);
         for (i = 0; i < count; i++) {
-            dbus_message_iter_open_container(&dict, DBUS_TYPE_DICT_ENTRY, NULL, &e);
-            dbus_message_iter_append_basic(&e, DBUS_TYPE_STRING, &names[i]);
+            rdbus_iter_open(&dict, RDBUS_TYPE_DICT_ENTRY, NULL, &e);
+            rdbus_iter_append_basic(&e, RDBUS_TYPE_STRING, &names[i]);
             prop(&e, names[i]);
-            dbus_message_iter_close_container(&dict, &e);
+            rdbus_iter_close(&dict, &e);
         }
-        dbus_message_iter_close_container(&it, &dict);
+        rdbus_iter_close(&it, &dict);
         return r;
     }
-    if (dbus_message_is_method_call(m, PROPS_IFACE, "Get")) {
-        if (!dbus_message_get_args(m, NULL, DBUS_TYPE_STRING, &iface,
-                                   DBUS_TYPE_STRING, &name, DBUS_TYPE_INVALID))
-            return dbus_message_new_error(m, DBUS_ERROR_INVALID_ARGS, "Get(ss)");
-        if (!(r = dbus_message_new_method_return(m))) return NULL;
-        dbus_message_iter_init_append(r, &it);
+    if (rdbus_msg_is_call(m, PROPS_IFACE, "Get")) {
+        if (!rdbus_msg_get_args(m, NULL, RDBUS_TYPE_STRING, &iface,
+                                RDBUS_TYPE_STRING, &name, RDBUS_TYPE_INVALID))
+            return rdbus_msg_error(m, RDBUS_ERROR_INVALID_ARGS, "Get(ss)");
+        if (!(r = rdbus_msg_return(m))) return NULL;
+        rdbus_iter_init_append(r, &it);
         if (prop(&it, name)) return r;
-        dbus_message_unref(r);
-        return dbus_message_new_error(m, DBUS_ERROR_UNKNOWN_PROPERTY, name);
+        rdbus_msg_free(r);
+        return rdbus_msg_error(m, RDBUS_ERROR_UNKNOWN_PROPERTY, name);
     }
-    return dbus_message_new_error(m, DBUS_ERROR_PROPERTY_READ_ONLY, "read only");
+    return rdbus_msg_error(m, RDBUS_ERROR_PROPERTY_READ_ONLY, "read only");
 }
 
-static DBusMessage *
-menu_call(DBusMessage *m, const char *member)
+static rdbus_msg *
+menu_call(rdbus_msg *m, const char *member)
 {
-    DBusMessage *r = NULL;
-    DBusMessageIter in, out, arr;
-    dbus_int32_t id = 0, depth = -1;
+    rdbus_msg *r = NULL;
+    rdbus_iter in, out, arr;
+    int32_t id = 0, depth = -1;
     int i;
 
     if (!SDL_strcmp(member, "GetLayout")) {
-        if (!dbus_message_get_args(m, NULL, DBUS_TYPE_INT32, &id, DBUS_TYPE_INT32, &depth,
-                                   DBUS_TYPE_INVALID) || id < 0 || id > g_n)
-            return dbus_message_new_error(m, DBUS_ERROR_INVALID_ARGS, "no such item");
-        if (!(r = dbus_message_new_method_return(m))) return NULL;
-        dbus_uint32_t revision = 1;
+        if (!rdbus_msg_get_args(m, NULL, RDBUS_TYPE_INT32, &id, RDBUS_TYPE_INT32, &depth,
+                                RDBUS_TYPE_INVALID) || id < 0 || id > g_n)
+            return rdbus_msg_error(m, RDBUS_ERROR_INVALID_ARGS, "no such item");
+        if (!(r = rdbus_msg_return(m))) return NULL;
+        uint32_t revision = 1;
 
-        dbus_message_iter_init_append(r, &out);
-        dbus_message_iter_append_basic(&out, DBUS_TYPE_UINT32, &revision);
+        rdbus_iter_init_append(r, &out);
+        rdbus_iter_append_basic(&out, RDBUS_TYPE_UINT32, &revision);
         put_layout(&out, id, depth);
     } else if (!SDL_strcmp(member, "GetGroupProperties")) {
-        dbus_int32_t *ids = NULL;
+        const int32_t *ids = NULL;
         int n = 0;
 
-        if (!dbus_message_get_args(m, NULL, DBUS_TYPE_ARRAY, DBUS_TYPE_INT32, &ids, &n,
-                                   DBUS_TYPE_INVALID))
+        if (!rdbus_msg_get_args(m, NULL, RDBUS_TYPE_ARRAY, RDBUS_TYPE_INT32, &ids, &n,
+                                RDBUS_TYPE_INVALID))
             n = 0;
-        if (!(r = dbus_message_new_method_return(m))) return NULL;
-        dbus_message_iter_init_append(r, &out);
-        dbus_message_iter_open_container(&out, DBUS_TYPE_ARRAY, "(ia{sv})", &arr);
+        if (!(r = rdbus_msg_return(m))) return NULL;
+        rdbus_iter_init_append(r, &out);
+        rdbus_iter_open(&out, RDBUS_TYPE_ARRAY, "(ia{sv})", &arr);
         /* No ids asks for every item. */
         for (i = 0; i < (n ? n : g_n + 1); i++) {
             id = n ? ids[i] : i;
             if (id >= 0 && id <= g_n) put_item(&arr, id);
         }
-        dbus_message_iter_close_container(&out, &arr);
+        rdbus_iter_close(&out, &arr);
     } else if (!SDL_strcmp(member, "GetProperty")) {
         const char *name = NULL;
-        DBusMessageIter props, e;
+        item_out o;
 
-        if (!dbus_message_get_args(m, NULL, DBUS_TYPE_INT32, &id, DBUS_TYPE_STRING, &name,
-                                   DBUS_TYPE_INVALID) || id < 0 || id > g_n)
-            return dbus_message_new_error(m, DBUS_ERROR_INVALID_ARGS, "no such item");
-        /* Built as a dict, then the one value copied out. */
-        {
-            DBusMessage *tmp = dbus_message_new_method_return(m);
-            DBusMessageIter t;
-
-            if (!tmp) return NULL;
-            dbus_message_iter_init_append(tmp, &t);
-            put_item_props(&t, id);
-            dbus_message_iter_init(tmp, &t);
-            dbus_message_iter_recurse(&t, &props);
-            while (dbus_message_iter_get_arg_type(&props) == DBUS_TYPE_DICT_ENTRY) {
-                const char *key;
-
-                dbus_message_iter_recurse(&props, &e);
-                dbus_message_iter_get_basic(&e, &key);
-                if (!SDL_strcmp(key, name)) {
-                    DBusMessageIter v, inner;
-                    int type;
-                    union { const char *s; dbus_int32_t i; dbus_bool_t b; } val;
-                    char sig[2];
-
-                    dbus_message_iter_next(&e);
-                    dbus_message_iter_recurse(&e, &v);
-                    type = dbus_message_iter_get_arg_type(&v);
-                    dbus_message_iter_get_basic(&v, &val);
-                    sig[0] = (char)type;
-                    sig[1] = 0;
-                    if ((r = dbus_message_new_method_return(m))) {
-                        dbus_message_iter_init_append(r, &out);
-                        dbus_message_iter_open_container(&out, DBUS_TYPE_VARIANT, sig, &inner);
-                        dbus_message_iter_append_basic(&inner, type, &val);
-                        dbus_message_iter_close_container(&out, &inner);
-                    }
-                    break;
-                }
-                dbus_message_iter_next(&props);
-            }
-            dbus_message_unref(tmp);
+        if (!rdbus_msg_get_args(m, NULL, RDBUS_TYPE_INT32, &id, RDBUS_TYPE_STRING, &name,
+                                RDBUS_TYPE_INVALID) || id < 0 || id > g_n)
+            return rdbus_msg_error(m, RDBUS_ERROR_INVALID_ARGS, "no such item");
+        if (!(r = rdbus_msg_return(m))) return NULL;
+        rdbus_iter_init_append(r, &out);
+        o.it = &out;
+        o.want = name;
+        o.found = 0;
+        item_props(&o, id);
+        if (!o.found) {
+            rdbus_msg_free(r);
+            return rdbus_msg_error(m, RDBUS_ERROR_INVALID_ARGS, "no such property");
         }
-        if (!r) return dbus_message_new_error(m, DBUS_ERROR_INVALID_ARGS, "no such property");
     } else if (!SDL_strcmp(member, "Event")) {
         const char *what = NULL;
 
-        if (!dbus_message_get_args(m, NULL, DBUS_TYPE_INT32, &id, DBUS_TYPE_STRING, &what,
-                                   DBUS_TYPE_INVALID))
+        if (!rdbus_msg_get_args(m, NULL, RDBUS_TYPE_INT32, &id, RDBUS_TYPE_STRING, &what,
+                                RDBUS_TYPE_INVALID))
             what = NULL;
-        r = dbus_message_new_method_return(m);
+        r = rdbus_msg_return(m);
         if (what && !SDL_strcmp(what, "clicked")) {
             send_and_free(r);
             clicked(id);
             return NULL;
         }
     } else if (!SDL_strcmp(member, "EventGroup")) {
-        DBusMessageIter evs, ev;
+        rdbus_iter evs, ev;
+        rdbus_conn *bus = g_bus;
         int n = 0, chosen[TRAY_ITEMS];
 
-        if (dbus_message_has_signature(m, "a(isvu)") && dbus_message_iter_init(m, &in)) {
-            dbus_message_iter_recurse(&in, &evs);
-            while (dbus_message_iter_get_arg_type(&evs) == DBUS_TYPE_STRUCT) {
+        if (rdbus_msg_has_signature(m, "a(isvu)") && rdbus_iter_init(m, &in)) {
+            rdbus_iter_recurse(&in, &evs);
+            while (rdbus_iter_type(&evs) == RDBUS_TYPE_STRUCT) {
                 const char *what = NULL;
 
-                dbus_message_iter_recurse(&evs, &ev);
-                dbus_message_iter_get_basic(&ev, &id);
-                dbus_message_iter_next(&ev);
-                if (dbus_message_iter_get_arg_type(&ev) == DBUS_TYPE_STRING)
-                    dbus_message_iter_get_basic(&ev, &what);
+                rdbus_iter_recurse(&evs, &ev);
+                rdbus_iter_get_basic(&ev, &id);
+                rdbus_iter_next(&ev);
+                if (rdbus_iter_type(&ev) == RDBUS_TYPE_STRING)
+                    rdbus_iter_get_basic(&ev, &what);
                 if (what && !SDL_strcmp(what, "clicked") && n < TRAY_ITEMS) chosen[n++] = id;
-                dbus_message_iter_next(&evs);
+                rdbus_iter_next(&evs);
             }
         }
-        if ((r = dbus_message_new_method_return(m))) {
-            dbus_message_iter_init_append(r, &out);
+        if ((r = rdbus_msg_return(m))) {
+            rdbus_iter_init_append(r, &out);
             put_empty(&out, "i");
             send_and_free(r);
         }
-        for (i = 0; i < n; i++) clicked(chosen[i]);
+        for (i = 0; i < n && g_bus == bus; i++) clicked(chosen[i]);
         return NULL;
     } else if (!SDL_strcmp(member, "AboutToShow")) {
-        dbus_bool_t no = 0;
+        rdbus_bool no = 0;
 
-        if ((r = dbus_message_new_method_return(m)))
-            dbus_message_append_args(r, DBUS_TYPE_BOOLEAN, &no, DBUS_TYPE_INVALID);
+        if ((r = rdbus_msg_return(m)))
+            rdbus_msg_append_args(r, RDBUS_TYPE_BOOLEAN, &no, RDBUS_TYPE_INVALID);
     } else if (!SDL_strcmp(member, "AboutToShowGroup")) {
-        if ((r = dbus_message_new_method_return(m))) {
-            dbus_message_iter_init_append(r, &out);
+        if ((r = rdbus_msg_return(m))) {
+            rdbus_iter_init_append(r, &out);
             put_empty(&out, "i");
             put_empty(&out, "i");
         }
     } else {
-        r = dbus_message_new_error(m, DBUS_ERROR_UNKNOWN_METHOD, member);
+        r = rdbus_msg_error(m, RDBUS_ERROR_UNKNOWN_METHOD, member);
     }
     return r;
 }
 
-static DBusHandlerResult
-on_message(DBusConnection *c, DBusMessage *m, void *menup)
+static int
+on_message(rdbus_conn *c, rdbus_msg *m, void *menup)
 {
     int menu = menup != NULL;
-    const char *iface = dbus_message_get_interface(m);
-    const char *member = dbus_message_get_member(m);
-    DBusMessage *r = NULL;
+    const char *iface = rdbus_msg_interface(m);
+    const char *member = rdbus_msg_member(m);
+    rdbus_msg *r = NULL;
 
     (void)c;
-    if (dbus_message_get_type(m) != DBUS_MESSAGE_TYPE_METHOD_CALL || !member)
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-    if (iface && !SDL_strcmp(iface, DBUS_INTERFACE_INTROSPECTABLE)) {
+    if (rdbus_msg_type(m) != RDBUS_MESSAGE_METHOD_CALL || !member)
+        return RDBUS_NOT_YET_HANDLED;
+    if (iface && !SDL_strcmp(iface, RDBUS_INTERFACE_INTROSPECTABLE)) {
         const char *xml = menu ? menu_xml : sni_xml;
 
-        if ((r = dbus_message_new_method_return(m)))
-            dbus_message_append_args(r, DBUS_TYPE_STRING, &xml, DBUS_TYPE_INVALID);
+        if ((r = rdbus_msg_return(m)))
+            rdbus_msg_append_args(r, RDBUS_TYPE_STRING, &xml, RDBUS_TYPE_INVALID);
     } else if (iface && !SDL_strcmp(iface, PROPS_IFACE)) {
         r = properties(m, menu);
     } else if (menu) {
@@ -551,62 +559,74 @@ on_message(DBusConnection *c, DBusMessage *m, void *menup)
     } else if (!SDL_strcmp(member, "Activate") || !SDL_strcmp(member, "SecondaryActivate") ||
                !SDL_strcmp(member, "ContextMenu") || !SDL_strcmp(member, "Scroll")) {
         /* ItemIsMenu: the host opens the menu itself on a click. */
-        r = dbus_message_new_method_return(m);
+        r = rdbus_msg_return(m);
     } else {
-        r = dbus_message_new_error(m, DBUS_ERROR_UNKNOWN_METHOD, member);
+        r = rdbus_msg_error(m, RDBUS_ERROR_UNKNOWN_METHOD, member);
     }
     send_and_free(r);
-    return DBUS_HANDLER_RESULT_HANDLED;
+    return RDBUS_HANDLED;
 }
 
 static int
 register_item(int block)
 {
-    DBusMessage *m = dbus_message_new_method_call(WATCHER, "/StatusNotifierWatcher", WATCHER,
-                                                  "RegisterStatusNotifierItem");
+    rdbus_msg *m = rdbus_msg_call(WATCHER, "/StatusNotifierWatcher", WATCHER,
+                                  "RegisterStatusNotifierItem");
     const char *name = g_name;
-    DBusMessage *r;
-    DBusError err;
+    rdbus_msg *r;
+    rdbus_error err;
 
     if (!m) return 0;
-    dbus_message_append_args(m, DBUS_TYPE_STRING, &name, DBUS_TYPE_INVALID);
+    rdbus_msg_append_args(m, RDBUS_TYPE_STRING, &name, RDBUS_TYPE_INVALID);
     if (!block) {
         send_and_free(m);
         return 1;
     }
-    dbus_error_init(&err);
-    r = dbus_connection_send_with_reply_and_block(g_bus, m, 2000, &err);
-    dbus_message_unref(m);
+    rdbus_error_init(&err);
+    r = rdbus_call(g_bus, m, 2000, &err);
+    rdbus_msg_free(m);
     if (!r) {
-        SDL_Log("tray: no StatusNotifierWatcher (%s)", err.message ? err.message : "");
-        dbus_error_free(&err);
+        SDL_Log("tray: no StatusNotifierWatcher (%s)", err.message);
+        rdbus_error_free(&err);
         return 0;
     }
-    dbus_message_unref(r);
+    rdbus_msg_free(r);
     return 1;
 }
 
 /* A watcher that starts after us, or restarts, is told about the item again. */
-static DBusHandlerResult
-on_signal(DBusConnection *c, DBusMessage *m, void *user)
+static int
+on_signal(rdbus_conn *c, rdbus_msg *m, void *user)
 {
     const char *name = NULL, *was = NULL, *now = NULL;
 
     (void)c; (void)user;
-    if (dbus_message_is_signal(m, DBUS_INTERFACE_DBUS, "NameOwnerChanged") &&
-        dbus_message_get_args(m, NULL, DBUS_TYPE_STRING, &name, DBUS_TYPE_STRING, &was,
-                              DBUS_TYPE_STRING, &now, DBUS_TYPE_INVALID) &&
+    if (rdbus_msg_is_signal(m, RDBUS_INTERFACE_DBUS, "NameOwnerChanged") &&
+        rdbus_msg_get_args(m, NULL, RDBUS_TYPE_STRING, &name, RDBUS_TYPE_STRING, &was,
+                           RDBUS_TYPE_STRING, &now, RDBUS_TYPE_INVALID) &&
         !SDL_strcmp(name, WATCHER) && now && now[0])
         register_item(0);
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    return RDBUS_NOT_YET_HANDLED;
 }
 
+/* Reads without waiting and dispatches. Called again from a handler on the
+   same bus, it only reads: the dispatch loop below it takes what was queued. */
 static void
 pump(void)
 {
-    dbus_connection_read_write(g_bus, 0);
-    while (dbus_connection_dispatch(g_bus) == DBUS_DISPATCH_DATA_REMAINS)
+    rdbus_conn *c = g_bus, *outer = g_pumped;
+    int outer_closed = g_pumped_closed;
+
+    if (!c) return;
+    rdbus_read_write(c, 0);
+    if (c == outer) return;
+    g_pumped = c;
+    g_pumped_closed = 0;
+    while (g_bus == c && rdbus_dispatch(c))
         ;
+    if (g_pumped_closed) rdbus_unref(c);
+    g_pumped = outer;
+    g_pumped_closed = outer_closed;
 }
 
 static void
@@ -666,22 +686,20 @@ clean_dup(const char *s, int mnemonic)
 int
 reaktor_tray_open(App *app, const reaktor_tray *spec)
 {
-    static const DBusObjectPathVTable vt = { NULL, on_message, NULL, NULL, NULL, NULL };
     const char *drv = SDL_GetCurrentVideoDriver();
-    DBusError err;
-    int i, fd = -1;
+    rdbus_error err;
+    int i, fd, owner;
 
     reaktor_tray_close(app);
     if (!spec) return 0;
     if (!drv || SDL_strcmp(drv, "dummy") == 0 || SDL_strcmp(drv, "offscreen") == 0)
         return 0;
-    dbus_error_init(&err);
-    if (!(g_bus = dbus_bus_get_private(DBUS_BUS_SESSION, &err))) {
-        SDL_Log("tray: %s", err.message ? err.message : "no session bus");
-        dbus_error_free(&err);
+    rdbus_error_init(&err);
+    if (!(g_bus = rdbus_session_private(&err))) {
+        SDL_Log("tray: %s", err.set && err.message[0] ? err.message : "no session bus");
+        rdbus_error_free(&err);
         return 0;
     }
-    dbus_connection_set_exit_on_disconnect(g_bus, 0);
     g_n = spec->count < 0 ? 0 : spec->count < TRAY_ITEMS ? spec->count : TRAY_ITEMS;
     for (i = 0; i < g_n; i++) {
         g_item[i]  = spec->items[i];
@@ -691,21 +709,27 @@ reaktor_tray_open(App *app, const reaktor_tray *spec)
     g_tip = spec->tooltip ? clean_dup(spec->tooltip, 0) : NULL;
     icons_make();
     SDL_snprintf(g_name, sizeof g_name, "org.kde.StatusNotifierItem-%d-1", (int)getpid());
-    if (!dbus_connection_register_object_path(g_bus, SNI_PATH, &vt, NULL) ||
-        !dbus_connection_register_object_path(g_bus, MENU_PATH, &vt, (void *)1) ||
-        dbus_bus_request_name(g_bus, g_name, DBUS_NAME_FLAG_DO_NOT_QUEUE, NULL) !=
-            DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER ||
-        !register_item(1)) {
+    owner = 0;
+    if (rdbus_register_path(g_bus, SNI_PATH, on_message, NULL) &&
+        rdbus_register_path(g_bus, MENU_PATH, on_message, (void *)1)) {
+        owner = rdbus_request_name(g_bus, g_name, RDBUS_NAME_FLAG_DO_NOT_QUEUE, &err) ==
+                RDBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER;
+        rdbus_error_free(&err);
+        rdbus_error_init(&err);
+    }
+    if (!owner || !register_item(1)) {
         reaktor_tray_close(app);
         return 0;
     }
-    dbus_connection_add_filter(g_bus, on_signal, NULL, NULL);
-    dbus_bus_add_match(g_bus, "type='signal',sender='" DBUS_SERVICE_DBUS "',"
-                       "interface='" DBUS_INTERFACE_DBUS "',member='NameOwnerChanged',"
-                       "arg0='" WATCHER "'", NULL);
-    dbus_connection_flush(g_bus);
-    if (dbus_connection_get_unix_fd(g_bus, &fd) && pipe(g_stop) == 0 &&
+    rdbus_add_filter(g_bus, on_signal, NULL);
+    rdbus_add_match(g_bus, "type='signal',sender='" RDBUS_SERVICE_DBUS "',"
+                    "interface='" RDBUS_INTERFACE_DBUS "',member='NameOwnerChanged',"
+                    "arg0='" WATCHER "'", &err);
+    rdbus_error_free(&err);
+    rdbus_flush(g_bus);
+    if ((fd = rdbus_fd(g_bus)) >= 0 && pipe(g_stop) == 0 &&
         (g_drained = SDL_CreateSemaphore(0))) {
+        g_gen++;
         SDL_SetAtomicInt(&g_running, 1);
         g_thread = SDL_CreateThread(watch_bus, "reaktor-tray", (void *)(intptr_t)fd);
     }
@@ -726,6 +750,8 @@ reaktor_tray_check(App *app, int item, int checked)
     if (g_on[item] == (checked != 0)) return;
     g_on[item] = checked != 0;
     items_updated(item + 1);
+    /* Sending may have read messages the watch thread will not hear about. */
+    pump();
 }
 
 void
@@ -747,10 +773,8 @@ reaktor_tray_close(App *app)
     }
     if (g_drained) SDL_DestroySemaphore(g_drained);
     g_drained = NULL;
-    if (g_bus) {
-        dbus_connection_close(g_bus);
-        dbus_connection_unref(g_bus);
-    }
+    if (g_bus && g_bus == g_pumped) g_pumped_closed = 1;
+    else if (g_bus) rdbus_unref(g_bus);
     g_bus = NULL;
     for (i = 0; i < g_n; i++) {
         SDL_free(g_label[i]);
@@ -774,10 +798,14 @@ void
 reaktor_tray_event(App *app, const SDL_Event *e)
 {
     if (e->type == SDL_EVENT_USER && e->user.data1 == &g_tag) {
-        if (g_bus) {
-            pump();
-            SDL_SignalSemaphore(g_drained);
-        }
+        rdbus_conn *c = g_bus;
+        SDL_Semaphore *drained = g_drained;
+
+        if (!c) return;
+        pump();
+        /* Not for a tray a callback closed or replaced, nor from an older thread. */
+        if (g_bus == c && g_drained == drained && e->user.code == g_gen)
+            SDL_SignalSemaphore(drained);
         return;
     }
     if (e->type == SDL_EVENT_WINDOW_MINIMIZED && g_hide_on_minimize && g_bus)

@@ -93,49 +93,51 @@ notify_os(App *app, const char *title, const char *text)
 }
 
 #elif defined(REAKTOR_HAVE_DBUS)
-#include <dbus/dbus.h>
+#include "rdbus.h"
 
 static int
 notify_os(App *app, const char *title, const char *body)
 {
-    DBusConnection *c;
-    DBusMessage    *m;
-    DBusMessageIter it, sub;
-    const char     *name = reaktor_app_ident(), *icon = "";
-    dbus_uint32_t   replaces = 0;
-    dbus_int32_t    expire = -1;
-    int             ok = 0;
-    size_t          tn = SDL_strlen(title) * 3 + 1, bn = SDL_strlen(body) * 3 + 1;
-    char           *t = (char *)SDL_malloc(tn), *b = (char *)SDL_malloc(bn);
+    rdbus_conn  *c;
+    rdbus_msg   *m;
+    rdbus_iter   it, sub;
+    rdbus_error  err;
+    const char  *name = reaktor_app_ident(), *icon = "";
+    uint32_t     replaces = 0;
+    int32_t      expire = -1;
+    int          ok = 0;
+    size_t       tn = SDL_strlen(title) * 3 + 1, bn = SDL_strlen(body) * 3 + 1;
+    char        *t = (char *)SDL_malloc(tn), *b = (char *)SDL_malloc(bn);
 
     (void)app;
+    rdbus_error_init(&err);
     if (!t || !b) goto done;
     reaktor_utf8_clean(t, title, tn);
     reaktor_utf8_clean(b, body, bn);
-    if (!(c = dbus_bus_get(DBUS_BUS_SESSION, NULL))) goto done;
-    m = dbus_message_new_method_call("org.freedesktop.Notifications",
-                                     "/org/freedesktop/Notifications",
-                                     "org.freedesktop.Notifications", "Notify");
+    if (!(c = rdbus_session(&err))) goto done;
+    m = rdbus_msg_call("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                       "org.freedesktop.Notifications", "Notify");
     if (!m) {
-        dbus_connection_unref(c);
+        rdbus_unref(c);
         goto done;
     }
-    dbus_message_iter_init_append(m, &it);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &name);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_UINT32, &replaces);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &icon);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &t);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &b);
-    dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "s", &sub);
-    dbus_message_iter_close_container(&it, &sub);
-    dbus_message_iter_open_container(&it, DBUS_TYPE_ARRAY, "{sv}", &sub);
-    dbus_message_iter_close_container(&it, &sub);
-    dbus_message_iter_append_basic(&it, DBUS_TYPE_INT32, &expire);
-    ok = dbus_connection_send(c, m, NULL);
-    dbus_connection_flush(c);
-    dbus_message_unref(m);
-    dbus_connection_unref(c);
+    rdbus_iter_init_append(m, &it);
+    rdbus_iter_append_basic(&it, RDBUS_TYPE_STRING, &name);
+    rdbus_iter_append_basic(&it, RDBUS_TYPE_UINT32, &replaces);
+    rdbus_iter_append_basic(&it, RDBUS_TYPE_STRING, &icon);
+    rdbus_iter_append_basic(&it, RDBUS_TYPE_STRING, &t);
+    rdbus_iter_append_basic(&it, RDBUS_TYPE_STRING, &b);
+    rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "s", &sub);
+    rdbus_iter_close(&it, &sub);
+    rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "{sv}", &sub);
+    rdbus_iter_close(&it, &sub);
+    rdbus_iter_append_basic(&it, RDBUS_TYPE_INT32, &expire);
+    ok = rdbus_send(c, m, NULL);
+    rdbus_flush(c);
+    rdbus_msg_free(m);
+    rdbus_unref(c);
 done:
+    rdbus_error_free(&err);
     SDL_free(t);
     SDL_free(b);
     return ok;

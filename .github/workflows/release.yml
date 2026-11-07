@@ -124,8 +124,7 @@ jobs:
             The programs are not signed, and SmartScreen may ask before the first run.
           - **macOS**: \`reaktor.app\` is the showcase as an app, signed ad hoc and not
             notarized: open it from its context menu the first time.
-          - **Linux**: glibc 2.36 or newer (2.41 for RISC-V), libdbus-1, and X11 or
-            Wayland.
+          - **Linux**: glibc 2.36 or newer (2.41 for RISC-V), and X11 or Wayland.
           - **BSDs**: the release named above, the dbus package, and X11.
           - **Web**: the showcase, Notepad and Simple as \`.html\`, \`.js\`, \`.wasm\`
             and \`.data\`. Serve the folder over HTTP (a \`file://\` page cannot fetch
