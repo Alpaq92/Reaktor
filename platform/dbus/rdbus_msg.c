@@ -58,6 +58,7 @@ struct rdbus_msg {
     char     *error_name;
     char     *dest;
     char     *sender;
+    char     *names;
     char      sig[256];
     size_t    sig_len;
     uint8_t  *raw;
@@ -69,6 +70,9 @@ struct rdbus_msg {
     size_t    wire_len;
     swapped  *swapped;
 };
+
+/* A parsed message's bytes follow it at an offset that keeps 8-byte arrays aligned. */
+#define RAW_AT ((sizeof(struct rdbus_msg) + 15) & ~(size_t)15)
 
 typedef struct reader {
     const uint8_t *b;
@@ -82,31 +86,35 @@ typedef struct reader {
 static uint16_t
 get16(const uint8_t *p, int big)
 {
-    return big ? (uint16_t)(p[0] << 8 | p[1]) : (uint16_t)(p[1] << 8 | p[0]);
+    uint16_t v;
+
+    SDL_memcpy(&v, p, 2);
+    return big ? SDL_Swap16BE(v) : SDL_Swap16LE(v);
 }
 
 static uint32_t
 get32(const uint8_t *p, int big)
 {
-    if (big)
-        return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
-    return (uint32_t)p[3] << 24 | (uint32_t)p[2] << 16 | (uint32_t)p[1] << 8 | p[0];
+    uint32_t v;
+
+    SDL_memcpy(&v, p, 4);
+    return big ? SDL_Swap32BE(v) : SDL_Swap32LE(v);
 }
 
 static uint64_t
 get64(const uint8_t *p, int big)
 {
-    uint64_t hi = get32(p + (big ? 0 : 4), big), lo = get32(p + (big ? 4 : 0), big);
+    uint64_t v;
 
-    return hi << 32 | lo;
+    SDL_memcpy(&v, p, 8);
+    return big ? SDL_Swap64BE(v) : SDL_Swap64LE(v);
 }
 
 static void
 put32(uint8_t *p, uint32_t v, int big)
 {
-    int i;
-
-    for (i = 0; i < 4; i++) p[big ? 3 - i : i] = (uint8_t)(v >> (8 * i));
+    v = big ? SDL_Swap32BE(v) : SDL_Swap32LE(v);
+    SDL_memcpy(p, &v, 4);
 }
 
 static size_t
@@ -167,7 +175,7 @@ utf8_valid(const void *bytes, size_t n)
 
         if (c < 0x80) {
             if (!c) return 0;
-            i++;
+            while (++i < n && s[i] && s[i] < 0x80) {}
             continue;
         }
         if ((c & 0xE0) == 0xC0) {
@@ -369,23 +377,34 @@ r_u32(reader *d, uint32_t *v)
     return 1;
 }
 
+/* A string's length and terminator; its contents are the caller's to check. */
 static int
-r_str(reader *d, const char **s, size_t *len)
+r_str_raw(reader *d, const char **s, size_t *len)
 {
     const uint8_t *p;
     uint32_t n;
 
     if (!r_u32(d, &n) || n >= d->len - d->pos) return 0;
     p = d->b + d->pos;
-    if (p[n] || !utf8_valid(p, n)) return 0;
+    if (p[n]) return 0;
     d->pos += (size_t)n + 1;
-    if (s) *s = (const char *)p;
-    if (len) *len = n;
+    *s = (const char *)p;
+    *len = n;
     return 1;
 }
 
 static int
-r_sig(reader *d, const char **s, size_t *len)
+r_str(reader *d)
+{
+    const char *s;
+    size_t n;
+
+    return r_str_raw(d, &s, &n) && utf8_valid(s, n);
+}
+
+/* A signature; with single set, of exactly one complete type. */
+static int
+r_sig(reader *d, const char **s, size_t *len, int single)
 {
     const uint8_t *p;
     size_t n;
@@ -394,7 +413,8 @@ r_sig(reader *d, const char **s, size_t *len)
     n = d->b[d->pos];
     if (n + 1 > d->len - d->pos - 1) return 0;
     p = d->b + d->pos + 1;
-    if (p[n] || !sig_valid((const char *)p, n)) return 0;
+    if (p[n] || !(single ? sig_single((const char *)p, n) : sig_valid((const char *)p, n)))
+        return 0;
     d->pos += n + 2;
     if (s) *s = (const char *)p;
     if (len) *len = n;
@@ -422,13 +442,13 @@ skip_value(reader *d, const char *t, size_t tn)
         sz = fixed_size(t[0]);
         return r_pad(d, sz) && r_take(d, sz);
     case 's':
-        return r_str(d, NULL, NULL);
+        return r_str(d);
     case 'o':
-        return r_str(d, &s, &k) && valid_path(s, k);
+        return r_str_raw(d, &s, &k) && valid_path(s, k);
     case 'g':
-        return r_sig(d, NULL, NULL);
+        return r_sig(d, NULL, NULL, 0);
     case 'v':
-        if (!r_sig(d, &s, &k) || !sig_single(s, k) || ++d->depth > MAX_DEPTH) return 0;
+        if (!r_sig(d, &s, &k, 1) || ++d->depth > MAX_DEPTH) return 0;
         ok = skip_value(d, s, k);
         d->depth--;
         return ok;
@@ -455,6 +475,65 @@ skip_value(reader *d, const char *t, size_t tn)
         if (!r_pad(d, 8) || ++d->depth > MAX_DEPTH) return 0;
         for (at = 1; at + 1 < tn; at += k)
             if (!(k = span(t + at, tn - 1 - at)) || !skip_value(d, t + at, k)) return 0;
+        d->depth--;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* Steps past the value of the complete type t in a body already validated
+   whole, by check_body or by the writers: bounds are checked, contents not. */
+static int
+step_value(reader *d, const char *t, size_t tn)
+{
+    size_t at, k, sz;
+    uint32_t v;
+    int ok;
+
+    switch (t[0]) {
+    case 'y': case 'b': case 'h': case 'n': case 'q': case 'i': case 'u': case 'x': case 't':
+    case 'd':
+        sz = fixed_size(t[0]);
+        at = align_up(d->pos, sz);
+        if (at > d->len || sz > d->len - at) return 0;
+        d->pos = at + sz;
+        return 1;
+    case 's': case 'o':
+        at = align_up(d->pos, 4);
+        if (at > d->len || d->len - at < 4) return 0;
+        v = get32(d->b + at, d->big);
+        if (v >= d->len - at - 4) return 0;
+        d->pos = at + 4 + (size_t)v + 1;
+        return 1;
+    case 'g':
+        if (d->pos >= d->len || (size_t)d->b[d->pos] + 2 > d->len - d->pos) return 0;
+        d->pos += (size_t)d->b[d->pos] + 2;
+        return 1;
+    case 'v':
+        if (d->pos >= d->len) return 0;
+        k = d->b[d->pos];
+        if (!k || k + 2 > d->len - d->pos || ++d->depth > MAX_DEPTH) return 0;
+        t = (const char *)d->b + d->pos + 1;
+        d->pos += k + 2;
+        ok = step_value(d, t, k);
+        d->depth--;
+        return ok;
+    case 'a':
+        at = align_up(d->pos, 4);
+        if (tn < 2 || at > d->len || d->len - at < 4) return 0;
+        v = get32(d->b + at, d->big);
+        at = align_up(at + 4, align_of(t[1]));
+        if (at > d->len || v > d->len - at) return 0;
+        d->pos = at + v;
+        return 1;
+    case '(':
+    case '{':
+        at = align_up(d->pos, 8);
+        if (at > d->len || ++d->depth > MAX_DEPTH) return 0;
+        d->pos = at;
+        for (at = 1; at + 1 < tn; at += k)
+            if (!(k = span(t + at, tn - 1 - at)) || !step_value(d, t + at, k)) return 0;
         d->depth--;
         return 1;
     default:
@@ -514,7 +593,7 @@ grow(rdbus_msg *m, size_t extra)
     if (extra > MAX_MESSAGE - m->body_len) return fail(m);
     need = m->body_len + extra;
     if (need > m->body_cap) {
-        cap = m->body_cap ? m->body_cap : 64;
+        cap = m->body_cap ? m->body_cap : 256;
         while (cap < need) cap *= 2;
         if (!(p = (uint8_t *)SDL_realloc(m->body, cap))) return fail(m);
         m->body = p;
@@ -535,23 +614,29 @@ w_pad(rdbus_msg *m, size_t a)
     return 1;
 }
 
-static int
-w_bytes(rdbus_msg *m, const void *p, size_t n)
+/* Room for n bytes at alignment a, the padding before them zeroed. */
+static uint8_t *
+w_reserve(rdbus_msg *m, size_t a, size_t n)
 {
-    if (!grow(m, n)) return 0;
-    if (n) SDL_memcpy(m->body + m->body_len, p, n);
-    m->body_len += n;
-    return 1;
+    size_t pad = align_up(m->body_len, a) - m->body_len;
+    uint8_t *p;
+
+    if (!grow(m, pad + n)) return NULL;
+    p = m->body + m->body_len;
+    if (pad) SDL_memset(p, 0, pad);
+    m->body_len += pad + n;
+    return p + pad;
 }
 
 static int
 w_uint(rdbus_msg *m, uint64_t v, size_t size)
 {
-    uint8_t b[8];
+    uint8_t *p = w_reserve(m, size, size);
     size_t i;
 
-    for (i = 0; i < size; i++) b[i] = (uint8_t)(v >> (8 * i));
-    return w_pad(m, size) && w_bytes(m, b, size);
+    if (!p) return 0;
+    for (i = 0; i < size; i++) p[i] = (uint8_t)(v >> (8 * i));
+    return 1;
 }
 
 static int
@@ -562,7 +647,7 @@ w_basic(rdbus_msg *m, int type, const void *value)
     uint32_t b;
     uint16_t h;
     size_t n;
-    uint8_t len;
+    uint8_t *p;
 
     switch (type) {
     case 'y':
@@ -584,35 +669,59 @@ w_basic(rdbus_msg *m, int type, const void *value)
         if (!s) return fail(m);
         n = SDL_strlen(s);
         if (n > MAX_MESSAGE || !(type == 's' ? utf8_valid(s, n) : valid_path(s, n))) return fail(m);
-        return w_uint(m, (uint32_t)n, 4) && w_bytes(m, s, n + 1);
+        if (!(p = w_reserve(m, 4, 4 + n + 1))) return 0;
+        put32(p, (uint32_t)n, 0);
+        SDL_memcpy(p + 4, s, n + 1);
+        return 1;
     case 'g':
         s = *(const char *const *)value;
         if (!s) return fail(m);
         n = SDL_strlen(s);
         if (!sig_valid(s, n)) return fail(m);
-        len = (uint8_t)n;
-        return w_bytes(m, &len, 1) && w_bytes(m, s, n + 1);
+        if (!(p = w_reserve(m, 1, n + 2))) return 0;
+        p[0] = (uint8_t)n;
+        SDL_memcpy(p + 1, s, n + 1);
+        return 1;
     default:
         return fail(m);
     }
 }
 
-static rdbus_msg *
-msg_new(int type)
+static size_t
+name_size(const char *s)
 {
-    rdbus_msg *m = (rdbus_msg *)SDL_calloc(1, sizeof(*m));
+    return s ? SDL_strlen(s) + 1 : 0;
+}
+
+/* A message with room after it for header names of names bytes in all. */
+static rdbus_msg *
+msg_new(int type, size_t names)
+{
+    rdbus_msg *m = (rdbus_msg *)SDL_calloc(1, sizeof(*m) + names);
 
     if (m) {
         m->type = type;
         m->dirty = 1;
+        m->names = (char *)(m + 1);
     }
     return m;
 }
 
 static void
+put_name(rdbus_msg *m, char **slot, const char *s, size_t n)
+{
+    SDL_memcpy(m->names, s, n + 1);
+    *slot = m->names;
+    m->names += n + 1;
+}
+
+static void
 set_name(rdbus_msg *m, char **slot, const char *s, int (*ok)(const char *, size_t))
 {
-    if (!s || !ok(s, SDL_strlen(s)) || !(*slot = SDL_strdup(s))) fail(m);
+    size_t n;
+
+    if (!s || !ok(s, n = SDL_strlen(s))) fail(m);
+    else put_name(m, slot, s, n);
 }
 
 static void
@@ -620,13 +729,14 @@ reply_to(rdbus_msg *m, const rdbus_msg *call)
 {
     if (call->type != RDBUS_MESSAGE_METHOD_CALL || !call->serial) fail(m);
     m->reply_serial = call->serial;
-    if (call->sender && !(m->dest = SDL_strdup(call->sender))) fail(m);
+    if (call->sender) put_name(m, &m->dest, call->sender, SDL_strlen(call->sender));
 }
 
 rdbus_msg *
 rdbus_msg_call(const char *dest, const char *path, const char *iface, const char *member)
 {
-    rdbus_msg *m = msg_new(RDBUS_MESSAGE_METHOD_CALL);
+    rdbus_msg *m = msg_new(RDBUS_MESSAGE_METHOD_CALL, name_size(dest) + name_size(path) +
+                                                          name_size(iface) + name_size(member));
 
     if (!m) return NULL;
     if (dest) set_name(m, &m->dest, dest, valid_bus);
@@ -641,7 +751,8 @@ rdbus_msg_call(const char *dest, const char *path, const char *iface, const char
 rdbus_msg *
 rdbus_msg_signal(const char *path, const char *iface, const char *member)
 {
-    rdbus_msg *m = msg_new(RDBUS_MESSAGE_SIGNAL);
+    rdbus_msg *m =
+        msg_new(RDBUS_MESSAGE_SIGNAL, name_size(path) + name_size(iface) + name_size(member));
 
     if (!m) return NULL;
     set_name(m, &m->path, path, valid_path);
@@ -657,7 +768,8 @@ rdbus_msg_return(const rdbus_msg *call)
 {
     rdbus_msg *m;
 
-    if (!call || !(m = msg_new(RDBUS_MESSAGE_METHOD_RETURN))) return NULL;
+    if (!call || !(m = msg_new(RDBUS_MESSAGE_METHOD_RETURN, name_size(call->sender))))
+        return NULL;
     reply_to(m, call);
     return m;
 }
@@ -667,7 +779,8 @@ rdbus_msg_error(const rdbus_msg *call, const char *name, const char *text)
 {
     rdbus_msg *m;
 
-    if (!call || !(m = msg_new(RDBUS_MESSAGE_ERROR))) return NULL;
+    if (!call || !(m = msg_new(RDBUS_MESSAGE_ERROR, name_size(call->sender) + name_size(name))))
+        return NULL;
     reply_to(m, call);
     set_name(m, &m->error_name, name, valid_iface);
     if (text) rdbus_msg_append_args(m, RDBUS_TYPE_STRING, &text, RDBUS_TYPE_INVALID);
@@ -680,21 +793,12 @@ rdbus_msg_free(rdbus_msg *m)
     swapped *s, *next;
 
     if (!m) return;
-    if (!m->parsed) {
-        SDL_free(m->path);
-        SDL_free(m->iface);
-        SDL_free(m->member);
-        SDL_free(m->error_name);
-        SDL_free(m->dest);
-        SDL_free(m->sender);
-        SDL_free(m->body);
-    }
+    if (!m->parsed) SDL_free(m->body);
     for (s = m->swapped; s; s = next) {
         next = s->next;
         SDL_free(s->data);
         SDL_free(s);
     }
-    SDL_free(m->raw);
     SDL_free(m->wire);
     SDL_free(m);
 }
@@ -802,6 +906,19 @@ rdbus_msg_has_signature(const rdbus_msg *m, const char *sig)
 
 /* Writing iterators */
 
+/* Clears every field but the signature past its terminator, which nothing
+   reads beyond sig_len. */
+static void
+iter_reset(rdbus_iter *it, rdbus_msg *m, int mode)
+{
+    it->msg = m;
+    it->mode = mode;
+    it->container = it->failed = it->depth = 0;
+    it->pos = it->end = it->len_at = it->first = 0;
+    it->sig[0] = 0;
+    it->sig_at = it->sig_len = 0;
+}
+
 static int
 it_fail(rdbus_iter *it)
 {
@@ -874,14 +991,12 @@ rdbus_iter_open(rdbus_iter *it, int type, const char *sig, rdbus_iter *sub)
 {
     rdbus_msg *m;
     size_t n;
-    uint8_t len;
+    uint8_t *p;
 
     if (!it) return 0;
     if (!sub) return it_fail(it);
-    SDL_zerop(sub);
-    sub->mode = MODE_WRITE;
+    iter_reset(sub, m = it->msg, MODE_WRITE);
     sub->failed = 1;
-    sub->msg = m = it->msg;
     sub->depth = it->depth + 1;
     if (!writable(it) || sub->depth > MAX_DEPTH + (type == RDBUS_TYPE_ARRAY))
         return it_fail(it);
@@ -900,8 +1015,9 @@ rdbus_iter_open(rdbus_iter *it, int type, const char *sig, rdbus_iter *sub)
             if (!w_uint(m, 0, 4) || !w_pad(m, align_of(sig[0]))) return it_fail(it);
             sub->first = m->body_len;
         } else {
-            len = (uint8_t)n;
-            if (!w_bytes(m, &len, 1) || !w_bytes(m, sig, n + 1)) return it_fail(it);
+            if (!(p = w_reserve(m, 1, n + 2))) return it_fail(it);
+            p[0] = (uint8_t)n;
+            SDL_memcpy(p + 1, sig, n + 1);
         }
         break;
     case RDBUS_TYPE_DICT_ENTRY:
@@ -1139,8 +1255,7 @@ rdbus_iter_recurse(const rdbus_iter *it, rdbus_iter *sub)
     int t = rdbus_iter_type(it);
 
     if (!sub) return;
-    SDL_zerop(sub);
-    sub->mode = MODE_READ;
+    iter_reset(sub, NULL, MODE_READ);
     sub->failed = 1;
     if (!t) return;
     sub->msg = it->msg;
@@ -1192,8 +1307,8 @@ rdbus_iter_next(rdbus_iter *it)
     d.pos = it->pos;
     d.big = it->msg->big;
     d.depth = 0;
-    d.fds = SDL_MAX_UINT32;
-    if (!tl || !skip_value(&d, it->sig + it->sig_at, tl)) {
+    d.fds = 0;
+    if (!tl || !step_value(&d, it->sig + it->sig_at, tl)) {
         it->failed = 1;
         return 0;
     }
@@ -1312,7 +1427,7 @@ field_str(reader *d, const char *vs, size_t vn, char want, char **out,
     const char *s;
     size_t n;
 
-    if (vn != 1 || vs[0] != want || !r_str(d, &s, &n) || !ok(s, n)) return 0;
+    if (vn != 1 || vs[0] != want || !r_str_raw(d, &s, &n) || !ok(s, n)) return 0;
     *out = (char *)s;
     return 1;
 }
@@ -1338,7 +1453,7 @@ parse_fields(rdbus_msg *m, size_t fields_end)
         code = d.b[d.pos++];
         if (!code || seen[code]) return 0;
         seen[code] = 1;
-        if (!r_sig(&d, &vs, &vn) || !sig_single(vs, vn)) return 0;
+        if (!r_sig(&d, &vs, &vn, 1)) return 0;
         switch (code) {
         case F_PATH:
             if (!field_str(&d, vs, vn, 'o', &m->path, valid_path)) return 0;
@@ -1366,7 +1481,7 @@ parse_fields(rdbus_msg *m, size_t fields_end)
             if (vn != 1 || vs[0] != 'u' || !r_u32(&d, &m->fds)) return 0;
             break;
         case F_SIGNATURE:
-            if (vn != 1 || vs[0] != 'g' || !r_sig(&d, &s, &n)) return 0;
+            if (vn != 1 || vs[0] != 'g' || !r_sig(&d, &s, &n, 0)) return 0;
             SDL_memcpy(m->sig, s, n);
             m->sig[n] = 0;
             m->sig_len = n;
@@ -1434,11 +1549,9 @@ rdbus_msg_parse(const void *bytes, size_t len)
     if (!in) return NULL;
     total = rdbus__frame_size(in, len);
     if (total <= 0 || (size_t)total != len || in[1] > RDBUS_MESSAGE_SIGNAL) return NULL;
-    if (!(m = (rdbus_msg *)SDL_calloc(1, sizeof(*m)))) return NULL;
-    if (!(m->raw = (uint8_t *)SDL_malloc(len))) {
-        SDL_free(m);
-        return NULL;
-    }
+    if (!(m = (rdbus_msg *)SDL_malloc(RAW_AT + len))) return NULL;
+    SDL_zerop(m);
+    m->raw = (uint8_t *)m + RAW_AT;
     SDL_memcpy(m->raw, in, len);
     m->raw_len = len;
     m->parsed = 1;

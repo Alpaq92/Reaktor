@@ -77,8 +77,14 @@ static struct {
 static void
 path_of(unsigned id, char *out, size_t cap)
 {
-    if (!id) SDL_snprintf(out, cap, "%s", ATSPI_ROOT_PATH);
-    else     SDL_snprintf(out, cap, "%s%u", ATSPI_PREFIX, id);
+    SDL_assert(cap >= sizeof(ATSPI_ROOT_PATH) && cap >= sizeof(ATSPI_PREFIX) + 10);
+    (void)cap;
+    if (!id) {
+        SDL_memcpy(out, ATSPI_ROOT_PATH, sizeof(ATSPI_ROOT_PATH));
+        return;
+    }
+    SDL_memcpy(out, ATSPI_PREFIX, sizeof(ATSPI_PREFIX) - 1);
+    SDL_uitoa(id, out + sizeof(ATSPI_PREFIX) - 1, 10);
 }
 
 static long

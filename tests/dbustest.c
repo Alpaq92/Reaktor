@@ -823,6 +823,35 @@ test_get_args(void)
     drop(p);
     drop(m);
 
+    m = rdbus_msg_call(NULL, "/org/reaktor/Obj", NULL, "Wide");
+    if (m) {
+        static const int64_t xs[] = { -1, INT64_C(1) << 40 };
+        static const double ds[] = { 0.5, -2.25 };
+
+        rdbus_iter_init_append(m, &it);
+        rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "x", &a);
+        rdbus_iter_append_fixed_array(&a, RDBUS_TYPE_INT64, xs, 2);
+        rdbus_iter_close(&it, &a);
+        rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "d", &a);
+        rdbus_iter_append_fixed_array(&a, RDBUS_TYPE_DOUBLE, ds, 2);
+        rdbus_iter_close(&it, &a);
+    }
+    p = reparse(m, 9);
+    pi = py = NULL;
+    ni = ny = -1;
+    got = p && rdbus_msg_get_args(p, NULL, RDBUS_TYPE_ARRAY, RDBUS_TYPE_INT64, &pi, &ni,
+                                  RDBUS_TYPE_ARRAY, RDBUS_TYPE_DOUBLE, &py, &ny,
+                                  RDBUS_TYPE_INVALID);
+    ok("axad reads two and two", got && ni == 2 && ny == 2 && pi && py);
+    ok("the int64s sit on 8 bytes", pi && (uintptr_t)pi % 8 == 0);
+    ok("the doubles sit on 8 bytes", py && (uintptr_t)py % 8 == 0);
+    ok("-1, 1 << 40", got && pi && ((const int64_t *)pi)[0] == -1 &&
+                          ((const int64_t *)pi)[1] == INT64_C(1) << 40);
+    ok("0.5, -2.25", got && py && ((const double *)py)[0] == 0.5 &&
+                         ((const double *)py)[1] == -2.25);
+    drop(p);
+    drop(m);
+
     puts("");
     puts("the iterator steps and stops");
     m = rdbus_msg_call(NULL, "/org/reaktor/Obj", NULL, "Two");
@@ -2117,6 +2146,96 @@ forever_thread(void *data)
     return 0;
 }
 
+/* More signals than a connection keeps queued, received without dispatching. */
+
+#define FLOOD_KEEP  4096
+#define FLOOD_SENT  (FLOOD_KEEP + 300)
+
+typedef struct flood {
+    int     got, bad;
+    int32_t first, last;
+} flood;
+
+static int
+on_flood(rdbus_conn *c, rdbus_msg *m, void *user)
+{
+    flood *f = (flood *)user;
+    int32_t v = -1;
+
+    (void)c;
+    if (!rdbus_msg_is_signal(m, LIVE_IFACE, "Flood")) return RDBUS_NOT_YET_HANDLED;
+    if (!rdbus_msg_get_args(m, NULL, RDBUS_TYPE_INT32, &v, RDBUS_TYPE_INVALID)) f->bad++;
+    if (!f->got)
+        f->first = v;
+    else if (v != f->last + 1)
+        f->bad++;
+    f->last = v;
+    f->got++;
+    return RDBUS_HANDLED;
+}
+
+/* Answered by the bus only after everything c sent before it. */
+static int
+bus_round_trip(rdbus_conn *c)
+{
+    rdbus_msg *m = rdbus_msg_call(RDBUS_SERVICE_DBUS, RDBUS_PATH_DBUS, RDBUS_INTERFACE_DBUS,
+                                  "GetId");
+    rdbus_msg *r;
+    rdbus_error err;
+
+    rdbus_error_init(&err);
+    r = m ? rdbus_call(c, m, 10000, &err) : NULL;
+    rdbus_error_free(&err);
+    drop(m);
+    if (!r) return 0;
+    drop(r);
+    return 1;
+}
+
+static void
+test_flood(const char *addr)
+{
+    rdbus_error err;
+    rdbus_conn *q;
+    flood f;
+    int32_t v;
+    int ready;
+
+    puts("");
+    puts("more signals than are kept, received before any dispatch");
+    SDL_zero(f);
+    rdbus_error_init(&err);
+    q = rdbus_open(addr, &err);
+    rdbus_error_free(&err);
+    rdbus_error_init(&err);
+    ready = q && rdbus_add_filter(q, on_flood, &f) &&
+            rdbus_add_match(q, "type='signal',interface='" LIVE_IFACE "',member='Flood'", &err);
+    rdbus_error_free(&err);
+    ok("a connection opens with a match and a filter", ready);
+    if (!ready) {
+        if (q) rdbus_unref(q);
+        return;
+    }
+    for (v = 0; v < FLOOD_SENT; v++) send_signal(L.a, "Flood", v);
+    ok("A sends them all", rdbus_flush(L.a) && bus_round_trip(L.a));
+    ok("the connection reads them while it waits for a reply", bus_round_trip(q));
+    while (rdbus_dispatch(q))
+        ;
+    test_eq("dispatch finds as many as are kept", f.got, FLOOD_KEEP);
+    test_eq("the oldest dropped", f.first, FLOOD_SENT - FLOOD_KEEP);
+    test_eq("up to the newest", f.last, FLOOD_SENT - 1);
+    test_eq("in order", f.bad, 0);
+    ok("still connected", rdbus_connected(q));
+
+    SDL_zero(f);
+    for (v = 0; v < 3; v++) send_signal(L.a, "Flood", v);
+    ok("after it, three more", rdbus_flush(L.a) && bus_round_trip(L.a) && bus_round_trip(q));
+    while (rdbus_dispatch(q))
+        ;
+    ok("arrive as sent", f.got == 3 && f.first == 0 && f.last == 2 && !f.bad);
+    rdbus_unref(q);
+}
+
 static void
 test_live(void)
 {
@@ -2430,6 +2549,7 @@ test_live(void)
         SDL_SetAtomicInt(&L.stop_a, 1);
         if (ta) ok("the dispatch thread stops", joined_within(ta, &L.a_done, 5000));
     }
+    test_flood(addr);
 
     puts("");
     puts("the daemon killed under waiting threads");

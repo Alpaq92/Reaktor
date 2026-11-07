@@ -29,6 +29,8 @@
 #define READ_CHUNK       65536
 #define READ_ROUNDS      64
 #define MAX_QUEUED       4096
+#define QUEUE_KEEP       64
+#define LOCAL_HANDLERS   8
 #define NEVER            (~(Uint64)0)
 
 #if defined(O_CLOEXEC)
@@ -53,11 +55,6 @@ typedef struct handler {
     void         *user;
 } handler;
 
-typedef struct queued {
-    struct queued *next;
-    rdbus_msg     *m;
-} queued;
-
 typedef struct waiter {
     struct waiter *next;
     uint32_t       serial;
@@ -80,8 +77,8 @@ struct rdbus_conn {
     uint8_t       *in;
     size_t         in_len, in_cap, need;
 
-    queued        *head, *tail;
-    int            nqueued;
+    rdbus_msg    **queue;
+    int            qhead, nqueued, qcap;
     waiter        *waiters;
     handler       *handlers;
     int            nhandlers, chandlers;
@@ -584,19 +581,31 @@ write_locked(rdbus_conn *c)
     }
 }
 
-static int
-queue_locked(rdbus_conn *c, rdbus_msg *m, uint32_t *serial)
+/* How much of b the socket takes now; a hard error closes the connection. */
+static size_t
+send_now_locked(rdbus_conn *c, const uint8_t *b, size_t n)
 {
-    const uint8_t *b;
-    size_t n, pending;
-    uint32_t s;
+    size_t sent = 0;
 
-    if (!c->open) return 0;
-    s = c->serial;
-    if (!(b = rdbus_msg_bytes(m, s, &n)) || !n) return 0;
-    if (c->out_at == c->out_len) c->out_at = c->out_len = 0;
-    pending = c->out_len - c->out_at;
-    if (n > MAX_OUTGOING - pending) return 0;
+    while (sent < n) {
+        ssize_t k = send_bytes(c->fd, b + sent, n - sent);
+
+        if (k > 0) {
+            sent += (size_t)k;
+            continue;
+        }
+        if (k < 0 && errno == EINTR) continue;
+        if (!(k < 0 && would_block(errno))) fail_locked(c);
+        break;
+    }
+    return sent;
+}
+
+static int
+room_locked(rdbus_conn *c, size_t n)
+{
+    size_t pending = c->out_len - c->out_at;
+
     if (c->out_len + n > c->out_cap && c->out_at) {
         SDL_memmove(c->out, c->out + c->out_at, pending);
         c->out_at = 0;
@@ -611,8 +620,30 @@ queue_locked(rdbus_conn *c, rdbus_msg *m, uint32_t *serial)
         c->out = p;
         c->out_cap = cap;
     }
-    SDL_memcpy(c->out + c->out_len, b, n);
-    c->out_len += n;
+    return 1;
+}
+
+/* With nothing queued ahead, the message goes straight from its own bytes;
+   only what the socket refuses is copied, into room made beforehand. 1 once
+   the serial is taken, even if sending closed the connection. */
+static int
+queue_locked(rdbus_conn *c, rdbus_msg *m, uint32_t *serial)
+{
+    const uint8_t *b;
+    size_t n, sent = 0;
+    uint32_t s;
+
+    if (!c->open) return 0;
+    s = c->serial;
+    if (!(b = rdbus_msg_bytes(m, s, &n)) || !n) return 0;
+    if (c->out_at == c->out_len) c->out_at = c->out_len = 0;
+    if (n > MAX_OUTGOING - (c->out_len - c->out_at)) return 0;
+    if (!room_locked(c, n)) return 0;
+    if (c->out_at == c->out_len) sent = send_now_locked(c, b, n);
+    if (c->open && sent < n) {
+        SDL_memcpy(c->out + c->out_len, b + sent, n - sent);
+        c->out_len += n - sent;
+    }
     c->serial = s + 1 ? s + 1 : 1;
     *serial = s;
     return 1;
@@ -633,11 +664,44 @@ answers(const waiter *w, const rdbus_msg *m)
            SDL_strcmp(from, RDBUS_SERVICE_DBUS) == 0;
 }
 
+/* The queue is a ring whose size is a power of two. */
+static int
+grow_queue_locked(rdbus_conn *c)
+{
+    int cap = c->qcap ? c->qcap * 2 : 16;
+    rdbus_msg **p = (rdbus_msg **)SDL_realloc(c->queue, sizeof(*p) * (size_t)cap);
+
+    if (!p) return 0;
+    if (c->qhead + c->nqueued > c->qcap)
+        SDL_memcpy(p + c->qcap, p, sizeof(*p) * (size_t)(c->qhead + c->nqueued - c->qcap));
+    c->queue = p;
+    c->qcap = cap;
+    return 1;
+}
+
+static rdbus_msg *
+pop_locked(rdbus_conn *c)
+{
+    rdbus_msg *m;
+
+    if (!c->nqueued) return NULL;
+    m = c->queue[c->qhead];
+    c->qhead = (c->qhead + 1) & (c->qcap - 1);
+    if (!--c->nqueued) {
+        c->qhead = 0;
+        if (c->qcap > QUEUE_KEEP) {
+            SDL_free(c->queue);
+            c->queue = NULL;
+            c->qcap = 0;
+        }
+    }
+    return m;
+}
+
 static void
 route_locked(rdbus_conn *c, rdbus_msg *m)
 {
     int type = rdbus_msg_type(m);
-    queued *q;
 
     if (type == RDBUS_MESSAGE_METHOD_RETURN || type == RDBUS_MESSAGE_ERROR) {
         uint32_t rs = rdbus_msg_reply_serial(m);
@@ -656,27 +720,14 @@ route_locked(rdbus_conn *c, rdbus_msg *m)
         rdbus_msg_free(m);
         return;
     }
-    if (!(q = (queued *)SDL_malloc(sizeof(*q)))) {
+    if (c->nqueued >= MAX_QUEUED) {
+        rdbus_msg_free(pop_locked(c));
+    } else if (c->nqueued == c->qcap && !grow_queue_locked(c)) {
         rdbus_msg_free(m);
         return;
     }
-    if (c->nqueued >= MAX_QUEUED) {
-        queued *old = c->head;
-
-        c->head = old->next;
-        if (!c->head) c->tail = NULL;
-        c->nqueued--;
-        rdbus_msg_free(old->m);
-        SDL_free(old);
-    }
-    q->next = NULL;
-    q->m = m;
+    c->queue[(c->qhead + c->nqueued) & (c->qcap - 1)] = m;
     c->nqueued++;
-    if (c->tail)
-        c->tail->next = q;
-    else
-        c->head = q;
-    c->tail = q;
 }
 
 static void
@@ -800,13 +851,8 @@ destroy(rdbus_conn *c)
 {
     int i;
 
-    while (c->head) {
-        queued *q = c->head;
-
-        c->head = q->next;
-        rdbus_msg_free(q->m);
-        SDL_free(q);
-    }
+    while (c->nqueued) rdbus_msg_free(pop_locked(c));
+    SDL_free(c->queue);
     for (i = 0; i < c->nhandlers; i++) SDL_free(c->handlers[i].path);
     SDL_free(c->handlers);
     if (c->fd >= 0) close(c->fd);
@@ -1090,7 +1136,7 @@ rdbus_read_write(rdbus_conn *c, int timeout_ms)
 
     if (!c) return 0;
     SDL_LockMutex(c->lock);
-    if (c->head) timeout_ms = 0;
+    if (c->nqueued) timeout_ms = 0;
     if (c->open && !c->reading) {
         io_locked(c, timeout_ms);
     } else if (c->open) {
@@ -1293,27 +1339,26 @@ answer_unhandled(rdbus_conn *c, rdbus_msg *m)
 int
 rdbus_dispatch(rdbus_conn *c)
 {
-    queued *q;
-    handler *calls = NULL;
+    rdbus_msg *m;
+    handler local[LOCAL_HANDLERS], *calls = NULL;
     const char *path;
     int i, j, n = 0, handled = 0, peer, more;
 
     if (!c) return 0;
     SDL_LockMutex(c->lock);
-    if (!(q = c->head)) {
+    if (!(m = pop_locked(c))) {
         SDL_UnlockMutex(c->lock);
         return 0;
     }
-    c->head = q->next;
-    if (!c->head) c->tail = NULL;
-    c->nqueued--;
     /* A handler may drop the caller's last reference. */
     SDL_AtomicIncRef(&c->refs);
 
-    path = rdbus_msg_path(q->m);
-    peer = is_peer(q->m);
-    if (!peer)
-        calls = (handler *)SDL_malloc(sizeof(*calls) * (size_t)(c->nhandlers ? c->nhandlers : 1));
+    path = rdbus_msg_path(m);
+    peer = is_peer(m);
+    if (!peer && c->nhandlers <= LOCAL_HANDLERS)
+        calls = local;
+    else if (!peer)
+        calls = (handler *)SDL_malloc(sizeof(*calls) * (size_t)c->nhandlers);
     if (calls) {
         for (i = 0; i < c->nhandlers; i++)
             if (c->handlers[i].kind == H_FILTER) calls[n++] = c->handlers[i];
@@ -1341,20 +1386,18 @@ rdbus_dispatch(rdbus_conn *c)
     SDL_UnlockMutex(c->lock);
 
     if (peer) {
-        answer_peer(c, q->m);
+        answer_peer(c, m);
     } else {
         for (i = 0; i < n && !handled; i++)
-            handled = calls[i].fn(c, q->m, calls[i].user) == RDBUS_HANDLED;
-        if (!handled && rdbus_msg_type(q->m) == RDBUS_MESSAGE_METHOD_CALL &&
-            !rdbus__msg_no_reply(q->m))
-            answer_unhandled(c, q->m);
+            handled = calls[i].fn(c, m, calls[i].user) == RDBUS_HANDLED;
+        if (!handled && rdbus_msg_type(m) == RDBUS_MESSAGE_METHOD_CALL && !rdbus__msg_no_reply(m))
+            answer_unhandled(c, m);
     }
-    SDL_free(calls);
-    rdbus_msg_free(q->m);
-    SDL_free(q);
+    if (calls != local) SDL_free(calls);
+    rdbus_msg_free(m);
 
     SDL_LockMutex(c->lock);
-    more = c->head != NULL;
+    more = c->nqueued != 0;
     SDL_UnlockMutex(c->lock);
     return release(c) ? 0 : more;
 }
