@@ -419,6 +419,40 @@ mask_rounded_fills(App *app)
             ctx->memory.allocated;
 }
 
+/* A software frame that opens by filling the whole window has no use for the
+   clear. A GPU keeps it, as SDL asks; so does a feathered fill, whose edge
+   blends with what is under it. */
+static int
+first_fill_covers(App *app)
+{
+    struct nk_context *ctx = app->ctx;
+    const struct nk_command *c;
+    float sx = 1.0f, sy = 1.0f;
+    int ow = 0, oh = 0, clipped = 0;
+
+    if (!SDL_GetCurrentRenderOutputSize(app->ren, &ow, &oh) ||
+        !SDL_GetRenderScale(app->ren, &sx, &sy))
+        return 0;
+    nk_foreach(c, ctx) {
+        if (c->type == NK_COMMAND_SCISSOR) {
+            const struct nk_command_scissor *s =
+                (const struct nk_command_scissor *)c;
+
+            clipped = s->x > 0 || s->y > 0 || (s->x + s->w) * sx < (float)ow ||
+                      (s->y + s->h) * sy < (float)oh;
+        } else if (c->type != NK_COMMAND_NOP) {
+            const struct nk_command_rect_filled *f =
+                (const struct nk_command_rect_filled *)c;
+
+            return !clipped && c->type == NK_COMMAND_RECT_FILLED &&
+                   !f->rounding && f->color.a == 255 && f->x <= 0 && f->y <= 0 &&
+                   (f->x + f->w) * sx >= (float)ow &&
+                   (f->y + f->h) * sy >= (float)oh;
+        }
+    }
+    return 0;
+}
+
 int
 reaktor_aa_lines(const App *app)
 {
@@ -436,9 +470,11 @@ reaktor_aa_fills(const App *app)
 void
 reaktor_render(App *app)
 {
-    SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
-                           app->clear.a);
-    SDL_RenderClear(app->ren);
+    if (!app->renderer_is_sw || reaktor_aa_fills(app) || !first_fill_covers(app)) {
+        SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
+                               app->clear.a);
+        SDL_RenderClear(app->ren);
+    }
     mask_rounded_fills(app);
     nk_sdl_render_ex(app->ctx,
                      reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,

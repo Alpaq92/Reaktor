@@ -371,8 +371,26 @@ reaktor_windows_restyle(void)
         img_cache_clear(a);
         apply_widget_style(a);
         reaktor_window_set_dark(a->win, a->dark);
-        a->dirty = 1;
+        a->dirty     = 1;
+        a->must_draw = 1;
     }
+}
+
+/* The callback rate is the process's: a held button or a fling in any window
+   keeps it. */
+int
+reaktor_windows_holding(void)
+{
+    App *m = reaktor_main_app();
+    int i;
+
+    if (m && (m->dragging || m->fling_v != 0.0f)) return 1;
+    for (i = 0; i < g_win_n; i++) {
+        const App *a = g_win[i].app;
+
+        if (!g_win[i].closing && (a->dragging || a->fling_v != 0.0f)) return 1;
+    }
+    return 0;
 }
 
 void

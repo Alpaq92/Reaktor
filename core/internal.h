@@ -427,6 +427,7 @@ void reaktor_windows_take(App *app, const SDL_Event *event);
 int  reaktor_windows_retitle(App *app, const char *title);
 void reaktor_windows_draw(void);
 void reaktor_windows_restyle(void);
+int  reaktor_windows_holding(void);
 void reaktor_windows_dirty(void);
 void reaktor_windows_rescale(void);
 void reaktor_windows_close_all(void);

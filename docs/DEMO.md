@@ -76,15 +76,15 @@ seconds flat out, on the Windows machine that
 
 ```
 size          800x600
-frames        4290
-fps           715.0
-ms_build      0.03
-ms_render     0.07
-ms_present    1.27
-ms_per_frame  1.37
-cpu_at_60fps  8.2
-cpu_percent   97.4
-private_mb    7.1
+frames        8095
+fps           1349.2
+ms_build      0.00
+ms_render     0.43
+ms_present    0.28
+ms_per_frame  0.72
+cpu_at_60fps  4.3
+cpu_percent   97.1
+private_mb    6.0
 ```
 
 With `--no-vsync`, read `cpu_at_60fps`, not `cpu_percent`. On vsync,

@@ -3,14 +3,14 @@
   <rect x="30" y="30" width="715" height="500" rx="14" fill="#353535"/>
   <text x="70" y="90" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="31" font-weight="600" fill="#ffffff">Memory</text>
   <text x="70" y="116" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8e8e8e">private bytes, peak, whole process tree</text>
-  <rect x="99.5" y="448.761" width="46" height="3.23882" fill="#56c7ff"/>
-  <text x="122.5" y="418.761" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">9.1 MB</text>
+  <rect x="99.5" y="448.832" width="46" height="3.16764" fill="#56c7ff"/>
+  <text x="122.5" y="418.832" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">8.9 MB</text>
   <text x="122.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">Software</text>
-  <path d="M205.5 452 v-36.9945 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v36.9945 z" fill="#56c7ff"/>
-  <text x="228.5" y="379.006" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">120.8 MB</text>
+  <path d="M205.5 452 v-36.8877 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v36.8877 z" fill="#56c7ff"/>
+  <text x="228.5" y="379.112" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">120.5 MB</text>
   <text x="228.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">D3D12</text>
-  <path d="M311.5 452 v-18.5581 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v18.5581 z" fill="#56c7ff"/>
-  <text x="334.5" y="397.442" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">69.0 MB</text>
+  <path d="M311.5 452 v-18.6293 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v18.6293 z" fill="#56c7ff"/>
+  <text x="334.5" y="397.371" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">69.2 MB</text>
   <text x="334.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">OpenGL</text>
   <path d="M417.5 452 v-41.2298 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v41.2298 z" fill="#6e7a82"/>
   <text x="440.5" y="374.77" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">132.7 MB</text>
@@ -25,14 +25,14 @@
   <rect x="755" y="30" width="715" height="500" rx="14" fill="#353535"/>
   <text x="795" y="90" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="31" font-weight="600" fill="#ffffff">CPU at 60 fps</text>
   <text x="795" y="116" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8e8e8e">percent of one core, steady state (3 s to 8 s)</text>
-  <path d="M824.5 452 v-51.4762 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v51.4762 z" fill="#56c7ff"/>
-  <text x="847.5" y="364.524" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">7.1%</text>
+  <path d="M824.5 452 v-45 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v45 z" fill="#56c7ff"/>
+  <text x="847.5" y="371" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">6.3%</text>
   <text x="847.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">Software</text>
   <path d="M930.5 452 v-27.1905 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v27.1905 z" fill="#56c7ff"/>
   <text x="953.5" y="388.81" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">4.1%</text>
   <text x="953.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">D3D12</text>
-  <path d="M1036.5 452 v-45.8095 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v45.8095 z" fill="#56c7ff"/>
-  <text x="1059.5" y="370.19" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">6.4%</text>
+  <path d="M1036.5 452 v-38.5238 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v38.5238 z" fill="#56c7ff"/>
+  <text x="1059.5" y="377.476" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">5.5%</text>
   <text x="1059.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="600" fill="#ffffff">OpenGL</text>
   <path d="M1142.5 452 v-117.857 a6 6 0 0 1 6 -6 h34 a6 6 0 0 1 6 6 v117.857 z" fill="#6e7a82"/>
   <text x="1165.5" y="298.143" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">15.3%</text>
@@ -45,5 +45,5 @@
   <text x="1377.5" y="478" text-anchor="middle" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="400" fill="#b9b9b9">KMP</text>
   <line x1="785" y1="452.5" x2="1440" y2="452.5" stroke="#4a4a4a" stroke-width="1"/>
   <text x="40" y="562" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#b9b9b9">Drawing 64 rotating boxes at 60 fps in an 800×600 window. Lower is better in both panels.</text>
-  <text x="40" y="586" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8e8e8e">Three Reaktor renderers (0.9.0, measured 2026-11-04) against the alternatives from other tech stacks (2026-10-24), on the same machine — details in benchmarks/BENCHMARKS.md.</text>
+  <text x="40" y="586" font-family="Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8e8e8e">Three Reaktor renderers (measured 2026-11-07) against the alternatives from other tech stacks (2026-10-24), on the same machine — details in benchmarks/BENCHMARKS.md.</text>
 </svg>

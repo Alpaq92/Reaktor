@@ -250,9 +250,10 @@ to thirteen times the memory. See
 
 ### Why is the frame time high on a machine with no GPU?
 
-Most of it is usually `SDL_RenderPresent`, copying the frame to the screen,
-not drawing it. The Diagnostics page and `bench --no-vsync` split build,
-render and present. See [The renderer](DOCUMENTATION.md#the-renderer).
+Most of it is usually rasterizing: SDL queues what it is asked to draw and fills the
+pixels when that queue is flushed. The rest is mostly copying the frame to the
+window. The Diagnostics page and `bench --no-vsync` split build, render and
+present. See [The renderer](DOCUMENTATION.md#the-renderer).
 
 ### Why does Japanese or Arabic text draw differently from Latin?
 
