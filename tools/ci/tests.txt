@@ -8,3 +8,4 @@ texttest
 csstest
 basetest
 imagetest
+dbustest
