@@ -2146,6 +2146,32 @@ forever_thread(void *data)
     return 0;
 }
 
+/* Echo with a byte array too big for the socket to take in one write. */
+static rdbus_msg *
+big_echo(const uint8_t *bytes)
+{
+    rdbus_msg *m = rdbus_msg_call(LIVE_NAME, LIVE_PATH, LIVE_IFACE, "Echo");
+    rdbus_iter it, a;
+
+    if (!m) return NULL;
+    rdbus_iter_init_append(m, &it);
+    rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "y", &a);
+    rdbus_iter_append_fixed_array(&a, RDBUS_TYPE_BYTE, bytes, BIG_LEN);
+    rdbus_iter_close(&it, &a);
+    return m;
+}
+
+static int
+echoed(rdbus_msg *r, const uint8_t *bytes)
+{
+    const uint8_t *p = NULL;
+    int n = 0;
+
+    return r && rdbus_msg_get_args(r, NULL, RDBUS_TYPE_ARRAY, RDBUS_TYPE_BYTE, &p, &n,
+                                   RDBUS_TYPE_INVALID) &&
+           n == BIG_LEN && p && SDL_memcmp(p, bytes, BIG_LEN) == 0;
+}
+
 /* More signals than a connection keeps queued, received without dispatching. */
 
 #define FLOOD_KEEP  4096
@@ -2249,9 +2275,8 @@ test_live(void)
     hang h;
     forever fv;
     const char *s = NULL;
-    const void *p = NULL;
     int32_t i = 0;
-    int n = 0, started, hung = 0;
+    int started, hung = 0;
     Uint64 t0, dt;
     size_t k;
 
@@ -2486,24 +2511,14 @@ test_live(void)
     puts("");
     puts("a 1 MiB message");
     for (k = 0; k < BIG_LEN; k++) big[k] = (uint8_t)(k * 13 + 1);
-    m = rdbus_msg_call(LIVE_NAME, LIVE_PATH, LIVE_IFACE, "Echo");
-    if (m) {
-        rdbus_iter it, a;
-
-        rdbus_iter_init_append(m, &it);
-        rdbus_iter_open(&it, RDBUS_TYPE_ARRAY, "y", &a);
-        rdbus_iter_append_fixed_array(&a, RDBUS_TYPE_BYTE, big, BIG_LEN);
-        rdbus_iter_close(&it, &a);
-    }
+    m = big_echo(big);
     rdbus_error_init(&err);
     r = m ? rdbus_call(L.a, m, 20000, &err) : NULL;
     drop(m);
     ok("goes there and back", r != NULL);
     if (!r && rdbus_error_is_set(&err)) printf("    %s: %s\n", err.name, err.message);
     rdbus_error_free(&err);
-    ok("unchanged", r && rdbus_msg_get_args(r, NULL, RDBUS_TYPE_ARRAY, RDBUS_TYPE_BYTE, &p, &n,
-                                            RDBUS_TYPE_INVALID) &&
-                        n == BIG_LEN && p && SDL_memcmp(p, big, BIG_LEN) == 0);
+    ok("unchanged", echoed(r, big));
     drop(r);
 
     puts("");
@@ -2560,6 +2575,22 @@ test_live(void)
     rdbus_error_free(&err);
     fv.c = d;
     td = d ? SDL_CreateThread(forever_thread, "forever", &fv) : NULL;
+    if (td) {
+        /* Let the thread settle into its wait, watching for input alone. */
+        SDL_Delay(100);
+        m = big_echo(big);
+        rdbus_error_init(&err);
+        t0 = SDL_GetTicks();
+        r = m ? rdbus_call(d, m, 20000, &err) : NULL;
+        dt = SDL_GetTicks() - t0;
+        drop(m);
+        ok("a 1 MiB call on a connection another thread waits on without end",
+           echoed(r, big));
+        if (!r && rdbus_error_is_set(&err)) printf("    %s: %s\n", err.name, err.message);
+        printf("    answered in %lu ms\n", (unsigned long)dt);
+        rdbus_error_free(&err);
+        drop(r);
+    }
     th = SDL_CreateThread(hang_call, "hang", &h);
     ok("a call that B never answers is waiting", th != NULL);
     ok("and a fourth connection waits with no timeout", td != NULL);

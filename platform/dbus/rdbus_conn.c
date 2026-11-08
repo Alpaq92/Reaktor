@@ -67,8 +67,10 @@ struct rdbus_conn {
     SDL_Mutex     *lock;
     SDL_Condition *cond;
     int            fd;
+    int            wake[2];
     int            open;
     int            reading;
+    int            woken;
     uint32_t       serial;
     char          *unique;
 
@@ -198,6 +200,24 @@ percent_decode(const char *s, size_t n, char *out, size_t cap)
         out[o++] = (char)ch;
     }
     return (long)o;
+}
+
+/* Both ends nonblocking and closed on exec. */
+static int
+open_wake(int fd[2])
+{
+    int i, fl;
+
+    if (pipe(fd) < 0) return 0;
+    for (i = 0; i < 2; i++) {
+        if (fcntl(fd[i], F_SETFD, FD_CLOEXEC) < 0 || (fl = fcntl(fd[i], F_GETFL)) < 0 ||
+            fcntl(fd[i], F_SETFL, fl | O_NONBLOCK) < 0) {
+            close(fd[0]);
+            close(fd[1]);
+            return 0;
+        }
+    }
+    return 1;
 }
 
 static int
@@ -601,6 +621,30 @@ send_now_locked(rdbus_conn *c, const uint8_t *b, size_t n)
     return sent;
 }
 
+/* A thread polling the socket for input alone is told there is output. */
+static void
+wake_locked(rdbus_conn *c)
+{
+    static const char byte = 0;
+
+    if (!c->reading || c->woken || c->out_at == c->out_len) return;
+    c->woken = 1;
+    while (write(c->wake[1], &byte, 1) < 0 && errno == EINTR)
+        ;
+}
+
+static void
+drain_wake_locked(rdbus_conn *c)
+{
+    char buf[16];
+    ssize_t n;
+
+    if (!c->woken) return;
+    c->woken = 0;
+    do n = read(c->wake[0], buf, sizeof(buf));
+    while (n > 0 || (n < 0 && errno == EINTR));
+}
+
 static int
 room_locked(rdbus_conn *c, size_t n)
 {
@@ -643,6 +687,7 @@ queue_locked(rdbus_conn *c, rdbus_msg *m, uint32_t *serial)
     if (c->open && sent < n) {
         SDL_memcpy(c->out + c->out_len, b + sent, n - sent);
         c->out_len += n - sent;
+        wake_locked(c);
     }
     c->serial = s + 1 ? s + 1 : 1;
     *serial = s;
@@ -816,27 +861,31 @@ io_locked(rdbus_conn *c, int timeout_ms)
 
     write_locked(c);
     while (c->open && timeout_ms != 0) {
-        struct pollfd p;
+        struct pollfd p[2];
         int r, e, ms = deadline == NEVER ? -1 : ms_left(deadline);
 
         if (ms == 0) break;
-        p.fd = c->fd;
-        p.events = POLLIN;
-        p.revents = 0;
-        if (c->out_at < c->out_len) p.events |= POLLOUT;
+        p[0].fd = c->fd;
+        p[0].events = POLLIN;
+        p[0].revents = 0;
+        if (c->out_at < c->out_len) p[0].events |= POLLOUT;
+        p[1].fd = c->wake[0];
+        p[1].events = POLLIN;
+        p[1].revents = 0;
         c->reading = 1;
         SDL_UnlockMutex(c->lock);
-        r = poll(&p, 1, ms);
+        r = poll(p, 2, ms);
         e = errno;
         SDL_LockMutex(c->lock);
         c->reading = 0;
+        drain_wake_locked(c);
         if (r == 0) break;
         if (r < 0) {
             if (e == EINTR || e == EAGAIN) continue;
             fail_locked(c);
             break;
         }
-        if (p.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) break;
+        if (p[0].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) break;
         write_locked(c);
     }
     write_locked(c);
@@ -856,6 +905,8 @@ destroy(rdbus_conn *c)
     for (i = 0; i < c->nhandlers; i++) SDL_free(c->handlers[i].path);
     SDL_free(c->handlers);
     if (c->fd >= 0) close(c->fd);
+    if (c->wake[0] >= 0) close(c->wake[0]);
+    if (c->wake[1] >= 0) close(c->wake[1]);
     SDL_free(c->out);
     SDL_free(c->in);
     SDL_free(c->unique);
@@ -882,6 +933,7 @@ establish(int fd, Uint64 deadline, rdbus_error *err)
         return NULL;
     }
     c->fd = fd;
+    c->wake[0] = c->wake[1] = -1;
     c->open = 1;
     c->serial = 1;
     SDL_SetAtomicInt(&c->refs, 1);
@@ -890,6 +942,12 @@ establish(int fd, Uint64 deadline, rdbus_error *err)
     if (!c->lock || !c->cond) {
         destroy(c);
         rdbus__error_set(err, ERR_NO_MEMORY, "out of memory");
+        return NULL;
+    }
+    if (!open_wake(c->wake)) {
+        rdbus__error_set(err, RDBUS_ERROR_FAILED, "pipe: %s", strerror(errno));
+        c->wake[0] = c->wake[1] = -1;
+        destroy(c);
         return NULL;
     }
 
@@ -1088,15 +1146,10 @@ rdbus_call(rdbus_conn *c, rdbus_msg *m, int timeout_ms, rdbus_error *err)
         int left = ms_left(deadline);
 
         if (!left) break;
-        if (!c->reading) {
+        if (!c->reading)
             io_locked(c, left);
-        } else {
-            /* Another thread polls; it may not be watching for output. */
-            int ms = c->out_at < c->out_len && left > 10 ? 10 : left;
-
-            SDL_WaitConditionTimeout(c->cond, c->lock, ms);
-            write_locked(c);
-        }
+        else
+            SDL_WaitConditionTimeout(c->cond, c->lock, left);
     }
     for (pp = &c->waiters; *pp; pp = &(*pp)->next) {
         if (*pp == &w) {

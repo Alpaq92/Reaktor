@@ -698,7 +698,7 @@ static int SDLCALL
 pump(void *user)
 {
     (void)user;
-    while (g.running && rdbus_read_write_dispatch(g.bus, 200))
+    while (g.running && rdbus_read_write_dispatch(g.bus, -1))
         ;
     return 0;
 }
