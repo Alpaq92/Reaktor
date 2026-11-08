@@ -6,13 +6,10 @@ A Nuklear-powered GUI library for C.
   <img src="assets/screenshots/screenshot.png" alt="Two Reaktor showcase windows, the light scheme behind and the dark scheme in front: each has the sidebar of pages with its own scheme chosen at the foot, and the front one shows the Login page's card in a rounded panel">
 </p>
 
-Tired of C having no cross-platform GUI — nothing like
-[Avalonia](https://github.com/avaloniaui/avalonia),
-[Shaft](https://github.com/ShaftUI/Shaft) or
-[Freya](https://github.com/marc2332/freya) — and of toolkits that want hundreds
-of megabytes to put a dialog on screen? No? But I was, so I wrote Reaktor:
-complete without being big. A 2.1 MB binary, 7–13 MB of RAM, and no GPU
-required.
+Tired of C relying on heavy toolkits that want hundreds of megabytes and a
+dozen dependencies just to put a dialog on screen? And of small alternatives
+always lacking crucial features? No? But I was, so I wrote Reaktor: complete
+without being big. A 2.1 MB binary, 7–13 MB of RAM, and no GPU required.
 
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
 same program, built to WebAssembly — or
