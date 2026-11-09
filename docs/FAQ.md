@@ -75,7 +75,7 @@ Nuklear is still underneath when you need it directly. See
 
 ### Why C99 and an immediate-mode core instead of a retained toolkit like GTK or Qt?
 
-To stay small: a 2.1 MB binary, 7–13 MB of RAM, no GPU, nothing to install
+To stay small: a 2.1 MB binary, 7–16 MB of RAM, no GPU, nothing to install
 beside it. A frame is drawn only when something changes, so the app idles at
 0% of a core. See [The frame loop](DOCUMENTATION.md#the-frame-loop)
 and [PERFORMANCE.md](PERFORMANCE.md).
