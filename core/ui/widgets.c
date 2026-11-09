@@ -400,11 +400,11 @@ reaktor_chevron_at(App *app, struct nk_context *ctx, struct nk_rect slot,
 }
 
 static void
-stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
+stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq, int live)
 {
     struct nk_color wash;
 
-    if (!hot_hover(ctx, sq)) return;
+    if (!live || !hot_hover(ctx, sq)) return;
     wash = reaktor_token("--background-hover", ctx->style.property.hover.type
                          == NK_STYLE_ITEM_COLOR
                          ? ctx->style.property.hover.data.color
@@ -424,7 +424,7 @@ reaktor_cap_offset(const struct nk_user_font *f)
 
 void
 reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
-                        struct nk_rect *steps)
+                        struct nk_rect *steps, int live)
 {
     const struct nk_style_property *st = &ctx->style.property;
     float h = ctx->style.font->height;
@@ -439,19 +439,26 @@ reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
     hot_push(app, b, 0, 1);
     hot_push(app, l, 0, 1);
     hot_push(app, r, 0, 1);
-    stepper_wash(app, ctx, l);
-    stepper_wash(app, ctx, r);
+    stepper_wash(app, ctx, l, live);
+    stepper_wash(app, ctx, r, live);
     reaktor_chevron_at(app, ctx, l, "chevron-back-outline",    st->dec_button.text_normal);
     reaktor_chevron_at(app, ctx, r, "chevron-forward-outline", st->inc_button.text_normal);
     if (steps) { steps[0] = l; steps[1] = r; }
 }
 
+/* Nuklear's property takes no input in a read-only window. */
+int
+reaktor_property_live(struct nk_context *ctx)
+{
+    return !(ctx->current->layout->flags & NK_WINDOW_ROM);
+}
+
 void
-reaktor_property_push(struct nk_context *ctx, struct nk_rect b)
+reaktor_property_push(struct nk_context *ctx, struct nk_rect b, int live)
 {
     struct nk_style_property *st = &ctx->style.property;
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
-    int lit = !(ctx->current->layout->flags & NK_WINDOW_ROM) && hot_hover(ctx, b);
+    int lit = live && hot_hover(ctx, b);
 
     push_clear(ctx, (struct nk_style_item *[]){
         &st->dec_button.hover,
