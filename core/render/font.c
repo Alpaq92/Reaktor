@@ -112,6 +112,7 @@ reaktor_font_glyph(const struct reaktor_font *f, nk_rune cp)
 {
     int lo = 0, hi = f->glyph_count - 1;
 
+    if (cp < 128) return f->ascii[cp] ? &f->glyphs[f->ascii[cp] - 1] : NULL;
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
 
@@ -302,6 +303,7 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
             g->x1        = (float)(d->left + d->w);
             g->y0        = (float)-d->top + f->ascent + 0.5f;
             g->y1        = g->y0 + (float)d->h;
+            if (cp[k] < 128) f->ascii[cp[k]] = (unsigned char)(f->glyph_count + 1);
             f->glyph_count++;
         }
         f->fallback = reaktor_font_glyph(f, '?');

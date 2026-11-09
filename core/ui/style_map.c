@@ -380,7 +380,7 @@ typedef struct button_glyph {
 } button_glyph;
 
 static void
-glyph_of(App *app, struct nk_context *ctx, const char *selector, const char *icon_src,
+glyph_of(App *app, struct nk_context *ctx, const char *selector, const char *ionicon,
          button_glyph *g)
 {
     reaktor_style st;
@@ -392,7 +392,8 @@ glyph_of(App *app, struct nk_context *ctx, const char *selector, const char *ico
                                          : SDL_roundf(ctx->style.font->height * 1.125f);
     g->gap = st.matched && st.margin[REAKTOR_SIDE_RIGHT] > 0.0f
            ? st.margin[REAKTOR_SIDE_RIGHT] : REAKTOR_BUTTON_GAP;
-    g->im = icon_ink(app, icon_src, (int)g->px, &g->ink_l, &g->ink_r);
+    g->im = ionicon_ink(app, ionicon, nk_rgb(255, 255, 255), -1.0f, (int)g->px,
+                        &g->ink_l, &g->ink_r);
 }
 
 static float
@@ -415,12 +416,12 @@ content_w(struct nk_context *ctx, const char *selector, float group, int glyph)
 
 float
 css_button_content_w(App *app, struct nk_context *ctx, const char *selector,
-                     const struct nk_user_font *f, const char *icon_src, const char *label)
+                     const struct nk_user_font *f, const char *ionicon, const char *label)
 {
     button_glyph g;
 
-    if (icon_src) glyph_of(app, ctx, selector, icon_src, &g);
-    return content_w(ctx, selector, group_w(f, icon_src ? &g : NULL, label), icon_src != NULL);
+    if (ionicon) glyph_of(app, ctx, selector, ionicon, &g);
+    return content_w(ctx, selector, group_w(f, ionicon ? &g : NULL, label), ionicon != NULL);
 }
 
 static struct nk_color
@@ -454,15 +455,15 @@ group_push(struct nk_context *ctx, const char *selector, struct nk_rect b,
 }
 
 static int
-group_press(App *app, struct nk_context *ctx, const char *selector, const char *icon_src,
+group_press(App *app, struct nk_context *ctx, const char *selector, const char *ionicon,
             const char *label)
 {
     button_glyph g;
     struct nk_rect at;
     int drawn = 0, clicked;
 
-    if (icon_src) {
-        glyph_of(app, ctx, selector, icon_src, &g);
+    if (ionicon) {
+        glyph_of(app, ctx, selector, ionicon, &g);
         drawn = group_push(ctx, selector, nk_widget_bounds(ctx), &g, label, &at);
     }
     reaktor_button_arm(ctx);
@@ -478,7 +479,7 @@ group_press(App *app, struct nk_context *ctx, const char *selector, const char *
 
 int
 css_button_accent(App *app, struct nk_context *ctx, const char *selector,
-                  const char *icon_src, const char *label)
+                  const char *ionicon, const char *label)
 {
     reaktor_style_frame f, a = { 0, 0, 0, 0, 0 };
     unsigned char c[4], hov[4];
@@ -509,7 +510,7 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
     a.colors = 4;
     g_chrome.edge_hover = g_chrome.edge_active = app->accent;
 
-    clicked = group_press(app, ctx, selector, icon_src, label);
+    clicked = group_press(app, ctx, selector, ionicon, label);
     reaktor_style_frame_pop(ctx, a);
     reaktor_style_frame_pop(ctx, f);
     return clicked;
@@ -517,7 +518,7 @@ css_button_accent(App *app, struct nk_context *ctx, const char *selector,
 
 int
 css_button_icon(App *app, struct nk_context *ctx, const char *selector,
-                const char *icon_src, const char *label)
+                const char *ionicon, const char *label)
 {
     reaktor_style_frame f;
     int clicked;
@@ -525,7 +526,7 @@ css_button_icon(App *app, struct nk_context *ctx, const char *selector,
     hot_push(app, nk_widget_bounds(ctx), REAKTOR_CURSOR_POINTER, 1);
     reaktor_note_here(app, ctx, REAKTOR_A11Y_BUTTON, label, 0);
     f = push_button_style(app, ctx, selector);
-    clicked = group_press(app, ctx, selector, icon_src, label);
+    clicked = group_press(app, ctx, selector, ionicon, label);
     reaktor_style_frame_pop(ctx, f);
     return clicked;
 }

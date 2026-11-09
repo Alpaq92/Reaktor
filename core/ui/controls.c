@@ -10,7 +10,6 @@ fit_button(reaktor_box *box, const reaktor_button_spec *s)
     const struct nk_style_button *nb = &g_frame_ctx->style.button;
     const char                   *sel = decl_rule_or(s->style, "button");
     float least = box->w, w;
-    char  src[192];
 
     box->w = box->h = 0.0f;
     box->flags &= ~(REAKTOR_LAY_FILL);
@@ -19,7 +18,7 @@ fit_button(reaktor_box *box, const reaktor_button_spec *s)
         w = box->h;
     else
         w = css_button_content_w(g_frame_app, g_frame_ctx, sel, decl_style_font(sel),
-                                 reaktor_button_src(src, s->icon), s->label);
+                                 s->icon, s->label);
     box->w = SDL_ceilf(SDL_max(w, least));
 }
 

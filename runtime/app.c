@@ -551,11 +551,8 @@ load_theme(App *app)
     app->style_ms_x100 = ms_x100(t0, t1);
     app->card_bg = reaktor_style_token("--background", c)
                  ? nk_rgba(c[0], c[1], c[2], c[3]) : nk_rgb(226, 226, 226);
-    if (reaktor_style_token("--text-muted", c))
-        SDL_snprintf(app->icon_hex, sizeof(app->icon_hex),
-                     "#%02x%02x%02x", c[0], c[1], c[2]);
-    else
-        SDL_strlcpy(app->icon_hex, "#6a6a6a", sizeof(app->icon_hex));
+    app->icon_col = reaktor_style_token("--text-muted", c)
+                  ? nk_rgb(c[0], c[1], c[2]) : nk_rgb(0x6a, 0x6a, 0x6a);
 
     reaktor_window_set_dark(app->win, app->dark);
 

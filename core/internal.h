@@ -63,7 +63,9 @@ struct img_slot {
     struct tex_slot s;
     char            src[192];
     unsigned        hash;
-    int             px, w, h;
+    Uint32          stroke;
+    float           sw;
+    int             ion, px, w, h;
     float           ink_l, ink_r;
 };
 
@@ -183,7 +185,7 @@ struct App {
     int   theme_mode;
     int   theme_pending;
     struct nk_color page, card_bg, text, accent;
-    char  icon_hex[10];
+    struct nk_color icon_col;
 
     struct hot_region {
         struct nk_rect r;
@@ -269,9 +271,10 @@ struct App {
 
 void img_cache_clear(App *app);
 void img_cache_free(App *app);
-struct nk_image icon_over(App *app, const char *src, int px, float over);
-struct nk_image icon(App *app, const char *src, int px);
-struct nk_image icon_ink(App *app, const char *src, int px, float *left, float *right);
+struct nk_image ionicon_over(App *app, const char *name, struct nk_color stroke,
+                             float sw, int px, float over);
+struct nk_image ionicon_ink(App *app, const char *name, struct nk_color stroke,
+                            float sw, int px, float *left, float *right);
 const struct nk_user_font *pick_font(App *app, int px, int bold);
 const struct nk_user_font *base_font(App *app);
 void rebuild_font(App *app);
@@ -341,12 +344,10 @@ extern void (*reaktor_test_hook)(App *app);
 void hot_push(App *app, struct nk_rect r, int cursor, int repaint);
 #define REAKTOR_BUTTON_GAP   12.0f
 float css_button_content_w(App *app, struct nk_context *ctx, const char *selector,
-                           const struct nk_user_font *f, const char *icon_src,
+                           const struct nk_user_font *f, const char *ionicon,
                            const char *label);
-const char *reaktor_ionicon_src(char out[192], const char *name, const char *hex, float sw);
-const char *reaktor_button_src(char out[192], const char *ionicon);
 int  css_button_accent(App *app, struct nk_context *ctx, const char *selector,
-                       const char *icon_src,
+                       const char *ionicon,
                        const char *label);
 int  reaktor_css_button_flat(App *app, struct nk_context *ctx, const char *icon,
                              const char *name, int accent);
@@ -430,7 +431,7 @@ void reaktor_windows_rescale(void);
 void reaktor_windows_close_all(void);
 const char *reaktor_launch_icon(void);
 int  css_button_icon(App *app, struct nk_context *ctx, const char *selector,
-                     const char *icon_src, const char *label);
+                     const char *ionicon, const char *label);
 
 struct nk_color readable_on(const unsigned char bg[4], const char *preferred,
                             const char *fallback);
