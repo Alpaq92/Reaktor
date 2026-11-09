@@ -92,7 +92,7 @@ with `-DCMAKE_PREFIX_PATH=/opt/reaktor`, or `pkg-config` with
 `PKG_CONFIG_PATH=/opt/reaktor/lib/pkgconfig`. Remove it with the system's
 package manager: it is `libreaktor` everywhere. With `-s` it also
 builds `libreaktor.so` and packs three packages instead: `libreaktor-sdl3-0`
-and `libreaktor0`, which an app needs to run, and `libreaktor-shared` to
+and `libreaktor1`, which an app needs to run, and `libreaktor-shared` to
 build one. `libreaktor` and `libreaktor-shared` conflict; install one or the
 other.
 

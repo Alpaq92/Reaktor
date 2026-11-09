@@ -109,7 +109,7 @@ dev=libreaktor-shared
 # The runtime packages carry the SOVERSION, as Debian's do. OpenBSD reads a
 # package name's version from its first dash followed by a digit, so there
 # the SDL one has no dash before its 0.
-lib=libreaktor0
+lib=libreaktor1
 sdl=libreaktor-sdl3-0
 [ "$format" = openbsd ] && sdl=libreaktor-sdl3
 conflicts=""
@@ -239,7 +239,7 @@ pack() {
 }
 
 # A REAKTOR_SHARED build splits in three, so an app can install the libraries
-# alone: libreaktor-sdl3-0 (our SDL), libreaktor0 (libreaktor.so, which needs
+# alone: libreaktor-sdl3-0 (our SDL), libreaktor1 (libreaktor.so, which needs
 # it) and the development package with everything else, which needs both.
 split=0
 ls "$stage$prefix"/lib/libreaktor.so* >/dev/null 2>&1 && split=1
