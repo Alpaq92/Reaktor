@@ -170,15 +170,15 @@ jobs:
 
           On Linux and the BSDs the library also comes shared, so
           several apps can share one copy in memory:
-          \`libreaktor-shared-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.0\`,
+          \`libreaktor-shared-$v-<system>-<arch>.tar.gz\` holds \`libreaktor.so.1\`,
           our own SDL as \`libreaktor-sdl3.so.0\`, \`libreaktor-modules.a\` (the
           modules, which go into each app), everything the static one has, and
           \`reaktor-shared.pc\`. Link with \`reaktor::shared\` in CMake or
           \`pkg-config --cflags --libs reaktor-shared\`; the app records where the
           libraries are. As system packages it splits in three:
-          \`libreaktor-sdl3-0\` and \`libreaktor0\`, all an app needs to run, and
+          \`libreaktor-sdl3-0\` and \`libreaktor1\`, all an app needs to run, and
           \`libreaktor-shared\` to build one:
-          \`libreaktor0_${v}_<arch>.deb\`, \`libreaktor-sdl3-0_${v}_<arch>.deb\` and
+          \`libreaktor1_${v}_<arch>.deb\`, \`libreaktor-sdl3-0_${v}_<arch>.deb\` and
           the \`.rpm\`s beside them. The static library stays the default.
 
           **Upgrading:** the static package was \`libreaktor-dev\` as a \`.deb\`

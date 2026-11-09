@@ -511,10 +511,9 @@ int
 main(int argc, char **argv)
 {
     return reaktor_test_app(argc, argv, &(reaktor_launch){
-        .name             = "Damagetest",
-        .window           = { .w = 640, .h = 480 },
-        .console          = REAKTOR_CONSOLE_PARENT,
-        .skip_same_frames = 1,
-        .font_fallbacks   = { { .path = "assets/fonts/MPLUS1p-Regular.ttf" } },
-        .page             = page }, script, NULL);
+        .name           = "Damagetest",
+        .window         = { .w = 640, .h = 480 },
+        .console        = REAKTOR_CONSOLE_PARENT,
+        .font_fallbacks = { { .path = "assets/fonts/MPLUS1p-Regular.ttf" } },
+        .page           = page }, script, NULL);
 }

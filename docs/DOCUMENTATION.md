@@ -1000,31 +1000,31 @@ While a mouse button is held, frames follow the display's refresh, with two
 more after the release. A turn of the wheel takes two frames, because Nuklear
 scrolls a panel after drawing it.
 
-**A frame that draws what is already on screen** is still rendered and
-presented, unless the launch sets `.skip_same_frames`. Then each frame's draw
+**A frame that draws what is already on screen** is skipped. Each frame's draw
 commands are hashed field by field, and one that matches the last presented
 frame is neither rendered nor presented. A key nothing takes, or a focus
 change that moves no ring, then costs the build and nothing more. A window
 uncovered, shown, resized, restored or moved to another scale is always drawn,
 and so is a frame a `--shot` or a capture waits for. A tween that changes
-nothing on screen follows the display's refresh. It is off by default; the
-showcase turns it on, and its Diagnostics page counts the frames drawn and
-skipped.
+nothing on screen follows the display's refresh. A launch that sets
+`.draw_every_frame` renders and presents every frame, whole; the bench sample
+does, to measure drawing. The showcase's Diagnostics page counts the frames
+drawn and skipped.
 
-On the software renderer at a whole-number scale, a launch with
-`.skip_same_frames` also redraws a changed frame only where its commands
-changed. The window is drawn into a texture that keeps the last frame; the
-commands that differ from it mark up to four rectangles, and only those are
-cleared and drawn again, through every command, before the texture is copied
-to the window. A frame that would redraw more than half the window, a new
-window size, scale, theme or clear color, an evicted icon or a new font atlas,
-the first frame, and a frame a `--shot` or a capture waits for are drawn whole.
-Every frame comes out pixel for pixel as a full redraw would draw it;
-`tests/damagetest.c` checks each one. A GPU renderer, whose back buffer is not
-kept, or a fractional scale, draws every frame whole. A texture an app changes
-in place through `reaktor_sdl_renderer` is not among the commands, so a frame
-that only changes its pixels is skipped, or leaves them where they were: draw
-it from a new texture, or at a new rectangle, for the change to show.
+On the software renderer at a whole-number scale, a changed frame is redrawn
+only where its commands changed. The window is drawn into a texture that keeps
+the last frame; the commands that differ from it mark up to four rectangles,
+and only those are cleared and drawn again, through every command, before the
+texture is copied to the window. A frame that would redraw more than half the
+window, a new window size, scale, theme or clear color, an evicted icon or a
+new font atlas, the first frame, and a frame a `--shot` or a capture waits for
+are drawn whole. Every frame comes out pixel for pixel as a full redraw would
+draw it; `tests/damagetest.c` checks each one. A GPU renderer, whose back
+buffer is not kept, or a fractional scale, draws every frame whole. A texture
+an app changes in place through `reaktor_sdl_renderer` is not among the
+commands, so a frame that only changes its pixels is skipped, or leaves them
+where they were: draw it from a new texture, or at a new rectangle, or set
+`.draw_every_frame`, for the change to show.
 
 A finger that moves mostly up or down, by more than 8 pixels, scrolls the
 panel under it: the runtime releases what the finger pressed away from every
@@ -1147,7 +1147,7 @@ the library shared, so several apps map one copy: `libreaktor.so` with SDL as
 stay in each app, from `libreaktor-modules.a`. Link `reaktor::shared`, or on
 Linux and the BSDs `pkg-config --cflags --libs reaktor-shared`; the framework
 has no `.pc`. Releases carry it as
-`libreaktor-shared-<version>-<system>-<arch>`. Its soname is `libreaktor.so.0`
+`libreaktor-shared-<version>-<system>-<arch>`. Its soname is `libreaktor.so.1`
 (OpenBSD installs no unversioned `libreaktor.so`), and it exports only what
 `tools/reaktor.map` names: the public calls, with Nuklear's and NukAnim's,
 under `LIBREAKTOR_0`, and what the modules call under `LIBREAKTOR_PRIVATE_0`,
@@ -1157,7 +1157,7 @@ which an application must not reach.
 it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
 where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
 `-i` installs it, `-s` builds the shared library too and splits the package
-in three: `libreaktor0` and `libreaktor-sdl3-0` to run an app
+in three: `libreaktor1` and `libreaktor-sdl3-0` to run an app
 (`libreaktor-sdl3` on OpenBSD, whose package names read a dash before a digit
 as the version) and `libreaktor-shared`, with the headers and both
 libraries, to build one,
@@ -1175,7 +1175,7 @@ apart from the system's include directory, because the package carries SDL's
 and Nuklear's headers. Point `CMAKE_PREFIX_PATH` or `PKG_CONFIG_PATH` (its
 `lib/pkgconfig`) there. No package depends on a system library — link the
 ones `pkg-config --libs reaktor` names — only on the others of a split:
-`libreaktor0` needs `libreaktor-sdl3-0`, and `libreaktor-shared` both.
+`libreaktor1` needs `libreaktor-sdl3-0`, and `libreaktor-shared` both.
 `libreaktor` and `libreaktor-shared` install the same headers, so each
 conflicts with the other.
 

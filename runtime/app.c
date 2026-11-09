@@ -1371,7 +1371,7 @@ same_frame(App *app, struct nk_context *ctx)
     unsigned h;
     int same;
 
-    if (!g_launch.skip_same_frames) return 0;
+    if (g_launch.draw_every_frame) return 0;
     h = reaktor_damage_collect(app, ctx);
     h = reaktor_fnv_n(h, &app->laid_w, sizeof app->laid_w);
     h = reaktor_fnv_n(h, &app->laid_h, sizeof app->laid_h);

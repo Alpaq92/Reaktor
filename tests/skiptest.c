@@ -65,6 +65,5 @@ main(int argc, char **argv)
         .name = "Skiptest",
         .window = { .w = 400, .h = 300 },
         .console = REAKTOR_CONSOLE_PARENT,
-        .skip_same_frames = 1,
         .page = page }, script, NULL);
 }

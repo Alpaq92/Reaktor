@@ -300,7 +300,7 @@ jobs:
                 -DCMAKE_PREFIX_PATH=/opt/reaktor -DCONSUMER_SHARED=ON </dev/null
           cmake --build build-pkg-shared </dev/null
           dpkg -r libreaktor-shared </dev/null
-          dpkg -s libreaktor0 libreaktor-sdl3-0 | grep -c '^Status: install ok installed' | grep -q 2
+          dpkg -s libreaktor1 libreaktor-sdl3-0 | grep -c '^Status: install ok installed' | grep -q 2
           timeout 600 build-pkg-shared/simple --theme light --video dummy \
             --shot check/lib-packaged-shared.bmp --a11y-dump check/lib-packaged-shared.txt </dev/null
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged-shared.$e"; done
@@ -398,7 +398,7 @@ jobs:
           rpm -e libreaktor
           rm -rf build-pkg
           sh tools/libreaktor-pkg.sh -s -i -o dist-pkg-shared </dev/null
-          rpm -q libreaktor0 libreaktor-sdl3-0 libreaktor-shared
+          rpm -q libreaktor1 libreaktor-sdl3-0 libreaktor-shared
           cmake -S examples/consumer -B build-pkg-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_PREFIX_PATH=/opt/reaktor -DCONSUMER_SHARED=ON </dev/null
           cmake --build build-pkg-shared </dev/null

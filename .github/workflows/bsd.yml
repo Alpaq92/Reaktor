@@ -197,7 +197,7 @@ jobs:
           cmake --build build-arm64-shared --parallel 4 --target libreaktor </dev/null
           shared="libreaktor-shared-${version}-${{ matrix.os }}-arm64"
           cmake --install build-arm64-shared --prefix "dist/$shared" --component libreaktor --strip </dev/null
-          file "dist/$shared"/lib/libreaktor.so.0.* | grep -qi aarch64
+          file -L "dist/$shared/lib/libreaktor.so.1" | grep -qi aarch64
           if grep -rq "$sysroot" "dist/$shared/lib/cmake" "dist/$shared/lib/pkgconfig"; then
             echo "the shared package carries the sysroot's path"; exit 1
           fi

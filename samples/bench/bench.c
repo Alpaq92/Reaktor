@@ -138,10 +138,11 @@ int
 main(int argc, char **argv)
 {
     return launchApp(argc, argv, &(reaktor_launch){
-        .name    = "Bench",
-        .window  = { .w = 800, .h = 600 },
-        .console = REAKTOR_CONSOLE_PARENT,
-        .page    = page_shell,
-        .key     = sample_key,
-        .start   = sample_start });
+        .name             = "Bench",
+        .window           = { .w = 800, .h = 600 },
+        .console          = REAKTOR_CONSOLE_PARENT,
+        .draw_every_frame = 1,
+        .page             = page_shell,
+        .key              = sample_key,
+        .start            = sample_start });
 }

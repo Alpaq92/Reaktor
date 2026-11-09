@@ -15,7 +15,7 @@ CMake options pass through: `./build.ps1 -DREAKTOR_A11Y=OFF`,
 `REAKTOR_SHARED=ON` left in `build/` makes every sample a shared one.
 
 Shipping: `tools/package.sh` packs a release folder, `tools/libreaktor-pkg.sh`
-a system package (`libreaktor` static; with `-s`, `libreaktor0`,
+a system package (`libreaktor` static; with `-s`, `libreaktor1`,
 `libreaktor-sdl3-0` and `libreaktor-shared`). A version tag such as `1.2.3`
 publishes through `release.yml`.
 
@@ -62,7 +62,8 @@ on every run.
   the present; the Diagnostics page and `bench --no-vsync` split them. Vsync
   sits in the present, so a total that matches the refresh rate measures it.
 - **`--shot` never skips a frame.** It and a capture force the draw, so a pixel
-  diff cannot see what `.skip_same_frames` breaks; `tests/skiptest.c` can.
+  diff cannot see what skipping an unchanged frame breaks; `tests/skiptest.c`
+  can. Skipping is the default; `.draw_every_frame` turns it off.
 - **Text the atlas lacks is not Nuklear's.** Strings with Japanese, Arabic and
   the like are measured and drawn by `core/text/text.c` through a custom
   command. mojibake 0.5.0 records `byte_offset` at a character's last byte.

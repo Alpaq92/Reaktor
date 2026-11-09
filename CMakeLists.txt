@@ -710,7 +710,7 @@ if(REAKTOR_SHARED)
     file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/reaktor_so.c" CONTENT "")
     add_library(reaktor_shared SHARED "${CMAKE_BINARY_DIR}/reaktor_so.c")
     set_target_properties(reaktor_shared PROPERTIES
-        VERSION ${PROJECT_VERSION} SOVERSION 0
+        VERSION ${PROJECT_VERSION} SOVERSION 1
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/reaktor.map")
     add_dependencies(reaktor_shared ${_so_parts})
