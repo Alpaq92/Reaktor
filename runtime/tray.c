@@ -36,10 +36,8 @@ static SDL_AtomicInt  g_running;
 static int            g_stop[2] = { -1, -1 };
 static Sint32         g_gen;
 
-/* A menu callback may close the tray while pump() dispatches on its bus;
-   the connection is then given back once that pump() returns. */
-static gibus_conn    *g_pumped;
-static int            g_pumped_closed;
+static reaktor_tray_item g_chosen[TRAY_ITEMS];
+static int               g_chosen_on[TRAY_ITEMS], g_chosen_n;
 
 static int SDLCALL
 watch_bus(void *fdp)
@@ -311,7 +309,6 @@ static void
 clicked(int id)
 {
     const reaktor_tray_item *it;
-    App *app = reaktor_main_app();
 
     if (id < 1 || id > g_n) return;
     it = &g_item[id - 1];
@@ -320,9 +317,9 @@ clicked(int id)
         g_on[id - 1] = !g_on[id - 1];
         items_updated(id);
     }
-    if (app && it->chosen) {
-        it->chosen(app, it->checkbox && g_on[id - 1], it->user);
-        reaktor_wake(app);
+    if (it->chosen && g_chosen_n < TRAY_ITEMS) {
+        g_chosen[g_chosen_n]      = *it;
+        g_chosen_on[g_chosen_n++] = it->checkbox && g_on[id - 1];
     }
 }
 
@@ -481,7 +478,6 @@ menu_call(gibus_msg *m, const char *member)
         }
     } else if (!SDL_strcmp(member, "EventGroup")) {
         gibus_iter evs, ev;
-        gibus_conn *bus = g_bus;
         int n = 0, chosen[TRAY_ITEMS];
 
         if (gibus_msg_has_signature(m, "a(isvu)") && gibus_iter_init(m, &in)) {
@@ -503,7 +499,7 @@ menu_call(gibus_msg *m, const char *member)
             put_empty(&out, "i");
             send_and_free(r);
         }
-        for (i = 0; i < n && g_bus == bus; i++) clicked(chosen[i]);
+        for (i = 0; i < n; i++) clicked(chosen[i]);
         return NULL;
     } else if (!SDL_strcmp(member, "AboutToShow")) {
         gibus_bool no = 0;
@@ -593,31 +589,35 @@ on_signal(gibus_conn *c, gibus_msg *m, void *user)
     return GIBUS_NOT_YET_HANDLED;
 }
 
-/* Reads without waiting and dispatches. Called again from a handler on the
-   same bus, it only reads: the dispatch loop below it takes what was queued. */
+/* Menu callbacks run after dispatch, where closing the tray or pumping
+   again is safe; one that closes it drops the rest. */
 static void
 pump(void)
 {
-    gibus_conn *c = g_bus, *outer = g_pumped;
-    int outer_closed = g_pumped_closed;
+    reaktor_tray_item chosen[TRAY_ITEMS];
+    int on[TRAY_ITEMS], i, n;
+    App *app = reaktor_main_app();
+    Sint32 gen = g_gen;
 
-    if (!c) return;
-    gibus_read_write(c, 0);
-    if (c == outer) return;
-    g_pumped = c;
-    g_pumped_closed = 0;
-    while (g_bus == c && gibus_dispatch(c))
+    if (!g_bus) return;
+    gibus_read_write(g_bus, 0);
+    while (gibus_dispatch(g_bus))
         ;
-    if (g_pumped_closed) gibus_unref(c);
-    g_pumped = outer;
-    g_pumped_closed = outer_closed;
+    n = g_chosen_n;
+    g_chosen_n = 0;
+    SDL_memcpy(chosen, g_chosen, sizeof chosen[0] * (size_t)n);
+    SDL_memcpy(on, g_chosen_on, sizeof on[0] * (size_t)n);
+    for (i = 0; app && i < n && g_bus && g_gen == gen; i++) {
+        chosen[i].chosen(app, on[i], chosen[i].user);
+        reaktor_wake(app);
+    }
 }
 
 static void
 icons_make(void)
 {
     static const int sizes[] = { 22, 32, 48, 64 };
-    int i, x, y;
+    int i;
 
     for (i = g_icons = 0; i < (int)SDL_arraysize(sizes); i++) {
         SDL_Surface *s = reaktor_icon_surface(reaktor_launch_icon(), sizes[i]);
@@ -629,18 +629,11 @@ icons_make(void)
             SDL_DestroySurface(s);
             continue;
         }
-        for (y = 0; y < s->h; y++) {
-            const Uint32 *row = (const Uint32 *)((const Uint8 *)s->pixels + y * s->pitch);
-
-            for (x = 0; x < s->w; x++) {
-                Uint32 p = row[x];
-                Uint8 *o = out + (y * s->w + x) * 4;
-
-                o[0] = (Uint8)(p >> 24);
-                o[1] = (Uint8)(p >> 16);
-                o[2] = (Uint8)(p >> 8);
-                o[3] = (Uint8)p;
-            }
+        if (!SDL_ConvertPixels(s->w, s->h, s->format, s->pixels, s->pitch,
+                               SDL_PIXELFORMAT_ARGB32, out, s->w * 4)) {
+            SDL_free(out);
+            SDL_DestroySurface(s);
+            continue;
         }
         g_icon[g_icons] = out;
         g_icon_px[g_icons++] = sizes[i];
@@ -649,14 +642,12 @@ icons_make(void)
 }
 
 static char *
-clean_dup(const char *s, int mnemonic)
+label_dup(const char *s)
 {
-    size_t n = SDL_strlen(s) * 3 + 1, i, j;
-    char *c = (char *)SDL_malloc(n), *out;
+    char *c = reaktor_utf8_clean_dup(s), *out;
+    size_t i, j;
 
-    if (!c) return NULL;
-    reaktor_utf8_clean(c, s, n);
-    if (!mnemonic || !(out = (char *)SDL_malloc(SDL_strlen(c) * 2 + 1))) return c;
+    if (!c || !(out = (char *)SDL_malloc(SDL_strlen(c) * 2 + 1))) return c;
     /* dbusmenu reads an underscore as a mnemonic; GTK's label under SDL did not. */
     for (i = j = 0; c[i]; i++) {
         if (c[i] == '_') out[j++] = '_';
@@ -688,18 +679,16 @@ reaktor_tray_open(App *app, const reaktor_tray *spec)
     for (i = 0; i < g_n; i++) {
         g_item[i]  = spec->items[i];
         g_on[i]    = spec->items[i].checkbox && spec->items[i].checked;
-        g_label[i] = spec->items[i].label ? clean_dup(spec->items[i].label, 1) : NULL;
+        g_label[i] = spec->items[i].label ? label_dup(spec->items[i].label) : NULL;
     }
-    g_tip = spec->tooltip ? clean_dup(spec->tooltip, 0) : NULL;
+    g_tip = spec->tooltip ? reaktor_utf8_clean_dup(spec->tooltip) : NULL;
     icons_make();
     SDL_snprintf(g_name, sizeof g_name, "org.kde.StatusNotifierItem-%d-1", (int)getpid());
     owner = 0;
     if (gibus_register_path(g_bus, SNI_PATH, on_message, NULL) &&
         gibus_register_path(g_bus, MENU_PATH, on_message, (void *)1)) {
-        owner = gibus_request_name(g_bus, g_name, GIBUS_NAME_FLAG_DO_NOT_QUEUE, &err) ==
+        owner = gibus_request_name(g_bus, g_name, GIBUS_NAME_FLAG_DO_NOT_QUEUE, NULL) ==
                 GIBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER;
-        gibus_error_free(&err);
-        gibus_error_init(&err);
     }
     if (!owner || !register_item(1)) {
         reaktor_tray_close(app);
@@ -708,8 +697,7 @@ reaktor_tray_open(App *app, const reaktor_tray *spec)
     gibus_add_filter(g_bus, on_signal, NULL);
     gibus_add_match(g_bus, "type='signal',sender='" GIBUS_SERVICE_DBUS "',"
                     "interface='" GIBUS_INTERFACE_DBUS "',member='NameOwnerChanged',"
-                    "arg0='" WATCHER "'", &err);
-    gibus_error_free(&err);
+                    "arg0='" WATCHER "'", NULL);
     gibus_flush(g_bus);
     if ((fd = gibus_fd(g_bus)) >= 0 && pipe(g_stop) == 0 &&
         (g_drained = SDL_CreateSemaphore(0))) {
@@ -755,8 +743,7 @@ reaktor_tray_close(App *app)
     }
     if (g_drained) SDL_DestroySemaphore(g_drained);
     g_drained = NULL;
-    if (g_bus && g_bus == g_pumped) g_pumped_closed = 1;
-    else if (g_bus) gibus_unref(g_bus);
+    if (g_bus) gibus_unref(g_bus);
     g_bus = NULL;
     for (i = 0; i < g_n; i++) {
         SDL_free(g_label[i]);

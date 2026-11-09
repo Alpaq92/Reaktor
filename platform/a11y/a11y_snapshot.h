@@ -17,10 +17,12 @@ typedef struct reaktor_snap_node {
 #define REAKTOR_SNAP_TEXT 4096
 
 /* A node the last update changed in place: whether its value changed, and
-   which state bits flipped. Its name is part of its id, so never changes. */
+   which state bits flipped, with the state and value it has now. Its name is
+   part of its id, so never changes. */
 typedef struct reaktor_snap_diff {
-    unsigned id, flipped;
+    unsigned id, flipped, state;
     int      value;
+    float    num, lo, hi;
 } reaktor_snap_diff;
 
 #define REAKTOR_SNAP_DIFFS 64

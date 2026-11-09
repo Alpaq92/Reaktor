@@ -33,6 +33,7 @@ void reaktor_process_memory(size_t *rss, size_t *priv);
 double reaktor_process_cpu_ms(void);
 void  reaktor_free(void *p);
 size_t reaktor_utf8_clean(char *dst, const char *src, size_t cap);
+char  *reaktor_utf8_clean_dup(const char *src);
 int    reaktor_url_allowed(const char *url, const char *extra);
 
 void reaktor_release_free_memory(void);

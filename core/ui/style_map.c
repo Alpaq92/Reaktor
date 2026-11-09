@@ -44,6 +44,7 @@ hot_hover(const struct nk_context *ctx, struct nk_rect r)
 {
     const struct nk_window *w = ctx->current;
 
+    if (w && w->widgets_disabled) return 0;
     return nk_input_is_mouse_hovering_rect(&ctx->input, r) &&
            (!w || !w->layout || nk_input_is_mouse_hovering_rect(&ctx->input, w->layout->clip));
 }
@@ -738,7 +739,7 @@ draw_hint(struct nk_context *ctx, struct nk_rect bounds, const char *hint,
 void
 note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds)
 {
-    if (nk_input_is_mouse_hovering_rect(&ctx->input, bounds)) {
+    if (hot_hover(ctx, bounds)) {
         app->field_rect = bounds;
         app->field_rect_valid = 1;
     }

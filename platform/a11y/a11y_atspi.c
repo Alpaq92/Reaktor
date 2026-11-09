@@ -188,32 +188,12 @@ append_attribute(gibus_iter *arr, const char *key, const char *val)
 }
 
 static void
-append_variant_string(gibus_iter *it, const char *s)
+append_variant(gibus_iter *it, int type, const char *sig, const void *value)
 {
     gibus_iter v;
 
-    gibus_iter_open(it, GIBUS_TYPE_VARIANT, "s", &v);
-    gibus_iter_append_basic(&v, GIBUS_TYPE_STRING, &s);
-    gibus_iter_close(it, &v);
-}
-
-static void
-append_variant_int(gibus_iter *it, int32_t n)
-{
-    gibus_iter v;
-
-    gibus_iter_open(it, GIBUS_TYPE_VARIANT, "i", &v);
-    gibus_iter_append_basic(&v, GIBUS_TYPE_INT32, &n);
-    gibus_iter_close(it, &v);
-}
-
-static void
-append_variant_double(gibus_iter *it, double d)
-{
-    gibus_iter v;
-
-    gibus_iter_open(it, GIBUS_TYPE_VARIANT, "d", &v);
-    gibus_iter_append_basic(&v, GIBUS_TYPE_DOUBLE, &d);
+    gibus_iter_open(it, GIBUS_TYPE_VARIANT, sig, &v);
+    gibus_iter_append_basic(&v, type, value);
     gibus_iter_close(it, &v);
 }
 
@@ -334,13 +314,12 @@ index_in_parent(unsigned id)
 }
 
 static int
-send_reply(gibus_conn *c, gibus_msg *m, gibus_msg *r)
+send_reply(gibus_conn *c, gibus_msg *r)
 {
     if (r) {
         gibus_send(c, r, NULL);
         gibus_msg_free(r);
     }
-    (void)m;
     return GIBUS_HANDLED;
 }
 
@@ -348,7 +327,7 @@ static int
 reply_unknown(gibus_conn *c, gibus_msg *m)
 {
     gibus_msg *r = gibus_msg_error(m, GIBUS_ERROR_UNKNOWN_METHOD, "no such member here");
-    return send_reply(c, m, r);
+    return send_reply(c, r);
 }
 
 static int
@@ -368,7 +347,7 @@ handle_properties(gibus_conn *c, gibus_msg *m, unsigned id, int is_root,
             gibus_iter_init_append(r, &it);
             gibus_iter_open(&it, GIBUS_TYPE_ARRAY, "{sv}", &arr);
             gibus_iter_close(&it, &arr);
-            return send_reply(c, m, r);
+            return send_reply(c, r);
         }
         return reply_unknown(c, m);
     }
@@ -383,18 +362,18 @@ handle_properties(gibus_conn *c, gibus_msg *m, unsigned id, int is_root,
 
     if (SDL_strcmp(iface, IF_ACCESSIBLE) == 0) {
         if (SDL_strcmp(prop, "Name") == 0)
-            append_variant_string(&it, is_root ? "Reaktor"
-                                               : (n->name ? n->name : ""));
+            append_variant(&it, GIBUS_TYPE_STRING, "s",
+                           &(const char *){ is_root ? "Reaktor" : n->name ? n->name : "" });
         else if (SDL_strcmp(prop, "Description") == 0)
-            append_variant_string(&it, "");
+            append_variant(&it, GIBUS_TYPE_STRING, "s", &(const char *){ "" });
         else if (SDL_strcmp(prop, "Locale") == 0)
-            append_variant_string(&it, "C");
+            append_variant(&it, GIBUS_TYPE_STRING, "s", &(const char *){ "C" });
         else if (SDL_strcmp(prop, "AccessibleId") == 0) {
             char buf[24];
             SDL_snprintf(buf, sizeof(buf), "%u", id);
-            append_variant_string(&it, buf);
+            append_variant(&it, GIBUS_TYPE_STRING, "s", &(const char *){ buf });
         } else if (SDL_strcmp(prop, "ChildCount") == 0)
-            append_variant_int(&it, (int32_t)child_count(id));
+            append_variant(&it, GIBUS_TYPE_INT32, "i", &(int32_t){ (int32_t)child_count(id) });
         else if (SDL_strcmp(prop, "Parent") == 0) {
             if (is_root) {
                 gibus_iter v;
@@ -410,33 +389,34 @@ handle_properties(gibus_conn *c, gibus_msg *m, unsigned id, int is_root,
         }
     } else if (SDL_strcmp(iface, IF_APPLICATION) == 0) {
         if (SDL_strcmp(prop, "ToolkitName") == 0)
-            append_variant_string(&it, "Reaktor");
+            append_variant(&it, GIBUS_TYPE_STRING, "s", &(const char *){ "Reaktor" });
         else if (SDL_strcmp(prop, "Version") == 0)
-            append_variant_string(&it, "1");
+            append_variant(&it, GIBUS_TYPE_STRING, "s", &(const char *){ "1" });
         else if (SDL_strcmp(prop, "AtspiVersion") == 0)
-            append_variant_string(&it, "2.1");
+            append_variant(&it, GIBUS_TYPE_STRING, "s", &(const char *){ "2.1" });
         else if (SDL_strcmp(prop, "Id") == 0)
-            append_variant_int(&it, 0);
+            append_variant(&it, GIBUS_TYPE_INT32, "i", &(int32_t){ 0 });
         else {
             gibus_msg_free(r);
             return reply_unknown(c, m);
         }
     } else if (SDL_strcmp(iface, IF_VALUE) == 0) {
         if (SDL_strcmp(prop, "CurrentValue") == 0)
-            append_variant_double(&it, n->num);
+            append_variant(&it, GIBUS_TYPE_DOUBLE, "d", &(double){ n->num });
         else if (SDL_strcmp(prop, "MinimumValue") == 0)
-            append_variant_double(&it, n->lo);
+            append_variant(&it, GIBUS_TYPE_DOUBLE, "d", &(double){ n->lo });
         else if (SDL_strcmp(prop, "MaximumValue") == 0)
-            append_variant_double(&it, n->hi);
+            append_variant(&it, GIBUS_TYPE_DOUBLE, "d", &(double){ n->hi });
         else if (SDL_strcmp(prop, "MinimumIncrement") == 0)
-            append_variant_double(&it, n->step);
+            append_variant(&it, GIBUS_TYPE_DOUBLE, "d", &(double){ n->step });
         else {
             gibus_msg_free(r);
             return reply_unknown(c, m);
         }
     } else if (SDL_strcmp(iface, IF_ACTION) == 0) {
         if (SDL_strcmp(prop, "NActions") == 0)
-            append_variant_int(&it, reaktor_snap_pressable(n->role) ? 1 : 0);
+            append_variant(&it, GIBUS_TYPE_INT32, "i",
+                           &(int32_t){ reaktor_snap_pressable(n->role) ? 1 : 0 });
         else {
             gibus_msg_free(r);
             return reply_unknown(c, m);
@@ -445,7 +425,7 @@ handle_properties(gibus_conn *c, gibus_msg *m, unsigned id, int is_root,
         gibus_msg_free(r);
         return reply_unknown(c, m);
     }
-    return send_reply(c, m, r);
+    return send_reply(c, r);
 }
 
 static int
@@ -507,7 +487,7 @@ handle_accessible(gibus_conn *c, gibus_msg *m, unsigned id, int is_root,
         gibus_msg_free(r);
         return reply_unknown(c, m);
     }
-    return send_reply(c, m, r);
+    return send_reply(c, r);
 }
 
 static int
@@ -577,7 +557,7 @@ handle_component(gibus_conn *c, gibus_msg *m, unsigned id,
         gibus_msg_free(r);
         return reply_unknown(c, m);
     }
-    return send_reply(c, m, r);
+    return send_reply(c, r);
 }
 
 static int
@@ -624,14 +604,14 @@ handle_action(gibus_conn *c, gibus_msg *m, unsigned id,
         gibus_msg_free(r);
         return reply_unknown(c, m);
     }
-    return send_reply(c, m, r);
+    return send_reply(c, r);
 }
 
 static int
 handle_value(gibus_conn *c, gibus_msg *m)
 {
     gibus_msg *r = gibus_msg_error(m, GIBUS_ERROR_NOT_SUPPORTED, "value is read-only");
-    return send_reply(c, m, r);
+    return send_reply(c, r);
 }
 /* ((so)(so)(so)iiassusau): one node as AT-SPI's cache holds it. */
 static void
@@ -691,7 +671,7 @@ on_cache(gibus_conn *c, gibus_msg *m, void *user)
     gibus_iter_open(&it, GIBUS_TYPE_ARRAY, "((so)(so)(so)iiassusau)", &arr);
     append_subtree(&arr, 0, 0, -1);
     gibus_iter_close(&it, &arr);
-    return send_reply(c, m, r);
+    return send_reply(c, r);
 }
 
 static int
@@ -710,7 +690,7 @@ on_message(gibus_conn *c, gibus_msg *m, void *user)
     SDL_memset(&n, 0, sizeof(n));
     if (!is_root && !reaktor_snap_get((unsigned)id, &n, buf, sizeof(buf))) {
         gibus_msg *r = gibus_msg_error(m, GIBUS_ERROR_UNKNOWN_OBJECT, "that element is gone");
-        return send_reply(c, m, r);
+        return send_reply(c, r);
     }
 
     if (SDL_strcmp(iface, IF_PROPS) == 0)
@@ -775,23 +755,20 @@ a11y_bus_address(void)
 {
     gibus_conn *session;
     gibus_msg *msg, *reply;
-    gibus_error err;
     const char *addr = NULL;
     char *out = NULL;
 
-    gibus_error_init(&err);
-    session = gibus_session(&err);
-    if (!session) { gibus_error_free(&err); return NULL; }
+    session = gibus_session(NULL);
+    if (!session) return NULL;
 
     msg = gibus_msg_call(A11Y_BUS_NAME, A11Y_BUS_PATH, A11Y_BUS_NAME, "GetAddress");
     if (!msg) {
         gibus_unref(session);
         return NULL;
     }
-    reply = gibus_call(session, msg, 1000, &err);
+    reply = gibus_call(session, msg, 1000, NULL);
     gibus_msg_free(msg);
     if (!reply) {
-        gibus_error_free(&err);
         gibus_unref(session);
         return NULL;
     }
@@ -842,7 +819,6 @@ void
 reaktor_a11y_platform_init(reaktor_a11y_action activate,
                            reaktor_a11y_action focus, void *user)
 {
-    gibus_error err;
     char *addr;
     const char *unique;
 
@@ -854,10 +830,8 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
         return;
     }
 
-    gibus_error_init(&err);
-    g.bus = gibus_open(addr, &err);
+    g.bus = gibus_open(addr, NULL);
     SDL_free(addr);
-    gibus_error_free(&err);
     if (!g.bus) return;
 
     unique = gibus_unique_name(g.bus);
@@ -895,19 +869,16 @@ emit_changes(void)
         { REAKTOR_A11Y_DISABLED, "sensitive", 1 }
     };
     const reaktor_snap_diff *d;
-    reaktor_snap_node node;
-    char buf[REAKTOR_SNAP_TEXT];
     int i, k, n = reaktor_snap_diffs(&d);
 
     for (i = 0; i < n; i++) {
-        if (!reaktor_snap_get(d[i].id, &node, buf, sizeof(buf))) continue;
         for (k = 0; k < (int)SDL_arraysize(flips); k++) {
             if (!(d[i].flipped & flips[k].bit)) continue;
             emit_event("StateChanged", flips[k].name,
-                       ((node.state & flips[k].bit) != 0) != flips[k].on_when_clear, 0, d[i].id);
+                       ((d[i].state & flips[k].bit) != 0) != flips[k].on_when_clear, 0, d[i].id);
         }
-        if (d[i].value && node.hi > node.lo) {
-            double v = node.num;
+        if (d[i].value && d[i].hi > d[i].lo) {
+            double v = d[i].num;
 
             emit_event_with("PropertyChange", "accessible-value", 0, 0, d[i].id, "d", &v);
         }
