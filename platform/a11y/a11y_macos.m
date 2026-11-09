@@ -268,6 +268,35 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
     g.ready = 1;
 }
 
+/* A control that changed in place: VoiceOver reads checks and selected tabs
+   from the value, as accessibilityValue answers. */
+static void
+post_changes(void)
+{
+    const reaktor_snap_diff *d;
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
+    int i, count = reaktor_snap_diffs(&d);
+
+    for (i = 0; i < count; i++) {
+        ReaktorElement *e;
+
+        if (!reaktor_snap_get(d[i].id, &n, buf, sizeof(buf)) || !(e = element_for(d[i].id)))
+            continue;
+        if (d[i].value ||
+            (d[i].flipped & (REAKTOR_A11Y_CHECKED | REAKTOR_A11Y_EXPANDED)) ||
+            ((d[i].flipped & REAKTOR_A11Y_SELECTED) && n.role == REAKTOR_A11Y_TAB))
+            NSAccessibilityPostNotification(e, NSAccessibilityValueChangedNotification);
+        if ((d[i].flipped & REAKTOR_A11Y_SELECTED) && n.role == REAKTOR_A11Y_LISTITEM) {
+            ReaktorElement *up = element_for(n.parent);
+
+            if (up)
+                NSAccessibilityPostNotification(
+                    up, NSAccessibilitySelectedChildrenChangedNotification);
+        }
+    }
+}
+
 void
 reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
@@ -282,6 +311,7 @@ reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
         NSAccessibilityPostNotification(
             g.root, NSAccessibilityLayoutChangedNotification);
     }
+    post_changes();
 
     if (focus_id != last_focus) {
         last_focus = focus_id;

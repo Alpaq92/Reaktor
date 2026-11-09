@@ -16,6 +16,15 @@ typedef struct reaktor_snap_node {
 
 #define REAKTOR_SNAP_TEXT 4096
 
+/* A node the last update changed in place: whether its value changed, and
+   which state bits flipped. Its name is part of its id, so never changes. */
+typedef struct reaktor_snap_diff {
+    unsigned id, flipped;
+    int      value;
+} reaktor_snap_diff;
+
+#define REAKTOR_SNAP_DIFFS 64
+
 typedef struct reaktor_snap reaktor_snap;
 
 int  reaktor_snap_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
@@ -43,8 +52,10 @@ void     reaktor_snap_wake_in(reaktor_snap *s);
 void     reaktor_snap_request_focus_in(reaktor_snap *s, unsigned id);
 void     reaktor_snap_request_activate_in(reaktor_snap *s, unsigned id);
 void     reaktor_snap_drain_in(reaktor_snap *s);
+int      reaktor_snap_diffs_in(reaktor_snap *s, const reaktor_snap_diff **out);
 
 int  reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id);
+int  reaktor_snap_diffs(const reaktor_snap_diff **out);
 
 int  reaktor_snap_get(unsigned id, reaktor_snap_node *out, char *buf,
                       size_t cap);

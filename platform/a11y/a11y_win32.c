@@ -785,6 +785,64 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
 }
 
 static void
+raise_property(Provider *p, PROPERTYID prop, VARIANT now)
+{
+    VARIANT was;
+
+    VariantInit(&was);
+    UiaRaiseAutomationPropertyChangedEvent((IRawElementProviderSimple *)&p->simple,
+                                           prop, was, now);
+    VariantClear(&now);
+}
+
+/* A control that changed in place: its new value or state, for the
+   properties the provider serves. */
+static void
+raise_changes(bridge *b)
+{
+    const reaktor_snap_diff *d;
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
+    VARIANT v;
+    int i, count = reaktor_snap_diffs_in(b->snap, &d);
+
+    for (i = 0; i < count; i++) {
+        Provider *p;
+
+        if (!reaktor_snap_get_in(b->snap, d[i].id, &n, buf, sizeof(buf))) continue;
+        if (!(p = provider_new(b, d[i].id))) return;
+        if (d[i].value) {
+            if (n.hi > n.lo) {
+                VariantInit(&v);
+                v.vt = VT_R8;
+                v.dblVal = n.num;
+                raise_property(p, UIA_RangeValueValuePropertyId, v);
+            } else {
+                str_variant(&v, n.value);
+                raise_property(p, UIA_ValueValuePropertyId, v);
+            }
+        }
+        if ((d[i].flipped & REAKTOR_A11Y_CHECKED) &&
+            (n.role == REAKTOR_A11Y_CHECKBOX || n.role == REAKTOR_A11Y_RADIO)) {
+            VariantInit(&v);
+            v.vt = VT_I4;
+            v.lVal = (n.state & REAKTOR_A11Y_CHECKED) ? ToggleState_On : ToggleState_Off;
+            raise_property(p, UIA_ToggleToggleStatePropertyId, v);
+        }
+        if ((d[i].flipped & REAKTOR_A11Y_SELECTED) &&
+            (n.role == REAKTOR_A11Y_TAB || n.role == REAKTOR_A11Y_LISTITEM)) {
+            bool_variant(&v, (n.state & REAKTOR_A11Y_SELECTED) != 0);
+            raise_property(p, UIA_SelectionItemIsSelectedPropertyId, v);
+        }
+        if (d[i].flipped & REAKTOR_A11Y_DISABLED) {
+            bool_variant(&v, !(n.state & REAKTOR_A11Y_DISABLED));
+            raise_property(p, UIA_IsEnabledPropertyId, v);
+        }
+        IRawElementProviderSimple_Release(&p->simple);
+    }
+}
+
+static void
 push_into(bridge *b, const reaktor_a11y *a, unsigned focus_id)
 {
     if (!b->wanted) {
@@ -793,6 +851,7 @@ push_into(bridge *b, const reaktor_a11y *a, unsigned focus_id)
     }
     if (!reaktor_snap_update_in(b->snap, a, focus_id)) return;
     if (!UiaClientsAreListening()) return;
+    raise_changes(b);
     if (reaktor_snap_structural(a)) {
         Provider *r = provider_new(b, 0);
 

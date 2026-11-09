@@ -38,6 +38,9 @@ struct reaktor_snap {
     unsigned   want_focus, want_activate;
     Uint32     window;
 
+    reaktor_snap_diff diff[REAKTOR_SNAP_DIFFS];
+    int               ndiff;
+
     reaktor_a11y_action activate, focus_action;
     void             *user;
 };
@@ -59,6 +62,13 @@ intern(reaktor_snap *s, const char *t)
     return at;
 }
 
+static int
+same_text(const reaktor_snap *s, int at, const char *t)
+{
+    if (at < 0) return !t || !*t;
+    return t && strcmp(s->str + at, t) == 0;
+}
+
 static snap_slot *
 slot_of(reaktor_snap *s, unsigned id)
 {
@@ -74,6 +84,32 @@ find(reaktor_snap *s, unsigned id)
     const snap_slot *at = id ? slot_of(s, id) : NULL;
 
     return at && at->id && at->at < s->count ? at->at : -1;
+}
+
+/* Before the tree is replaced: what each node the core says changed in place
+   had, against what it has now. */
+static void
+diff_tree(reaktor_snap *s, const reaktor_a11y *a, const reaktor_a11y_node *t, int n)
+{
+    const reaktor_a11y_change *c;
+    int m, i, j, k;
+
+    c = reaktor_a11y_changes(a, &m);
+    for (i = 0; i < m && s->ndiff < REAKTOR_SNAP_DIFFS; i++) {
+        reaktor_snap_diff *d = &s->diff[s->ndiff];
+        const snap_node *o;
+
+        if (c[i].kind != REAKTOR_A11Y_RENAMED && c[i].kind != REAKTOR_A11Y_RESTATED) continue;
+        for (k = 0; k < s->ndiff && s->diff[k].id != c[i].id; k++) {}
+        if (k < s->ndiff || (j = find(s, c[i].id)) < 0) continue;
+        o = &s->node[j];
+        for (j = 0; j < n && t[j].id != c[i].id; j++) {}
+        if (j == n) continue;
+        d->id      = c[i].id;
+        d->flipped = o->state ^ t[j].state;
+        d->value   = !same_text(s, o->value, t[j].value) || o->num != t[j].num;
+        if (d->value || d->flipped) s->ndiff++;
+    }
 }
 
 static void
@@ -169,11 +205,13 @@ reaktor_snap_update_in(reaktor_snap *s, const reaktor_a11y *a, unsigned focus_id
     const reaktor_a11y_node *t;
 
     if (!s || !s->ready) return 0;
+    s->ndiff = 0;
     reaktor_a11y_changes(a, &m);
     t = reaktor_a11y_tree(a, &n);
     if (m == 0 && focus_id == s->focus && !s->stale) return 0;
 
     SDL_LockMutex(s->lock);
+    if (!s->stale) diff_tree(s, a, t, n);
     s->str_used = 0;
     s->count    = 0;
     for (i = 0; i < n && i < REAKTOR_A11Y_MAX_NODES; i++) {
@@ -213,6 +251,13 @@ copy_text(const reaktor_snap *s, int at, char **buf, size_t *left)
         *left -= n + 1;
         return out;
     }
+}
+
+int
+reaktor_snap_diffs_in(reaktor_snap *s, const reaktor_snap_diff **out)
+{
+    *out = s ? s->diff : NULL;
+    return s ? s->ndiff : 0;
 }
 
 int
@@ -423,6 +468,7 @@ reaktor_snap_drain_in(reaktor_snap *s)
 
 int reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id)
 { return reaktor_snap_update_in(&g, a, focus_id); }
+int reaktor_snap_diffs(const reaktor_snap_diff **out) { return reaktor_snap_diffs_in(&g, out); }
 int reaktor_snap_get(unsigned id, reaktor_snap_node *out, char *buf, size_t cap)
 { return reaktor_snap_get_in(&g, id, out, buf, cap); }
 unsigned reaktor_snap_child(unsigned parent, int last)
