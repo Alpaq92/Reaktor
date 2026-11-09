@@ -1024,7 +1024,11 @@ buffer is not kept, or a fractional scale, draws every frame whole. A texture
 an app changes in place through `reaktor_sdl_renderer` is not among the
 commands, so a frame that only changes its pixels is skipped, or leaves them
 where they were: draw it from a new texture, or at a new rectangle, or set
-`.draw_every_frame`, for the change to show.
+`.draw_every_frame`, for the change to show. A custom command
+(`nk_push_custom`, `NK_COMMAND_CUSTOM`) is recorded by its rectangle,
+callback and data pointer only, so a callback whose drawing depends on state
+behind the same pointer must be given a new pointer when that state changes,
+or the launch must set `.draw_every_frame`.
 
 A finger that moves mostly up or down, by more than 8 pixels, scrolls the
 panel under it: the runtime releases what the finger pressed away from every
