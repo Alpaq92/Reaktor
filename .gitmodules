@@ -34,3 +34,6 @@
 [submodule "external/toml-c"]
 	path = external/toml-c
 	url = https://github.com/arp242/toml-c.git
+[submodule "external/gibus"]
+	path = external/gibus
+	url = https://github.com/Alpaq92/gibus.git
