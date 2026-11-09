@@ -773,7 +773,7 @@ menu_draw_col(int k, struct nk_vec2 at)
             }
         }
         if (nk_input_is_mouse_released(&ctx->input, NK_BUTTON_LEFT) &&
-            nk_input_is_mouse_hovering_rect(&ctx->input, slot) && !e->disabled && !e->items) {
+            hot_hover(ctx, slot) && !e->disabled && !e->items) {
             g_menu.picked_k = k;
             g_menu.picked_i = i;
             menu_changed();

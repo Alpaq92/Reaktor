@@ -451,9 +451,7 @@ reaktor_property_push(struct nk_context *ctx, struct nk_rect b)
 {
     struct nk_style_property *st = &ctx->style.property;
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
-    const struct nk_window *w = ctx->current;
-    int lit = !(w->layout->flags & NK_WINDOW_ROM) && !w->widgets_disabled &&
-              hot_hover(ctx, b);
+    int lit = hot_hover(ctx, b);
 
     push_clear(ctx, (struct nk_style_item *[]){
         &st->dec_button.hover,
