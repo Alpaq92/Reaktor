@@ -21,6 +21,8 @@
 #define IF_SOCKET       "org.a11y.atspi.Socket"
 #define IF_EVENT_OBJECT "org.a11y.atspi.Event.Object"
 #define IF_PROPS        "org.freedesktop.DBus.Properties"
+#define IF_CACHE        "org.a11y.atspi.Cache"
+#define CACHE_PATH      "/org/a11y/atspi/cache"
 
 enum {
     ATSPI_ROLE_INVALID       = 0,
@@ -166,6 +168,14 @@ append_null_ref(gibus_iter *it)
     append_ref(it, "org.a11y.atspi.Registry", "/org/a11y/atspi/null");
 }
 
+/* The root's parent: the desktop it was embedded in. */
+static void
+append_desktop_ref(gibus_iter *it)
+{
+    if (g.desktop_path[0]) append_ref(it, g.desktop_name, g.desktop_path);
+    else                   append_null_ref(it);
+}
+
 static void
 append_attribute(gibus_iter *arr, const char *key, const char *val)
 {
@@ -227,18 +237,25 @@ append_state(gibus_iter *it, const reaktor_snap_node *n)
     w[0] = w[1] = 0;
 #define SET(bit) (w[(bit) / 32] |= 1u << ((bit) % 32))
     SET(ATSPI_STATE_VISIBLE);
-    if (!(n->state & REAKTOR_A11Y_OFFSCREEN)) SET(ATSPI_STATE_SHOWING);
-    if (!(n->state & REAKTOR_A11Y_DISABLED)) {
+    if (!n) {
+        /* The application. */
+        SET(ATSPI_STATE_SHOWING);
         SET(ATSPI_STATE_ENABLED);
         SET(ATSPI_STATE_SENSITIVE);
-    }
-    if (reaktor_snap_focusable(n->role, n->state)) SET(ATSPI_STATE_FOCUSABLE);
-    if (n->state & REAKTOR_A11Y_FOCUSED)  SET(ATSPI_STATE_FOCUSED);
-    if (n->state & REAKTOR_A11Y_CHECKED)  SET(ATSPI_STATE_CHECKED);
-    if (n->state & REAKTOR_A11Y_EXPANDED) SET(ATSPI_STATE_EXPANDED);
-    if (n->role == REAKTOR_A11Y_TAB || n->role == REAKTOR_A11Y_LISTITEM) {
-        SET(ATSPI_STATE_SELECTABLE);
-        if (n->state & REAKTOR_A11Y_SELECTED) SET(ATSPI_STATE_SELECTED);
+    } else {
+        if (!(n->state & REAKTOR_A11Y_OFFSCREEN)) SET(ATSPI_STATE_SHOWING);
+        if (!(n->state & REAKTOR_A11Y_DISABLED)) {
+            SET(ATSPI_STATE_ENABLED);
+            SET(ATSPI_STATE_SENSITIVE);
+        }
+        if (reaktor_snap_focusable(n->role, n->state)) SET(ATSPI_STATE_FOCUSABLE);
+        if (n->state & REAKTOR_A11Y_FOCUSED)  SET(ATSPI_STATE_FOCUSED);
+        if (n->state & REAKTOR_A11Y_CHECKED)  SET(ATSPI_STATE_CHECKED);
+        if (n->state & REAKTOR_A11Y_EXPANDED) SET(ATSPI_STATE_EXPANDED);
+        if (n->role == REAKTOR_A11Y_TAB || n->role == REAKTOR_A11Y_LISTITEM) {
+            SET(ATSPI_STATE_SELECTABLE);
+            if (n->state & REAKTOR_A11Y_SELECTED) SET(ATSPI_STATE_SELECTED);
+        }
     }
 #undef SET
 
@@ -382,10 +399,7 @@ handle_properties(gibus_conn *c, gibus_msg *m, unsigned id, int is_root,
             if (is_root) {
                 gibus_iter v;
                 gibus_iter_open(&it, GIBUS_TYPE_VARIANT, "(so)", &v);
-                if (g.desktop_path[0])
-                    append_ref(&v, g.desktop_name, g.desktop_path);
-                else
-                    append_null_ref(&v);
+                append_desktop_ref(&v);
                 gibus_iter_close(&it, &v);
             } else {
                 append_variant_ref(&it, reaktor_snap_parent(id));
@@ -452,21 +466,7 @@ handle_accessible(gibus_conn *c, gibus_msg *m, unsigned id, int is_root,
         const char *s = is_root ? "application" : role_name(n->role);
         gibus_iter_append_basic(&it, GIBUS_TYPE_STRING, &s);
     } else if (gibus_msg_has_member(m, "GetState")) {
-        if (is_root) {
-            gibus_iter arr;
-            uint32_t w[2];
-            int i;
-
-            w[0] = (1u << ATSPI_STATE_VISIBLE) | (1u << ATSPI_STATE_SHOWING) |
-                   (1u << ATSPI_STATE_ENABLED) | (1u << ATSPI_STATE_SENSITIVE);
-            w[1] = 0;
-            gibus_iter_open(&it, GIBUS_TYPE_ARRAY, "u", &arr);
-            for (i = 0; i < 2; i++)
-                gibus_iter_append_basic(&arr, GIBUS_TYPE_UINT32, &w[i]);
-            gibus_iter_close(&it, &arr);
-        } else {
-            append_state(&it, n);
-        }
+        append_state(&it, is_root ? NULL : n);
     } else if (gibus_msg_has_member(m, "GetChildAtIndex")) {
         int32_t idx = 0;
 
@@ -633,6 +633,66 @@ handle_value(gibus_conn *c, gibus_msg *m)
     gibus_msg *r = gibus_msg_error(m, GIBUS_ERROR_NOT_SUPPORTED, "value is read-only");
     return send_reply(c, m, r);
 }
+/* ((so)(so)(so)iiassusau): one node as AT-SPI's cache holds it. */
+static void
+append_item(gibus_iter *arr, unsigned id, unsigned parent, int index)
+{
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
+    gibus_iter st;
+    const char *name, *none = "";
+    int32_t i32;
+    uint32_t role;
+    int is_root = id == 0;
+
+    SDL_memset(&n, 0, sizeof(n));
+    if (!is_root && !reaktor_snap_get(id, &n, buf, sizeof(buf))) return;
+    gibus_iter_open(arr, GIBUS_TYPE_STRUCT, NULL, &st);
+    append_node_ref(&st, id);
+    append_node_ref(&st, 0);
+    if (is_root) append_desktop_ref(&st);
+    else         append_node_ref(&st, parent);
+    i32 = index;
+    gibus_iter_append_basic(&st, GIBUS_TYPE_INT32, &i32);
+    i32 = child_count(id);
+    gibus_iter_append_basic(&st, GIBUS_TYPE_INT32, &i32);
+    append_interfaces(&st, &n, is_root);
+    name = is_root ? "Reaktor" : (n.name ? n.name : "");
+    gibus_iter_append_basic(&st, GIBUS_TYPE_STRING, &name);
+    role = is_root ? ATSPI_ROLE_APPLICATION : role_of(n.role);
+    gibus_iter_append_basic(&st, GIBUS_TYPE_UINT32, &role);
+    gibus_iter_append_basic(&st, GIBUS_TYPE_STRING, &none);
+    append_state(&st, is_root ? NULL : &n);
+    gibus_iter_close(arr, &st);
+}
+
+static void
+append_subtree(gibus_iter *arr, unsigned id, unsigned parent, int index)
+{
+    unsigned kid = reaktor_snap_child(id, 0);
+    int i = 0;
+
+    append_item(arr, id, parent, index);
+    for (; kid; kid = reaktor_snap_sibling(kid, 0)) append_subtree(arr, kid, id, i++);
+}
+
+/* Cache.GetItems: the whole tree in one reply, which a screen reader would
+   otherwise read a property at a time. */
+static int
+on_cache(gibus_conn *c, gibus_msg *m, void *user)
+{
+    gibus_msg *r;
+    gibus_iter it, arr;
+
+    (void)user;
+    if (!gibus_msg_is_call(m, IF_CACHE, "GetItems")) return GIBUS_NOT_YET_HANDLED;
+    if (!(r = gibus_msg_return(m))) return GIBUS_HANDLED;
+    gibus_iter_init_append(r, &it);
+    gibus_iter_open(&it, GIBUS_TYPE_ARRAY, "((so)(so)(so)iiassusau)", &arr);
+    append_subtree(&arr, 0, 0, -1);
+    gibus_iter_close(&it, &arr);
+    return send_reply(c, m, r);
+}
 
 static int
 on_message(gibus_conn *c, gibus_msg *m, void *user)
@@ -796,7 +856,8 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
     unique = gibus_unique_name(g.bus);
     SDL_strlcpy(g.self, unique ? unique : "", sizeof(g.self));
 
-    if (!gibus_register_fallback(g.bus, "/org/a11y/atspi/accessible", on_message, NULL)) {
+    if (!gibus_register_fallback(g.bus, "/org/a11y/atspi/accessible", on_message, NULL) ||
+        !gibus_register_path(g.bus, CACHE_PATH, on_cache, NULL)) {
         gibus_unref(g.bus);
         g.bus = NULL;
         return;
