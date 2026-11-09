@@ -727,9 +727,10 @@ on_message(gibus_conn *c, gibus_msg *m, void *user)
     return GIBUS_NOT_YET_HANDLED;
 }
 
+/* An Event.Object signal; its variant is an int 0 unless vsig says otherwise. */
 static void
-emit_event(const char *member, const char *detail, int32_t d1,
-           int32_t d2, unsigned id)
+emit_event_with(const char *member, const char *detail, int32_t d1, int32_t d2,
+                unsigned id, const char *vsig, const void *v_value)
 {
     gibus_msg *sig;
     gibus_iter it, v;
@@ -745,13 +746,19 @@ emit_event(const char *member, const char *detail, int32_t d1,
     gibus_iter_append_basic(&it, GIBUS_TYPE_STRING, &detail);
     gibus_iter_append_basic(&it, GIBUS_TYPE_INT32, &d1);
     gibus_iter_append_basic(&it, GIBUS_TYPE_INT32, &d2);
-    gibus_iter_open(&it, GIBUS_TYPE_VARIANT, "i", &v);
-    gibus_iter_append_basic(&v, GIBUS_TYPE_INT32, &zero);
+    gibus_iter_open(&it, GIBUS_TYPE_VARIANT, vsig ? vsig : "i", &v);
+    gibus_iter_append_basic(&v, vsig ? vsig[0] : GIBUS_TYPE_INT32, vsig ? v_value : &zero);
     gibus_iter_close(&it, &v);
     append_node_ref(&it, 0);
 
     gibus_send(g.bus, sig, NULL);
     gibus_msg_free(sig);
+}
+
+static void
+emit_event(const char *member, const char *detail, int32_t d1, int32_t d2, unsigned id)
+{
+    emit_event_with(member, detail, d1, d2, id, NULL, NULL);
 }
 
 static int SDLCALL
@@ -875,12 +882,10 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
     }
 }
 
-#define RESTATED_MAX 64
-
-/* What a screen reader is told when a control's state flips; focus has its
-   own event below. */
+/* What a screen reader is told when a control changes in place: its value,
+   or a state that flipped. Focus has its own event below. */
 static void
-emit_states(const unsigned *id, const unsigned *was, int n)
+emit_changes(void)
 {
     static const struct { unsigned bit; const char *name; int on_when_clear; } flips[] = {
         { REAKTOR_A11Y_CHECKED,  "checked",   0 },
@@ -889,17 +894,22 @@ emit_states(const unsigned *id, const unsigned *was, int n)
         { REAKTOR_A11Y_DISABLED, "enabled",   1 },
         { REAKTOR_A11Y_DISABLED, "sensitive", 1 }
     };
+    const reaktor_snap_diff *d;
     reaktor_snap_node node;
     char buf[REAKTOR_SNAP_TEXT];
-    int i, k;
+    int i, k, n = reaktor_snap_diffs(&d);
 
     for (i = 0; i < n; i++) {
-        if (!reaktor_snap_get(id[i], &node, buf, sizeof(buf))) continue;
+        if (!reaktor_snap_get(d[i].id, &node, buf, sizeof(buf))) continue;
         for (k = 0; k < (int)SDL_arraysize(flips); k++) {
-            int on = (node.state & flips[k].bit) != 0;
+            if (!(d[i].flipped & flips[k].bit)) continue;
+            emit_event("StateChanged", flips[k].name,
+                       ((node.state & flips[k].bit) != 0) != flips[k].on_when_clear, 0, d[i].id);
+        }
+        if (d[i].value && node.hi > node.lo) {
+            double v = node.num;
 
-            if (on == ((was[i] & flips[k].bit) != 0)) continue;
-            emit_event("StateChanged", flips[k].name, on != flips[k].on_when_clear, 0, id[i]);
+            emit_event_with("PropertyChange", "accessible-value", 0, 0, d[i].id, "d", &v);
         }
     }
 }
@@ -907,23 +917,9 @@ emit_states(const unsigned *id, const unsigned *was, int n)
 void
 reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
-    const reaktor_a11y_change *c;
-    unsigned id[RESTATED_MAX], was[RESTATED_MAX];
-    reaktor_snap_node node;
-    char buf[REAKTOR_SNAP_TEXT];
-    int i, m, n = 0;
-
-    /* The snapshot still holds the last frame: keep what changed states had. */
-    c = reaktor_a11y_changes(a, &m);
-    for (i = 0; g.ready && i < m && n < RESTATED_MAX; i++) {
-        if (c[i].kind != REAKTOR_A11Y_RESTATED) continue;
-        if (!reaktor_snap_get(c[i].id, &node, buf, sizeof(buf))) continue;
-        id[n] = c[i].id;
-        was[n++] = node.state;
-    }
     if (!reaktor_snap_update(a, focus_id)) return;
     if (!g.ready) return;
-    emit_states(id, was, n);
+    emit_changes();
 
     if (reaktor_snap_structural(a)) emit_event("ChildrenChanged", "add", 0, 0, 0);
 

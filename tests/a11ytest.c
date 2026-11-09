@@ -211,6 +211,64 @@ check_snapshot(reaktor_a11y *a)
     check("snapshot: unknown id", (int)reaktor_snap_parent_in(s, 0xdeadu), 0);
 }
 
+static void
+build_field(reaktor_a11y *a, const char *label, const char *value)
+{
+    reaktor_a11y_begin(a, "Reaktor", r(0, 0, 960, 680));
+    reaktor_a11y_add(a, REAKTOR_A11Y_TEXTBOX, label, value, 0, r(16, 190, 380, 38));
+    reaktor_a11y_end(a);
+}
+
+static const reaktor_snap_diff *
+diff_of(reaktor_snap *s, unsigned id)
+{
+    const reaktor_snap_diff *d;
+    int i, n = reaktor_snap_diffs_in(s, &d);
+
+    for (i = 0; i < n; i++)
+        if (d[i].id == id) return &d[i];
+    return NULL;
+}
+
+static void
+check_diffs(reaktor_a11y *a)
+{
+    reaktor_snap *s = reaktor_snap_new(NULL, NULL, NULL, 0);
+    const reaktor_snap_diff *d;
+    unsigned ids[3];
+
+    if (!s) { printf("FAIL no snapshot\n"); failures++; return; }
+    build(a, 1, 1, 0);
+    reaktor_snap_update_in(s, a, 1);
+    build(a, 1, 1, 1);
+    reaktor_snap_update_in(s, a, 1);
+    ids_of(a, ids);
+    check("diff: checked box only", reaktor_snap_diffs_in(s, &d), 1);
+    d = diff_of(s, ids[1]);
+    check("diff: checked flipped", d ? (int)d->flipped : -1, REAKTOR_A11Y_CHECKED);
+    check("diff: checked, value unchanged", d ? d->value : -1, 0);
+
+    build(a, 2, 1, 1);
+    reaktor_snap_update_in(s, a, 1);
+    check("diff: tab switch, two tabs", reaktor_snap_diffs_in(s, &d), 2);
+    check("diff: tab switch flips selected", d[0].flipped == REAKTOR_A11Y_SELECTED &&
+          d[1].flipped == REAKTOR_A11Y_SELECTED, 1);
+
+    build_field(a, "E-mail", "a@example.com");
+    reaktor_snap_update_in(s, a, 1);
+    build_field(a, "E-mail", "b@example.com");
+    reaktor_snap_update_in(s, a, 1);
+    check("diff: value", reaktor_snap_diffs_in(s, &d) == 1 ? d->value : -1, 1);
+    build_field(a, "E-mail", "b@example.com");
+    reaktor_snap_update_in(s, a, 1);
+    check("diff: nothing changed", reaktor_snap_diffs_in(s, &d), 0);
+
+    reaktor_snap_skip_in(s);
+    build_field(a, "E-mail", "c@example.com");
+    reaktor_snap_update_in(s, a, 1);
+    check("diff: none after a skipped frame", reaktor_snap_diffs_in(s, &d), 0);
+}
+
 int main(int argc, char **argv)
 {
     static reaktor_a11y a;
@@ -358,6 +416,7 @@ int main(int argc, char **argv)
     }
 
     check_snapshot(&a);
+    check_diffs(&a);
 
     {
         int frame, added_late = 0, swaps = 0, side = a.pool_side;
