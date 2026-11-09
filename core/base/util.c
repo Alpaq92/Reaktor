@@ -289,7 +289,7 @@ void reaktor_process_memory(size_t *rss, size_t *priv)
         unsigned long resident = 0;
 
         if (f) {
-            if (fscanf(f, "%*lu %lu", &resident) == 1)
+            if (fscanf(f, "%*s %lu", &resident) == 1)
                 *rss = (size_t)resident * (size_t)sysconf(_SC_PAGESIZE);
             fclose(f);
         }
