@@ -342,6 +342,7 @@ extern void (*reaktor_test_hook)(App *app);
 
 
 void hot_push(App *app, struct nk_rect r, int cursor, int repaint);
+int  hot_hover(const struct nk_context *ctx, struct nk_rect r);
 #define REAKTOR_BUTTON_GAP   12.0f
 float css_button_content_w(App *app, struct nk_context *ctx, const char *selector,
                            const struct nk_user_font *f, const char *ionicon,
@@ -494,7 +495,7 @@ void reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id,
 void reaktor_knob_dial(App *app, struct nk_context *ctx, float *val,
                        float lo, float hi, enum nk_heading zero);
 
-void reaktor_property_push(struct nk_context *ctx);
+void reaktor_property_push(struct nk_context *ctx, struct nk_rect b);
 void reaktor_property_pop(struct nk_context *ctx);
 void reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
                             struct nk_rect *steps);

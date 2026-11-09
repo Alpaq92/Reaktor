@@ -444,8 +444,7 @@ list_draw(const reaktor_list_spec *s, tree_rows *t)
                 if (s->selected && on) {
                     nk_fill_rect(cv, row, 0.0f, g_frame_app->accent);
                     fg = reaktor_on(g_frame_app->accent);
-                } else if (s->selected &&
-                           nk_input_is_mouse_hovering_rect(&g_frame_ctx->input, row)) {
+                } else if (s->selected && hot_hover(g_frame_ctx, row)) {
                     nk_fill_rect(cv, row, 0.0f,
                                  reaktor_token("--background-hover", nk_rgba(128, 128, 128, 60)));
                 }
@@ -764,8 +763,7 @@ menu_draw_col(int k, struct nk_vec2 at)
         if (e->keys) reaktor_note_keys(app, id, e->keys);
         if (!e->disabled) {
             reaktor_hot_top(app, slot, 1, 1);
-            if (nk_input_is_mouse_hovering_rect(&ctx->input, slot) &&
-                nk_input_is_mouse_moved(&ctx->input) &&
+            if (hot_hover(ctx, slot) && nk_input_is_mouse_moved(&ctx->input) &&
                 (g_menu.hi[k] != i || g_menu.kcol != k || g_menu.depth != k + !!e->items)) {
                 g_menu.hi[k] = i;
                 g_menu.kcol  = k;
@@ -979,7 +977,7 @@ reaktor_menubar(const reaktor_menubar_spec *s)
         reaktor_hot(app, r, REAKTOR_CURSOR_POINTER, 1);
         if (g_menu.open == m) { st.normal = st.active; st.text_normal = st.text_active; }
         nk_button_text_styled(ctx, &st, label, (int)strlen(label));
-        if (nk_input_is_mouse_hovering_rect(&ctx->input, r)) {
+        if (hot_hover(ctx, r)) {
             on_title = 1;
             if (g_menu.open >= 0 && g_menu.open != m && nk_input_is_mouse_moved(&ctx->input))
                 menu_open_at(m, 0);

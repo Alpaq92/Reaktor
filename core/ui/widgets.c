@@ -217,7 +217,7 @@ reaktor_slider_ramp(App *app, struct nk_context *ctx, unsigned id, float *val,
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
     struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
     struct nk_rect b = reaktor_rect_trunc(nk_widget_bounds(ctx));
-    int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
+    int hot = hot_hover(ctx, b);
     const struct nk_style_item *ci = hot ? &st->cursor_hover
                                          : &st->cursor_normal;
     struct nk_color track = hot ? st->bar_hover : st->bar_normal;
@@ -301,7 +301,7 @@ reaktor_progress_bar(App *app, struct nk_context *ctx, nk_size *cur, nk_size max
                                  st->padding.y + st->border);
     struct nk_rect fill = nk_rect(b.x + pad.x, b.y + pad.y,
                                   b.w - 2.0f * pad.x, b.h - 2.0f * pad.y);
-    int hot = nk_input_is_mouse_hovering_rect(&ctx->input, b);
+    int hot = hot_hover(ctx, b);
     struct nk_style_item track_it = hot ? st->hover : st->normal;
     struct nk_style_item fill_it = hot ? st->cursor_hover : st->cursor_normal;
     float track_r = st->rounding, r;
@@ -404,7 +404,7 @@ stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
 {
     struct nk_color wash;
 
-    if (!nk_input_is_mouse_hovering_rect(&ctx->input, sq)) return;
+    if (!hot_hover(ctx, sq)) return;
     wash = reaktor_token("--background-hover", ctx->style.property.hover.type
                          == NK_STYLE_ITEM_COLOR
                          ? ctx->style.property.hover.data.color
@@ -436,6 +436,7 @@ reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
                        reaktor_cap_offset(ctx->style.font) + 0.5f);
     r.x = b.x + b.w - (h + st->padding.x);
     r.y = l.y;
+    hot_push(app, b, 0, 1);
     hot_push(app, l, 0, 1);
     hot_push(app, r, 0, 1);
     stepper_wash(app, ctx, l);
@@ -446,21 +447,28 @@ reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
 }
 
 void
-reaktor_property_push(struct nk_context *ctx)
+reaktor_property_push(struct nk_context *ctx, struct nk_rect b)
 {
+    struct nk_style_property *st = &ctx->style.property;
     struct nk_style_item clear = nk_style_item_color(nk_rgba(0, 0, 0, 0));
+    const struct nk_window *w = ctx->current;
+    int lit = !(w->layout->flags & NK_WINDOW_ROM) && !w->widgets_disabled &&
+              hot_hover(ctx, b);
 
     push_clear(ctx, (struct nk_style_item *[]){
-        &ctx->style.property.dec_button.hover,
-        &ctx->style.property.dec_button.active,
-        &ctx->style.property.inc_button.hover,
-        &ctx->style.property.inc_button.active }, 4, clear);
+        &st->dec_button.hover,
+        &st->dec_button.active,
+        &st->inc_button.hover,
+        &st->inc_button.active }, 4, clear);
+    nk_style_push_style_item(ctx, &st->normal, lit ? st->hover : st->normal);
+    nk_style_push_color(ctx, &st->label_normal, lit ? st->label_hover : st->label_normal);
 }
 
 void
 reaktor_property_pop(struct nk_context *ctx)
 {
-    pop_items(ctx, 4);
+    nk_style_pop_color(ctx);
+    pop_items(ctx, 5);
 }
 
 #define COMBO_MARGIN   12.0f
