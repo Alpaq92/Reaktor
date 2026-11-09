@@ -53,7 +53,7 @@ not plotted: it does not link on Windows.
   GPU renderer its memory is mostly the graphics driver's: 58–121 MB, below
   Flutter's 133.
 - **Once running, `direct3d12` and `opengl` take 0.8–1.6 points less than
-  `software`; with startup, 2.7–4.9 more.** `direct3d11` takes the most of
+  `software`; with startup, 2.7–3.5 more.** `direct3d11` takes the most of
   the four either way.
 - **About 2.2 MB of every arm is the antivirus.** Bitdefender puts two
   components into every process on this machine. Walked with VirtualQueryEx
@@ -102,7 +102,8 @@ reads about 3 MB less private memory (2026-11-07).
 
 Driving the showcase with input, master draws the same frames as 0.10.0
 in 41–43% less time each, 20% less on the wheel, most of it saved in
-rendering; the process spends 8–24% less CPU. A harness build of the
+rendering; the process spends 11–23% less CPU on hover, slider drag and
+typing, and about the same on the wheel. A harness build of the
 showcase feeds it synthetic SDL events every 8 ms after two seconds of
 warm-up, on `software` at 1100×680, vsync off, light theme, with the clock
 pinned as above:
@@ -128,24 +129,26 @@ A drawn frame is build, render and present as the runtime times them; CPU is
 the whole process over the script. Every pair drew the frame faster on
 master. Rendering is 52–56% shorter on hover, slider drag and typing, 22%
 on the wheel, whose frames redraw most of the window; build is 23–37%
-shorter, present unchanged. Process CPU was lower on master in every slider
+shorter. Present is no shorter, and on slider drag it is noisy and leans
+slower. Process CPU was lower on master in every slider
 pair, ten of twelve hover and typing pairs and seven of twelve wheel pairs:
 on master the drawn frames are 10–46% of the process's CPU time.
 
 ## Memory
 
 Idle, ten seconds after launch with the pointer outside the window; medians of
-ten launches, 0.10.0's taken in turn with master's:
+ten launches on 2026-11-10, master with #137 taken in turn with 0.10.0 and
+with master before it:
 
-| | Private bytes | Working set | 0.10.0, private bytes |
-| --- | --- | --- | --- |
-| `showcase` | **15.8 MB** | 34.4 MB | 12.9 MB |
-| `notepad` | **11.0 MB** | 27.0 MB | 8.8 MB |
-| `simple` | **7.3 MB** | 20.2 MB | 7.1 MB |
+| | Private bytes | Working set | 0.10.0, private bytes | Before #137 |
+| --- | --- | --- | --- | --- |
+| `showcase` | **13.1 MB** | 29.5 MB | 12.8 MB | 15.8 MB |
+| `notepad` | **8.8 MB** | 25.2 MB | 8.8 MB | 10.6 MB |
+| `simple` | **6.6 MB** | 19.8 MB | 7.1 MB | 7.6 MB |
 
 Private bytes are what the process asked the system to back; the working set
 is what is in RAM, shared pages of system DLLs included. Launches spread by up
-to 0.9 MB of private bytes, `notepad` on 0.10.0 by 2.1 MB. The showcase opens
+to 1.0 MB of private bytes. The showcase opens
 on its Login page; its figure includes a second copy of the glyph atlas,
 because its splash is a window of its own and the first such window keeps its
 atlas for the next.
@@ -259,13 +262,13 @@ with it. With `--video dummy`, where nothing reaches a display, the frame costs
 
 ### Modules
 
-`showcase.exe` on 0.9.0 (2026-11-04), each module off in turn:
+`showcase.exe` on master (2026-11-09), each module off in turn:
 
 | | Default | Module off | Saved |
 | --- | --- | --- | --- |
-| Accessibility bridges | 3,215,360 | 3,200,000 | 15,360 (0.48%) |
-| Locale | 3,215,360 | 3,200,000 | 15,360 (0.48%) |
-| Text | 3,215,360 | 2,591,232 | 624,128 (19.4%) |
+| Accessibility bridges | 3,233,280 | 3,216,384 | 16,896 (0.52%) |
+| Locale | 3,233,280 | 3,218,944 | 14,336 (0.44%) |
+| Text | 3,233,280 | 2,609,152 | 624,128 (19.3%) |
 
 **The bridges are small**; turned off, they drop libraries more than bytes.
 Pixels and `--a11y-dump` stay byte-identical, and only a screen reader
@@ -275,12 +278,12 @@ them.
 **Text is mostly tables and a font.** kb_text_shape is 95 KB of code and
 391 KB of tables, and mojibake 19 KB of code and 180 KB of line-breaking and
 bidirectional data; on the web, the `.data` it adds is M PLUS 1p, 1,758,688
-bytes. Locale is 15 KB of the executable and 7,581 bytes of catalogs;
+bytes. Locale is 14 KB of the executable and 7,581 bytes of catalogs;
 compiled in (`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` was 3,222,528 bytes.
 
 ## What it needs to run
 
-**No GPU**, and **7–16 MB of RAM** on Windows. The default look is compiled
+**No GPU**, and **7–13 MB of RAM** on Windows. The default look is compiled
 in, so a program needs no files beside it until it uses other Ionicons,
 Simple.css, the catalogs or the Japanese font, found under a `.reaktor-root`
 marker beside it or up to two folders above. The web build packs those into

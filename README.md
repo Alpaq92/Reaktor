@@ -9,7 +9,7 @@ A Nuklear-powered GUI library for C.
 Tired of C relying on heavy toolkits that want hundreds of megabytes and a
 dozen dependencies just to put a dialog on screen? And of small alternatives
 always lacking crucial features? No? But I was, so I wrote Reaktor: complete
-without being big. A 2.1 MB binary, 7–16 MB of RAM, and no GPU required.
+without being big. A 2.1 MB binary, 7–13 MB of RAM, and no GPU required.
 
 **[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)**, the
 same program built to WebAssembly, or
