@@ -228,7 +228,6 @@ reaktor_slider_bar(App *app, struct nk_context *ctx, unsigned id, float *val,
     reaktor_slider_ramp(app, ctx, id, val, lo, hi, step, NULL);
 }
 
-/* With a rule that has a gradient, the filled part is that gradient. */
 void
 reaktor_slider_ramp(App *app, struct nk_context *ctx, unsigned id, float *val,
                     float lo, float hi, float step, const reaktor_style *fill)
@@ -432,7 +431,6 @@ stepper_wash(App *app, struct nk_context *ctx, struct nk_rect sq)
     reaktor_fill_round(app, nk_window_get_canvas(ctx), sq, sq.w * 0.5f, wash);
 }
 
-/* How far below a centered line's middle its capitals' middle lies. */
 static float
 reaktor_cap_offset(const struct nk_user_font *f)
 {
@@ -525,7 +523,6 @@ reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
     return css_button(app, ctx, "button", label);
 }
 
-/* A button's icon is drawn white and tinted with its label's color. */
 const char *
 reaktor_button_src(char out[192], const char *ionicon)
 {
@@ -733,7 +730,6 @@ field_edit(App *app, struct nk_context *ctx, nk_flags flags, char *buf,
         undo_drop(u, 0);
         held = undo_keep(u, buf, *len);
     }
-    /* After the click that focused the field, which would move the caret. */
     if (win->edit.active && win->edit.seq == win->edit.name &&
         app->field_pick.buf == buf && app->field_pick.asked &&
         app->key_click == KEY_CLICK_NONE) {
@@ -804,7 +800,6 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
     if (pad_x > 0.0f) ctx->style.edit.padding.x = pad_x;
     if (pad_y > 0.0f) ctx->style.edit.padding.y = pad_y;
     hint_pad = ctx->style.edit.padding;
-    /* One byte short, so the value is always there to be read as a string. */
     state = field_edit(app, ctx, flags, buf, len, cap > 0 ? cap - 1 : 0,
                        filter);
     if (cap > 0) buf[*len] = '\0';
@@ -818,7 +813,6 @@ reaktor_field_text_as(App *app, struct nk_context *ctx, const char *sel,
     if (hint && *len == 0) {
         struct nk_rect at = bounds;
 
-        /* Where the first line would be: a box's sits at the top. */
         if (flags & NK_EDIT_MULTILINE) {
             s.pad_x = hint_pad.x;
             at.h    = 2.0f * hint_pad.y + ctx->style.font->height;
@@ -1047,7 +1041,6 @@ reaktor_style_font(App *app, const char *selector, int px, int bold)
     return reaktor_font(app, px, bold);
 }
 
-/* A borderless popup of the current window at r, in screen coordinates. */
 int
 reaktor_flyout_begin(struct nk_context *ctx, const char *name, struct nk_rect r)
 {
@@ -1096,7 +1089,6 @@ reaktor_menu_style_push(struct nk_context *ctx)
                         reaktor_popup_rounding());
     nk_style_push_vec2(ctx, &ctx->style.window.spacing,
                        nk_vec2(4.0f, REAKTOR_MENU_GAP));
-    /* Alpha 0 drops a dynamic popup's own fills; reaktor_menu_edge paints them. */
     nk_style_push_color(ctx, &ctx->style.window.background, none);
     nk_style_push_color(ctx, &ctx->style.window.menu_border_color, none);
     nk_style_push_color(ctx, &ctx->style.window.contextual_border_color,
@@ -1146,7 +1138,6 @@ reaktor_popup_open(const struct nk_window *w)
     return w && w->popup.win && w->popup.active;
 }
 
-/* Nuklear keeps ROM until its own popups end. */
 static void
 lift_rom(struct nk_window *w)
 {
@@ -1179,7 +1170,6 @@ hold_end(App *app, struct nk_context *ctx)
     app->layer_held = app->input_held = 0;
 }
 
-/* The page is BACKGROUND: activated in place, never raised. */
 void
 reaktor_layer_focus(struct nk_context *ctx, struct nk_window *to)
 {
@@ -1199,7 +1189,6 @@ reaktor_layer_begin(App *app, struct nk_context *ctx, const char *name,
     hold_input(app, ctx, name, hold, held);
     app->layer      = layer;
     app->layer_trap = trap;
-    /* ROM alone: a click activates the window, and activation lifts it. */
     return nk_begin(ctx, name, r,
                     flags | (hold == HOLD_ALL ? (nk_flags)NK_WINDOW_NOT_INTERACTIVE : 0));
 }
@@ -1211,7 +1200,6 @@ reaktor_layer_end(App *app, struct nk_context *ctx, int shown)
         app->focus_layer == app->layer && app->focus_win == ctx->current) {
         struct nk_command_buffer *cv = nk_window_get_canvas(ctx);
 
-        /* The ring stands outside its widget, past the content region. */
         nk_push_scissor(cv, nk_window_get_bounds(ctx));
         focus_ring(app, ctx, cv);
     }

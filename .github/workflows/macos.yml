@@ -154,9 +154,6 @@ jobs:
           done
           ditto -c -k --keepParent "dist/$name" "dist/$name.zip"
 
-      # Reaktor.framework, with SDL inside, beside the static library: built,
-      # linked from an outside app, and drawn the same; released as
-      # libreaktor-shared-VERSION-macos-ARCH.zip.
       - name: Shared libreaktor
         id: shared
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -220,8 +217,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # One framework for both: the two per-architecture shared builds joined with
-  # lipo, released as libreaktor-VERSION-macos-universal.zip beside them.
   universal:
     name: macos universal
     needs: macos
@@ -258,8 +253,6 @@ jobs:
           U="dist/libreaktor-shared-$v-macos-universal"
           mkdir -p dist
           ditto "$A" "$U"
-          # Every Mach-O file and archive becomes one with both; anything else
-          # must already be the same in the two.
           (cd "$A" && find . -type f) | while read -r f; do
             if file -b "$A/$f" | grep -q -E 'Mach-O|ar archive'; then
               lipo -create "$A/$f" "$X/$f" -output "$U/$f"

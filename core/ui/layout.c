@@ -11,7 +11,6 @@ rect_of(float x, float y, float w, float h)
     return r;
 }
 
-/* The direction a box was declared with, read back from onlay's own item. */
 static unsigned char
 dir_of(const reaktor_layout *l, lay_id it)
 {

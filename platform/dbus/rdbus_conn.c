@@ -1,5 +1,4 @@
-/* The connection half of rdbus.h: addresses, EXTERNAL authentication, Hello,
-   the socket, and dispatch. Ported from minidbus's conn/ (MIT; see NOTICE.md). */
+/* Ported from minidbus's conn/ (MIT; see NOTICE.md). */
 
 #include "rdbus_internal.h"
 
@@ -114,7 +113,6 @@ would_block(int e)
     return e == EAGAIN;
 }
 
-/* 1 when ready (or hung up), 0 at the deadline, -1 on a poll error. */
 static int
 wait_fd(int fd, short events, Uint64 deadline)
 {
@@ -164,8 +162,6 @@ send_bytes(int fd, const void *buf, size_t len)
 #endif
 }
 
-/* Addresses */
-
 static int
 unhex(int ch)
 {
@@ -175,7 +171,6 @@ unhex(int ch)
     return -1;
 }
 
-/* The decoded length, or -1 for a bad escape or a value longer than cap. */
 static long
 percent_decode(const char *s, size_t n, char *out, size_t cap)
 {
@@ -202,7 +197,6 @@ percent_decode(const char *s, size_t n, char *out, size_t cap)
     return (long)o;
 }
 
-/* Both ends nonblocking and closed on exec. */
 static int
 open_wake(int fd[2])
 {
@@ -419,8 +413,6 @@ connect_session(Uint64 deadline, rdbus_error *err)
     return connect_unix(path, (size_t)n, 0, deadline, err);
 }
 
-/* Authentication */
-
 static int
 write_all(int fd, const char *buf, size_t len, Uint64 deadline)
 {
@@ -482,8 +474,6 @@ send_nul(int fd, Uint64 deadline)
 #endif
 }
 
-/* One CRLF-terminated line, read a byte at a time so nothing after it is
-   taken from the socket. */
 static int
 read_line(int fd, char *line, size_t cap, Uint64 deadline, rdbus_error *err)
 {
@@ -561,8 +551,6 @@ authenticate(int fd, Uint64 deadline, rdbus_error *err)
     return 1;
 }
 
-/* The socket, with the lock held */
-
 static void
 fail_locked(rdbus_conn *c)
 {
@@ -601,7 +589,6 @@ write_locked(rdbus_conn *c)
     }
 }
 
-/* How much of b the socket takes now; a hard error closes the connection. */
 static size_t
 send_now_locked(rdbus_conn *c, const uint8_t *b, size_t n)
 {
@@ -621,7 +608,6 @@ send_now_locked(rdbus_conn *c, const uint8_t *b, size_t n)
     return sent;
 }
 
-/* A thread polling the socket for input alone is told there is output. */
 static void
 wake_locked(rdbus_conn *c)
 {
@@ -667,9 +653,6 @@ room_locked(rdbus_conn *c, size_t n)
     return 1;
 }
 
-/* With nothing queued ahead, the message goes straight from its own bytes;
-   only what the socket refuses is copied, into room made beforehand. 1 once
-   the serial is taken, even if sending closed the connection. */
 static int
 queue_locked(rdbus_conn *c, rdbus_msg *m, uint32_t *serial)
 {
@@ -694,8 +677,6 @@ queue_locked(rdbus_conn *c, rdbus_msg *m, uint32_t *serial)
     return 1;
 }
 
-/* The bus stamps every sender, so a call to the bus or to a unique name is
-   answered by it, or by the bus with an error. */
 static int
 answers(const waiter *w, const rdbus_msg *m)
 {
@@ -709,7 +690,6 @@ answers(const waiter *w, const rdbus_msg *m)
            SDL_strcmp(from, RDBUS_SERVICE_DBUS) == 0;
 }
 
-/* The queue is a ring whose size is a power of two. */
 static int
 grow_queue_locked(rdbus_conn *c)
 {
@@ -797,7 +777,6 @@ frames_locked(rdbus_conn *c)
         }
         type = c->in[at + 1];
         if (type > RDBUS_MESSAGE_SIGNAL) {
-            /* The specification has unknown types ignored. */
             at += (size_t)n;
             continue;
         }
@@ -852,8 +831,6 @@ read_locked(rdbus_conn *c)
     }
 }
 
-/* Waits up to timeout_ms (negative: without end) for input as the one reader,
-   writing meanwhile, then reads what has come. Wakes every waiter. */
 static void
 io_locked(rdbus_conn *c, int timeout_ms)
 {
@@ -892,8 +869,6 @@ io_locked(rdbus_conn *c, int timeout_ms)
     read_locked(c);
     SDL_BroadcastCondition(c->cond);
 }
-
-/* Connections */
 
 static void
 destroy(rdbus_conn *c)
@@ -1018,7 +993,6 @@ rdbus_session(rdbus_error *err)
     return c;
 }
 
-/* 1 when that was the last reference. */
 static int
 release(rdbus_conn *c)
 {
@@ -1063,8 +1037,6 @@ rdbus_connected(rdbus_conn *c)
     return open;
 }
 
-/* Sending */
-
 int
 rdbus_send(rdbus_conn *c, rdbus_msg *m, uint32_t *serial)
 {
@@ -1092,7 +1064,6 @@ rdbus_flush(rdbus_conn *c)
     while (c->open && c->out_at < c->out_len) {
         int fd = c->fd;
 
-        /* The bus may be waiting for us to read before it reads again. */
         if (!c->reading) io_locked(c, 0);
         if (!c->open || c->out_at == c->out_len) break;
         SDL_UnlockMutex(c->lock);
@@ -1180,8 +1151,6 @@ rdbus_call(rdbus_conn *c, rdbus_msg *m, int timeout_ms, rdbus_error *err)
     return r;
 }
 
-/* Reading and dispatch */
-
 int
 rdbus_read_write(rdbus_conn *c, int timeout_ms)
 {
@@ -1238,8 +1207,6 @@ read_machine_id(char *id)
     return 0;
 }
 
-/* org.freedesktop.DBus.Peer, which libdbus answered on every path before any
-   filter or handler saw the call. */
 static int
 is_peer(const rdbus_msg *m)
 {
@@ -1309,8 +1276,6 @@ path_char(char ch)
            ch == '_';
 }
 
-/* The element of h's path right below path, whose length with its slash is
-   skip; NULL when h is not below path. */
 static const char *
 child_of(const handler *h, const char *path, size_t skip, size_t *len)
 {
@@ -1325,8 +1290,6 @@ child_of(const handler *h, const char *path, size_t skip, size_t *len)
     return n ? p : NULL;
 }
 
-/* What libdbus answered to an Introspect no handler claimed: a node for each
-   next element of the registered paths below. */
 static rdbus_msg *
 introspect_reply(rdbus_conn *c, rdbus_msg *m)
 {
@@ -1525,8 +1488,6 @@ rdbus_register_fallback(rdbus_conn *c, const char *path, rdbus_handler fn, void 
 {
     return add_handler(c, H_FALLBACK, path, fn, user);
 }
-
-/* The bus's own methods */
 
 static rdbus_msg *
 bus_call(rdbus_conn *c, const char *member, const char *s, const uint32_t *u, rdbus_error *err)

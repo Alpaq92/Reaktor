@@ -101,7 +101,6 @@ void reaktor_style_darken(unsigned char rgba[4], float amount)
         rgba[i] = (unsigned char)(rgba[i] * (1.0f - amount) + 0.5f);
 }
 
-/* Selectors and "--" tokens share the cache; a token keeps its color in bg. */
 static const reaktor_style *cached(const char *key)
 {
     unsigned     h = reaktor_fnv(REAKTOR_FNV, key);

@@ -168,7 +168,6 @@ line_count(void)
     return n;
 }
 
-/* One printed page: its sixty lines on white, as plain labels. */
 static void
 print_page(App *app, struct reaktor_context *ctx, int index, int w, int h, void *user)
 {

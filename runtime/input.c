@@ -7,7 +7,6 @@
 static Uint32       g_page_key;
 static enum nk_keys g_web_key;
 
-/* A phone's named keys, REAKTOR_WEB_KEY_BACKSPACE (-1) first. */
 static const struct { SDL_Keycode sdl; enum nk_keys nk; } g_soft[] = {
     { SDLK_BACKSPACE, NK_KEY_BACKSPACE }, { SDLK_RETURN, NK_KEY_ENTER },
     { SDLK_LEFT, NK_KEY_LEFT },           { SDLK_RIGHT, NK_KEY_RIGHT },
@@ -17,7 +16,6 @@ static const struct { SDL_Keycode sdl; enum nk_keys nk; } g_soft[] = {
 };
 #define SOFT_KEYS ((int)(sizeof(g_soft) / sizeof(g_soft[0])))
 
-/* Let go next frame, or Nuklear never sees it pressed. */
 static void
 page_key_take(struct nk_context *ctx, int code)
 {
@@ -43,7 +41,6 @@ reaktor_input_page_key(App *app, SDL_Event *event)
 
     if (event->type != g_page_key) return 0;
     app->dirty = 1;
-    /* Not Backspace, which also replays edits. */
     if (c <= REAKTOR_WEB_KEY_ENTER && c >= REAKTOR_WEB_KEY_DELETE) {
         SDL_Event k;
 
@@ -188,7 +185,6 @@ hold_for_next_frame(App *app, const SDL_Event *event)
     size_t n;
 
     if (!held_kind(event->type)) {
-        /* Window events stay behind held input. */
         if (!q->n || event->type < SDL_EVENT_WINDOW_FIRST ||
             event->type > SDL_EVENT_WINDOW_LAST)
             return 0;
@@ -332,7 +328,6 @@ touch_sample(App *app, float y, Uint64 ns)
     app->touch_n++;
 }
 
-/* Nuklear moves a panel a tenth of its height per wheel step. */
 static float
 touch_unit(const App *app)
 {
@@ -386,7 +381,6 @@ reaktor_fling_step(App *app)
     }
 }
 
-/* A finger that moves mostly up or down scrolls, and presses nothing. */
 static int
 touch_takes(App *app, const SDL_Event *e)
 {
@@ -433,7 +427,6 @@ touch_takes(App *app, const SDL_Event *e)
                 app->touch = TOUCH_DRAGGING;
                 return 0;
             }
-            /* Released away from every widget, the press clicks nothing. */
             if (app->touch == TOUCH_PRESSED) touch_pointer(app, -1e4f, -1e4f, 1);
             touch_pointer(app, app->touch_x0, app->touch_y0, 0);
             app->touch      = TOUCH_SCROLLING;

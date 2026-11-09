@@ -16,7 +16,6 @@ reaktor_window_popup(struct nk_rect r,
     return reaktor_window_spawn(&spec, &r);
 }
 
-/* The usable display, in the main window's logical units. */
 int
 reaktor_window_bounds(struct nk_rect *out)
 {

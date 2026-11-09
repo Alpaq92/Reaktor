@@ -6,9 +6,6 @@
 #include <emscripten.h>
 #endif
 
-/* Settings live here as flat dotted keys, in the order they were added; the
-   file is TOML, every key quoted at the top level, so `window` and
-   `window.maximized` can both be strings. */
 typedef struct { char *key, *value; } setting;
 
 static setting *g_set;
@@ -65,8 +62,6 @@ setting_put(char *key, char *value)
     g_set[g_count++].value = value;
 }
 
-/* A table nested in a hand-written file reads as dotted keys, and a number or
-   a boolean as its text, so `maximized = 1` reads as "1"; an array is skipped. */
 static void
 settings_take(const toml_table_t *t, const char *prefix)
 {

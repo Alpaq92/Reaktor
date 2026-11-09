@@ -4,9 +4,8 @@
 #define TRAY_ITEMS 16
 
 #ifdef REAKTOR_TRAY_DBUS
-/* Linux and the BSDs: a StatusNotifierItem with a com.canonical.dbusmenu menu,
-   spoken over platform/dbus. SDL's tray there builds its menu from GTK widgets,
-   and loading GTK cost the showcase hundreds of libraries and half a second. */
+/* SDL's tray here builds its menu from GTK widgets, and loading GTK cost the
+   showcase hundreds of libraries and half a second. */
 #include "rdbus.h"
 #include <poll.h>
 #include <unistd.h>
@@ -64,7 +63,6 @@ watch_bus(void *fdp)
         e.user.code = gen;
         if (!SDL_PushEvent(&e)) break;
         SDL_WaitSemaphore(g_drained);
-        /* A hung-up bus would wake us forever. */
         if (p[0].revents & (POLLHUP | POLLERR)) break;
     }
     return 0;
@@ -100,7 +98,6 @@ put_empty(rdbus_iter *it, const char *sig)
     rdbus_iter_close(it, &arr);
 }
 
-/* a(iiay): each size, ARGB32 in network byte order. */
 static void
 put_pixmaps(rdbus_iter *it, int all)
 {
@@ -122,7 +119,6 @@ put_pixmaps(rdbus_iter *it, int all)
     rdbus_iter_close(it, &arr);
 }
 
-/* (sa(iiay)ss): icon name, pixmaps, title, text. */
 static void
 put_tooltip(rdbus_iter *it)
 {
@@ -139,7 +135,6 @@ put_tooltip(rdbus_iter *it)
     rdbus_iter_close(it, &var);
 }
 
-/* One property of the item into a variant; 0 when there is no such name. */
 static int
 sni_prop(rdbus_iter *it, const char *name)
 {
@@ -197,8 +192,6 @@ menu_prop(rdbus_iter *it, const char *name)
 
 static const char *const menu_props[] = { "Version", "TextDirection", "Status", "IconThemePath" };
 
-/* Where an item's properties go: every one as an a{sv} entry, or, with want
-   set, that one alone as a variant. */
 typedef struct item_out {
     rdbus_iter *it;
     const char *want;
@@ -216,7 +209,6 @@ put_prop(item_out *o, const char *key, int type, const char *sig, const void *v)
     }
 }
 
-/* Id 0 is the root, item i is id i + 1. */
 static void
 item_props(item_out *o, int id)
 {
@@ -246,7 +238,6 @@ item_props(item_out *o, int id)
     }
 }
 
-/* An item's a{sv}. */
 static void
 put_item_props(rdbus_iter *it, int id)
 {
@@ -261,7 +252,6 @@ put_item_props(rdbus_iter *it, int id)
     rdbus_iter_close(it, &dict);
 }
 
-/* (ia{sv}av), the root holding every item when depth allows. */
 static void
 put_layout(rdbus_iter *it, int id, int depth)
 {
@@ -282,7 +272,6 @@ put_layout(rdbus_iter *it, int id, int depth)
     rdbus_iter_close(it, &st);
 }
 
-/* (ia{sv}): an item with its properties. */
 static void
 put_item(rdbus_iter *arr, int32_t id)
 {
@@ -327,7 +316,6 @@ clicked(int id)
     if (id < 1 || id > g_n) return;
     it = &g_item[id - 1];
     if (!it->label || it->disabled) return;
-    /* A check item flips as it is chosen, as GTK's did under SDL's tray. */
     if (it->checkbox) {
         g_on[id - 1] = !g_on[id - 1];
         items_updated(id);
@@ -390,7 +378,6 @@ static const char menu_xml[] =
     "<signal name=\"ItemActivationRequested\"><arg type=\"i\"/><arg type=\"u\"/></signal>"
     "</interface></node>";
 
-/* Properties.Get and GetAll, for either object. */
 static rdbus_msg *
 properties(rdbus_msg *m, int menu)
 {
@@ -458,7 +445,6 @@ menu_call(rdbus_msg *m, const char *member)
         if (!(r = rdbus_msg_return(m))) return NULL;
         rdbus_iter_init_append(r, &out);
         rdbus_iter_open(&out, RDBUS_TYPE_ARRAY, "(ia{sv})", &arr);
-        /* No ids asks for every item. */
         for (i = 0; i < (n ? n : g_n + 1); i++) {
             id = n ? ids[i] : i;
             if (id >= 0 && id <= g_n) put_item(&arr, id);
@@ -558,7 +544,6 @@ on_message(rdbus_conn *c, rdbus_msg *m, void *menup)
         r = menu_call(m, member);
     } else if (!SDL_strcmp(member, "Activate") || !SDL_strcmp(member, "SecondaryActivate") ||
                !SDL_strcmp(member, "ContextMenu") || !SDL_strcmp(member, "Scroll")) {
-        /* ItemIsMenu: the host opens the menu itself on a click. */
         r = rdbus_msg_return(m);
     } else {
         r = rdbus_msg_error(m, RDBUS_ERROR_UNKNOWN_METHOD, member);
@@ -594,7 +579,6 @@ register_item(int block)
     return 1;
 }
 
-/* A watcher that starts after us, or restarts, is told about the item again. */
 static int
 on_signal(rdbus_conn *c, rdbus_msg *m, void *user)
 {
@@ -737,7 +721,6 @@ reaktor_tray_open(App *app, const reaktor_tray *spec)
         reaktor_tray_close(app);
         return 0;
     }
-    /* Whatever arrived during setup is read now; the thread sees only what is new. */
     pump();
     return 1;
 }
@@ -750,7 +733,6 @@ reaktor_tray_check(App *app, int item, int checked)
     if (g_on[item] == (checked != 0)) return;
     g_on[item] = checked != 0;
     items_updated(item + 1);
-    /* Sending may have read messages the watch thread will not hear about. */
     pump();
 }
 
@@ -803,7 +785,6 @@ reaktor_tray_event(App *app, const SDL_Event *e)
 
         if (!c) return;
         pump();
-        /* Not for a tray a callback closed or replaced, nor from an older thread. */
         if (g_bus == c && g_drained == drained && e->user.code == g_gen)
             SDL_SignalSemaphore(drained);
         return;
@@ -834,7 +815,6 @@ int
 reaktor_tray_open(App *app, const reaktor_tray *spec)
 {
 #if defined(__EMSCRIPTEN__) || (defined(__unix__) && !defined(__APPLE__) && !defined(__ANDROID__))
-    /* Linux and the BSDs built without dbus-1: no tray, rather than SDL's and GTK. */
     (void)app; (void)spec;
     return 0;
 #else

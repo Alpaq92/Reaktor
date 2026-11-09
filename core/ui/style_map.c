@@ -364,7 +364,6 @@ reaktor_visible(struct nk_color want, struct nk_color behind,
     return contrast_ratio(a, b) < 1.12f ? fallback : want;
 }
 
-/* What the sheet's rule puts between a button's edge and its label. */
 static float
 button_inset(struct nk_context *ctx, const reaktor_style *st, int glyph)
 {
@@ -372,13 +371,9 @@ button_inset(struct nk_context *ctx, const reaktor_style *st, int glyph)
     float pad = st->matched ? st->pad_x : nb->padding.x;
     float edge = st->matched ? st->border : nb->border + nb->rounding;
 
-    /* An icon tightens the sides, as GTK's image-text buttons are. */
     return (glyph ? pad * 0.5f : pad) + edge;
 }
 
-/* A button's icon: "button .icon" in the sheet sizes it and spaces it from
-   the label; unstyled, it follows the font. ink_l and ink_r are where its
-   drawn pixels start and end, since an Ionicon sits anywhere in its square. */
 typedef struct button_glyph {
     struct nk_image im;
     float           px, gap, ink_l, ink_r;
@@ -400,7 +395,6 @@ glyph_of(App *app, struct nk_context *ctx, const char *selector, const char *ico
     g->im = icon_ink(app, icon_src, (int)g->px, &g->ink_l, &g->ink_r);
 }
 
-/* The icon and label side by side, and the button that holds them. */
 static float
 group_w(const struct nk_user_font *f, const button_glyph *g, const char *label)
 {
@@ -441,9 +435,6 @@ state_ink(struct nk_context *ctx)
     return nk_rgb_factor(ink, bs->color_factor_text);
 }
 
-/* The glyph and label centred as one, as GTK and Qt set them: the label is
-   set flush right of a padding that leaves the pair in the middle. 0 when
-   the button is too narrow for both, and the label stands alone. */
 static int
 group_push(struct nk_context *ctx, const char *selector, struct nk_rect b,
            const button_glyph *g, const char *label, struct nk_rect *at)
@@ -462,8 +453,6 @@ group_push(struct nk_context *ctx, const char *selector, struct nk_rect b,
     return 1;
 }
 
-/* Presses the button, with its icon beside the label when there is room,
-   in the label's color for the button's state. */
 static int
 group_press(App *app, struct nk_context *ctx, const char *selector, const char *icon_src,
             const char *label)
@@ -552,7 +541,6 @@ press_blank(struct nk_context *ctx)
     return clicked;
 }
 
-/* The sheet's button with nothing in it; the caller paints the inside. */
 int
 reaktor_css_button_custom(App *app, struct nk_context *ctx, const char *sel,
                           const char *name, reaktor_button_paint paint, void *user)
@@ -591,7 +579,6 @@ image_centered(struct nk_context *ctx, struct nk_rect b, struct nk_image im, flo
                   &im, nk_rgb(255, 255, 255));
 }
 
-/* An icon alone: no fill or edge until the pointer is over it, then the sheet's hover. */
 int
 reaktor_css_button_flat(App *app, struct nk_context *ctx, const char *icon,
                         const char *name, int accent)
@@ -710,7 +697,6 @@ reaktor_edit_edge(App *app, struct nk_context *ctx, struct nk_rect b,
     struct nk_color fill = nk_rgba_bv(s->bg);
 
     if (!s->matched) return;
-    /* A sheet may fill a field like the card it sits on; it then takes the page's. */
     if (on.w > b.w && b.x >= on.x && b.y >= on.y &&
         b.x + b.w <= on.x + on.w && b.y + b.h <= on.y + on.h &&
         SDL_abs(fill.r - app->surface.r) + SDL_abs(fill.g - app->surface.g) +
@@ -751,7 +737,6 @@ note_field_rect(App *app, struct nk_context *ctx, struct nk_rect bounds)
 void
 note_edit_active(App *app, struct nk_context *ctx, nk_flags state)
 {
-    /* A held field keeps its caret, not the keys. */
     if (!(state & NK_EDIT_ACTIVE) || app->layer_held) return;
     if (app->stop_editing) nk_edit_unfocus(ctx);
     else app->editing = 1;
@@ -766,7 +751,6 @@ note_ime_caret(App *app, struct nk_context *ctx, struct nk_rect bounds,
 
     if (!(state & NK_EDIT_ACTIVE) || app->layer_held) return;
 
-    /* An empty edit has no text, whatever it says its length is. */
     if (font && font->width && nk_str_get_const(&edit->string)) {
         const char *txt = nk_str_get_const(&edit->string);
         nk_rune unicode;
@@ -886,7 +870,6 @@ apply_widget_style(App *app)
     st->button.userdata   = nk_handle_ptr(app);
     st->button.draw_begin = button_chrome_begin;
     st->button.draw_end   = chrome_end;
-    /* A disabled button is faded, not darkened: see reaktor_button. */
     st->button.disabled_factor = 1.0f;
 
     reaktor_style_get("input.type-text", &inp);
@@ -1050,7 +1033,6 @@ apply_widget_style(App *app)
     st->chart.selected_color = focus;
     st->chart.border         = 1.0f;
 
-    /* No track: a scrollbar sits on lists and panels as well as the page. */
     st->scrollh.normal        = i_none;
     st->scrollh.hover         = i_none;
     st->scrollh.active        = i_none;

@@ -1,8 +1,6 @@
-/* An application driven from a script, as a person would: the script runs on
-   a thread of its own, finds widgets in the accessibility tree by name or
-   mark, and acts through the same SDL events a mouse and keyboard send. Every
-   look at the tree happens on the main thread, and every action waits until
-   the window has drawn and settled. */
+/* The script runs on a thread of its own. Every look at the tree happens on
+   the main thread, and every action waits until the window has drawn and
+   settled. */
 #include "internal.h"
 #include "reaktor/test.h"
 #include "declare.h"
@@ -56,7 +54,6 @@ matches(const reaktor_a11y_node *n, const char *target)
     return n->name && SDL_strcmp(n->name, target) == 0;
 }
 
-/* Whether the node at i sits, at any depth, inside a node marked scope. */
 static int
 within(const reaktor_a11y_node *tree, int i, const char *scope)
 {
@@ -81,8 +78,6 @@ look_main(App *app, void *user)
     const char *target = q->target, *space;
     int         scoped = 0;
 
-    /* "#list Delete": a mark, then what to find inside it. A whole target
-       that is itself a mark, spaces and all, is taken as one. */
     if (target[0] == '#' && !reaktor_mark_has(0, target + 1) &&
         (space = SDL_strchr(target, ' ')) && (size_t)(space - target) < sizeof scope) {
         SDL_strlcpy(scope, target + 1, (size_t)(space - target));
@@ -237,7 +232,6 @@ reaktor_test_type(reaktor_test *t, const char *target, const char *text)
     return !t->stuck;
 }
 
-/* "Ctrl+Shift+S", "Enter", "Escape": the modifiers, then one key by its SDL name. */
 int
 reaktor_test_key(reaktor_test *t, const char *chord)
 {
@@ -304,13 +298,11 @@ script_thread(void *data)
     return 0;
 }
 
-/* From the main window's frame: the script starts once the first frame settles. */
 static void
 test_frame(App *app)
 {
     test_ask *q = (test_ask *)SDL_GetAtomicPointer(&g_settle);
 
-    /* A settle asked for: two frames drawn since, and the last one settled. */
     if (q) {
         if (!q->seq) q->seq = app->ctx->seq + 1;
         if (app->ctx->seq >= q->seq + 2 && reaktor_frame_settled(app)) {

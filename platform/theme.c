@@ -29,7 +29,6 @@ static int workspace_says(const char *what)
 #elif defined(REAKTOR_HAVE_RDBUS)
 #include "rdbus.h"
 
-/* A setting's value as a number, or -1 when it is not one. */
 static int portal_value(rdbus_iter *it)
 {
     rdbus_iter in;
@@ -48,9 +47,6 @@ static int portal_value(rdbus_iter *it)
     return -1;
 }
 
-/* The settings below in one round trip, -1 for each the portal does not
-   have. A session with no bus, or a desktop with no portal or one without
-   ReadAll, is not asked again; one slow to start is. */
 static const char *const g_portal[][2] = {
     { "org.freedesktop.appearance", "reduced-motion" },
     { "org.gnome.desktop.interface", "enable-animations" },

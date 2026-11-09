@@ -76,9 +76,6 @@ jobs:
           key: ccache-linux-${{ matrix.arch }}-${{ matrix.image }}-${{ github.run_id }}
           restore-keys: ccache-linux-${{ matrix.arch }}-${{ matrix.image }}-
 
-      # The emulated architectures are compiled by a native x86-64 Debian with
-      # Debian's cross compilers, in the same checkout; the emulated machine
-      # then only runs what was built.
       - name: Start the cross builder
         if: ${{ matrix.emulated }}
         run: |
@@ -162,11 +159,6 @@ jobs:
         continue-on-error: true
         run: docker exec -i debian sh tools/ci/pss-pages.sh -x Xvfb -w "dbus-run-session -- timeout 120" </dev/null
 
-      # libreaktor.so beside the static library, on every architecture, and
-      # released as libreaktor-shared-VERSION-linux-ARCH.tar.gz; the static one is
-      # libreaktor-VERSION-linux-ARCH.tar.gz. An emulated
-      # machine has none of the cross compiler's headers, so it is built and
-      # installed on the builder and only checked on the emulated machine.
       - name: Shared libreaktor
         id: shared
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -205,8 +197,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # Every native job, so each architecture's table comes from a machine
-      # like CI's. One not written yet is a warning, and the upload has it.
       - name: ABI table
         id: abi
         if: ${{ !cancelled() && steps.build.outcome == 'success' && !matrix.emulated }}
@@ -281,8 +271,6 @@ jobs:
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged.$e"; done
           EOF
 
-      # The shared build splits in three: libreaktor-sdl3-0, libreaktor0 and
-      # libreaktor-shared, on every architecture.
       - name: Pack the shared libreaktor as .debs
         id: shareddeb
         if: ${{ !cancelled() && steps.shared.outcome == 'success' }}
@@ -302,8 +290,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # An app linked against them must still run, and draw the same, with only
-      # the two runtime packages left.
       - name: Check the shared libreaktor .debs
         if: ${{ !cancelled() && steps.shareddeb.outcome == 'success' && steps.libcheck.outcome == 'success' && matrix.arch == 'x86-64' }}
         run: |

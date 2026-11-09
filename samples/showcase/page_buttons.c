@@ -13,7 +13,6 @@ static const struct { const char *icon, *label; } g_icons[] = {
 };
 #define ICON_N ((int)(sizeof(g_icons) / sizeof(g_icons[0])))
 
-/* A count after the label, in a pill of the accent. */
 static void
 paint_inbox(App *app, struct reaktor_command_buffer *cv, struct reaktor_rect c,
             struct reaktor_color ink, void *user)
@@ -34,7 +33,6 @@ paint_inbox(App *app, struct reaktor_command_buffer *cv, struct reaktor_rect c,
                       (int)SDL_strlen(n), f, reaktor_rgba(0, 0, 0, 0), reaktor_on(accent));
 }
 
-/* An icon over two lines of text, as a download list shows one. */
 static void
 paint_download(App *app, struct reaktor_command_buffer *cv, struct reaktor_rect c,
                struct reaktor_color ink, void *user)

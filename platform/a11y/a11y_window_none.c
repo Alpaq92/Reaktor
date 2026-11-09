@@ -1,4 +1,3 @@
-/* Windows other than the main one, where only UI Automation serves them. */
 #include "a11y.h"
 
 void

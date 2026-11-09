@@ -22,9 +22,6 @@ static struct nk_rect     g_boxrect[REAKTOR_LAY_DEPTH + 1];
 static unsigned char      g_boxok[REAKTOR_LAY_DEPTH + 1];
 static unsigned           g_boxid[REAKTOR_LAY_DEPTH + 1];
 
-/* Marks, for tests: kept apart from the tree, and allocated only once a widget
-   sets one, so an application that sets none pays nothing. The main window's
-   last frame is what a test reads. One mark may sit on many widgets. */
 #define MARK_LEN 64
 
 typedef struct decl_mark {
@@ -64,7 +61,6 @@ reaktor_mark_at(int i, unsigned *id)
     return g_marks[i].mark;
 }
 
-/* Whether a node carries a mark; with id 0, whether anything does. */
 int
 reaktor_mark_has(unsigned id, const char *mark)
 {
@@ -97,7 +93,6 @@ reaktor_frame_end(void)
     if (g_space) { nk_layout_space_end(g_frame_ctx); g_space = 0; }
     reaktor_layout_end(&g_frame_app->lay);
 
-    /* This frame's rectangles were laid out with the sizes of an older sheet. */
     if (g_frame_app->style_loads != reaktor_style_loads()) {
         g_frame_app->style_loads = reaktor_style_loads();
         g_frame_unsettled++;

@@ -1,5 +1,4 @@
-/* The message half of rdbus.h: the wire format, its validation, and the
-   iterators. Ported from minidbus's marshal/ and message/ (MIT; see NOTICE.md). */
+/* Ported from minidbus's marshal/ and message/ (MIT; see NOTICE.md). */
 
 #include "rdbus_internal.h"
 
@@ -71,7 +70,6 @@ struct rdbus_msg {
     swapped  *swapped;
 };
 
-/* A parsed message's bytes follow it at an offset that keeps 8-byte arrays aligned. */
 #define RAW_AT ((sizeof(struct rdbus_msg) + 15) & ~(size_t)15)
 
 typedef struct reader {
@@ -160,8 +158,6 @@ is_basic(int c)
 {
     return fixed_size(c) || c == 's' || c == 'o' || c == 'g';
 }
-
-/* Validation of names, paths, strings and signatures. */
 
 static int
 utf8_valid(const void *bytes, size_t n)
@@ -280,7 +276,6 @@ valid_member(const char *s, size_t n)
     return 1;
 }
 
-/* The length of the complete type s starts with, or 0 if it starts with none. */
 static size_t
 type_len(const char *s, size_t n, int ctx, int arrays, int structs)
 {
@@ -329,7 +324,6 @@ sig_single(const char *s, size_t n)
     return n && n <= 255 && type_len(s, n, CTX_TOP, 0, 0) == n;
 }
 
-/* The length of the complete type at the start of a validated signature. */
 static size_t
 span(const char *s, size_t n)
 {
@@ -346,8 +340,6 @@ span(const char *s, size_t n)
     }
     return 0;
 }
-
-/* Reading, bounded by the reader's length. */
 
 static int
 r_pad(reader *d, size_t a)
@@ -377,7 +369,6 @@ r_u32(reader *d, uint32_t *v)
     return 1;
 }
 
-/* A string's length and terminator; its contents are the caller's to check. */
 static int
 r_str_raw(reader *d, const char **s, size_t *len)
 {
@@ -402,7 +393,6 @@ r_str(reader *d)
     return r_str_raw(d, &s, &n) && utf8_valid(s, n);
 }
 
-/* A signature; with single set, of exactly one complete type. */
 static int
 r_sig(reader *d, const char **s, size_t *len, int single)
 {
@@ -421,8 +411,6 @@ r_sig(reader *d, const char **s, size_t *len, int single)
     return 1;
 }
 
-/* Validates the value of the complete type t (a validated signature) and
-   steps past it. */
 static int
 skip_value(reader *d, const char *t, size_t tn)
 {
@@ -482,8 +470,6 @@ skip_value(reader *d, const char *t, size_t tn)
     }
 }
 
-/* Steps past the value of the complete type t in a body already validated
-   whole, by check_body or by the writers: bounds are checked, contents not. */
 static int
 step_value(reader *d, const char *t, size_t tn)
 {
@@ -541,8 +527,6 @@ step_value(reader *d, const char *t, size_t tn)
     }
 }
 
-/* Errors */
-
 void
 rdbus_error_init(rdbus_error *e)
 {
@@ -573,8 +557,6 @@ rdbus__error_set(rdbus_error *e, const char *name, const char *fmt, ...)
     SDL_vsnprintf(e->message, sizeof(e->message), fmt, ap);
     va_end(ap);
 }
-
-/* Building */
 
 static int
 fail(rdbus_msg *m)
@@ -614,7 +596,6 @@ w_pad(rdbus_msg *m, size_t a)
     return 1;
 }
 
-/* Room for n bytes at alignment a, the padding before them zeroed. */
 static uint8_t *
 w_reserve(rdbus_msg *m, size_t a, size_t n)
 {
@@ -693,7 +674,6 @@ name_size(const char *s)
     return s ? SDL_strlen(s) + 1 : 0;
 }
 
-/* A message with room after it for header names of names bytes in all. */
 static rdbus_msg *
 msg_new(int type, size_t names)
 {
@@ -803,8 +783,6 @@ rdbus_msg_free(rdbus_msg *m)
     SDL_free(m);
 }
 
-/* Getters */
-
 int
 rdbus_msg_type(const rdbus_msg *m)
 {
@@ -877,7 +855,6 @@ same(const char *a, const char *b)
     return a && b && !SDL_strcmp(a, b);
 }
 
-/* As libdbus does, a message without an interface matches any. */
 int
 rdbus_msg_is_call(const rdbus_msg *m, const char *iface, const char *member)
 {
@@ -904,10 +881,6 @@ rdbus_msg_has_signature(const rdbus_msg *m, const char *sig)
     return m && sig && !SDL_strcmp(m->sig, sig);
 }
 
-/* Writing iterators */
-
-/* Clears every field but the signature past its terminator, which nothing
-   reads beyond sig_len. */
 static void
 iter_reset(rdbus_iter *it, rdbus_msg *m, int mode)
 {
@@ -934,7 +907,6 @@ writable(const rdbus_iter *it)
            !it->msg->parsed && it->msg->open == it->depth;
 }
 
-/* Takes a complete value of type t into the iterator's container. */
 static int
 take_type(rdbus_iter *it, const char *t, size_t n)
 {
@@ -1143,8 +1115,6 @@ rdbus_msg_append_args(rdbus_msg *m, int type, ...)
     return ok && !it.failed;
 }
 
-/* Reading iterators */
-
 int
 rdbus_iter_init(rdbus_msg *m, rdbus_iter *it)
 {
@@ -1233,7 +1203,6 @@ set_sig(rdbus_iter *it, const char *s, size_t n)
     it->sig_len = n;
 }
 
-/* Where the elements of the array at the iterator start, and their length. */
 static int
 array_at(const rdbus_iter *it, size_t *start, size_t *n)
 {
@@ -1399,8 +1368,6 @@ rdbus_msg_get_args(rdbus_msg *m, rdbus_error *err, int type, ...)
     va_end(ap);
     return ok;
 }
-
-/* The wire */
 
 long
 rdbus__frame_size(const uint8_t *b, size_t have)

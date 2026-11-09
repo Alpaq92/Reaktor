@@ -69,7 +69,6 @@ console_ctrl(DWORD type)
     switch (type) {
     case CTRL_C_EVENT:
     case CTRL_BREAK_EVENT:
-        /* A borrowed console's Ctrl+C belongs to the shell. */
         if (!g_own_ctrl_c) return TRUE;
         if (SDL_AddAtomicInt(&g_ctrl_c, 1) == 0) reaktor_console_quit();
         else reaktor_hard_quit(130);

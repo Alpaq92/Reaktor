@@ -40,7 +40,6 @@ reaktor_format_money(char *buf, size_t cap, double amount, const char *currency)
     return buf;
 }
 
-/* English names and numbers: the letters reaktor_format_pattern knows. */
 const char *
 reaktor_format_pattern(char *buf, size_t cap, const struct tm *t, const char *pattern)
 {

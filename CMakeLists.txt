@@ -22,9 +22,6 @@ endif()
 
 set(TP "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
-# A shared libreaktor beside libreaktor.a, so several apps share one copy:
-# libreaktor.so, with SDL as libreaktor-sdl3.so, on Linux and the BSDs, and
-# Reaktor.framework, with SDL inside, on macOS. The samples link it.
 option(REAKTOR_SHARED "Also build a shared libreaktor, and link the samples to it" OFF)
 set(REAKTOR_SHARED_SDL OFF)
 if(REAKTOR_SHARED)
@@ -60,13 +57,9 @@ set(SDL_TRAY ON CACHE BOOL "" FORCE)
 foreach(drv RENDER_D3D RENDER_VULKAN VULKAN)
     set(SDL_${drv} OFF CACHE BOOL "" FORCE)
 endforeach()
-# SDL's GPU API runs on Vulkan where there is no Direct3D 12 or Metal.
 if(REAKTOR_SHADERS AND UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     set(SDL_VULKAN ON CACHE BOOL "" FORCE)
 endif()
-# The renderers built beside software, in the words --renderer takes. Empty
-# is the platform's default; `none` is software only. macOS builds metal and
-# opengl either way and the web opengles2, so the list means nothing there.
 set(_renderers_all direct3d11 direct3d12 opengl opengles2)
 if(WIN32)
     set(_renderers_default direct3d11 direct3d12)
@@ -299,9 +292,6 @@ set(APP_RESOURCES "")
 add_executable(mkicon EXCLUDE_FROM_ALL tools/mkicon.c)
 target_link_libraries(mkicon PRIVATE reaktor_core)
 
-# Linux and the BSDs speak D-Bus through platform/dbus, Reaktor's own client,
-# built into the runtime: the portal's settings there, and in the modules the
-# AT-SPI bridge, the tray and notifications.
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_library(reaktor_rdbus INTERFACE)
     target_include_directories(reaktor_rdbus INTERFACE
@@ -350,7 +340,6 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(imagetest tests/imagetest.c)
     target_link_libraries(imagetest PRIVATE plutovg)
 
-    # The message format everywhere; a live bus where there is one.
     add_executable(dbustest tests/dbustest.c platform/dbus/rdbus_msg.c)
     target_include_directories(dbustest PRIVATE platform/dbus)
     target_link_libraries(dbustest PRIVATE ${REAKTOR_SDL})
@@ -734,8 +723,6 @@ if(REAKTOR_SHARED)
                 string(APPEND _exp "_${_n}\n")
             endforeach()
         endforeach()
-        # SDL is linked in here rather than beside the framework, and apps
-        # and their modules call it directly.
         string(APPEND _exp "_SDL_*\n")
         file(WRITE "${CMAKE_BINARY_DIR}/reaktor.exp" "${_exp}")
         set(_force "")
@@ -791,7 +778,6 @@ function(reaktor_add_app name)
     # STATIC: a test that reaches past include/reaktor/ links the archives even
     # in a shared build, so libreaktor.so need not export what it reaches.
     if(REAKTOR_SHARED AND NOT RA_STATIC)
-        # The modules stay in the app; the shared core calls them back.
         target_link_libraries(${name} PRIVATE ${_mods} reaktor_shared)
         set_target_properties(${name} PROPERTIES ENABLE_EXPORTS ON)
         if(APPLE)
@@ -1133,7 +1119,6 @@ function(reaktor_outside_links)
         endforeach()
     endwhile()
 
-    # A shared library found on this machine is named, so the package finds it on another.
     set(_named "")
     foreach(_l IN LISTS _libs)
         if(IS_ABSOLUTE "${_l}" AND _l MATCHES "/lib([^/]+)\\.(so|dylib|tbd)(\\.[0-9.]+)?$")
@@ -1238,8 +1223,6 @@ add_custom_command(OUTPUT "${_lib}"
     VERBATIM)
 add_custom_target(libreaktor DEPENDS "${_lib}")
 
-# Beside libreaktor.so, the modules as libreaktor-modules.a for apps built
-# outside the tree: an app links them in and exports them back to the library.
 if(REAKTOR_SHARED)
     set(_mod_parts reaktor_modules)
     foreach(_t mojibake_lib kb_text_shape)

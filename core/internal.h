@@ -197,7 +197,6 @@ struct App {
     unsigned char  hot_last_repaint;
 
     int   dirty;
-    /* The last rounded surface filled this frame, which a field may sit on. */
     struct nk_rect  surface_at;
     struct nk_color surface;
     unsigned why;
@@ -301,10 +300,8 @@ enum {
     REAKTOR_WHY_STYLE  = 1u << 3
 };
 
-/* The Tray module, or its _none twin. */
 void reaktor_tray_event(App *app, const SDL_Event *e);
 
-/* The Inspector module, or its _none twin. */
 struct reaktor_inspector_spec;
 void reaktor_inspector_early(void);
 void reaktor_inspector_start(App *app, const struct reaktor_inspector_spec *spec, int flag);

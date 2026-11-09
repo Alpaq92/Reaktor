@@ -542,7 +542,6 @@ quit_after(void *app)
     return 0;
 }
 
-/* The last frame's tree: this frame's is still being built. */
 static const reaktor_a11y_node *
 last_node(App *app, unsigned char role, const char *name)
 {

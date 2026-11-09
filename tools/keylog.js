@@ -1,4 +1,3 @@
-/* ?keylog: what the browser and its keyboard actually send. */
 (function () {
   var log = document.createElement('pre');
 
@@ -18,7 +17,6 @@
     log.textContent = text;
     log.scrollTop = log.scrollHeight;
   };
-  /* Stamped as it happens and written in one route, so lines stay in order. */
   var add = function (line) {
     text += line + '\n';
     if (!pending) { pending = 1; requestAnimationFrame(flush); }
@@ -39,7 +37,6 @@
         (e.data === undefined ? '' : ' data=' + JSON.stringify(e.data)) +
         (e.isComposing ? ' composing' : '');
 
-    /* Read once every listener has run, SDL's among them. */
     setTimeout(function () {
       add(at + ' ' + line + (e.defaultPrevented ? ' PREVENTED' : ''));
     }, 0);

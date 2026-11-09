@@ -416,7 +416,6 @@ tab_logs(void)
         .box = { .flags = REAKTOR_LAY_FILL } });
 }
 
-/* A flat icon beside the tabs; its name is also what the pointer shows. */
 static int
 tool(const char *icon, const char *name, const char *tip, int on, int off, float mr)
 {
@@ -455,7 +454,6 @@ page(App *app, struct reaktor_context *ctx, int w, int h, void *user)
                 g_sel = 0;
                 redraw();
             }
-            /* The page's floater has no titlebar to close it from. */
             if (tool("close-circle-outline", "Close the Inspector", NULL, 0, 0, 8.0f))
                 reaktor_inspector_close(g_main);
 #else
@@ -629,7 +627,6 @@ reaktor_inspector_frame(App *app)
     g_why    = app->why;
     app->why = 0;
     if (!shown()) return;
-    /* Only the Frame tab changes with every frame; the rest follow the tree. */
     {
         static unsigned last;
         const reaktor_a11y_node *n;

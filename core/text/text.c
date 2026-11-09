@@ -457,7 +457,6 @@ shape_run(const text_run *r, float pen)
     if (kbts_ShapeDirect(c->scratch, &g_storage,
                          (r->level & 1) ? KBTS_DIRECTION_RTL : KBTS_DIRECTION_LTR,
                          &it) != KBTS_SHAPE_ERROR_NONE) {
-        /* A scratchpad keeps its error. */
         kbts_DestroyShapeScratchpad(c->scratch);
         c->scratch = NULL;
         return pen;
@@ -521,8 +520,6 @@ shape(int file, const char *s, int len)
     return g_entries++;
 }
 
-/* Keeps what the frame just measured, so a full cache does not reshape
-   everything on screen at once. */
 static void
 shapes_compact(void)
 {
@@ -802,7 +799,6 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
     const struct nk_command *cmd;
 
     g_renderer = renderer;
-    /* The same frame again: its text commands are already custom ones. */
     if (g_faces == 0 || (g_seq_known && ctx->seq == g_seq)) return;
     g_seq       = ctx->seq;
     g_seq_known = 1;

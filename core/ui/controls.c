@@ -286,7 +286,6 @@ reaktor_label(const reaktor_label_spec *s)
                                                 : NK_TEXT_LEFT;
         struct nk_color c = reaktor_token(s->color, g_frame_ctx->style.text.color);
 
-        /* A sheet can repaint the page without redefining the token. */
         if (s->color)
             c = reaktor_visible(c, reaktor_page_color(g_frame_app),
                                 g_frame_ctx->style.text.color);
@@ -334,7 +333,6 @@ reaktor_field_select(App *app, const char *buf, int from, int to)
     reaktor_wake(app);
 }
 
-/* Room for what is typed or pasted this frame: Nuklear never writes past cap. */
 static char *
 field_room(const reaktor_field_spec *s, int *cap)
 {

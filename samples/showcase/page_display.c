@@ -10,7 +10,6 @@ static const char *const g_grid[7][3] = {
     { "Aileron",   "CC0",    "the typeface" }
 };
 
-/* Example figures: scans and threats per hour over a day. */
 static const int g_scans[24] = { 0, 0, 0, 0, 0, 0, 0, 1, 3, 2, 0, 0,
                                  9, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 2 };
 static const int g_threats[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
@@ -119,7 +118,6 @@ static int         file_parent(int n, void *u) { (void)u; return g_files[n].pare
 static const char *file_label(int n, void *u)  { (void)u; return g_files[n].label; }
 static const char *file_icon(int n, void *u)   { (void)u; return g_files[n].icon; }
 
-/* Two lists of task numbers; a drop moves one from a list to a place in another. */
 static const char *const g_tasks[] = {
     "Write the release notes", "Check the BSD builds", "Answer the issue on fonts",
     "Draw the new icon", "Measure the web build", "Update the screenshots"

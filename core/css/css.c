@@ -45,7 +45,6 @@ typedef struct selector {
     unsigned n, nneg, nnm, spec;
 } selector;
 
-/* Compounds whose name and negation offsets index nm and neg. */
 typedef struct pool {
     const compound *c, *neg;
     const unsigned *nm;
@@ -62,13 +61,10 @@ typedef struct rule {
     unsigned char n;
 } rule;
 
-/* Rules by the type or first name of their last compound, chained through next. */
 typedef struct bucket { unsigned key, first; } bucket;
 
 typedef struct var { char *name, *value; size_t n; unsigned h; } var;
 
-/* A rule's selector list and body in the sheet's text; the body is read into
-   declarations when a query first matches one of its selectors. */
 typedef struct block {
     size_t        ss, se, bs, be;
     unsigned      d0, nd;
@@ -185,7 +181,6 @@ static size_t skip_string(const char *s, size_t i, size_t n)
     return i < n ? i + 1 : n;
 }
 
-/* The first of `stops` at bracket depth 0, or n. */
 static size_t scan(const char *s, size_t i, size_t n, const char *stops)
 {
     int depth = 0;
@@ -215,7 +210,6 @@ static size_t block_end(const char *s, size_t i, size_t n)
     return n;
 }
 
-/* The next comma-separated item of s[*a..e), trimmed. */
 static int next_item(const char *s, size_t *a, size_t e, size_t *ps, size_t *pe)
 {
     if (*a >= e) return 0;
@@ -278,7 +272,6 @@ static double number(const char *p, const char **end)
     return neg ? -v : v;
 }
 
-/* A plain number, or one with '%' when pct is set. */
 static int number_of(const char *v, size_t n, float *f, int *pct)
 {
     const char *end;
@@ -389,7 +382,6 @@ static int expand(const reaktor_sheet *s, const char *v, size_t n, buf *out, int
     return out->len <= VAR_MAX;
 }
 
-/* v with every var() replaced, trimmed; *b holds what it points into. */
 static int resolve_vars(const reaktor_sheet *s, const char **v, size_t *n, buf *b)
 {
     int    steps = VAR_STEPS;
@@ -459,7 +451,6 @@ static int mix_arg(const char *s, size_t n, float c[4], float *pct, int depth)
     return color_of(s + a, e - a, c, depth + 1);
 }
 
-/* color-mix(in srgb, a [p%], b [q%]) */
 static int mix(const char *s, size_t n, float out[4], int depth)
 {
     size_t i = 0, ps, pe, part[2][2];
@@ -586,7 +577,6 @@ static int calc_sum(calc_in *c, calc_val *out)
     }
 }
 
-/* A length in pixels, em counted against `em`; a percentage is not one. */
 static int length_em(const reaktor_sheet *sh, const char *s, size_t n, float em, float *px)
 {
     const char *end;
@@ -667,8 +657,6 @@ static int direction(const char *s, size_t n, int *axis, int *flip)
     }
 }
 
-/* linear-gradient([to <side> | <n>deg,] a, b), turned to run left to right or
-   top to bottom. Two stops and the four sides are all that is drawn. */
 static int gradient(const char *s, size_t n, unsigned char from[4], unsigned char to[4],
                     int *axis)
 {
@@ -701,7 +689,6 @@ static int line_style(const char *s, size_t n, float *v)
     return 0;
 }
 
-/* The next space-separated part of s[*i..n), or 0 at the end or at a '/'. */
 static int part(const char *s, size_t *i, size_t n, size_t *a, size_t *b)
 {
     while (*i < n && space(s[*i])) (*i)++;
@@ -860,7 +847,6 @@ static void apply(ctx *x, const struct prop *p, const char *v, size_t n)
             if (!axis && gradient(v + a, b - a, from, to, &axis)) continue;
             if (color(v + a, b - a, rgba, &flags)) { painted = 1; break; }
         }
-        /* Where the gradient is not drawn, its first stop stands for it. */
         if (axis && !painted) memcpy(rgba, from, 4);
         emit(x, P_BG, 0.0f, rgba, flags);
         emit_gradient(x, axis, from, to);
@@ -916,7 +902,6 @@ static const struct prop *prop_of(const char *s, size_t n)
     return NULL;
 }
 
-/* Calls fn for each declaration in s[i..n), its value with !important cut. */
 static void each_decl(ctx *x, const char *s, size_t i, size_t n,
                       void (*fn)(ctx *, const char *, size_t, const char *, size_t, int))
 {
@@ -966,7 +951,6 @@ static void collect_var(ctx *x, const char *p, size_t pn, const char *v, size_t 
     if (pn > 2 && p[0] == '-' && p[1] == '-') var_set(x->s, p, pn, v, vn);
 }
 
-/* The winning font-size against x->rel, for the root and the body. */
 static void font_size(ctx *x, const char *p, size_t pn, const char *v, size_t vn, int important)
 {
     uint64_t key = (uint64_t)!!important << 63 | x->key;
@@ -988,7 +972,6 @@ static int ident_char(char c)
     return isalnum((unsigned char)c) || c == '-' || c == '_' || c == '\\' || (unsigned char)c >= 0x80;
 }
 
-/* Past the escape at s[i]: up to six hex digits and one space, or one character. */
 static size_t escape_end(const char *s, size_t i, size_t n, unsigned *cp)
 {
     size_t k = 0;
@@ -1009,7 +992,6 @@ static size_t ident_end(const char *s, size_t i, size_t n)
     return i;
 }
 
-/* s[0..n) with its escapes decoded into out as UTF-8; the length, or cap when it does not fit. */
 static size_t unescape(const char *s, size_t n, char *out, size_t cap)
 {
     size_t   i = 0, k = 0;
@@ -1051,7 +1033,6 @@ static unsigned name_hash(char kind, const char *s, size_t n)
     return hash(kind, b, k < sizeof b ? k : 0);
 }
 
-/* [name] as the class "name", [name=value] as "name-value". */
 static int attribute(const char *s, size_t *pi, size_t n, unsigned *h)
 {
     size_t i = *pi + 1, close = scan(s, i, n, "]"), ne, vs, ve, k;
@@ -1260,7 +1241,6 @@ static void add_rule(reaktor_sheet *s, const selector *q, unsigned blk)
     s->nnm += q->nnm;
 }
 
-/* 1 or 0 for a feature this runtime answers, and 0 for any other. */
 static int media_feature(const char *s, size_t n, const char *theme)
 {
     static const struct { const char *name, *on; int *flag; } prefs[] = {
@@ -1283,8 +1263,6 @@ static int media_feature(const char *s, size_t n, const char *theme)
     return 0;
 }
 
-/* Whether a @media prelude holds: one of its comma-separated queries names
-   only features answered here, each true. */
 static int media_matches(const char *q, size_t n, const char *theme)
 {
     size_t i = 0;
@@ -1346,7 +1324,6 @@ static void blocks(reaktor_sheet *sh, const char *s, size_t i, size_t n, int dep
     }
 }
 
-/* `to` resolved against the folder of `from`, with "." and ".." folded away. */
 static char *import_path(const char *from, const char *to, size_t n)
 {
     const char *slash = strrchr(from, '/');
@@ -1389,8 +1366,6 @@ static int in_chain(const loader *l, int depth, const char *path)
     return 0;
 }
 
-/* s[i..n) with every string, bracket and block it leaves open closed, as
-   the end of a sheet closes them. */
 static int add_closed(buf *all, const char *s, size_t i, size_t n)
 {
     buf    stack = { 0 };
@@ -1420,7 +1395,6 @@ static int add_closed(buf *all, const char *s, size_t i, size_t n)
     return ok && buf_str(all, "\n");
 }
 
-/* The sheet, its leading @imports read in place, a conditional one as @media. */
 static int load_sheet(loader *l, const char *path, int depth)
 {
     char  *t, *to;
@@ -1494,7 +1468,6 @@ static ctx context(reaktor_sheet *s)
     return x;
 }
 
-/* The font size of the element `who` names, against `rel`, or `fallback`. */
 static float root_font(reaktor_sheet *s, const char *who, float rel, float fallback)
 {
     ctx      x = context(s);
@@ -1550,8 +1523,6 @@ static void index_rules(reaktor_sheet *s)
     }
 }
 
-/* One more sheet read into s: its blocks, its rules, and the custom
-   properties of the root. */
 static int ingest(reaktor_sheet *s, const char *path)
 {
     loader   l;
@@ -1583,8 +1554,6 @@ static int ingest(reaktor_sheet *s, const char *path)
     return 1;
 }
 
-/* After a sheet is read: the root's sizes, the index, and every body to be
-   read again, since a custom property may have changed under it. */
 static void settle(reaktor_sheet *s)
 {
     char     who[96];
@@ -1713,8 +1682,6 @@ static const block *read_block(reaktor_sheet *s, unsigned k)
     return b;
 }
 
-/* The rules chained from `first` that match q, cascaded into win as indices,
-   since reading a body may move the declarations. */
 static void cascade(reaktor_sheet *s, unsigned first, const selector *q,
                     unsigned *win, uint64_t *key, reaktor_style *out)
 {

@@ -63,7 +63,6 @@ reaktor_toast(App *app, const reaktor_toast_spec *spec)
     t->icon   = copy(spec->icon);
     t->action = copy(spec->action);
     ms = spec->timeout_ms;
-    /* Nothing would ever close it. */
     if (ms <= 0 && spec->no_close && !spec->action) ms = 5000;
     if (ms > 0) {
         t->until = SDL_GetTicks() + (Uint64)ms;
@@ -149,7 +148,6 @@ reaktor_toasts_draw(App *app, struct nk_context *ctx, int win_w, int win_h,
                              nk_style_item_color(none));
     nk_style_push_font(ctx, font);
 
-    /* Creating the toasts window takes Nuklear's focus. */
     keep = nk_window_find(ctx, "reaktor-toasts") ? NULL : ctx->active;
     hold = blocked ? HOLD_ALL : g_toast_fresh ? HOLD_FRESH : HOLD_NONE;
     g_toast_fresh = 0;

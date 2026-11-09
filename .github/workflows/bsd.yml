@@ -22,8 +22,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The x86-64 machines run with hardware virtualization, and also
-  # cross-compile the arm64 programs here, for the arm64 machines below to run.
   # OpenBSD's base compiler has no arm64 backend, so it uses the ports LLVM.
   bsd:
     name: ${{ matrix.os }} ${{ matrix.version }} ${{ matrix.arch }}
@@ -84,7 +82,6 @@ jobs:
             echo "no cached build to diff against; every source is new"
           fi
 
-      # The packages the machine downloads, kept so the next run installs without fetching them.
       - name: Restore the package cache
         id: pkgcache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -192,7 +189,6 @@ jobs:
           if grep -rq "$sysroot" "dist/$name/lib/cmake" "dist/$name/lib/pkgconfig"; then
             echo "the package carries the sysroot's path"; exit 1
           fi
-          # The shared libreaktor too; the arm64 machine checks it below.
           cmake -S . -B build-arm64-shared -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/cross/${{ matrix.os }}-aarch64.cmake" \
                 -DREAKTOR_SYSROOT="$sysroot" -DREAKTOR_SHARED=ON \
@@ -332,8 +328,6 @@ jobs:
             --shot check/lib-packaged.bmp --a11y-dump check/lib-packaged.txt </dev/null
           for e in bmp txt; do cmp "check/lib-built.$e" "check/lib-packaged.$e"; done
 
-      # The split packages. The app must run on the two runtime packages
-      # alone once the development one is gone.
       - name: Pack and check the shared libreaktor packages
         id: shared
         if: ${{ !cancelled() && steps.libcheck.outcome == 'success' }}
@@ -408,9 +402,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # The arm64 programs built above, run on an arm64 machine: the tests, the
-  # shots, the package, and a program linked against libreaktor with the
-  # machine's own compiler. Nothing is compiled from the tree here.
   bsd-arm64:
     name: ${{ matrix.os }} ${{ matrix.version }} arm64
     needs: bsd
@@ -440,7 +431,6 @@ jobs:
         with:
           name: cross-${{ matrix.os }}-arm64
 
-      # Unpacked on the runner, before the machine reads the tree.
       - name: Unpack the arm64 build
         shell: bash
         run: |
@@ -449,7 +439,6 @@ jobs:
           chmod +x build-arm64/*
           ls -l build-arm64 dist
 
-      # The packages the machine downloads, kept so the next run installs without fetching them.
       - name: Restore the package cache
         id: pkgcache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
