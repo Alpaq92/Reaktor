@@ -852,7 +852,7 @@ push_into(bridge *b, const reaktor_a11y *a, unsigned focus_id)
     if (!reaktor_snap_update_in(b->snap, a, focus_id)) return;
     if (!UiaClientsAreListening()) return;
     raise_changes(b);
-    if (reaktor_snap_structural(a)) {
+    if (reaktor_snap_structural_in(b->snap, a)) {
         Provider *r = provider_new(b, 0);
 
         if (!r) return;

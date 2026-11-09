@@ -29,6 +29,9 @@ typedef struct reaktor_snap_diff {
 
 typedef struct reaktor_snap reaktor_snap;
 
+typedef void (*reaktor_snap_visit)(void *user, const reaktor_snap_node *n,
+                                   int index, int children);
+
 int  reaktor_snap_init(reaktor_a11y_action activate, reaktor_a11y_action focus,
                        void *user);
 
@@ -55,6 +58,8 @@ void     reaktor_snap_request_focus_in(reaktor_snap *s, unsigned id);
 void     reaktor_snap_request_activate_in(reaktor_snap *s, unsigned id);
 void     reaktor_snap_drain_in(reaktor_snap *s);
 int      reaktor_snap_diffs_in(reaktor_snap *s, const reaktor_snap_diff **out);
+void     reaktor_snap_walk_in(reaktor_snap *s, reaktor_snap_visit visit, void *user);
+int      reaktor_snap_structural_in(reaktor_snap *s, const reaktor_a11y *a);
 
 int  reaktor_snap_update(const reaktor_a11y *a, unsigned focus_id);
 int  reaktor_snap_diffs(const reaktor_snap_diff **out);
@@ -65,6 +70,7 @@ int  reaktor_snap_get(unsigned id, reaktor_snap_node *out, char *buf,
 unsigned reaktor_snap_child(unsigned parent, int last);
 unsigned reaktor_snap_sibling(unsigned id, int back);
 unsigned reaktor_snap_parent(unsigned id);
+void     reaktor_snap_walk(reaktor_snap_visit visit, void *user);
 
 unsigned reaktor_snap_hit(float x, float y);
 

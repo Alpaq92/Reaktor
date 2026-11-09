@@ -615,45 +615,31 @@ handle_value(gibus_conn *c, gibus_msg *m)
 }
 /* ((so)(so)(so)iiassusau): one node as AT-SPI's cache holds it. */
 static void
-append_item(gibus_iter *arr, unsigned id, unsigned parent, int index)
+append_item(void *arrp, const reaktor_snap_node *n, int index, int children)
 {
-    reaktor_snap_node n;
-    char buf[REAKTOR_SNAP_TEXT];
-    gibus_iter st;
+    gibus_iter *arr = (gibus_iter *)arrp, st;
     const char *name, *none = "";
     int32_t i32;
     uint32_t role;
-    int is_root = id == 0;
+    int is_root = n->id == 0;
 
-    SDL_memset(&n, 0, sizeof(n));
-    if (!is_root && !reaktor_snap_get(id, &n, buf, sizeof(buf))) return;
     gibus_iter_open(arr, GIBUS_TYPE_STRUCT, NULL, &st);
-    append_node_ref(&st, id);
+    append_node_ref(&st, n->id);
     append_node_ref(&st, 0);
     if (is_root) append_desktop_ref(&st);
-    else         append_node_ref(&st, parent);
+    else         append_node_ref(&st, n->parent);
     i32 = index;
     gibus_iter_append_basic(&st, GIBUS_TYPE_INT32, &i32);
-    i32 = child_count(id);
+    i32 = children;
     gibus_iter_append_basic(&st, GIBUS_TYPE_INT32, &i32);
-    append_interfaces(&st, &n, is_root);
-    name = is_root ? "Reaktor" : (n.name ? n.name : "");
+    append_interfaces(&st, n, is_root);
+    name = is_root ? "Reaktor" : (n->name ? n->name : "");
     gibus_iter_append_basic(&st, GIBUS_TYPE_STRING, &name);
-    role = is_root ? ATSPI_ROLE_APPLICATION : role_of(n.role);
+    role = is_root ? ATSPI_ROLE_APPLICATION : role_of(n->role);
     gibus_iter_append_basic(&st, GIBUS_TYPE_UINT32, &role);
     gibus_iter_append_basic(&st, GIBUS_TYPE_STRING, &none);
-    append_state(&st, is_root ? NULL : &n);
+    append_state(&st, is_root ? NULL : n);
     gibus_iter_close(arr, &st);
-}
-
-static void
-append_subtree(gibus_iter *arr, unsigned id, unsigned parent, int index)
-{
-    unsigned kid = reaktor_snap_child(id, 0);
-    int i = 0;
-
-    append_item(arr, id, parent, index);
-    for (; kid; kid = reaktor_snap_sibling(kid, 0)) append_subtree(arr, kid, id, i++);
 }
 
 /* Cache.GetItems: the whole tree in one reply, which a screen reader would
@@ -669,7 +655,7 @@ on_cache(gibus_conn *c, gibus_msg *m, void *user)
     if (!(r = gibus_msg_return(m))) return GIBUS_HANDLED;
     gibus_iter_init_append(r, &it);
     gibus_iter_open(&it, GIBUS_TYPE_ARRAY, "((so)(so)(so)iiassusau)", &arr);
-    append_subtree(&arr, 0, 0, -1);
+    reaktor_snap_walk(append_item, &arr);
     gibus_iter_close(&it, &arr);
     return send_reply(c, r);
 }
