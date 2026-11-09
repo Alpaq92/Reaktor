@@ -427,8 +427,8 @@ splice_fill(App *app, nk_size at, struct nk_rect clip)
     return run.last;
 }
 
-static void
-mask_rounded_fills(App *app)
+void
+reaktor_mask_rounded_fills(App *app)
 {
     struct nk_context *ctx = app->ctx;
     const struct nk_command *c = nk__begin(ctx);
@@ -510,54 +510,43 @@ reaktor_aa_fills(const App *app)
            (app->aa_mode == REAKTOR_AA_AUTO && !app->renderer_is_sw);
 }
 
-void
-reaktor_render(App *app)
+static void
+clear_rects(App *app, const SDL_Rect *rects, int n)
 {
-    if (!app->renderer_is_sw || reaktor_aa_fills(app) || !first_fill_covers(app)) {
-        SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
-                               app->clear.a);
-        SDL_RenderClear(app->ren);
-    }
-    mask_rounded_fills(app);
-    nk_sdl_render_ex(app->ctx,
-                     reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
-                     reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
-}
-
-void
-reaktor_render_list(App *app, const SDL_Rect *rects, int n)
-{
-    nk_sdl_render_area(app->ctx,
-                       reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
-                       reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
-                       rects, n);
-}
-
-/* SDL_RenderClear would ignore the clip. */
-void
-reaktor_render_area(App *app, const SDL_Rect *rects, int n)
-{
+    SDL_FRect     f[REAKTOR_DAMAGE_RECTS];
     SDL_BlendMode blend = SDL_BLENDMODE_BLEND;
     int i;
 
+    n = SDL_min(n, REAKTOR_DAMAGE_RECTS);
+    for (i = 0; i < n; i++) {
+        f[i].x = (float)rects[i].x;
+        f[i].y = (float)rects[i].y;
+        f[i].w = (float)rects[i].w;
+        f[i].h = (float)rects[i].h;
+    }
     SDL_GetRenderDrawBlendMode(app->ren, &blend);
     SDL_SetRenderDrawBlendMode(app->ren, SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
                            app->clear.a);
-    for (i = 0; i < n; i++) {
-        SDL_FRect f;
-
-        f.x = (float)rects[i].x;
-        f.y = (float)rects[i].y;
-        f.w = (float)rects[i].w;
-        f.h = (float)rects[i].h;
-        SDL_SetRenderClipRect(app->ren, &rects[i]);
-        SDL_RenderFillRect(app->ren, &f);
-    }
-    SDL_SetRenderClipRect(app->ren, NULL);
+    SDL_RenderFillRects(app->ren, f, n);
     SDL_SetRenderDrawBlendMode(app->ren, blend);
-    mask_rounded_fills(app);
-    if (n > 0) reaktor_render_list(app, rects, n);
+}
+
+void
+reaktor_render(App *app, const SDL_Rect *rects, int n)
+{
+    if (n > 0) {
+        clear_rects(app, rects, n);
+    } else if (!app->renderer_is_sw || reaktor_aa_fills(app) || !first_fill_covers(app)) {
+        SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
+                               app->clear.a);
+        SDL_RenderClear(app->ren);
+    }
+    if (!app->secondary) reaktor_text_prepare(app->ctx, app->ren);
+    nk_sdl_render_area(app->ctx,
+                       reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
+                       reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
+                       rects, n);
 }
 
 nk_size

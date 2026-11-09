@@ -449,9 +449,8 @@ SDL_Cursor *reaktor_cursor(int kind);
 int  reaktor_instance_claim(int argc, char **argv);
 void reaktor_instance_listen(App *app, void (*opened)(App *app, const char *path));
 void reaktor_instance_stop(void);
-void reaktor_render(App *app);
-void reaktor_render_list(App *app, const SDL_Rect *rects, int n);
-void reaktor_render_area(App *app, const SDL_Rect *rects, int n);
+void reaktor_mask_rounded_fills(App *app);
+void reaktor_render(App *app, const SDL_Rect *rects, int n);
 
 unsigned reaktor_damage_collect(App *app, struct nk_context *ctx);
 int  reaktor_damage_render(App *app);

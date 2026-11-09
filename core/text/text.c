@@ -91,7 +91,7 @@ typedef struct glyph_page {
     int          x, y, row;
 } glyph_page;
 
-/* By its shape entry, not the command's string: commands spliced in before the
+/* By its shape entry, not the command's string: a command pushed before the
    draw can move Nuklear's command memory and free the string. */
 typedef struct text_draw {
     int             face, entry;

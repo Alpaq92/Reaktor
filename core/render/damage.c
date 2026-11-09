@@ -656,9 +656,7 @@ check(App *app, const SDL_Rect *r, int n)
     if (!d->check && !(d->check = target(app, d->kw, d->kh))) return;
     SDL_SetRenderTarget(app->ren, d->check);
     SDL_SetRenderScale(app->ren, app->render_scale, app->render_scale);
-    SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b, app->clear.a);
-    SDL_RenderClear(app->ren);
-    reaktor_render_list(app, NULL, 0);
+    reaktor_render(app, NULL, 0);
     want = SDL_RenderReadPixels(app->ren, NULL);
     SDL_SetRenderTarget(app->ren, d->k);
     got = SDL_RenderReadPixels(app->ren, NULL);
@@ -727,14 +725,16 @@ reaktor_damage_render(App *app)
     if (!in_scope(app)) {
         drop(app);
         d->collected = 0;
-        return 0;
+        reaktor_render(app, NULL, 0);
+        return 1;
     }
     d->collected = 0;
     if (!d->k || d->kw != now->ow || d->kh != now->oh) {
         drop(app);
         if (!(d->k = target(app, now->ow, now->oh))) {
             SDL_SetRenderTarget(app->ren, NULL);
-            return 0;
+            reaktor_render(app, NULL, 0);
+            return 1;
         }
         d->kw = now->ow;
         d->kh = now->oh;
@@ -750,8 +750,9 @@ reaktor_damage_render(App *app)
         SDL_memcmp(&d->clear, &app->clear, sizeof d->clear) == 0)
         d->kind = reaktor_damage_diff(was, now, d->rect, &d->rects);
 
+    if (d->kind == REAKTOR_DAMAGE_NONE) return 0;
     if (d->kind == REAKTOR_DAMAGE_FULL) {
-        reaktor_render(app);
+        reaktor_render(app, NULL, 0);
         d->share = 1.0f;
         d->full++;
     } else {
@@ -767,9 +768,8 @@ reaktor_damage_render(App *app)
         }
         d->share = (float)covered / ((float)now->ow * (float)now->oh);
         if (d->share > d->peak) d->peak = d->share;
-        reaktor_render_area(app, r, d->rects);
+        reaktor_render(app, r, d->rects);
         if (d->checking) check(app, r, d->rects);
-        nk_sdl_frame_done(app->ctx);
         d->partial++;
     }
 

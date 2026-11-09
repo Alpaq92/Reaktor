@@ -37,10 +37,8 @@ NK_API struct nk_context*   nk_sdl_init(SDL_Window *win, SDL_Renderer *renderer,
 /* REAKTOR: an atlas Reaktor bakes itself, alpha8. */
 NK_API nk_handle            nk_sdl_font_upload(struct nk_context* ctx, const void *image, int width, int height);
 NK_API int                  nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt);
-/* REAKTOR: fill and stroke feathering apart. */
-NK_API void                 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA);
-/* REAKTOR: one pass per rectangle, each clipped to it; none is one pass. The
-   list stays until nk_sdl_frame_done. */
+/* REAKTOR: fill and stroke feathering apart, drawn only inside rects; none
+   is the whole window. The list stays until nk_sdl_frame_done. */
 NK_API void                 nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA, const SDL_Rect *rects, int n);
 NK_API void                 nk_sdl_frame_done(struct nk_context* ctx);
 NK_API void                 nk_sdl_update_TextInput(struct nk_context* ctx);
@@ -431,16 +429,7 @@ nk_sdl_run_meets(const void *vertices, const nk_draw_index *ix, nk_uint count,
     return nk_sdl_meets(x0 * sx, y0 * sy, x1 * sx, y1 * sy, a, sx, sy);
 }
 
-/* REAKTOR: fill and stroke feathering apart. */
-NK_API void
-nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
-                 enum nk_anti_aliasing line_AA)
-{
-    nk_sdl_render_area(ctx, shape_AA, line_AA, NULL, 0);
-    nk_sdl_frame_done(ctx);
-}
-
-/* REAKTOR: the end of nk_sdl_render_ex, apart. */
+/* REAKTOR: the end of nk_sdl_render, apart. */
 NK_API void
 nk_sdl_frame_done(struct nk_context* ctx)
 {
@@ -456,12 +445,9 @@ nk_sdl_frame_done(struct nk_context* ctx)
     }
 
     nk_clear(&sdl->ctx);
-    nk_buffer_clear(&sdl->ogl.cmds);
-    nk_buffer_clear(&sdl->ogl.vbuf);
-    nk_buffer_clear(&sdl->ogl.ebuf);
 }
 
-/* REAKTOR: the drawing of nk_sdl_render_ex, apart. */
+/* REAKTOR: the drawing of nk_sdl_render, apart. */
 NK_API void
 nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                    enum nk_anti_aliasing line_AA, const SDL_Rect *rects, int n)
