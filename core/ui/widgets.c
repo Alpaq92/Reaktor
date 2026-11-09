@@ -43,17 +43,6 @@ reaktor_current_font(struct nk_context *ctx)
 
 #define ICON_HAIRLINE_BELOW 20
 
-const char *
-reaktor_ionicon_src(char out[192], const char *name, const char *hex, float sw)
-{
-    if (sw < 0.0f)
-        SDL_snprintf(out, 192, "external/ionicons/src/svg/%s.svg?stroke=%s", name, hex);
-    else
-        SDL_snprintf(out, 192, "external/ionicons/src/svg/%s.svg?stroke=%s&sw=%.2f",
-                     name, hex, (double)sw);
-    return out;
-}
-
 static void
 push_clear(struct nk_context *ctx, struct nk_style_item *const *items, int n,
            struct nk_style_item clear)
@@ -70,31 +59,23 @@ pop_items(struct nk_context *ctx, int n)
 struct nk_image
 reaktor_ionicon(App *app, const char *name, int px)
 {
-    char src[192];
-
-    return icon(app, reaktor_ionicon_src(src, name, app->icon_hex,
-                              px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : -1.0f), px);
+    return ionicon_over(app, name, app->icon_col,
+                        px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : -1.0f, px, 2.0f);
 }
 
 struct nk_image
 reaktor_ionicon_exact(App *app, const char *name, int px,
                       struct nk_color stroke, float sw)
 {
-    char hex[8], src[192];
-
     if (sw <= 0.0f) sw = px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f;
-    reaktor_hex(stroke, hex);
-    return icon_over(app, reaktor_ionicon_src(src, name, hex, sw), px, 1.0f);
+    return ionicon_over(app, name, stroke, sw, px, 1.0f);
 }
 
 struct nk_image
 reaktor_ionicon_col(App *app, const char *name, int px, struct nk_color stroke)
 {
-    char hex[8], src[192];
-
-    reaktor_hex(stroke, hex);
-    return icon(app, reaktor_ionicon_src(src, name, hex,
-                                         px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f), px);
+    return ionicon_over(app, name, stroke,
+                        px < ICON_HAIRLINE_BELOW ? GLYPH_STROKE : 1.0f, px, 2.0f);
 }
 
 struct nk_color
@@ -523,28 +504,18 @@ reaktor_button_label(App *app, struct nk_context *ctx, const char *label)
     return css_button(app, ctx, "button", label);
 }
 
-const char *
-reaktor_button_src(char out[192], const char *ionicon)
-{
-    return ionicon ? reaktor_ionicon_src(out, ionicon, "#ffffff", -1.0f) : NULL;
-}
-
 int
 reaktor_button_accent_as(App *app, struct nk_context *ctx, const char *sel,
                          const char *ionicon, const char *label)
 {
-    char src[192];
-
-    return css_button_accent(app, ctx, sel, reaktor_button_src(src, ionicon), label);
+    return css_button_accent(app, ctx, sel, ionicon, label);
 }
 
 int
 reaktor_button_icon_as(App *app, struct nk_context *ctx, const char *sel,
                        const char *ionicon, const char *label)
 {
-    char src[192];
-
-    return css_button_icon(app, ctx, sel, reaktor_button_src(src, ionicon), label);
+    return css_button_icon(app, ctx, sel, ionicon, label);
 }
 
 int
@@ -564,10 +535,8 @@ float
 reaktor_button_width(App *app, struct nk_context *ctx, const char *ionicon,
                      const char *label)
 {
-    char src[192];
-
     return SDL_ceilf(css_button_content_w(app, ctx, "button", ctx->style.font,
-                                          reaktor_button_src(src, ionicon), label));
+                                          ionicon, label));
 }
 
 int

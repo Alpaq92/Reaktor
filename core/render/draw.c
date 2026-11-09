@@ -84,15 +84,23 @@ blank_image(App *app)
     return nk_image_ptr(app->blank);
 }
 
+#define ION_DIR "external/ionicons/src/svg/"
+
+struct img_key {
+    const char *src;
+    int         ion;
+    Uint32      stroke;
+    float       sw;
+};
+
 static const char *
 icon_source(App *app, const char *rel, char *out, size_t cap)
 {
-    static const char ion[] = "external/ionicons/src/svg/";
     const char *base;
     int i;
 
-    if (SDL_strncmp(rel, ion, sizeof(ion) - 1) != 0) return rel;
-    base = rel + sizeof(ion) - 1;
+    if (SDL_strncmp(rel, ION_DIR, sizeof(ION_DIR) - 1) != 0) return rel;
+    base = rel + sizeof(ION_DIR) - 1;
     for (i = 0; i < app->icon_dir_count; i++) {
         SDL_snprintf(out, cap, "%s/%s", app->icon_dirs[i], base);
         if (reaktor_asset_exists(out)) return out;
@@ -114,8 +122,27 @@ raster_surface(const char *path)
     return surf;
 }
 
+static void
+src_query(char *rel, char *ocol, char *icol, size_t cap, float *sw)
+{
+    char *opts = strchr(rel, '?');
+    const char *tok;
+
+    if (!opts) return;
+    *opts++ = 0;
+    for (tok = SDL_strtok_r(opts, "&", &opts); tok;
+         tok = SDL_strtok_r(NULL, "&", &opts)) {
+        if (SDL_strncmp(tok, "stroke=", 7) == 0)
+            parse_color(tok + 7, ocol, cap);
+        else if (SDL_strncmp(tok, "fill=", 5) == 0)
+            parse_color(tok + 5, icol, cap);
+        else if (SDL_strncmp(tok, "sw=", 3) == 0)
+            *sw = (float)SDL_atof(tok + 3);
+    }
+}
+
 static struct img_slot *
-img_lookup(App *app, const char *src, int px)
+img_lookup(App *app, const struct img_key *k, int px)
 {
     char rel[192], found[1024], ocol[16] = {0}, icol[16] = {0};
     float swk = 0.0f;
@@ -127,38 +154,38 @@ img_lookup(App *app, const char *src, int px)
     unsigned hash;
     int i, w, h, stride;
 
+    if (!k->src) return NULL;
     if (px < 8) px = 8;
     if (px > 512) px = 512;
 
-    hash = reaktor_fnv(REAKTOR_FNV ^ (unsigned)px, src);
-    for (i = 0; i < app->img_count; i++)
-        if (app->img[i].hash == hash && app->img[i].px == px &&
-            strcmp(app->img[i].src, src) == 0) {
-            app->img[i].s.seen = app->ctx->seq;
-            return app->img[i].s.tex ? &app->img[i] : NULL;
+    hash = reaktor_fnv(REAKTOR_FNV ^ (unsigned)px, k->src);
+    for (i = 0; i < app->img_count; i++) {
+        slot = &app->img[i];
+        if (slot->hash == hash && slot->px == px && slot->ion == k->ion &&
+            slot->stroke == k->stroke && slot->sw == k->sw &&
+            strcmp(slot->src, k->src) == 0) {
+            slot->s.seen = app->ctx->seq;
+            return slot->s.tex ? slot : NULL;
         }
+    }
 
     slot = (struct img_slot *)slot_take(app, app->img, sizeof app->img[0],
                                         &app->img_count, app->img_cap);
     if (!slot) slot = img_grow(app);
     if (!slot) return NULL;
 
-    SDL_strlcpy(rel, src, sizeof(rel));
-    q = strchr(rel, '?');
-    if (q) {
-        char *opts = (char *)q + 1;
-        char *cut = (char *)q;
-        const char *tok;
-        *cut = 0;
-        for (tok = SDL_strtok_r(opts, "&", &opts); tok;
-             tok = SDL_strtok_r(NULL, "&", &opts)) {
-            if (SDL_strncmp(tok, "stroke=", 7) == 0)
-                parse_color(tok + 7, ocol, sizeof(ocol));
-            else if (SDL_strncmp(tok, "fill=", 5) == 0)
-                parse_color(tok + 5, icol, sizeof(icol));
-            else if (SDL_strncmp(tok, "sw=", 3) == 0)
-                swk = (float)SDL_atof(tok + 3);
+    if (k->ion) {
+        SDL_snprintf(rel, sizeof(rel), ION_DIR "%s.svg", k->src);
+        SDL_snprintf(ocol, sizeof(ocol), "#%06x", (unsigned)k->stroke);
+        if (k->sw >= 0.0f) {
+            char num[32];
+
+            SDL_snprintf(num, sizeof(num), "%.2f", (double)k->sw);
+            swk = (float)SDL_atof(num);
         }
+    } else {
+        SDL_strlcpy(rel, k->src, sizeof(rel));
+        src_query(rel, ocol, icol, sizeof(ocol), &swk);
     }
 
     q = SDL_strrchr(rel, '.');
@@ -168,7 +195,10 @@ img_lookup(App *app, const char *src, int px)
                                     px, ocol[0] ? ocol : NULL,
                                     icol[0] ? icol : NULL, swk);
 
-    SDL_strlcpy(slot->src, src, sizeof(slot->src));
+    SDL_strlcpy(slot->src, k->src, sizeof(slot->src));
+    slot->ion    = k->ion;
+    slot->stroke = k->stroke;
+    slot->sw     = k->sw;
     slot->hash   = hash;
     slot->px     = px;
     slot->s.tex  = NULL;
@@ -236,27 +266,38 @@ slot_image(App *app, const struct img_slot *slot)
 }
 
 static struct img_slot *
-icon_slot(App *app, const char *src, int px, float over)
+icon_slot(App *app, const struct img_key *k, int px, float over)
 {
-    return img_lookup(app, src, (int)(px * reaktor_scale() * over + 0.5f));
+    return img_lookup(app, k, (int)(px * reaktor_scale() * over + 0.5f));
+}
+
+static struct img_key
+ion_key(const char *name, struct nk_color stroke, float sw)
+{
+    struct img_key k;
+
+    k.src    = name;
+    k.ion    = 1;
+    k.stroke = (Uint32)stroke.r << 16 | (Uint32)stroke.g << 8 | stroke.b;
+    k.sw     = sw;
+    return k;
 }
 
 struct nk_image
-icon_over(App *app, const char *src, int px, float over)
+ionicon_over(App *app, const char *name, struct nk_color stroke, float sw,
+             int px, float over)
 {
-    return slot_image(app, icon_slot(app, src, px, over));
+    struct img_key k = ion_key(name, stroke, sw);
+
+    return slot_image(app, icon_slot(app, &k, px, over));
 }
 
 struct nk_image
-icon(App *app, const char *src, int px)
+ionicon_ink(App *app, const char *name, struct nk_color stroke, float sw,
+            int px, float *left, float *right)
 {
-    return icon_over(app, src, px, 2.0f);
-}
-
-struct nk_image
-icon_ink(App *app, const char *src, int px, float *left, float *right)
-{
-    struct img_slot *slot = icon_slot(app, src, px, 2.0f);
+    struct img_key k = ion_key(name, stroke, sw);
+    struct img_slot *slot = icon_slot(app, &k, px, 2.0f);
 
     *left  = slot ? slot->ink_l : 0.0f;
     *right = slot ? slot->ink_r : 1.0f;
@@ -266,7 +307,9 @@ icon_ink(App *app, const char *src, int px, float *left, float *right)
 struct nk_image
 reaktor_image_file(App *app, const char *src, int px)
 {
-    return icon(app, src, px);
+    struct img_key k = { src, 0, 0, 0.0f };
+
+    return slot_image(app, icon_slot(app, &k, px, 2.0f));
 }
 
 void

@@ -21,6 +21,7 @@ struct reaktor_font {
     struct reaktor_glyph       *glyphs;
     int                         glyph_count;
     const struct reaktor_glyph *fallback;
+    unsigned char               ascii[128];
 };
 
 struct reaktor_face_src {
