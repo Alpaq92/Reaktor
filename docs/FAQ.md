@@ -53,48 +53,45 @@
 
 ### What is Reaktor, and how is it different from Nuklear?
 
-Reaktor is a toolkit for building desktop and web apps in C. Nuklear, which it
-is built on, gives you widgets and leaves everything else to
-you. Reaktor fills in the rest:
+A toolkit for desktop and web apps in C. Nuklear, which it is built on, gives
+you widgets and leaves the rest to you. Reaktor fills it in:
 
-- **The whole stack, ready to use.** Nuklear only draws; the window, input,
-  fonts and rendering are yours to wire up. Reaktor brings them, built on
-  SDL, so there is nothing to connect yourself.
+- **The whole stack.** Nuklear only draws; the window, input, fonts and
+  rendering are yours to wire up. Reaktor brings them, on SDL.
 - **A finished app, not a drawing kit.** One call opens a window and runs
-  it; you describe what's on screen and Reaktor lays it out.
+  it; you describe what is on screen and Reaktor lays it out.
 - **A look you change without recompiling.** Colors, fonts, spacing and
-  rounded corners come from ordinary CSS files, with light and dark themes.
-- **Everyone can use it.** Screen readers can read it, and every control
-  works from the keyboard.
+  rounded corners come from ordinary CSS files, light and dark.
+- **Everyone can use it.** Screen readers read it, and every control works
+  from the keyboard.
 - **Any language.** Translations, number and date formats, and scripts such
   as Japanese and Arabic.
 - **What real apps need.** Menus, file pickers, dialogs, notifications,
   undo, printing, saved settings, extra windows and a tray icon.
-- **One codebase everywhere.** Windows, macOS, Linux, the BSDs and the
-  browser.
+- **One codebase.** Windows, macOS, Linux, the BSDs and the browser.
 
-Nuklear is still there underneath when you need something it offers
-directly. See [An application](DOCUMENTATION.md#an-application).
+Nuklear is still underneath when you need it directly. See
+[An application](DOCUMENTATION.md#an-application).
 
 ### Why C99 and an immediate-mode core instead of a retained toolkit like GTK or Qt?
 
-To stay small: a 2.1 MB binary, 7–13 MB of RAM, no GPU, and nothing to
-install beside it. A frame is drawn only when something changes, so the app
-idles at 0% of a core. See [The frame loop](DOCUMENTATION.md#the-frame-loop)
+To stay small: a 2.1 MB binary, 7–13 MB of RAM, no GPU, nothing to install
+beside it. A frame is drawn only when something changes, so the app idles at
+0% of a core. See [The frame loop](DOCUMENTATION.md#the-frame-loop)
 and [PERFORMANCE.md](PERFORMANCE.md).
 
 ### Which platforms and architectures are supported?
 
 Windows, macOS, Linux, FreeBSD, OpenBSD, NetBSD and WebAssembly, on x86 and
-ARM, plus ARMv7 and RISC-V on Linux. Every pull request builds them all; the
-BSDs' ARM64 runs under emulation and may fail without failing the run. See
+ARM, plus ARMv7 and RISC-V on Linux. Every pull request builds them all; a
+job that runs under emulation (the BSDs' ARM64, Linux's ARMv7 and RISC-V) may
+fail without failing the run. See
 [Platforms](DOCUMENTATION.md#platforms).
 
 ### What license is it under?
 
-MIT. Each dependency keeps its own license, all permissive; a release ships
-them in `licenses/` with [NOTICE.md](NOTICE.md), and your app should carry
-them too.
+MIT. Each dependency keeps its own permissive license; a release ships them in
+`licenses/` with [NOTICE.md](NOTICE.md), and your app should carry them too.
 
 ---
 
@@ -109,10 +106,10 @@ axis. Leave the axis unset and the rule applies. See
 ### Why can't I use `em` or `rem`, and how far do `var()` and `color-mix()` go?
 
 You can: `em` is the body's font size and `rem` the root's. The engine also
-resolves `var()`, works out `color-mix(in srgb, …)` and `calc()` over pixels,
-and keeps the `prefers-color-scheme` branch for the active scheme. Percentages
-are not lengths, and operator selectors such as `[href^="http"]` are dropped.
-See [Styling](DOCUMENTATION.md#styling).
+resolves `var()`, `color-mix(in srgb, …)` and `calc()` over pixels, and keeps
+the `prefers-color-scheme` branch for the active scheme. Percentages are not
+lengths, and operator selectors such as `[href^="http"]` are dropped. See
+[Styling](DOCUMENTATION.md#styling).
 
 ### How do I ship my own stylesheet or theme?
 
@@ -128,9 +125,9 @@ and `--css` adds one on top. `.no_reaktor_css` drops reaktor.css. See
 ### Why does a widget have no rectangle, or the declared tree not settle?
 
 A box is placed one frame late and found again by its name. A widget whose
-label changes every frame needs a stable `.name`, and a node declared only on
-some frames renumbers everything after it. A loose label after a row belongs
-inside a named `REAKTOR_COLUMN`. See [Layout](DOCUMENTATION.md#layout).
+label changes every frame needs a stable `.name`; a node declared only on some
+frames renumbers everything after it. A loose label after a row belongs inside
+a named `REAKTOR_COLUMN`. See [Layout](DOCUMENTATION.md#layout).
 
 ### Can I still call Nuklear directly?
 
@@ -141,9 +138,9 @@ a panel, but a group or popup is its own panel. See
 
 ### How do I write a widget of my own?
 
-Lay it out by hand in a group, from the pieces in `ui.h`: colors from the
+Lay it out by hand in a group from the pieces in `ui.h`: colors from the
 sheet, rounded fills and borders, a hot rectangle so hover redraws, and a
-`reaktor_note` so screen readers and keyboard focus see it. See
+`reaktor_note` so screen readers and keyboard focus find it. See
 [Beyond the specs](DOCUMENTATION.md#beyond-the-specs).
 
 ---
@@ -152,10 +149,10 @@ sheet, rounded fills and borders, a hot rectangle so hover redraws, and a
 
 ### Where are settings stored, and when are they saved?
 
-In `settings.toml`, a TOML file in SDL's preference folder for the app.
-`.save_settings` picks when: never (the default), on quit, on every change,
-or `.save_ms` after a change. `reaktor_settings_save` writes now and
-`reaktor_settings_clear` empties them and deletes the file. See
+In `settings.toml`, in SDL's preference folder for the app. `.save_settings`
+picks when: never (the default), on quit, on every change, or `.save_ms`
+after a change. `reaktor_settings_save` writes now; `reaktor_settings_clear`
+empties them and deletes the file. See
 [Services](DOCUMENTATION.md#services).
 
 ### How do settings work on the web?
@@ -180,8 +177,8 @@ followed by a frame. See [Services](DOCUMENTATION.md#services).
 
 ### How do I add undo, notifications or printing?
 
-Push a step with an undo and a redo callback after each change, and Ctrl+Z
-and Ctrl+Y take it back and forth, merging typing into one step if asked.
+Push a step with undo and redo callbacks after each change; Ctrl+Z and Ctrl+Y
+take it back and forth, merging typing into one step if asked.
 `reaktor_notify` shows a message outside the window. `reaktor_print` and
 `reaktor_print_pdf` lay pages out as the window does and print them or write
 a PDF. See [Services](DOCUMENTATION.md#services).
@@ -192,7 +189,7 @@ a PDF. See [Services](DOCUMENTATION.md#services).
 
 ### How do I build without CMake on PATH, or for x86 or ARM64?
 
-`./build.ps1` on Windows finds MSVC's CMake; `./build.sh` elsewhere.
+`./build.ps1` on Windows finds Visual Studio's CMake; `./build.sh` elsewhere.
 `./build.ps1 -Arch x86` or `-Arch arm64` builds that architecture into
 `build-<arch>`; ARM64 needs Visual Studio's ARM64 tools. See
 [Platforms](DOCUMENTATION.md#platforms).
@@ -200,28 +197,28 @@ a PDF. See [Services](DOCUMENTATION.md#services).
 ### How do I turn off accessibility, localization or text shaping?
 
 `-DREAKTOR_A11Y=OFF`, `-DREAKTOR_LOCALE=OFF` or `-DREAKTOR_TEXT=OFF`. Each
-swaps in a stub, and pixels and `--a11y-dump` stay identical apart from what
-the module drew. CMake keeps the option until you pass `=ON`. See
+swaps in a stub; pixels and `--a11y-dump` stay identical apart from what the
+module drew. CMake keeps the option until you pass `=ON`. See
 [Build options](DOCUMENTATION.md#build-options).
 
 ### How do I install libreaktor and link against it?
 
-Take the release's archive or the `.deb` or `.rpm`, or run
+Take the release's archive, `.deb` or `.rpm`, or run
 `sh tools/libreaktor-pkg.sh -i`. Then `find_package(reaktor 0.10 REQUIRED)`
 and link `reaktor::reaktor`, or use `pkg-config --cflags --libs reaktor`. To
-build it into your tree instead, `add_subdirectory` the checkout and call
+build it into your tree, `add_subdirectory` the checkout and call
 `reaktor_add_app`. See [In your own project](DOCUMENTATION.md#in-your-own-project).
 
 ### How do I build and host the WebAssembly version?
 
-`./build-wasm.sh` (or `.ps1`) with emsdk writes the pages into `build-wasm/`;
-serve that folder over HTTP, since opening the file directly will not load.
+`./build-wasm.sh` (or `.ps1`) with emsdk writes the pages into `build-wasm/`.
+Serve that folder over HTTP; opened as a file, a page will not load.
 See [The web build](DOCUMENTATION.md#the-web-build).
 
 ### Why is the web page blank in a background tab?
 
 The loop waits on `requestAnimationFrame`, which a hidden tab, a minimized
-window or an off-screen pane never fires. It draws once it is visible.
+window or an off-screen pane never fires. It draws once visible.
 
 ---
 
@@ -233,39 +230,37 @@ window or an off-screen pane never fires. It draws once it is visible.
 ./build/showcase --tab 7 --theme dark --shot a.bmp --a11y-dump a.txt
 ```
 
-Any app takes `--shot` and `--a11y-dump`; the dump lists every node with its
-bounds, so two dumps diff to the pixel. Settings are not read under either.
+Any app takes `--shot` and `--a11y-dump`. The dump lists every node with its
+bounds, so two dumps diff to the pixel. Neither reads settings.
 See [Command-line flags](DOCUMENTATION.md#command-line-flags).
 
 ### Should my app use a GPU renderer?
 
 Usually not. `software`, the default, needs no GPU, uses about a tenth of the
-memory and starts fastest. A GPU
-renderer pays off in long, continuous animation: `--renderer gpu` takes
-Metal on macOS; on Windows OpenGL where the build has it, else Direct3D 12,
-else 11, so `directx` on a default build; on Linux and the BSDs OpenGL, else
-OpenGL ES 2, neither built unless `REAKTOR_RENDERERS` names it. Expect six
-to thirteen times the memory. See
+memory and starts fastest. A GPU renderer pays off in long, continuous
+animation. `--renderer gpu` takes Metal on macOS; on Windows OpenGL where the
+build has it, else Direct3D 12, else 11, so `directx` on a default build; on
+Linux and the BSDs OpenGL, else OpenGL ES 2, neither built unless
+`REAKTOR_RENDERERS` names it. Expect six to thirteen times the memory. See
 [The renderer](DOCUMENTATION.md#the-renderer).
 
 ### Why is the frame time high on a machine with no GPU?
 
-Most of it is usually rasterizing: SDL queues what it is asked to draw and fills the
-pixels when that queue is flushed. The rest is mostly copying the frame to the
-window. The Diagnostics page and `bench --no-vsync` split build, render and
-present. See [The renderer](DOCUMENTATION.md#the-renderer).
+Most of it is usually rasterizing: SDL queues what it is asked to draw and
+fills the pixels when the queue is flushed. Most of the rest is copying the
+frame to the window. The Diagnostics page and `bench --no-vsync` split build,
+render and present. See [The renderer](DOCUMENTATION.md#the-renderer).
 
 ### Why does Japanese or Arabic text draw differently from Latin?
 
-A string with a character the font atlas lacks is drawn by the Text module,
-which orders, shapes and takes glyphs from fallback fonts; the rest is
-Nuklear's. Arabic, Hebrew or an Indic script needs a font that has it, passed
-with `--font-fallback` or `.font_fallbacks`. See [Text](DOCUMENTATION.md#text).
+The Text module draws a string with a character the atlas lacks: it orders,
+shapes and takes glyphs from fallback fonts. The rest is Nuklear's. Arabic,
+Hebrew or an Indic script needs a font that has it, passed with
+`--font-fallback` or `.font_fallbacks`. See [Text](DOCUMENTATION.md#text).
 
 ### How do I report a bug?
 
 Open an issue at [github.com/Alpaq92/Reaktor/issues](https://github.com/Alpaq92/Reaktor/issues)
-with the Reaktor version (`reaktor_version()`), the system and architecture,
-the steps that show it, and what you expected. For anything drawn wrong,
-attach a `--shot` and an `--a11y-dump` of it; for a crash, what the
-`--console debug` log printed.
+with the Reaktor version (`reaktor_version()`), system and architecture, the
+steps that show it, and what you expected. For anything drawn wrong, attach a
+`--shot` and an `--a11y-dump`; for a crash, what `--console debug` printed.

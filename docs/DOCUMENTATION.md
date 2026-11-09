@@ -15,7 +15,7 @@
 
 ## An application
 
-`main` makes one call, which returns the exit code when the app quits; on the
+`main` makes one call, which returns the exit code when the app quits. On the
 web it returns at once, and a second call returns 1.
 
 ```c
@@ -39,13 +39,13 @@ keys mean. Only `.page` is required. `launchApp` is an inline alias of
 `reaktor_launch_app`, left out under `REAKTOR_NO_SHORT_NAMES`.
 [`samples/simple/simple.c`](../samples/simple/simple.c) is a whole application.
 
-`reaktor/reaktor.h` is the whole public API: it includes the rest of
-[`include/reaktor/`](../include/reaktor/) — Nuklear as Reaktor configures and names it,
-`launch.h`, `widgets.h`, `keys.h`, `a11y.h`, `ui.h`, `anim.h`, `locale.h`,
-`style.h` and `text.h` — and nothing from `core/`. `App` is opaque:
+`reaktor/reaktor.h` is the whole public API. It includes the rest of
+[`include/reaktor/`](../include/reaktor/) (Nuklear as Reaktor configures and
+names it, `launch.h`, `widgets.h`, `keys.h`, `a11y.h`, `ui.h`, `anim.h`,
+`locale.h`, `style.h` and `text.h`) and nothing from `core/`. `App` is opaque;
 the calls below ask it what an application may know. Every sample includes
 only these headers, and MSVC builds an app with implicit declarations as
-errors, so an internal function cannot slip back in.
+errors, so no internal function slips back in.
 
 | Hook | When |
 | --- | --- |
@@ -53,7 +53,7 @@ errors, so an internal function cannot slip back in.
 | `start(app, argc, argv)` | Once, after the window and fonts exist, with the runtime's flags removed; non-zero ends the launch with that code |
 | `key(app, event)` | A key press in any window, with that window's App, before focus navigation; non-zero keeps the key and its text from everything else |
 | `closing(app, reason)` | Before quitting; non-zero refuses a close button (`REAKTOR_QUIT_WINDOW`), `reaktor_request_quit` or macOS's Quit (`_APP`) and a first Ctrl+C (`_CONSOLE`). SIGTERM (`_SIGNAL`) and logoff (`_SESSION`) ask but cannot be refused |
-| `stop(app)` | Once before teardown when `start` succeeded, at logoff and page unload too — the only place for cleanup |
+| `stop(app)` | Once before teardown when `start` succeeded, at logoff and page unload too; the only place for cleanup |
 | `file_opened(app, path)` | A file dropped on a window, with that window's App; with `.single_instance`, also each file a later launch hands over. Unset, no window is a drop target, which on Windows spares COM's drag-and-drop: three DLLs and three threads |
 
 | Call | Effect |
@@ -79,12 +79,11 @@ The `set` calls are for the main thread, take effect at the next frame, and do
 nothing when nothing changes.
 
 **Asking before closing.** `.confirm_close` is a question, such as "Close
-without saving?", that the runtime asks in a modal floater with Cancel and
-Quit whenever `closing` lets a quit it could refuse go ahead, bringing a
-minimized or hidden window back to ask it. Quit quits with code 0 and asks
-nothing more; a second Ctrl+C still quits at once.
-`reaktor_set_confirm_close` copies a new question, and `NULL` stops asking and
-closes the floater if it is open.
+without saving?". Whenever `closing` lets a refusable quit go ahead, the
+runtime asks it in a modal floater with Cancel and Quit, bringing a minimized
+or hidden window back first. Quit quits with code 0 and asks nothing more; a
+second Ctrl+C still quits at once. `reaktor_set_confirm_close` copies a new
+question; `NULL` stops asking and closes the floater if it is open.
 
 ### Services
 
@@ -101,11 +100,12 @@ followed by a frame.
 | `reaktor_setting(key)`, `reaktor_setting_set(key, value)` | A string kept between runs; `NULL` removes it. A key is any non-empty string; `window` and `window.maximized` are two keys |
 | `reaktor_settings_save()`, `reaktor_settings_clear()` | Write the settings now, whatever the mode; empty them and delete the file |
 
-Settings are a TOML file, `settings.toml` in SDL's preference folder for `.id`
-(or `.name`), read by [toml-c](https://github.com/arp242/toml-c) and written by
+Settings are `settings.toml` in SDL's preference folder for `.id` (or
+`.name`), read by [toml-c](https://github.com/arp242/toml-c) and written by
 the runtime: one quoted key and string per line, `"window.maximized" = "1"`.
 A hand-written table reads as dotted keys, so `[window]` with `maximized = 1`
-is the same setting; names match case-sensitively. `.save_settings` says when it is written:
+is the same setting; names are case-sensitive. `.save_settings` says when it
+is written:
 
 | `.save_settings` | Written |
 | --- | --- |
@@ -118,63 +118,58 @@ Each write goes to a new file renamed over the old, so a crash mid-write
 leaves the last one whole. On the web the same `settings.toml` lives in the
 browser's IndexedDB: `tools/web-pre.js` mounts it with Emscripten's IDBFS and
 loads it before `main` runs, every write is synced back, and saving on quit
-means saving on change. Clearing site data, or a private window closing,
-loses it. `.remember_window` stores the
-main window's position, size and maximized state as settings, so it needs a
-save mode to last, and restores them at start. Under `--shot` and
-`--a11y-dump` settings are neither read nor written, so a user's file cannot
-change a test.
+means saving on change. Clearing site data, or closing a private window,
+loses it. `.remember_window` stores the main window's position, size and
+maximized state as settings, so it needs a save mode to last, and restores
+them at start. `--shot` and `--a11y-dump` neither read nor write settings, so
+a user's file cannot change a test.
 
 **One copy at a time.** With `.single_instance`, a launch that finds the
-application already running does not open a window: it hands its arguments,
-made absolute, to the running copy and exits with 0. The running copy gets
-each as `file_opened`, on the main thread, and comes to the front, restored
-if it was minimized. The copies find each other by `.id` (or `.name`), per
-user: a named mutex and a named pipe on Windows, a Unix socket in the
-application's preference folder on macOS, Linux and the BSDs, replaced if a
-copy that crashed left it behind. Launches that race each other settle on
-one. `--new-instance` starts a separate copy anyway, and so do `--shot` and
-`--a11y-dump`, which are tests. On the web there is one page per tab and the
-field is ignored. On macOS, Finder and the Dock already hand a running app
-its files, through the same `file_opened`.
+application running opens no window: it hands its arguments, made absolute,
+to the running copy and exits with 0. The running copy gets each as
+`file_opened`, on the main thread, and comes to the front, restored if
+minimized. The copies find each other by `.id` (or `.name`), per user: a
+named mutex and a named pipe on Windows, a Unix socket in the application's
+preference folder on macOS, Linux and the BSDs, replaced if a crashed copy
+left it behind. Racing launches settle on one. `--new-instance` starts a
+separate copy anyway, and so do `--shot` and `--a11y-dump`, which are tests.
+The web ignores the field: there is one page per tab. On macOS, Finder and
+the Dock already hand a running app its files, through the same
+`file_opened`.
 
 **Notifications.** `reaktor_notify(app, &(reaktor_notification){ .title,
 .text })` tells the user something outside the window and answers 1 when it
 was sent. On Windows it is a balloon from an icon of the app's own, which
-Windows 10 and 11 show as a toast headed by the program's name, and the icon
-goes ten seconds later; on Linux and the BSDs, a `Notify` call to
+Windows 10 and 11 show as a toast headed by the program's name; the icon goes
+ten seconds later. On Linux and the BSDs it is a `Notify` call to
 `org.freedesktop.Notifications` over D-Bus; on macOS,
-`UNUserNotificationCenter`, which answers 0 outside an app bundle; on the web,
-the browser's `Notification`, after it asks for permission once. A click on
-one is not reported.
+`UNUserNotificationCenter`, which answers 0 outside an app bundle; on the
+web, the browser's `Notification`, after asking permission once. Clicks are
+not reported.
 
 **Printing.** `reaktor_print(app, &(reaktor_print_spec){ ... })` prints pages
-the application lays out, and `reaktor_print_pdf(app, path, &spec)` writes
-them to a PDF. `.page(app, ctx, index, w, h, user)` draws page `index` of
-`.pages` (up to 64) as a page hook would, `w` by `h` points: `.w` and `.h`, A4
-when unset. Each page is laid out and drawn as on screen, in a hidden window
-at `.dpi` (200 unset), so it carries the window's look: a page that should be
-white paints itself white. Both calls answer 1 when the job is queued; it runs
-between frames, and `.done(app, ok, user)` says how it went. A page is an
-image in the PDF, a JPEG from plutovg's writer that `runtime/print.c` wraps
-in the file itself, so its text is not selectable. To print, Windows shows
-its print dialog and draws the pages to the printer; macOS opens its print
-dialog on the PDF; Linux and the BSDs open the PDF in the user's viewer, which
-prints it. The web build does not print.
+the application lays out; `reaktor_print_pdf(app, path, &spec)` writes them
+to a PDF. `.page(app, ctx, index, w, h, user)` draws page `index` of `.pages`
+(up to 64) as a page hook would, `w` by `h` points: `.w` and `.h`, A4 when
+unset. Each page is laid out and drawn as on screen, in a hidden window at
+`.dpi` (200 unset), so it carries the window's look: a page that should be
+white paints itself white. Both calls answer 1 when the job is queued; it
+runs between frames, and `.done(app, ok, user)` says how it went. A page is an
+image in the PDF, a JPEG from plutovg's writer that `runtime/print.c` wraps,
+so its text is not selectable. To print, Windows shows its print dialog and
+draws the pages to the printer; macOS opens its print dialog on the PDF;
+Linux and the BSDs open the PDF in the user's viewer. The web build does not
+print.
 
 **Undo.** Each window keeps a stack of steps. `reaktor_undo_push(app,
 &(reaktor_undo_step){ .label, .undo, .redo, .free, .data, .merge })` records
 one the application has already done: `.undo(data)` and `.redo(data)` take it
 back and do it again, and `.free(data)` runs when the step is dropped. Steps
 pushed between `reaktor_undo_group(app, 1)` and `reaktor_undo_group(app, 0)`
-undo as one, and so do consecutive steps with the same nonzero `.merge`, as
-typing does. `reaktor_undo` and `reaktor_redo` take one step back or forward,
-`reaktor_undo_label` and `reaktor_redo_label` name it for a menu entry,
-`reaktor_undo_saved` marks where the document was saved and
-`reaktor_undo_dirty` says whether it has changed since. A new step drops the
-ones that could be redone. Ctrl+Z, and Ctrl+Y or Ctrl+Shift+Z, reach the stack
-when no field is being edited, as a field keeps its own history; the `key`
-hook sees them first.
+undo as one, as do consecutive steps with the same nonzero `.merge`, as typing
+does. A new step drops the ones that could be redone. Ctrl+Z, and Ctrl+Y or
+Ctrl+Shift+Z, reach the stack when no field is being edited, since a field
+keeps its own history; the `key` hook sees them first.
 
 | Call | Effect |
 | --- | --- |
@@ -186,9 +181,9 @@ hook sees them first.
 | `reaktor_undo_clear(app)` | Drop every step |
 
 Clipboard, URLs and logging are SDL's: `SDL_SetClipboardText`,
-`SDL_GetClipboardText`, `SDL_OpenURL` (behind a link's `.url`), `SDL_Log`;
-`.log` names a file that gets a copy of every line, with the time, priority
-and category, appended; `--log <path>` overrides it.
+`SDL_GetClipboardText`, `SDL_OpenURL` (behind a link's `.url`), `SDL_Log`.
+`.log` names a file that gets a copy of every line appended, with the time,
+priority and category; `--log <path>` overrides it.
 
 **Console.** `.console` is `REAKTOR_CONSOLE_NONE` (the window alone),
 `_PARENT` (on Windows, the terminal it was started from) or `_DEBUG` (that
@@ -201,21 +196,21 @@ renderer too, which it pays for) or `_OFF`. `--aa <auto|on|off>` overrides it.
 Rounded fills are masks and look the same under each.
 
 **Assets.** `.css` adds up to four sheets after Water.css and reaktor.css
-(`.no_reaktor_css` drops reaktor.css), `.font` and `.font_bold` replace
-Aileron (which stands in for one that cannot be read, or that is cut short or
-not a font at all), `.font_fallbacks` feed the Text module, `.icon_dirs` are searched for
-`<name>.svg` before Ionicons, and `.window.icon` replaces the mark. Each is a
-path, absolute or under the `.reaktor-root` marker, or named bytes (`.name`,
-`.data`, `.size`) that outlive the run; `.assets` registers more, and one named
-`icons/<name>.svg` stands in for that Ionicon. A `.window.icon` that cannot be
-read leaves the mark. `--css`, `--font`, `--font-bold` and `--icons` beat the
-struct.
+(`.no_reaktor_css` drops reaktor.css). `.font` and `.font_bold` replace
+Aileron, which stands in for one that cannot be read, is cut short or is not
+a font. `.font_fallbacks` feed the Text module, `.icon_dirs` are searched for
+`<name>.svg` before Ionicons, and `.window.icon` replaces the mark (kept if
+the icon cannot be read). Each is a path, absolute or under the
+`.reaktor-root` marker, or named bytes (`.name`, `.data`, `.size`) that
+outlive the run; `.assets` registers more, and one named `icons/<name>.svg`
+stands in for that Ionicon. `--css`, `--font`, `--font-bold` and `--icons`
+beat the struct.
 
 ## Widgets
 
-A widget is a call taking a designated-initializer spec, every field optional.
-It draws, reports itself to the accessibility tree and answers in your scope;
-there is no object, handle or id to keep.
+A widget is a call taking a designated-initializer spec, every field
+optional. It draws, reports itself to the accessibility tree and answers in
+your scope; there is no object, handle or id to keep.
 
 ```c
 if (reaktor_button(&(reaktor_button_spec){
@@ -255,41 +250,42 @@ again), `.style` (a selector to read instead of the widget's own) and `.box`
 | Tree | `reaktor_tree` | when another node is chosen | `.count`, `.parent(node, user)`, `.label(node, user)`, `.icon(node, user)`, `.open` (a flag per node), `.selected` (a node), `.row_h` |
 | Splitter | `reaktor_splitter` | while dragged | `.value` (the first child's share, 0 to 1), `.lo`, `.hi` (0.1 and 0.9 unset), `.vertical` |
 
-The icon is 1.125 times the button font's height, 18 px at 16 px, unless the sheet sizes `button .icon` with `width`; its `margin-right` is then the gap. A `min-width` on the button's rule is the least `.fit_content` takes.
+The icon is 1.125 times the button font's height, 18 px at 16 px, unless the
+sheet sizes `button .icon` with `width`; its `margin-right` is then the gap.
+A `min-width` on the button's rule is the least `.fit_content` takes.
 
 **An icon gives way to its label**: a button too narrow for both draws the
-label alone. `.fit_content` makes it as large as both need, as GTK and Qt size
-a button: the label, the icon's drawn width and 12 px between them, plus half
-the sheet's padding and its border on each side, since an icon tightens a
-button as it does GTK's. At any width the icon and label are centered together
-on the icon's drawn pixels, since an Ionicon sits anywhere in its square.
+label alone. `.fit_content` sizes it as GTK and Qt do: the label, the icon's
+drawn width and 12 px between them, plus half the sheet's padding and its
+border on each side, since an icon tightens a button as in GTK. At any width
+the icon and label are centered together on the icon's drawn pixels, since an
+Ionicon sits anywhere in its square.
 
-**A field writes back** its bytes into `.buf` and its length into `*.len`, and
-reads both next frame, so the length must be the field's own: one from
-anywhere else reseeds the buffer. Ctrl+Z and Ctrl+R undo and redo from a
-history each field keeps; editing another field, or changing the value in
-code, starts it over.
+**A field writes back** its bytes into `.buf` and its length into `*.len`,
+and reads both next frame, so the length must be the field's own: one from
+anywhere else reseeds the buffer. Ctrl+Z and Ctrl+R undo and redo from each
+field's own history; editing another field, or changing the value in code,
+starts it over.
 
 **A field can grow.** Given `.heap` and `.heap_cap` instead of `.buf` and
-`.cap`, it keeps the buffer, from `SDL_malloc` or `NULL`, large enough for what
-is typed or pasted, and the caller frees it with `SDL_free`. `.line_numbers`
+`.cap`, it keeps the buffer (from `SDL_malloc`, or `NULL`) large enough for
+what is typed or pasted; the caller frees it with `SDL_free`. `.line_numbers`
 draws a gutter of line numbers beside a multiline field.
 `reaktor_field_select(app, buf, from, to)` focuses the field whose buffer is
 `buf` and selects bytes `from` to `to`, scrolling them into view: a find bar
 is a search over the buffer and this call, as in the notepad sample. Lines do
 not wrap: Nuklear's editor lays text out in hard lines only.
 
-**A date or time is picked on wheels.** The field is drawn as an input,
-from `input`, and shows the value as the language writes a short date or
-time, or a hint (`date.day`, `date.month`, `date.year`, `time.hour`,
-`time.minute`) until one is set. A click or Enter opens wheels over it, a
-dialog surface with a wheel per part in the language's order: days, months
-and hours loop, years stop at `.min_year` and `.max_year` (1900 and 2100
-unset). Scroll a wheel, click a row, or use the arrows: Up and Down turn the
-focused wheel, Left and Right move between wheels. Enter or OK
-(`button.ok`) sets the value and answers 1; Escape, Cancel (`button.cancel`)
-or a click outside leaves it. Days follow the
-month and year on the wheels. Month names are the stand-alone form,
+**A date or time is picked on wheels.** The field is drawn from `input` and
+shows the value as the language writes a short date or time, or a hint
+(`date.day`, `date.month`, `date.year`, `time.hour`, `time.minute`) until one
+is set. A click or Enter opens a dialog surface over it with a wheel per
+part, in the language's order: days, months and hours loop, years stop at
+`.min_year` and `.max_year` (1900 and 2100 unset), and days follow the month
+and year. Scroll a wheel, click a row, or use the arrows: Up and Down turn the
+focused wheel, Left and Right move between wheels. Enter or OK (`button.ok`)
+sets the value and answers 1; Escape, Cancel (`button.cancel`) or a click
+outside leaves it. Month names are the stand-alone form,
 `date.months.standalone`, as Polish names a month alone differently from one
 in a date.
 
@@ -297,35 +293,34 @@ in a date.
 everything, styled by `.tooltip`.
 
 **A list draws only the rows on screen.** `.cell` is asked for each, and the
-first column names the row. With `.selected`, a click picks a row and the
-selection follows keyboard focus; the arrow keys move it, scrolling the row
-into view. Without it the rows are plain text. Unsized, a list shows up to
-eight rows and fills its row. Colors come from `thead`, `th`, `td`,
+first column names the row. With `.selected`, a click picks a row, the
+selection follows keyboard focus, and the arrow keys move it, scrolling the
+row into view; without it the rows are plain text. Unsized, a list shows up
+to eight rows and fills its row. Colors come from `thead`, `th`, `td`,
 `--table`, `--table-bg` and `--table-bg-alt`, which reaktor.css takes from
 Water.css's `--links`, `--background-body` and `--background-alt`. The header
-row is `thead`'s background, or `--table` without one, as the sheet writes it.
+row is `thead`'s background, or `--table` without one.
 
 **A row can be dragged** out of a list that names a `.drag` kind, a string.
-Its first column follows the pointer as a tooltip would, and any list of the
-same kind under the pointer, the same one included, draws a line where it
-would land. On release that list calls `.dropped(from, item, at, user)`:
-`from` is the name of the list it left, `item` its row there, and `at` the
-place between this list's rows it lands, counted before the row is taken out.
-Moving it is the caller's, so a list can copy instead.
+Its first column follows the pointer like a tooltip, and any list of the same
+kind under the pointer, itself included, draws a line where it would land. On
+release that list calls `.dropped(from, item, at, user)`: `from` names the
+list it left, `item` is its row there, and `at` the place between this list's
+rows where it lands, counted before the row is taken out. Moving it is the
+caller's job, so a list can copy instead.
 
 **A tree is a list of its nodes in depth-first order**, each naming its
-parent, or -1 for a root; a node with children is followed by them. `.open`
-holds a flag per node, written when a branch opens or closes, and `.selected`
-a node. It is drawn as a list is, only the rows on screen, styled the same,
-each indented under its parent with a chevron on every branch. Up and Down
-move between rows; Right opens a branch or steps into it, Left closes it or
-steps out to its parent; a click on a chevron opens or closes it. Screen
-readers see tree items with their expanded and selected states.
+parent, or -1 for a root; a node's children follow it. `.open` holds a flag
+per node, written when a branch opens or closes, and `.selected` a node. It
+is drawn and styled as a list, only the rows on screen, each indented under
+its parent with a chevron on every branch. Up and Down move between rows;
+Right opens a branch or steps into it, Left closes it or steps out to its
+parent; a click on a chevron opens or closes it. Screen readers see tree
+items with their expanded and selected states.
 
 **A splitter** writes the first child's share; pass it to both children's
-`.weight`. It drags, and with focus the arrow keys step it by 5%, moving the
-divider the way they point. Screen
-readers hear a slider:
+`.weight`. It drags, and with focus the arrow keys step it by 5% the way they
+point. Screen readers hear a slider:
 
 ```c
 REAKTOR_ROW(.h = 300) {
@@ -382,10 +377,11 @@ if (reaktor_sidebar(&(reaktor_sidebar_spec){
 `key` hook still handles it), `.checked` (toggled on choice, drawn as a dot),
 `.disabled` and `.on_press`. `.items` and `.count` make it a submenu.
 `.custom(app, ctx, user)` makes it a row of its own: the callback draws one
-widget into the row with the App and context of the window it is in,
-`.height` and `.width` size it, and `.on_press.user` is its `user`. An entry with neither a label nor `.custom` is a separator. The call
-answers 1 when an entry is chosen, writing the entry to `.picked`, its menu
-to `.picked_menu` and its place among its siblings to `.picked_item`.
+widget into the row with the App and context of its window, `.height` and
+`.width` size it, and `.on_press.user` is its `user`. An entry with neither a
+label nor `.custom` is a separator. The call answers 1 when an entry is
+chosen, writing the entry to `.picked`, its menu to `.picked_menu` and its
+place among its siblings to `.picked_item`.
 
 ```c
 static const reaktor_menu_entry zoom[] = {
@@ -411,15 +407,14 @@ hovering its entry. Screen readers see a menu bar, menus and menu items with
 their checked, expanded and disabled states.
 
 **A menu is a window of its own.** On the desktop each open menu and submenu
-is an SDL popup-menu window, so it can reach past the main window's edge; it
-never takes keyboard focus, so the keys still reach the main window and the
-menu. A submenu opens to the right of its entry, or to the left when the
-display has no room, and a menu that would run off the bottom opens above its
-title. The web has no such windows, so there the menu is a popup in the page,
-fitted the same way inside the canvas, as it is if a window cannot be made.
-The windows are drawn after the frame, from a copy of each open menu's
-entries taken by the call, so the arrays need not outlive it; up to 32
-entries a menu are shown. Titles are Nuklear's menu button, which
+is an SDL popup-menu window, so it can reach past the main window's edge. It
+never takes keyboard focus, so keys still reach the main window and the menu.
+A submenu opens to the right of its entry, or to the left when the display
+has no room, and a menu that would run off the bottom opens above its title.
+On the web, or when a window cannot be made, the menu is a popup in the page,
+fitted the same way inside the canvas. The windows are drawn after the frame
+from a copy of each open menu's entries, so the arrays need not outlive the
+call; a menu shows up to 32 entries. Titles are Nuklear's menu button, which
 `style_map.c` styles.
 
 ## Layout
@@ -443,10 +438,10 @@ REAKTOR_COLUMN(.gap = 10.0f) {
 | `REAKTOR_COLUMN(...)` | Top to bottom |
 | `REAKTOR_FREE(...)` | Each by its own margins; they may overlap |
 
-`reaktor_gap(w, h)` is empty space of a size, and `reaktor_soak()` empty
-space taking the width a row has left. Inside a container,
-`reaktor_box_rect(&r)` gives its rectangle once placed, and `reaktor_box_id()`
-its id, which is what [animation](#animation) keys on.
+`reaktor_gap(w, h)` is empty space of a size, `reaktor_soak()` empty space
+taking the width a row has left. Inside a container, `reaktor_box_rect(&r)`
+gives its rectangle once placed, and `reaktor_box_id()` its id, which
+[animation](#animation) keys on.
 
 A container's fields, and a widget's `.box`:
 
@@ -458,39 +453,40 @@ A container's fields, and a widget's `.box`:
 | `.ml .mt .mr .mb` | Margins |
 | `.flags` | `REAKTOR_LAY_FILL_X`, `_FILL_Y`, `_FILL` (both), `_WRAP`, `_CENTER_X`, `_CENTER_Y`, `_PACK_CENTER`, `_PACK_END`, `_PACK_SPREAD` |
 | `.name` | How a container is found again; a widget uses its spec's `.name` |
-| `.mark` | A handle for a [scripted test](#testing-an-application), on a widget or a container: `"#mark"` finds it, `"#mark Delete"` finds Delete inside it, and no reader hears it. One mark may sit on many widgets, every row of a list for one; up to 63 characters are kept. Marks are kept apart from the tree, in a table made only once something sets one; `--a11y-dump` lists them after the tree |
+| `.mark` | A handle for a [scripted test](#testing-an-application), on a widget or a container: `"#mark"` finds it, `"#mark Delete"` finds Delete inside it, and no reader hears it. One mark may sit on many widgets, such as every row of a list; up to 63 characters are kept. Marks live apart from the tree, in a table made only once something sets one; `--a11y-dump` lists them after the tree |
 
 So `.w` alone is fixed, `.w` with `FILL_X` a minimum that grows, and `FILL_X`
-with `.weight` a fraction. The outermost container is as wide as the panel it
-is declared in, filling or not, and ignores its own margins: wrap it in
-`REAKTOR_FREE` to inset it.
+with `.weight` a fraction. The outermost container is as wide as its panel,
+filling or not, and ignores its own margins: wrap it in `REAKTOR_FREE` to
+inset it.
 
 **A box is placed one frame late.** A frame draws into the rectangles the one
-before computed, found by accessibility id, and a box seen for the first time
-waits a frame. So a size that depends on content takes a frame to settle, and
-a widget whose text changes every frame needs a stable `.name` or it never has
-a rectangle. The first frame after the stylesheets load counts as unsettled
-too, since its rectangles were laid out with the old sheet's sizes. After
-sixteen unsettled frames the runtime stops redrawing and logs the box.
+before computed, found by accessibility id, and a new box waits a frame. So a
+size that depends on content takes a frame to settle, and a widget whose text
+changes every frame needs a stable `.name` or never gets a rectangle. The
+first frame after the stylesheets load is unsettled too, laid out with the
+old sheet's sizes. After sixteen unsettled frames the runtime stops redrawing
+and logs the box.
 
 ## Layers
 
 Above the page, inside the main window: floaters, then toasts. Windows and
 the tray are the system's. Their specs are in
-[`include/reaktor/launch.h`](../include/reaktor/launch.h), except the toast's,
-in [`include/reaktor/ui.h`](../include/reaktor/ui.h); all of them are main-thread calls.
+[`include/reaktor/launch.h`](../include/reaktor/launch.h), except the toast's
+in [`include/reaktor/ui.h`](../include/reaktor/ui.h); all are main-thread
+calls.
 
 ### Floaters
 
-A dialog inside the main window. `reaktor_floater_open` centers one whose body
-is `.w` by `.h`, as CSS sizes a box, with the `dialog` rule's padding around it;
-it answers its id, and calls `.body` every frame inside the `dialog` rule's
-look, with the body's size; `.title` is its accessible name. A `.modal` one dims the window by
-`--dialog-backdrop` and holds everything under it — the page, the toasts,
-earlier floaters — until it closes, and Tab stays with it and the floaters
-opened after it. `reaktor_floater_close` closes one, from its own body too,
-and runs `.closed`. `.body` and `.closed` get the main window's App.
-`reaktor_floater_is_open` answers whether an id is still open.
+A dialog inside the main window. `reaktor_floater_open` centers one whose
+body is `.w` by `.h`, as CSS sizes a box, with the `dialog` rule's padding
+around it, and answers its id. It calls `.body` every frame inside the
+`dialog` rule's look, with the body's size; `.title` is its accessible name.
+A `.modal` one dims the window by `--dialog-backdrop` and holds everything
+under it (the page, the toasts, earlier floaters) until it closes; Tab stays
+with it and the floaters opened after it. `reaktor_floater_close` closes one,
+from its own body too, and runs `.closed`. `.body` and `.closed` get the main
+window's App. `reaktor_floater_is_open` answers whether an id is still open.
 
 ```c
 static void
@@ -526,29 +522,29 @@ reaktor_toast(app, &(reaktor_toast_spec){
 | `.no_close` | No close button; with no action either, it goes after five seconds |
 
 `.toast` styles the surface, text, border and padding, `.toast-button` the
-action and `.toast-close` the close button. Under a modal floater or an open
+action, `.toast-close` the close button. Under a modal floater or an open
 popup, toasts are drawn but take no input.
 
 ### Windows
 
 `reaktor_window_open` opens a real window with its own renderer, atlas and
 Nuklear context, and answers its id, or 0 on the web. The first such window
-bakes its atlas and keeps the image, and every later one uploads that copy
+bakes its atlas and keeps the image; every later one uploads that copy
 instead of baking, so the image stays in memory once a second window, or a
-menu in a window of its own, has opened. `.page` draws it with
-that window's App, so the same widgets and sheets work, and it follows the
-main window's theme and scale. It takes its input the way the main window
-does: focus navigation, the `key` hook and dropped files with its App, one
-change a frame, its own animations and file picker; a wake for its App draws
-it alone, and `reaktor_set_title` with its App retitles it. `.window.icon`
-replaces the mark for it. A `.modal` one is the system's modal window: on
-Windows and macOS the main window, close button included, takes no input
-until it closes; on Linux the window manager decides. Its own close button or
-`reaktor_window_close` runs `.closed`, with the main window's App;
+menu in a window of its own, has opened. `.page` draws it with that window's
+App, so the same widgets and sheets work, and it follows the main window's
+theme and scale. It takes input as the main window does: focus navigation,
+the `key` hook and dropped files with its App, one change a frame, its own
+animations and file picker. A wake for its App draws it alone, and
+`reaktor_set_title` with its App retitles it. `.window.icon` replaces the
+mark for it. A `.modal` one is the system's modal window: on Windows and
+macOS the main window, close button included, takes no input until it
+closes; on Linux the window manager decides. Its close button or
+`reaktor_window_close` runs `.closed` with the main window's App;
 `reaktor_window_is_open` answers whether an id is still open. Closing the
-main window quits, and every window goes with it. The Text module stays in the
-main window, and only UI Automation serves a window's tree to screen readers:
-NSAccessibility and AT-SPI serve the main window's.
+main window quits, and every window goes with it. The Text module stays in
+the main window, and only UI Automation serves a window's tree to screen
+readers; NSAccessibility and AT-SPI serve the main window's.
 
 ```c
 reaktor_window_open(app, &(reaktor_window){
@@ -558,9 +554,8 @@ reaktor_window_open(app, &(reaktor_window){
 
 Any window, the main one included, takes three hints: `.borderless` (no
 frame), `.centered` (on its display's usable area) and `.skip_taskbar` (out
-of the taskbar and the window switcher, where the system allows). A splash
-screen is those three on an ordinary window, with the main window started
-`.hidden`:
+of the taskbar and window switcher, where the system allows). A splash screen
+is those three on an ordinary window, with the main window started `.hidden`:
 
 ```c
 splash = reaktor_window_open(app, &(reaktor_window){
@@ -577,21 +572,22 @@ compositor decides whether a window stays out of the taskbar.
 
 `reaktor_tray_open` puts the app's icon in the system tray, with a menu, and
 answers 0 where there is no tray: the web, a desktop without one, or SDL's
-`dummy` and `offscreen` video drivers. An entry
-is a button, a checkbox (`.checkbox`, `.checked`) or, without a `.label`, a
-separator; `.disabled` grays it out. Choosing one runs `.chosen(app, checked,
-user)` on the main thread, then draws a frame. A click toggles a checkbox
-before `.chosen` runs, so set checkboxes from your state with
-`reaktor_tray_check(app, index, on)` each frame. `reaktor_tray_close` removes
-the icon. There is one tray, of up to sixteen entries.
+`dummy` and `offscreen` video drivers. An entry is a button, a checkbox
+(`.checkbox`, `.checked`) or, without a `.label`, a separator; `.disabled`
+grays it out. Choosing one runs `.chosen(app, checked, user)` on the main
+thread, then draws a frame. A click toggles a checkbox before `.chosen` runs,
+so set checkboxes from your state with `reaktor_tray_check(app, index, on)`
+each frame. `reaktor_tray_close` removes the icon. There is one tray, of up
+to sixteen entries.
 
 `reaktor_tray_hide_on_minimize(app, 1)` makes minimizing the main window hide
-it while the icon is there, so it leaves the taskbar; `reaktor_set_visible(app,
-1)` brings it back, unminimized. Closing the tray leaves a hidden window
-hidden, so show it first. The tray has no click of its own, so a Show entry
-in the menu is the way back. Wayland tells a window nothing when it is minimized, so
-there it stays in the taskbar. To close to the tray instead, have `closing`
-hide the window and refuse `REAKTOR_QUIT_WINDOW`.
+it while the icon is there, so it leaves the taskbar;
+`reaktor_set_visible(app, 1)` brings it back, unminimized. Closing the tray
+leaves a hidden window hidden, so show it first. The tray has no click of its
+own, so a Show entry in the menu is the way back. Wayland does not tell a
+window it was minimized, so there it stays in the taskbar. To close to the
+tray instead, have `closing` hide the window and refuse
+`REAKTOR_QUIT_WINDOW`.
 
 ```c
 static const reaktor_tray_item items[] = {
@@ -605,24 +601,24 @@ reaktor_tray_open(app, &(reaktor_tray){
 ```
 
 On Linux, FreeBSD, OpenBSD and NetBSD the tray is Reaktor's own, spoken over
-D-Bus by gibus rather than SDL's, which loads AppIndicator and GTK 3. The icon is a
+D-Bus by gibus, not SDL's, which loads AppIndicator and GTK 3. The icon is a
 StatusNotifierItem (`org.kde.StatusNotifierItem`) registered with the
 session's `org.kde.StatusNotifierWatcher`, its image the app's SVG icon as
-`IconPixmap` at 22, 32, 48 and 64 pixels, its tooltip `.tooltip`; the menu is
-`com.canonical.dbusmenu`, with the entries as labels, separators and
-checkmark items. The item sets `ItemIsMenu`, so a host opens the menu itself
-and a left click chooses nothing. KDE Plasma, Cinnamon and MATE (through
-xapp-sn-watcher), Xfce, LXQt, Budgie and GNOME with the AppIndicator extension
-show it; a desktop with no watcher on the bus, plain GNOME among them, gets
-none, and `reaktor_tray_open` answers 0. A watcher that starts or restarts
-later is told about the item again. One thread waits on the bus's socket and
-wakes the frame loop, which reads and answers the calls, so `.chosen` still
-runs on the main thread. Windows and macOS keep SDL's.
+`IconPixmap` at 22, 32, 48 and 64 pixels, its tooltip `.tooltip`. The menu is
+`com.canonical.dbusmenu`, the entries as labels, separators and checkmark
+items. The item sets `ItemIsMenu`, so a host opens the menu itself and a left
+click chooses nothing. KDE Plasma, Cinnamon and MATE (through
+xapp-sn-watcher), Xfce, LXQt, Budgie and GNOME with the AppIndicator
+extension show it; a desktop with no watcher on the bus, plain GNOME among
+them, gets none, and `reaktor_tray_open` answers 0. A watcher that starts or
+restarts later is told about the item again. One thread waits on the bus's
+socket and wakes the frame loop, which reads and answers the calls, so
+`.chosen` still runs on the main thread. Windows and macOS keep SDL's.
 
 The session bus is the one `DBUS_SESSION_BUS_ADDRESS` names, or else
 `$XDG_RUNTIME_DIR/bus`. A session that publishes its bus only through X11
-autolaunch, as libdbus would find it, has none: no tray, notifications, portal
-settings or AT-SPI bridge.
+autolaunch, where libdbus would find it, has none: no tray, notifications,
+portal settings or AT-SPI bridge.
 
 ### Inspector
 
@@ -634,7 +630,7 @@ The Inspector looks into a running app from a window of its own, titled
   the widget under the pointer without pressing it.
 - **Box**: the widget's bounds, its rectangle in its parent, and where its
   width and height come from: its parent, its content, the stylesheet, or the
-  page. A size the page fixed is one no rule can change.
+  page. No rule can change a size the page fixed.
 - **Style**: what the widget's element (`button`, `input`, ...) gets from the
   sheets, and a box of CSS applied after every other sheet, to this run only.
 - **Frame**: frames drawn, what made the last one run, and the build, render
@@ -643,8 +639,7 @@ The Inspector looks into a running app from a window of its own, titled
 
 An app opts in with `.inspector`; left zero, there is no Inspector and the
 shortcut is the app's. `.mods` and `.key` replace the shortcut, Ctrl+Shift+I
-(Cmd+Option+I on macOS); `.key = -1` leaves it without one. `.open` opens it at
-start.
+(Cmd+Option+I on macOS); `.key = -1` removes it. `.open` opens it at start.
 
 ```c
 launchApp(argc, argv, &(reaktor_launch){
@@ -655,7 +650,7 @@ launchApp(argc, argv, &(reaktor_launch){
 `reaktor_inspector_open(app)` opens it and answers 0 when the app has none,
 `reaktor_inspector_close(app)` closes it, and `reaktor_inspector_shown(app)`
 says whether it is open. `--inspect` opens it at start and `--no-inspector`
-detaches it, but no flag gives an Inspector to an app that did not attach one.
+detaches it; no flag gives an Inspector to an app that did not attach one.
 
 ## Styling
 
@@ -664,10 +659,10 @@ Water.css's palette (`variables-light.css` or `variables-dark.css`), Water.css
 (`parts/_core.css` and the parts it imports), `reaktor.css`, the application's
 `.css`, then `--css`. Nothing merges them. An `@import` is read in place,
 relative to the sheet that names it; one with a condition, such as
-`(prefers-color-scheme: dark)`, is read as that `@media` block. A field filled
-exactly like the rounded panel it sits on
-takes the page's color instead, so a sheet that styles `input` and `details`
-alike still shows its fields on a card.
+`(prefers-color-scheme: dark)`, is read as that `@media` block. A field
+filled exactly like the rounded panel it sits on takes the page's color
+instead, so a sheet that styles `input` and `details` alike still shows its
+fields on a card.
 
 A widget asks for a selector and gets computed values, or `matched` clear and
 Nuklear's default:
@@ -695,57 +690,58 @@ if (s.matched) { /* s.bg, s.fg, s.border, s.rounding, s.pad[4], s.font_px, s.gra
 
 With `:hover` and `:active` where a widget has those states, a button's
 border included. Controls a document lacks borrow from what they resemble: a
-slider's rail from `input`, the accent from `a:link` (which a plain `a` rule
-answers too), a knob's body from `button` — reading the accent off the link
-rule rather than a token is what lets a sheet that never declares `--links`
-work, and it fills accent buttons, sliders, progress, checks and the accent
-icons. The page and the text on it come from `body` the same way, and
+slider's rail from `input`, a knob's body from `button`, and the accent from
+`a:link` (which a plain `a` rule answers too). Reading the accent off the
+link rule rather than a token lets a sheet that never declares `--links`
+work; it fills accent buttons, sliders, progress, checks and the accent
+icons. The page and its text come from `body` the same way, and
 `reaktor_page_color` and `reaktor_accent_color` hand an application the page
 and the accent. An icon on a button takes its label's color.
 
-- **A size set in code beats the sheet.** A `.box = { .h = N }` locks CSS out of
-  that axis, the usual reason a rule "only changes the color".
+- **A size set in code beats the sheet.** `.box = { .h = N }` locks CSS out
+  of that axis, the usual reason a rule "only changes the color".
 - **A disabled button wears the sheet's own rule.** It reads
-  `button.disabled:disabled`, so `button:disabled` and `button[disabled]` both
-  count, and that rule's `opacity` fades everything the button draws, as a
-  browser fades it. A sheet that does not tell a disabled button apart gets
+  `button.disabled:disabled`, so `button:disabled` and `button[disabled]`
+  both count, and that rule's `opacity` fades everything the button draws, as
+  a browser does. A sheet that does not tell a disabled button apart gets
   half. Nuklear's own dimming, which multiplies colors toward black, is off.
 - **A rule's margin only parts a widget from its neighbors.** Across its row
-  or column the page has sized the box, so in a row a rule's top and bottom
-  margins are skipped, and in a column its left and right ones. Along it the
-  margins go between widgets, never before the first or after the last, so a
-  row of buttons starts and ends where the field below it does, and each line
-  of a row that wraps starts at the edge. A margin set in code always counts,
-  and a `REAKTOR_FREE` box keeps all four.
+  or column the page has sized the box, so a row skips a rule's top and
+  bottom margins and a column its left and right. Along it the margins go
+  between widgets, never before the first or after the last, so a row of
+  buttons starts and ends where the field below it does, and each line of a
+  wrapping row starts at the edge. A margin set in code always counts, and a
+  `REAKTOR_FREE` box keeps all four.
 - **The engine is Reaktor's own, and small.** `core/css/css.c` parses every
   selector when the sheets load and a rule's declarations the first time a
   widget's query matches it, so rules nothing asks for cost almost nothing.
-  [What the engine reads](#what-the-engine-reads) lists all of it. reaktor.css uses the scheme branch to strengthen light
-  hovers and tint the current sidebar entry from `--links`.
+  [What the engine reads](#what-the-engine-reads) lists all of it. reaktor.css
+  uses the scheme branch to strengthen light hovers and tint the current
+  sidebar entry from `--links`.
 
-**The system's settings.** Reduced motion and high contrast are read from the
+**The system's settings.** Reduced motion and high contrast come from the
 system: Windows' animation and high-contrast settings, macOS's accessibility
-display options, the desktop portal's `reduced-motion` and `contrast` (GNOME's
-own keys where the portal lacks them), and the browser's media queries. They
-reach the sheets as `@media (prefers-reduced-motion: reduce)` and
-`(prefers-contrast: more)`; reaktor.css answers more contrast by drawing muted
-text, placeholders and borders in `--text-bright`. Under reduced motion every
-`reaktor_animate` returns its end value at once. Both are read again when the
-system theme changes and when the window regains focus. The portal is asked
-for all four settings in one call, and a desktop without one is not asked
-again.
+display options, the desktop portal's `reduced-motion` and `contrast`
+(GNOME's own keys where the portal lacks them), and the browser's media
+queries. They reach the sheets as `@media (prefers-reduced-motion: reduce)`
+and `(prefers-contrast: more)`; reaktor.css answers more contrast by drawing
+muted text, placeholders and borders in `--text-bright`. Under reduced motion
+every `reaktor_animate` returns its end value at once. Both are read again
+when the system theme changes and when the window regains focus. The portal
+is asked for all four settings in one call, and a desktop without one is not
+asked again.
 
-**Live reload.** With `--watch-css` the runtime looks at every sheet it read
+**Live reload.** With `--watch-css` the runtime checks every sheet it read
 from disk, `@import`s included, twice a second, and restyles when one is
-saved. A sheet compiled in is not watched; one on disk is preferred to it, so
-in a checkout the built-in sheets are watched too.
+saved. A compiled-in sheet is not watched, but a copy on disk is preferred to
+it, so in a checkout the built-in sheets are watched too.
 
 `reaktor_set_css` swaps the application's sheets at the next frame. The
-showcase's Styling page lays Simple.css over Water.css that way, which is the
-test that the look is not in the code. reaktor.css is written in Water.css's
-names, so once such a sheet is read, `--links`, `--background-body` and
-`--text-main` are given its link, page and text colors in one more sheet read
-last; Reaktor's own chrome then follows it too. A sheet laid over Water.css
+showcase's Styling page lays Simple.css over Water.css that way, the test
+that the look is not in the code. reaktor.css is written in Water.css's
+names, so once such a sheet is read, one more sheet read last gives
+`--links`, `--background-body` and `--text-main` its link, page and text
+colors, and Reaktor's own chrome follows it too. A sheet laid over Water.css
 costs a second read.
 
 
@@ -771,10 +767,11 @@ its compounds names a subset of what the query names, in order.
 | `a b`, `a > b` | Descendant and child |
 | `a + b`, `a ~ b`, `::before`, `[href^="…"]` and the other operators | Drop that selector; the rest of its list stays |
 
-The cascade is CSS's: `!important` first, then specificity (ids, then classes,
-attributes and pseudo-classes, then types), then the later rule. Nothing is
-inherited: a widget reads its own selector, and the page reads `body`. `inherit`,
-`initial`, `unset` and `revert` all give a property its initial value.
+The cascade is CSS's: `!important` first, then specificity (ids, then
+classes, attributes and pseudo-classes, then types), then the later rule.
+Nothing is inherited: a widget reads its own selector, the page reads `body`.
+`inherit`, `initial`, `unset` and `revert` all give a property its initial
+value.
 
 Custom properties come from rules that match the root in the active theme
 (`:root`, `html`, `[data-theme="dark"]`, `:root:not([data-theme="dark"])`) and
@@ -822,16 +819,17 @@ properties does not count toward `matched`.
 A field keeps the arrows, Home, End, Enter and Space while it is edited; Tab
 leaves it. A modal floater or an open popup keeps focus inside. A spec's
 `.keys` only announces a shortcut; bind it in the `key` hook.
-[`include/reaktor/keys.h`](../include/reaktor/keys.h) matches events against a table of
-shortcuts (`reaktor_shortcut_match`) and writes the same table as text for
-`.keys` (`reaktor_shortcut_text`), so the two never disagree.
+[`include/reaktor/keys.h`](../include/reaktor/keys.h) matches events against
+a table of shortcuts (`reaktor_shortcut_match`) and writes the same table as
+text for `.keys` (`reaktor_shortcut_text`), so the two never disagree.
 
 ## Accessibility
 
 There is nothing to do. A declared widget reports its role, name, value,
-state and bounds; the tree is diffed each frame and served as UI Automation on
-Windows (every window), NSAccessibility on macOS and AT-SPI on Linux and
-the BSDs (the main window), and a DOM subtree beside the canvas on the web. A widget with no spec reports itself:
+state and bounds; the tree is diffed each frame and served as UI Automation
+on Windows (every window), NSAccessibility on macOS and AT-SPI on Linux and
+the BSDs (the main window), and a DOM subtree beside the canvas on the web. A
+widget with no spec reports itself:
 
 ```c
 reaktor_note(app, REAKTOR_A11Y_TREEITEM, label, NULL, state, bounds);
@@ -842,8 +840,9 @@ The tree is still built, because layout and animation key on its ids.
 
 ## Animation
 
-[NukAnim](https://github.com/Alpaq92/NukAnim), in `external/nukanim`, runs it.
-The simplest of it is a number that takes time to change, keyed by a box's id.
+[NukAnim](https://github.com/Alpaq92/NukAnim), in `external/nukanim`, runs
+it. The simplest form is a number that takes time to change, keyed by a box's
+id.
 
 ```c
 REAKTOR_COLUMN(.name = "Track", .h = 56.0f) {
@@ -856,9 +855,10 @@ REAKTOR_COLUMN(.name = "Track", .h = 56.0f) {
 
 The first call starts at its target: nothing has changed yet. A new target
 starts a run from wherever the value is, so a change mid-flight redirects
-rather than restarts. `channel`, the second argument, tells several numbers on
-one box apart, and each window keeps its own. There are 31 curves, and `reaktor_ease_at(curve, t)` draws
-them; `reaktor_anim_progress` says how far a run has got.
+rather than restarts. `channel`, the second argument, tells several numbers
+on one box apart, and each window keeps its own. There are 31 curves;
+`reaktor_ease_at(curve, t)` draws them, and `reaktor_anim_progress` says how
+far a run has got.
 
 The rest of NukAnim works on the window's context, `reaktor_anim(app)`, under
 `reaktor_anim_` and `REAKTOR_ANIM_` names that alias `nka_` and `NKA_`:
@@ -871,14 +871,14 @@ if (hovered) reaktor_anim_animate(reaktor_anim(app), 1, 1.1f, 150, &size, REAKTO
 else         reaktor_anim_animate(reaktor_anim(app), 1.1f, 1, 250, &size, REAKTOR_ANIM_EASE_OUT_CUBIC);
 ```
 
-The runtime moves the context's time before each page and draws another frame
-while anything the page sampled is still moving, so a page with nothing moving
-asks for no frames. What is not sampled for 600 frames is forgotten. Something
+The runtime moves the context's time before each page and draws another
+frame while anything the page sampled is still moving, so a still page asks
+for no frames. What is not sampled for 600 frames is forgotten. Something
 that changes under the pointer needs a hot rectangle, `reaktor_hot`, for the
 pointer's motion to run a frame. NukAnim's debug timeline,
-`reaktor_anim_show_debug_timeline`, lays out a row of its own, so it goes between
-declared blocks rather than inside one, and its tooltips follow the pointer
-only across a `reaktor_hot_follow` rectangle.
+`reaktor_anim_show_debug_timeline`, lays out a row of its own, so it goes
+between declared blocks rather than inside one, and its tooltips follow the
+pointer only across a `reaktor_hot_follow` rectangle.
 
 ## Beyond the specs
 
@@ -888,13 +888,15 @@ and popup bodies have no spec and are laid out by hand.
 Nuklear type, constant and call the samples use: `struct reaktor_rect`,
 `reaktor_rect(x, y, w, h)`, `REAKTOR_TEXT_LEFT`, `reaktor_group_begin`. An
 alias is the same type, so values mix freely with `nk_*`, which stays
-available for the rest. Two names differ, as the declared widgets own theirs:
-`nk_label` is `reaktor_text_label`, `nk_button_label` is
+available for the rest. Two names differ, as the declared widgets own
+theirs: `nk_label` is `reaktor_text_label`, `nk_button_label` is
 `reaktor_button_plain`.
 
 A declared tree and `reaktor_layout_row_*` cannot share a panel, so convert a
 whole container at a time; a group or popup is its own panel and may be laid
-out by hand inside a declared page. [`include/reaktor/ui.h`](../include/reaktor/ui.h) has the pieces the specs are made of:
+out by hand inside a declared page.
+[`include/reaktor/ui.h`](../include/reaktor/ui.h) has the pieces the specs
+are made of:
 
 | Helper | For |
 | --- | --- |
@@ -949,40 +951,41 @@ include/reaktor  the public API; launch.h and main.h come first
 core/internal.h  the App struct, and what the layers share
 core/base        paths, metrics, assets
 core/css         the CSS engine and the style cache
-core/render      Nuklear, the SDL3 backend, drawing, SVG and raster images
+core/render      Nuklear, the SDL3 backend, drawing, damage, SVG and raster images
+core/sdl         no_dynapi.h, forced into SDL's build
 core/ui          the declared tree (declare.c), its controls and views, layout,
                  the style map, keys, focus, floaters, toasts
 core/a11y        the shadow tree and its diff
 core/anim        NukAnim, a context a window
 core/locale      the Locale module
 core/text        the Text module
-platform/        theme, process lifecycle, the accessibility bridges, notifications,
-                 the web keyboard
-runtime/         the main window's lifecycle and frame (app.c), input, services,
-                 other windows, the tray
+platform/        theme, process lifecycle, the accessibility bridges,
+                 notifications, the web keyboard
+runtime/         the main window's lifecycle and frame (app.c), input,
+                 services, other windows, the tray
 samples/         showcase, notepad, simple, bench
-tests/           the console tests and launchtest
-tools/           packaging, the icon compiler, vmwalk
+tests/           the console tests, the scripted UI tests and launchtest
+tools/           packaging, CI scripts, the ABI table, the icon compiler, vmwalk
 benchmarks/      bench in four other frameworks, and the sampler
 external/        thirteen submodules, read as they ship
 ```
 
 `runtime/` and `core/` build `reaktor_runtime`, a static library every
-program links. The nine [modules](#build-options) — the bridges,
+program links. The nine [modules](#build-options) (the bridges,
 `core/locale`, `core/text`, `platform/notify`, and settings, the tray, popup
-windows, printing and the Inspector in `runtime/` — are compiled into the
+windows, printing and the Inspector in `runtime/`) are compiled into the
 programs that take them. Nothing in `core/` knows which application it is in.
 
 **The default look is compiled in**: Aileron in both weights, the mark, the
 seven Ionicons the widgets draw (three chevrons, three discs and the toast's
-close cross), `reaktor.css` and Water.css's palettes and parts, copied byte for byte
-at configure time. `reaktor_asset_load` still tries the file under the
-`.reaktor-root` marker first, so an edited sheet shows without a rebuild; the
-marker is looked for beside the program and at most two folders above it.
+close cross), `reaktor.css` and Water.css's palettes and parts, copied byte
+for byte at configure time. `reaktor_asset_load` still tries the file under
+the `.reaktor-root` marker first, so an edited sheet shows without a rebuild;
+the marker is looked for beside the program and at most two folders above.
 Nothing is read from the working directory, and a path a user hands over is
 made absolute where it is taken. The rest of Ionicons, Simple.css and the
-catalogs are read from files; an icon that is not there is drawn as nothing,
-and the log names it.
+catalogs are read from files; a missing icon is drawn as nothing, and the log
+names it.
 
 **`style_map.c` is the only writer of `nk_style`.** A widget style set
 anywhere else lasts until a theme change reloads the sheets.
@@ -994,59 +997,60 @@ returns at once unless something marked the frame dirty: a widget clicked,
 typed into or dragged; the pointer crossing a **hot rectangle** registered
 the frame before, which is how hover repaints without polling; the window
 resizing or changing scheme; an animation still running. Each window has its
-own frames: a wake carries the window it is for.
+own frames: a wake names the window it is for.
 
 While a mouse button is held, frames follow the display's refresh, with two
 more after the release. A turn of the wheel takes two frames, because Nuklear
 scrolls a panel after drawing it.
 
-**A frame that draws what is already on screen** is skipped. Each frame's draw
-commands are hashed field by field, and one that matches the last presented
-frame is neither rendered nor presented. A key nothing takes, or a focus
-change that moves no ring, then costs the build and nothing more. A window
-uncovered, shown, resized, restored or moved to another scale is always drawn,
-and so is a frame a `--shot` or a capture waits for. A tween that changes
-nothing on screen follows the display's refresh. A launch that sets
-`.draw_every_frame` renders and presents every frame, whole; the bench sample
-does, to measure drawing. The showcase's Diagnostics page counts the frames
-drawn and skipped.
+**A frame that draws what is already on screen** is skipped. Each frame's
+draw commands are hashed field by field, and one that matches the last
+presented frame is neither rendered nor presented, so a key nothing takes, or
+a focus change that moves no ring, costs the build alone. A window uncovered,
+shown, resized, restored or moved to another scale is always drawn, as is a
+frame a `--shot` or a capture waits for. A tween that changes nothing on
+screen follows the display's refresh. A launch that sets `.draw_every_frame`
+renders and presents every frame, whole; the bench sample does, to measure
+drawing. The showcase's Diagnostics page counts the frames drawn and skipped;
+`tests/skiptest.c` checks the skipping.
 
 On the software renderer at a whole-number scale, a changed frame is redrawn
-only where its commands changed. The window is drawn into a texture that keeps
-the last frame; the commands that differ from it mark up to four rectangles,
+only where its commands changed. The window is drawn into a texture that
+keeps the last frame; the commands that differ mark up to four rectangles,
 and only those are cleared and drawn again, through every command, before the
-texture is copied to the window. A frame that would redraw more than half the
-window, a new window size, scale, theme or clear color, an evicted icon or a
-new font atlas, the first frame, and a frame a `--shot` or a capture waits for
-are drawn whole. Every frame comes out pixel for pixel as a full redraw would
-draw it; `tests/damagetest.c` checks each one. A GPU renderer, whose back
-buffer is not kept, or a fractional scale, draws every frame whole. A texture
-an app changes in place through `reaktor_sdl_renderer` is not among the
-commands, so a frame that only changes its pixels is skipped, or leaves them
-where they were: draw it from a new texture, or at a new rectangle, or set
-`.draw_every_frame`, for the change to show. A custom command
+texture is copied to the window. Drawn whole are: a frame that would redraw
+more than half the window; a new window size, scale, theme or clear color; an
+evicted icon or a new font atlas; the first frame; and a frame a `--shot` or
+a capture waits for. Every frame comes out pixel for pixel as a full redraw
+would draw it; `tests/damagetest.c` checks each one. A GPU renderer, whose
+back buffer is not kept, or a fractional scale, draws every frame whole.
+
+A texture an app changes in place through `reaktor_sdl_renderer` is not among
+the commands, so a frame that only changes its pixels is skipped, or leaves
+them where they were: for the change to show, draw it from a new texture or
+at a new rectangle, or set `.draw_every_frame`. A custom command
 (`nk_push_custom`, `NK_COMMAND_CUSTOM`) is recorded by its rectangle,
 callback and data pointer only, so a callback whose drawing depends on state
-behind the same pointer must be given a new pointer when that state changes,
-or the launch must set `.draw_every_frame`.
+behind the same pointer needs a new pointer when that state changes, or the
+launch must set `.draw_every_frame`.
 
 A finger that moves mostly up or down, by more than 8 pixels, scrolls the
-panel under it: the runtime releases what the finger pressed away from every
-widget, so nothing is clicked, and turns its movement into wheel steps sized
-to the page body `reaktor_focus_area` names, or to the window. A fast swipe
-coasts on after the finger lifts, and a touch stops it. Sideways drags, and
-drags that start in a text field, stay drags.
+panel under it: the runtime releases what the finger pressed, so nothing is
+clicked, and turns its movement into wheel steps sized to the page body
+`reaktor_focus_area` names, or to the window. A fast swipe coasts after the
+finger lifts, and a touch stops it. Sideways drags, and drags that start in a
+text field, stay drags.
 
 Nuklear reads input as it stands at a frame's end: a button pressed and
-released within one frame was never down. So a frame takes one change — a
-button or a key — or a run of text, and faster input is spread over the frames
+released within one frame was never down. So a frame takes one change (a
+button or a key) or a run of text, and faster input is spread over the frames
 it needs, in order. A printable key without Ctrl or Cmd is only its text.
 
 A click that activates a window also reaches the widget under it, except on
 macOS, where the first click only activates.
 
 At rest the app uses 0% of a core. **Adding a timer or an unconditional
-repaint to make something update is the wrong fix** — mark what changed.
+repaint to make something update is the wrong fix**: mark what changed.
 [PERFORMANCE.md](PERFORMANCE.md) has the costs.
 
 ## Platforms
@@ -1061,40 +1065,40 @@ repaint to make something update is the wrong fix** — mark what changed.
 | NetBSD | x86-64, ARM64 | 11.0 |
 | Web | WebAssembly | Chromium; emscripten 6.0.9 targets Chrome 85, Firefox 79 and Safari 15 |
 
-Every pull request builds each native one, runs the ten console tests that
-`tools/ci/tests.txt` lists, and writes a `--shot` and an `--a11y-dump` of
-`simple` and the showcase through the system's video driver and SDL's `dummy`
-one: `.github/workflows/` holds a
-workflow per system. The BSDs run in virtual machines, and their ARM64
-programs are cross-compiled in the x86-64 machine, against a sysroot
-`tools/cross/sysroot.sh` gathers from the release's sets and packages, with
-the toolchain file `tools/cross/<system>-aarch64.cmake` and
-`-DREAKTOR_SYSROOT=<dir>`; OpenBSD's compiler has no ARM64 backend, so there
-the ports LLVM builds them. An ARM64 machine, which runs under emulation, then
-only runs the programs, and a job that emulates may fail without failing its
-run. Linux on ARMv7 and RISC-V is cross-compiled in an x86-64 Debian with
-`tools/cross/linux-cross.cmake` and run in an emulated one, on master and for
-releases rather than on every pull request. The web
-build is built and packed on every pull request too (`web.yml`), and checked
-by hand in headless Edge, as desktop, Android and iOS.
+Every pull request builds each one, runs the eleven console tests
+`tools/ci/tests.txt` lists and the scripted UI tests (`uitest`, `skiptest`,
+`damagetest`), and writes a `--shot` and an `--a11y-dump` of `simple` and the
+showcase through the system's video driver and SDL's `dummy` one;
+`.github/workflows/` holds a workflow per system. The BSDs run in virtual
+machines. Their ARM64 programs are cross-compiled in the x86-64 machine,
+against a sysroot `tools/cross/sysroot.sh` gathers from the release's sets
+and packages, with the toolchain file `tools/cross/<system>-aarch64.cmake`
+and `-DREAKTOR_SYSROOT=<dir>`; OpenBSD's compiler has no ARM64 backend, so
+there the ports LLVM builds them. An emulated ARM64 machine then only runs
+the programs. Linux on ARMv7 and RISC-V is cross-compiled in an x86-64 Debian
+with `tools/cross/linux-cross.cmake` and run in an emulated one. A job that
+emulates may fail without failing its run. The web build is built and packed
+on every pull request too (`web.yml`), and checked by hand in headless Edge,
+as desktop, Android and iOS.
 
-`build.sh` builds for the machine it runs on. `build.ps1 -Arch x86` (or `x64`,
-`arm64`) builds that architecture with MSVC's matching toolset, into
+`build.sh` builds for the machine it runs on. `build.ps1 -Arch x86` (or
+`x64`, `arm64`) builds that architecture with MSVC's matching toolset, into
 `build-<arch>` when it is not the machine's own; ARM64 needs Visual Studio's
 ARM64 build tools.
 
-**Releases.** Pushing a version tag such as `1.2.3` or `1.2.3-rc1` runs `release.yml`: the four native
-workflows again, with every job required, a web build, and a GitHub release
-of what they packed — one archive per system and architecture, the three
-WebAssembly programs, libreaktor for each ([In your own project](#in-your-own-project)),
-the source with its submodules, which GitHub's own archives leave out, and a
-`SHA256SUMS` of them all. `tools/package.sh <build> <folder> [.exe]` packs a native
-one: the four programs without their symbols, the `.reaktor-root` marker, the
-files they read at runtime (`tools/assets.sh`, which the macOS app bundle uses
+**Releases.** Pushing a version tag such as `1.2.3` or `1.2.3-rc1` runs
+`release.yml`: the four native workflows again, every job required, a web
+build, and a GitHub release of what they packed. That is one archive per
+system and architecture, the three WebAssembly programs, libreaktor for each
+([In your own project](#in-your-own-project)), the source with its
+submodules, which GitHub's own archives leave out, and a `SHA256SUMS` of
+them all. `tools/package.sh <build> <folder> [.exe]` packs a native one: the
+four programs without their symbols, the `.reaktor-root` marker, the files
+they read at runtime (`tools/assets.sh`, which the macOS app bundle uses
 too), `licenses/` and `NOTICE.md`. Each job runs the packed showcase and
-checks it draws its Translations page as the built one does. Windows links the
-C runtime statically (`-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`); the macOS
-app is signed ad hoc, not notarized; Linux needs glibc 2.36, or 2.41 on
+checks it draws its Translations page as the built one does. Windows links
+the C runtime statically (`-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`); the
+macOS app is signed ad hoc, not notarized; Linux needs glibc 2.36, or 2.41 on
 RISC-V; a BSD package wants the release it was built on.
 
 ## In your own project
@@ -1109,26 +1113,27 @@ reaktor_add_app(myapp SOURCES main.c)
 Under another project Reaktor builds none of its samples or tests and
 installs nothing (`REAKTOR_SAMPLES`, `REAKTOR_TESTS` and `REAKTOR_INSTALL`
 default to on only at the top), and its settings stay in its own directory.
-A module's sources compile in the app's directory, so the one that needs a
-language of its own, the macOS accessibility bridge in Objective-C, is
-compiled in Reaktor's instead: the app needs no Objective-C, and no ARC flag.
+A module's sources compile in the app's directory, except the macOS
+accessibility bridge, in Objective-C, which compiles in Reaktor's: the app
+needs no Objective-C and no ARC flag.
 [`examples/embedded`](../examples/embedded) declares Simple this way from a
 directory of its own; the macOS jobs and Linux x86-64 build it and check it
 draws as the in-tree build does.
 
 **libreaktor.** Each release carries `libreaktor-<version>-<system>-<arch>`
-for every platform above, and `-wasm`. Build one yourself with:
+for every platform above, and `-wasm`. To build one:
 
 ```bash
 cmake --build build --target libreaktor
 cmake --install build --prefix libreaktor --component libreaktor
 ```
 
-It is one static library — `reaktor.lib` with MSVC, `libreaktor.a` elsewhere
-— holding Reaktor, every module, SDL, FreeType, plutosvg, Onlay, NukAnim,
-mojibake, kb_text_shape and toml-c, merged with `lib.exe`, Apple's `libtool` or an
-`ar` MRI script. Beside it go the public headers with Nuklear's, NukAnim's
-and SDL's, a CMake package, a pkg-config file and `share/reaktor/licenses`:
+It is one static library (`reaktor.lib` with MSVC, `libreaktor.a` elsewhere)
+holding Reaktor, every module, SDL, FreeType, plutosvg, Onlay, NukAnim,
+mojibake, kb_text_shape and toml-c, merged with `lib.exe`, Apple's `libtool`
+or an `ar` MRI script. Beside it go the public headers with Nuklear's,
+NukAnim's and SDL's, a CMake package, a pkg-config file and
+`share/reaktor/licenses`:
 
 ```cmake
 find_package(reaktor 0.10 REQUIRED)
@@ -1142,7 +1147,7 @@ the DLL runtime, CMake's default, while the programs in a release link it
 statically. On the web, point `reaktor_DIR` at its `lib/cmake/reaktor`, as
 the emscripten toolchain searches only its own sysroot.
 [`examples/consumer`](../examples/consumer) builds `samples/simple/simple.c`
-against an installed package: every CI job does, and checks it draws as the
+against an installed package; every CI job does, and checks it draws as the
 in-tree build does.
 
 **Shared.** On Linux, the BSDs and macOS, `-DREAKTOR_SHARED=ON` also builds
@@ -1151,23 +1156,24 @@ the library shared, so several apps map one copy: `libreaktor.so` with SDL as
 stay in each app, from `libreaktor-modules.a`. Link `reaktor::shared`, or on
 Linux and the BSDs `pkg-config --cflags --libs reaktor-shared`; the framework
 has no `.pc`. Releases carry it as
-`libreaktor-shared-<version>-<system>-<arch>`. Its soname is `libreaktor.so.1`
-(OpenBSD installs no unversioned `libreaktor.so`), and it exports only what
-`tools/reaktor.map` names: the public calls, with Nuklear's and NukAnim's,
-under `LIBREAKTOR_0`, and what the modules call under `LIBREAKTOR_PRIVATE_0`,
-which an application must not reach.
+`libreaktor-shared-<version>-<system>-<arch>`, and for macOS also
+`-macos-universal`. Its soname is `libreaktor.so.1` (OpenBSD installs no
+unversioned `libreaktor.so`), and it exports only what `tools/reaktor.map`
+names: the public calls, with Nuklear's and NukAnim's, under `LIBREAKTOR_0`,
+and what the modules call under `LIBREAKTOR_PRIVATE_0`, which an application
+must not reach.
 
-**As a system package.** `tools/libreaktor-pkg.sh` builds libreaktor and packs
-it for the system it runs on: a `.deb` where `dpkg-deb` exists, an `.rpm`
-where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a `.tar.gz`.
-`-i` installs it, `-s` builds the shared library too and splits the package
-in three: `libreaktor1` and `libreaktor-sdl3-0` to run an app
+**As a system package.** `tools/libreaktor-pkg.sh` builds libreaktor and
+packs it for the system it runs on: a `.deb` where `dpkg-deb` exists, an
+`.rpm` where `rpmbuild` does, a FreeBSD, OpenBSD or NetBSD package, or a
+`.tar.gz`. `-i` installs it. `-s` builds the shared library too and splits
+the package in three: `libreaktor1` and `libreaktor-sdl3-0` to run an app
 (`libreaktor-sdl3` on OpenBSD, whose package names read a dash before a digit
-as the version) and `libreaktor-shared`, with the headers and both
-libraries, to build one,
-`-p` sets the prefix, `-o` the output folder, `-b` packs
-from an existing build. On Linux the `deb` and `rpm` targets do the same from
-the current build, into `build/dist`; each release carries both, built by CI.
+as the version), and `libreaktor-shared`, with the headers and both
+libraries, to build one. `-p` sets the prefix, `-o` the output folder, `-b`
+packs from an existing build. On Linux the `deb` and `rpm` targets do the
+same from the current build, into `build/dist`; each release carries both,
+built by CI.
 
 ```bash
 sh tools/libreaktor-pkg.sh -i
@@ -1177,8 +1183,8 @@ sh tools/libreaktor-pkg.sh -i
 The prefix is `/opt/reaktor` on Linux and `/usr/local/reaktor` on the BSDs,
 apart from the system's include directory, because the package carries SDL's
 and Nuklear's headers. Point `CMAKE_PREFIX_PATH` or `PKG_CONFIG_PATH` (its
-`lib/pkgconfig`) there. No package depends on a system library — link the
-ones `pkg-config --libs reaktor` names — only on the others of a split:
+`lib/pkgconfig`) there. No package depends on a system library (link the
+ones `pkg-config --libs reaktor` names), only on the others of a split:
 `libreaktor1` needs `libreaktor-sdl3-0`, and `libreaktor-shared` both.
 `libreaktor` and `libreaktor-shared` install the same headers, so each
 conflicts with the other.
@@ -1195,9 +1201,9 @@ Passed to CMake, through either script:
 | Option | Default | Effect |
 | --- | --- | --- |
 | `REAKTOR_A11Y` | `ON` | Serve the accessibility tree to screen readers |
-| `REAKTOR_LOCALE` | `ON` | Translations and formatting — [Localization](#localization) |
+| `REAKTOR_LOCALE` | `ON` | Translations and formatting: [Localization](#localization) |
 | `REAKTOR_LOCALE_EMBED` | `OFF` | Compile the catalogs in rather than read them at startup |
-| `REAKTOR_TEXT` | `ON` | Direction, shaping, fallback glyphs and Unicode line breaks — [Text](#text) |
+| `REAKTOR_TEXT` | `ON` | Direction, shaping, fallback glyphs and Unicode line breaks: [Text](#text) |
 | `REAKTOR_SETTINGS` | `ON` | Settings kept between runs, in `settings.toml` |
 | `REAKTOR_TRAY` | `ON` | The tray icon |
 | `REAKTOR_POPUP_WINDOWS` | `ON` | Menus in windows of their own |
@@ -1215,11 +1221,12 @@ pass `=ON` to switch one back.
 
 **A module is two interface libraries**, and a program links one:
 `reaktor_a11y` or `reaktor_a11y_none`, and likewise `_locale`, `_text`,
-`_settings`, `_tray`, `_popups`, `_notify`, `_print` and `_inspector`. Both define the same functions. The
-showcase takes every module; `notepad` takes settings, popups and print; `simple` and
-`bench` take none, and show what the runtime costs alone. An option switched off swaps in the `_none` half everywhere, and leaves
-pixels and `--a11y-dump` byte-identical apart from what the module itself
-produces.
+`_settings`, `_tray`, `_popups`, `_notify`, `_print` and `_inspector`. Both
+define the same functions. The showcase takes every module; `notepad` takes
+settings, popups and print; `simple` and `bench` take none, and show what the
+runtime costs alone. An option switched off swaps in the `_none` half
+everywhere, and leaves pixels and `--a11y-dump` byte-identical apart from
+what the module itself produces.
 
 ```cmake
 reaktor_add_app(myapp MODULES a11y locale SOURCES main.c)
@@ -1232,8 +1239,8 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 
 - **`REAKTOR_A11Y=OFF`** drops the bridges and the libraries only they need:
   `uiautomationcore`, `ole32` and `oleaut32` on Windows. It saves few bytes
-  ([PERFORMANCE.md](PERFORMANCE.md#modules)). On Linux and the BSDs the
-  D-Bus client, gibus, is part of the runtime, which reads the desktop portal's
+  ([PERFORMANCE.md](PERFORMANCE.md#modules)). On Linux and the BSDs the D-Bus
+  client, gibus, is part of the runtime, which reads the desktop portal's
   appearance settings through it; `REAKTOR_A11Y`, `REAKTOR_TRAY` and
   `REAKTOR_NOTIFY` only drop their own use of it.
 - **`REAKTOR_LOCALE=OFF`** leaves every string as its key, bakes Latin-1
@@ -1305,8 +1312,8 @@ And `bench`:
 | `--boxes <n>` | How many boxes rotate (64) |
 
 `--shot` and `--a11y-dump` are the regression oracle: pin the view with
-`--tab`, `--scroll` and `--theme`, and diff two dumps — anything that moved by
-a pixel says so.
+`--tab`, `--scroll` and `--theme`, and diff two dumps; anything that moved by
+a pixel shows.
 
 ```bash
 ./build/showcase --tab 7 --theme dark --shot styling.bmp --a11y-dump styling.txt
@@ -1329,20 +1336,23 @@ Built by default and run from `build/`:
 | `imagetest` | PNG and JPEG decode; other formats are not compiled in |
 | `basetest` | Which URL schemes a link opens, and UTF-8 cleaning |
 | `uitest` | The scripted UI test below, driving its own window: find by name and mark, click, type, a check box, a key hook |
+| `skiptest` | Scripted: a frame that repeats the last is skipped and leaves no commands behind, and a busy tween stays paced |
+| `damagetest`, `damagetest_text` | Scripted: partial redraws on hover, after a theme switch and at scale 2 match a full redraw, without and with the Text module |
 | `texttest` | Line breaks, direction, measuring and glyph order, against `assets/fonts`; with the Text module |
 | `launchtest` | Opt-in (`./build.ps1 launchtest`): `launchApp`'s hooks by mode (`start-fail`, `quit`, `veto`, `title`, `confirm`, `confirm-cancel`), the services (`ask`, `timer`, `post`, `settings`, `save-change`, `save-timer`, `settings-clear`, `list`, `list-keys`, `tree-keys`, `field-find`, `spin-keys`, `date-keys`, `undo`, `print-pdf`, `split-keys`, `split-vkeys`, `menu-keys`, `tip`; `dialog-open`, `dialog-many`, `dialog-save` and `dialog-folder` wait for someone to answer the system's dialog), what a floater, toast or popup holds and where keys go (the `hold-` modes), and a window beside the main one (`window-text` and the `win-` modes: keys, drops, animation, title, theme, wakes, a drag, one change a frame, the picker, memory, `win-hints`) |
 
-Beyond those, check a visual change against the framebuffer (`--shot`) and the
-dump, not against a reading of the source.
+`sh tools/ci/uitest.sh build` runs the four scripted ones. Beyond those, check
+a visual change against the framebuffer (`--shot`) and the dump, not against
+a reading of the source.
 
 ### Testing an application
 
 `reaktor_test_app` launches an application with SDL's dummy video driver, so
-no window shows, and runs a script on a thread of its own once the first frame
-settles. The script acts as a person would: it finds widgets in the
-accessibility tree by their name, or by a `.box.mark` written `"#mark"`, and
-clicks and types through the same SDL events a mouse and keyboard send. Every
-call returns once the window has drawn and settled. The run exits 0 when every
+no window shows, and runs a script on a thread of its own once the first
+frame settles. The script acts as a person would: it finds widgets in the
+accessibility tree by name, or by a `.box.mark` written `"#mark"`, and clicks
+and types through the same SDL events a mouse and keyboard send. Every call
+returns once the window has drawn and settled. The run exits 0 when every
 check passed, and each check is logged (`--log` writes it to a file).
 
 ```c
@@ -1372,8 +1382,12 @@ int main(int argc, char **argv)
 | `reaktor_test_settle(t)` | Wait until the window has drawn and settled |
 | `reaktor_test_check(t, ok, what)` | Count and log one check |
 
-A target names a widget by what a reader hears, or by its mark as `"#mark"`; `"#rows Delete"` looks for Delete only inside the container marked `rows`, at any depth. When several widgets match, the first is used and the log says how many there were. A test reads only the main window. The video driver is dummy unless the
-command line names one, and `--new-instance` is passed for it.
+A target names a widget by what a reader hears, or by its mark as `"#mark"`;
+`"#rows Delete"` looks for Delete only inside the container marked `rows`, at
+any depth. When several widgets match, the first is used and the log says
+how many there were. A test reads only the main window. The video driver is
+dummy unless the command line names one, and `--new-instance` is passed for
+it.
 
 ## The renderer
 
@@ -1404,59 +1418,54 @@ command line names one, and `--new-instance` is passed for it.
 | `auto` | Everywhere | SDL chooses | |
 
 **An application names its renderer** with the launch's `.renderer`, read as
-`--renderer` is when the flag is not given, so `"sdl-gpu"`, in a build with
+`--renderer` is when the flag is not given. So `"sdl-gpu"`, in a build with
 `-DREAKTOR_SHADERS=ON`, lets it draw with its own shaders:
 `reaktor_sdl_renderer(app)` hands it the renderer, and the renderer's
 `SDL_PROP_RENDERER_GPU_DEVICE_POINTER` the device they are made for.
 
-**HDR output** is the launch's `.hdr`, or `--hdr on`. The renderer is then made
-with a linear (scRGB) output, which SDL scales so sRGB drawing looks as before
-while an HDR texture can go past white. The colorspace is fixed when the
-renderer is made, so the software renderer, a display without HDR under
-`sdl-gpu`, or a renderer that refuses it gets an SDR one as before, and turning
-the system's HDR on or off takes effect at the next launch. On an SDR display a
+**HDR output** is the launch's `.hdr`, or `--hdr on`. The renderer is then
+made with a linear (scRGB) output, which SDL scales so sRGB drawing looks as
+before while an HDR texture can go past white. The colorspace is fixed when
+the renderer is made: the software renderer, a display without HDR under
+`sdl-gpu`, or a renderer that refuses it gets SDR as before, and turning the
+system's HDR on or off takes effect at the next launch. On an SDR display a
 GPU renderer other than `sdl-gpu` keeps the linear output, which blends in
-linear light: edges and text come out slightly different from an SDR renderer.
+linear light, so edges and text differ slightly from an SDR renderer.
 
 **Prefer `directx` or `direct3d12` to `direct3d11`.** Once running, on
 2026-10-24, `direct3d11` took 13.4% of a core where `direct3d12` and `opengl`
-took 5.6%, and turning vsync off did not change it: the cost is in SDL's
-Direct3D 11 renderer or the driver, not in Reaktor's frame. Pick it only where Direct3D 12
-will not start; `directx` does that by itself.
+took 5.6%, with vsync on or off: the cost is in SDL's Direct3D 11 renderer or
+the driver, not in Reaktor's frame. Pick it only where Direct3D 12 will not
+start; `directx` does that by itself.
 
 A GPU renderer smooths the edges of fills unless `.anti_aliasing` says
 otherwise, and keeps the CPU free during long animations. It costs six to
 thirteen times the memory and more CPU to start, and it shares the GPU: with
 another program keeping the GPU busy, frames missed 60 fps and took 16–28% of
-a core. A renderer that would not start falls back to SDL's choice and logs
+a core. A renderer that will not start falls back to SDL's choice and logs
 why. The figures are in [PERFORMANCE.md](PERFORMANCE.md#against-the-others).
 
 - **Every vertex is snapped to the pixel grid**, so a sub-pixel correction is
   discarded, and abutting rectangles can round apart into a seam.
 - **A rectangle is drawn from device pixels** by `nk_sdl_quad`, because SDL's
-  software renderer turns two triangles into a fill and truncates position and
-  size apart at fractional scales.
+  software renderer turns two triangles into a fill and truncates position
+  and size apart at fractional scales.
 - **A one-pixel stroke is two half-alpha rows**, so borders are fills:
-  `reaktor_edge_round`. Fill anti-aliasing is off on the software renderer
-  and on under a GPU one unless `.anti_aliasing` says otherwise; rounded fills
-  do not depend on it, as they are masks: `reaktor_fill_round`, and each rounded fill Nuklear draws
-  itself — a scrollbar, a tree's header, a combo, a menu item — is swapped for
-  masks before the frame is drawn.
+  `reaktor_edge_round`. Fill anti-aliasing is off on the software renderer,
+  and on under a GPU one unless `.anti_aliasing` says otherwise. Rounded
+  fills do not depend on it, as they are masks: `reaktor_fill_round`, and
+  each rounded fill Nuklear draws itself (a scrollbar, a tree's header, a
+  combo, a menu item) is swapped for masks before the frame is drawn.
 
 `core/render/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, vendored because
-its changes sit inside its functions. Every deviation is marked
-`REAKTOR`: an 8-bit indexed atlas, a 1×1 white texture for untextured
-geometry, pixel snapping, fills and strokes feathered apart, the atlas palette
-shared with the Text module, rectangles from device pixels, an upload for the
-atlas Reaktor bakes itself, `tex_null` repointed after every bake, a key-up dropped for a key Nuklear does not hold,
-text input of any length fed one rune at a time, and textures clamped rather
-than tested for wrapping.
+its changes sit inside its functions. Every deviation is marked `REAKTOR`;
+[NOTICE.md](NOTICE.md#the-one-vendored-source-file) lists them.
 
 ## The web build
 
 The same sources and `CMakeLists.txt`. `./build-wasm.sh` (emsdk) writes
-`showcase.html`, `simple.html` and `notepad.html` into `build-wasm/`, which
-must be served over HTTP. Every push to `master` publishes the showcase to
+`showcase.html`, `simple.html` and `notepad.html` into `build-wasm/`, to be
+served over HTTP. Every push to `master` publishes the showcase to
 [GitHub Pages](https://alpaq92.github.io/Reaktor/) through
 `.github/workflows/pages.yml`, pinned to the emscripten the published sizes
 were built with.
@@ -1465,18 +1474,18 @@ were built with.
   minus the ones compiled in; the showcase alone adds the catalogs and the
   Japanese font. `tools/shell.html` is the page; its loading overlay must keep
   `pointer-events: none` or it swallows every click.
-- **A phone types into a hidden `input`** (`platform/web/keyboard_web.c`). Its
-  contents are diffed against what the app was told, and the edits go onto
-  SDL's own queue so they keep their place among taps and keys. The tap
+- **A phone types into a hidden `input`** (`platform/web/keyboard_web.c`).
+  Its contents are diffed against what the app was told, and the edits go
+  onto SDL's own queue so they keep their place among taps and keys. The tap
   focuses it in its own `pointerup`, as Safari requires, and the touch's
   `pointerdown` is canceled, or the canvas takes focus and the keyboard
   closes. `?keylog` overlays every input event as it arrives.
 - **A hidden page runs no frames**: the loop waits on
   `requestAnimationFrame`. The accessibility root exists from `main()`, but
   the tree stays empty until the page renders.
-- **The accessibility tree is `position: fixed`.** A node lies where its widget
-  does, even off the canvas, and absolutely positioned it would widen the page
-  past a phone's screen.
+- **The accessibility tree is `position: fixed`.** A node lies where its
+  widget does, even off the canvas; absolutely positioned, it would widen the
+  page past a phone's screen.
 
 ## Localization
 
@@ -1486,8 +1495,8 @@ and Japanese.
 
 **A catalog** is `assets/locale/<code>.txt`, an entry a line, split at the
 first ` = `; `\n` is a newline and `\\` a backslash. `language` is the
-catalog's own name for itself, `plural` a gettext plural expression. There are
-no comments, because a key is free text.
+catalog's name for itself, `plural` a gettext plural expression. There are no
+comments, because a key is free text.
 
 ```
 language = Polski
@@ -1528,22 +1537,23 @@ Formatting reads these keys, and a key a catalog leaves out is English's:
 
 A pattern is made of `d dd M MM MMM MMMM LLLL y yy EEE EEEE H HH h hh m mm a`,
 with `'quoted'` text kept; `LLLL` is a month's stand-alone name, from
-`date.months.standalone` where a catalog has it. `reaktor_format_pattern(buf,
-cap, tm, pattern)` formats any pattern. The weekday is computed from the date. A catalog says
-how its language writes numbers the way it says "Save" — Polish puts
-no-break spaces between digit groups and before its symbol — and a symbol of
-letters is always kept a space off the amount: `PLN 12.00`.
+`date.months.standalone` where a catalog has it.
+`reaktor_format_pattern(buf, cap, tm, pattern)` formats any pattern. The
+weekday is computed from the date. A catalog says how its language writes
+numbers as it says "Save" (Polish puts no-break spaces between digit groups
+and before its symbol), and a symbol of letters is always kept a space off
+the amount: `PLN 12.00`.
 
 **The language** is `--lang` when a catalog has it, else the system's: the
 first of its preferred languages that a catalog has, else English, else the
-first catalog, and it changes when the system's does.
-`reaktor_locale_set(code)` switches at any time and stops following the
-system; `reaktor_locale_set(NULL)` follows it again, and
-`reaktor_locale_system()` says whether it does.
+first catalog; it changes when the system's does. `reaktor_locale_set(code)`
+switches at any time and stops following the system;
+`reaktor_locale_set(NULL)` follows it again, and `reaktor_locale_system()`
+says whether it does.
 
 **Leave `.name` to the translated text**, so a screen reader reads what is
-drawn; the cost is that a switch makes each translated widget new, placed a
-frame late and dropping focus.
+drawn. The cost: a switch makes each translated widget new, placed a frame
+late and dropping focus.
 
 The atlas bakes Latin-1 plus every character the catalogs use that Aileron
 has; the rest is the [Text](#text) module's. Formatting stops at the patterns
@@ -1552,7 +1562,7 @@ above: no time zones, only the Gregorian calendar, groups of three only.
 ## Text
 
 Nuklear draws a string from the atlas, glyph after glyph, left to right. The
-Text module draws every string that needs more, and breaks lines as Unicode
+Text module draws every string that needs more and breaks lines as Unicode
 says; a string the atlas can draw is left to Nuklear.
 
 - **Direction** by the bidirectional algorithm, through
@@ -1580,9 +1590,9 @@ Shaping is cached by string and font, glyphs by font, glyph and size; each
 cache starts over when full. Its bidi levels match mojibake's by order, since
 mojibake 0.5.0 records `byte_offset` at a character's last byte.
 
-**Fonts are the application's.** The showcase ships M PLUS 1p for Japanese, as
-a `.font_fallbacks` entry; Arabic, Hebrew or an Indic script needs a font that
-has it:
+**Fonts are the application's.** The showcase ships M PLUS 1p for Japanese as
+a `.font_fallbacks` entry; Arabic, Hebrew or an Indic script needs a font
+that has it:
 
 ```bash
 ./build/showcase --font-fallback C:/Windows/Fonts/segoeui.ttf --font-fallback C:/Windows/Fonts/Nirmala.ttc
@@ -1591,12 +1601,11 @@ has it:
 Load fonts you trust, the application's own or the system's: kb_text_shape
 says it is not safe on a font file built to attack it, so a font a user hands
 over is a risk. FreeType, which reads and draws every font, is fuzzed
-continuously by OSS-Fuzz. A collection is read at its first
-font. Without the module,
-`reaktor_text_none` breaks after a space, or before the glyph that would not
-fit, keeping the glyph `nk_label_wrap` would lose. mojibake is built with only
-what is called, and kb_text_shape is one header compiled in `core/text/kb.c`;
-together they are most of the module's size
+continuously by OSS-Fuzz. A collection is read at its first font. Without the
+module, `reaktor_text_none` breaks after a space, or before the glyph that
+would not fit, keeping the glyph `nk_label_wrap` would lose. mojibake is
+built with only what is called, and kb_text_shape is one header compiled in
+`core/text/kb.c`; together they are most of the module's size
 ([PERFORMANCE.md](PERFORMANCE.md#modules)).
 
 Not yet: editing shaped text (a field's caret moves in stored order, a glyph
@@ -1622,15 +1631,15 @@ None is a bug, and each cost an afternoon.
   picks the glyph's side.
 - **`nk_do_selectable_image` reads inverted**: `NK_TEXT_ALIGN_LEFT` pins the
   image right.
-- **A tree header's border is square**: `REAKTOR_TREE_TAB` fills it at rounding 0,
-  as does `nk_combo_begin_color`.
+- **A tree header's border is square**: `REAKTOR_TREE_TAB` fills it at
+  rounding 0, as does `nk_combo_begin_color`.
 - **There is one `window.rounding`**, popups included.
-- **`reaktor_menubar_begin` must come first** in its panel, and pins its row out of
-  the scroll.
-- **A menu's height needs the real row spacing**, 4 rather than 2, or the last
-  item lands on the clipped edge.
-- **`reaktor_group_begin` answers 0 when scrolled out of view**; returning early on
-  it blanks everything below.
+- **`reaktor_menubar_begin` must come first** in its panel, and pins its row
+  out of the scroll.
+- **A menu's height needs the real row spacing**, 4 rather than 2, or the
+  last item lands on the clipped edge.
+- **`reaktor_group_begin` answers 0 when scrolled out of view**; returning
+  early on it blanks everything below.
 - **`REAKTOR_POPUP_DYNAMIC` strokes its border at the bounds before shrinking**,
   so `reaktor_tooltip` leaves a ghost frame.
 - **`reaktor_layout_space_begin` does not nest.**

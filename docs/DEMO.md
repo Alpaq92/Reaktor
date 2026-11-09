@@ -1,15 +1,15 @@
 # The four programs
 
-All four share `runtime/` and `core/`; what differs is `samples/`, and which
-modules each links. The showcase takes every module. Notepad takes settings, popup
-menus and printing; bench and simple take none, so they show what the runtime costs by
-itself. Without the accessibility module, a screen reader finds nothing in
-notepad, bench or simple.
+All four share `runtime/` and `core/`; they differ in `samples/` and in the
+modules they link. The showcase takes every module, notepad settings, popup
+menus and printing; bench and simple take none, so they show what the runtime
+costs alone. Without the accessibility module, a screen reader finds nothing
+in notepad, bench or simple.
 
 | | Lines | For |
 | --- | --- | --- |
-| `showcase` | ~3,300 | Every widget and layer, both schemes, three languages, and how far the CSS reaches |
-| `notepad` | ~330 | A text editor that opens, edits, searches and saves a file of any size |
+| `showcase` | ~4,600 | Every widget and layer, both schemes, three languages, and how far the CSS reaches |
+| `notepad` | ~410 | A text editor that opens, edits, searches and saves a file of any size |
 | `bench` | ~150 | The workload the published figures measure, here and in four other frameworks |
 | `simple` | ~40 | One button that closes the window |
 
@@ -23,28 +23,28 @@ notepad, bench or simple.
 ## Showcase
 
 It opens with a two-second splash: the mark, the name, Reaktor's and SDL's
-versions and what it is built on, each fading in after the one before. The
-web build shows its loading screen instead.
+versions and what it is built on, fading in one after another. The web build
+shows its loading screen instead.
 
 <p align="center">
   <img src="../assets/screenshots/showcase.png" alt="The Reaktor showcase under the system's titlebar in the dark scheme: the sidebar of pages with System chosen at its foot, and the Login page's card in a rounded panel">
 </p>
 
-Ten pages in a sidebar — Login, Buttons, Inputs, Display, Layout, Popups,
-Animation, Styling, Translations, Diagnostics — with the color scheme and the
+Ten pages in a sidebar (Login, Buttons, Inputs, Display, Layout, Popups,
+Animation, Styling, Translations, Diagnostics), the color scheme and the
 titlebar switch at its foot, and an icon in the tray. It is the reference for
-what the library draws, and where its claims are tested rather than asserted:
+what the library draws, where its claims are tested rather than asserted:
 
-- **Styling** lays Simple.css over Water.css at the flick of a checkbox, and
-  prints what each rule resolved to beside the widgets it painted.
+- **Styling** lays Simple.css over Water.css with a checkbox, and prints what
+  each rule resolved to beside the widgets it painted.
 - **Translations** sets the opening of *The Ugly Duckling* in English, Polish
   and Japanese from the catalogs, beside a date, a number, one amount in three
   currencies and a count of ducklings, each written the way that language
   writes it. The Japanese is drawn by the Text module.
 - **Popups** opens floaters, toasts, windows of their own, menus and the tray,
   and can have the showcase ask before it closes.
-- **Diagnostics** shows the renderer, and where each frame's milliseconds and
-  each megabyte went, live.
+- **Diagnostics** shows the renderer, and live, where each frame's
+  milliseconds and each megabyte went.
 - **Animation** sends five blocks to one stop, one of them instantly, draws
   all 31 easing curves through the function the widgets animate with, and
   plays the rest of NukAnim: a clip staggered across a grid under its debug
@@ -58,10 +58,10 @@ what the library draws, and where its claims are tested rather than asserted:
 </p>
 
 A real editor in one file: a menu bar, a multiline field with line numbers
-that grows to fit any file, a find bar, printing and PDF export, a status line, the platform's own open
-and save dialogs, and eight shortcuts. A page of widgets
-never has to answer what happens to a modified document, or where a menu's last
-item lands when its popup is a pixel short; this does.
+that grows to fit any file, a find bar, printing and PDF export, a status
+line, the platform's open and save dialogs, and eight shortcuts. A page of
+widgets never has to answer what happens to a modified document, or where a
+menu's last item lands when its popup is a pixel short; this does.
 
 ## Bench
 
@@ -70,8 +70,8 @@ item lands when its popup is a pixel short; this does.
 </p>
 
 Sixty-four rotating boxes, at the display's rate or flat out with
-`--no-vsync`, for `--bench-seconds`, then what the run cost on stdout. Six
-seconds flat out, on the Windows machine that
+`--no-vsync`, for `--bench-seconds`, then what the run cost, on stdout. Six
+seconds flat out on the Windows machine
 [PERFORMANCE.md](PERFORMANCE.md#where-the-numbers-came-from) names:
 
 ```
@@ -88,11 +88,11 @@ private_mb    6.0
 ```
 
 With `--no-vsync`, read `cpu_at_60fps`, not `cpu_percent`. On vsync,
-`SDL_RenderPresent` waits for the next vblank, and whether that wait is charged
-depends on whether SDL blocks or spins: the same 386 frames have read anywhere
-from 0.3% to 99.6% of a core. `size` is the drawing area, printed because four
+`SDL_RenderPresent` waits for the next vblank, and whether the wait is charged
+depends on whether SDL blocks or spins: the same 386 frames have read from
+0.3% to 99.6% of a core. `size` is the drawing area, printed because four
 other frameworks in `benchmarks/` draw the same picture. `--boxes` changes the
-workload, and `--fps` holds it to a rate.
+workload; `--fps` holds it to a rate.
 
 It is deliberately what the library is worst at. Everything else in
 PERFORMANCE.md counts frames, because nothing is drawn while nothing changes;
@@ -106,7 +106,7 @@ bars in the chart there come from this program, one per renderer.
 </p>
 
 One centered button that closes the window, in about forty lines: the
-smallest thing that is still an application, and the one to start from.
+smallest application, and the one to start from.
 
 ## Running one the same way twice
 
@@ -116,5 +116,5 @@ smallest thing that is still an application, and the one to start from.
 
 `--shot` writes the window once it settles and quits; `--a11y-dump` writes
 every node's role, name, value, state and rectangle. Diff two dumps and
-anything that moved by a pixel says so. The rest of the flags are in
+anything that moved by a pixel shows. The other flags are in
 [DOCUMENTATION.md](DOCUMENTATION.md#command-line-flags).

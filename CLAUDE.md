@@ -4,15 +4,15 @@ C99. Widgets are declared; the look comes from CSS read at runtime.
 
 ## Build and run
 
-`./build.sh [target]` (`./build.ps1` on Windows; `cmake` is not on PATH, the
-script finds it). Targets: `showcase`, `notepad`, `simple`, `bench`, the tests
+`./build.sh [target]` (`./build.ps1` on Windows, which finds `cmake`; it is
+not on PATH). Targets: `showcase`, `notepad`, `simple`, `bench`, the tests
 in `tests/`, and `libreaktor`. `-Arch x86|arm64` builds into `build-<arch>`;
 ARM64 is checked only by CI.
 
 CMake options pass through: `./build.ps1 -DREAKTOR_A11Y=OFF`,
-`./build.sh -- -DREAKTOR_A11Y=OFF`. The cache keeps them, so pass `=OFF` or
-`=ON` again to switch back. Check `build/CMakeCache.txt` before measuring:
-`REAKTOR_SHARED=ON` left in `build/` makes every sample a shared one.
+`./build.sh -- -DREAKTOR_A11Y=OFF`. The cache keeps them; pass `=ON` to switch
+back. Check `build/CMakeCache.txt` before measuring: `REAKTOR_SHARED=ON` left
+in `build/` links every sample shared.
 
 Shipping: `tools/package.sh` packs a release folder, `tools/libreaktor-pkg.sh`
 a system package (`libreaktor` static; with `-s`, `libreaktor1`,
@@ -21,16 +21,16 @@ publishes through `release.yml`.
 
 ## Verify against pixels, not source
 
-Reasoning about what a dependency will draw has been wrong too often. Take the
-screenshot and diff the dump:
+Reasoning about what a dependency will draw has been wrong too often. Take
+the screenshot and diff the dump:
 
 ```bash
 ./build/showcase --tab 7 --theme dark --shot a.bmp --a11y-dump a.txt
 ```
 
-The dump has one line per node with role, name, value, state and bounds, so
-a one-pixel move shows. Lines marked `volatile` (Diagnostics timings) differ
-on every run.
+The dump has a line per node with role, name, value, state and bounds, so a
+one-pixel move shows. Lines marked `volatile` (Diagnostics timings) differ
+every run.
 
 ## Traps that have cost real time
 
@@ -57,13 +57,14 @@ on every run.
   renderer, so `reaktor_render` swaps each rounded fill for
   `reaktor_fill_round`, relinking the command list (it ends where a `next`
   reaches `ctx->memory.allocated`).
-- **SDL draws when it flushes, not when it is asked.** Its calls only queue, so
-  without a GPU most of a frame is the flush the runtime makes before timing
-  the present; the Diagnostics page and `bench --no-vsync` split them. Vsync
-  sits in the present, so a total that matches the refresh rate measures it.
-- **`--shot` never skips a frame.** It and a capture force the draw, so a pixel
-  diff cannot see what skipping an unchanged frame breaks; `tests/skiptest.c`
-  can. Skipping is the default; `.draw_every_frame` turns it off.
+- **SDL draws when it flushes, not when it is asked.** Its calls only queue,
+  so without a GPU most of a frame is the flush the runtime makes before
+  timing the present; the Diagnostics page and `bench --no-vsync` split them.
+  Vsync sits in the present: a total matching the refresh rate measures it.
+- **`--shot` never skips a frame.** It and a capture force a whole draw, so a
+  pixel diff cannot see what skipping an unchanged frame, or redrawing only
+  what changed, breaks; `tests/skiptest.c` and `tests/damagetest.c` can.
+  Skipping is the default; `.draw_every_frame` turns it off.
 - **Text the atlas lacks is not Nuklear's.** Strings with Japanese, Arabic and
   the like are measured and drawn by `core/text/text.c` through a custom
   command. mojibake 0.5.0 records `byte_offset` at a character's last byte.
@@ -81,8 +82,8 @@ on every run.
   stops it.
 - **Web: SDL delivers events a frame late**, so the page's own typing goes
   through SDL's queue to keep its order.
-- **Web: a hidden page runs no frames.** No `requestAnimationFrame` in a
-  background tab, so the canvas and a11y tree stay empty. Check
+- **Web: a hidden page runs no frames.** A background tab fires no
+  `requestAnimationFrame`, so the canvas and a11y tree stay empty. Check
   `document.visibilityState`.
 - **The shared library exports only `tools/reaktor.map`.** A new public call
   goes in the map, or `check-exports.sh` fails; a struct an app sees that

@@ -2,8 +2,8 @@
 
 Reaktor is MIT ([LICENSE](../LICENSE)). Everything it is built on is a git
 submodule under `external/`, used as it ships; each license below was read
-from the project's own license file at the pinned revision.
-`git submodule status` prints the pins.
+from the project's own license file at the pinned revision, which
+`git submodule status` prints.
 
 | Component | Used for | License |
 | --- | --- | --- |
@@ -22,25 +22,25 @@ from the project's own license file at the pinned revision.
 | [toml-c](https://github.com/arp242/toml-c) | Reading `settings.toml`; a fork of [tomlc99](https://github.com/cktan/tomlc99), whose copyright notice it keeps | MIT |
 | [gibus](https://github.com/Alpaq92/gibus) | D-Bus on Linux and the BSDs, for the AT-SPI bridge, the tray, notifications and the desktop portal's settings — a port of [minidbus](https://codefloe.com/Honken/minidbus), whose copyright notice it keeps | MIT |
 
-SDL is built static — and, in a `REAKTOR_SHARED` build on Linux and the BSDs,
-shared too, as `libreaktor-sdl3.so` — without audio, joystick, haptic, HID,
-sensor, camera, power, GPU, offscreen, the render backends Reaktor never
-selects, or its dynamic API (see below). Its tray is built, and opened on
-Windows and macOS; on Linux and the BSDs Reaktor's own tray speaks
-StatusNotifierItem and dbusmenu over gibus, so SDL's, which would load
-AppIndicator and GTK 3, never opens there and nothing links them. mojibake is
-built without its collation, IDNA, security
-and character-name tables. NukAnim is one header, compiled in
+SDL is built static (and, in a `REAKTOR_SHARED` build on Linux and the BSDs,
+shared too, as `libreaktor-sdl3.so`) without audio, joystick, haptic, HID,
+sensor, camera, power, offscreen, the render backends Reaktor never selects,
+or its dynamic API (see below); its GPU API is built only with
+`REAKTOR_SHADERS`. Its tray is built, and opened on Windows and macOS. On
+Linux and the BSDs Reaktor's own tray speaks StatusNotifierItem and dbusmenu
+over gibus, so SDL's, which would load AppIndicator and GTK 3, never opens
+there and nothing links them. mojibake is built without its collation, IDNA,
+security and character-name tables. NukAnim is one header, compiled in
 `core/anim/anim.c`; its own Nuklear submodule, which only its tests use, comes
-with a recursive checkout and is not built. kb_text_shape is one header, compiled in
-`core/text/kb.c`; it shapes, and FreeType draws. FreeType is built with only
-its TrueType, CFF, auto-hinter and anti-aliasing modules, and
+with a recursive checkout and is not built. kb_text_shape is one header,
+compiled in `core/text/kb.c`; it shapes, and FreeType draws. FreeType is built
+with only its TrueType, CFF, auto-hinter and anti-aliasing modules, and
 `core/render/ft/reaktor_ftoption.h` turns off what Reaktor never reads, its
 environment override among them.
 
-Nothing links libdbus. SDL still opens `libdbus-1.so.3` where the system has it,
-for input methods, portals and the screensaver, and goes without it where it
-does not.
+Nothing links libdbus. SDL still opens `libdbus-1.so.3` where the system has
+it, for input methods, portals and the screensaver, and does without it
+elsewhere.
 
 The stylesheets are read by Reaktor's own engine, `core/css/css.c`; no CSS
 library is linked or copied.
@@ -51,26 +51,26 @@ Portions of this software are copyright © 2026 The FreeType Project
 ## The one vendored source file
 
 `core/render/nk_sdl3_renderer.h` is Nuklear's SDL3 backend, copied from
-`external/nuklear/demo/sdl3_renderer/` under Nuklear's license. Every deviation
-is marked `REAKTOR`: an 8-bit indexed atlas, a 1×1 white texture for
-untextured geometry, pixel snapping, fills and strokes feathered apart, the
-atlas palette shared with the Text module, rectangles drawn from device pixels
-by `nk_sdl_quad` on the software renderer, an upload for the atlas Reaktor
-bakes itself, `tex_null` repointed after every bake, a key-up dropped for a key Nuklear does not hold, text input of any
-length fed one rune at a time, and textures clamped rather than tested for
-wrapping.
+`external/nuklear/demo/sdl3_renderer/` under Nuklear's license. Every
+deviation is marked `REAKTOR`: an 8-bit indexed atlas, a 1×1 white texture
+for untextured geometry, pixel snapping, fills and strokes feathered apart,
+the atlas palette shared with the Text module, rectangles drawn from device
+pixels by `nk_sdl_quad` on the software renderer, an upload for the atlas
+Reaktor bakes itself, `tex_null` repointed after every bake, a key-up dropped
+for a key Nuklear does not hold, text input of any length fed one rune at a
+time, and textures clamped rather than tested for wrapping.
 
-It cannot stay an include because the changes sit inside its functions, and
-submodules are not edited. The cost: when
-Nuklear's backend changes, it is re-vendored and the hunks re-applied.
+It cannot stay an include: the changes sit inside its functions, and
+submodules are not edited. So when Nuklear's backend changes, it is
+re-vendored and the hunks re-applied.
 
 ## The one change to how a submodule builds
 
 SDL's dynamic API keeps every SDL function in the program and, at startup,
-loads whichever SDL library the `SDL3_DYNAMIC_API` environment variable names.
-It exists so a statically linked game can take a newer SDL; Reaktor's
-programs are rebuilt against one instead, and read no environment. Without it
-`simple` is 20% smaller and `showcase` 12%.
+loads whichever SDL library the `SDL3_DYNAMIC_API` environment variable names,
+so a statically linked game can take a newer SDL. Reaktor's programs are
+rebuilt against one instead, and read no environment. Without it `simple` is
+20% smaller and `showcase` 12%.
 
 SDL refuses a command-line switch for it, so `core/sdl/no_dynapi.h` is forced
 into SDL's sources and defines `SDL_dynapi_h_`, the guard of SDL's own
@@ -88,11 +88,11 @@ UI face, Karla, came from inside Nuklear with no license near it.
 | **M PLUS 1p** | Japanese, for what Aileron lacks | OFL 1.1 | `assets/fonts/MPLUS1p-Notice.txt` |
 
 Aileron is by Sora Sagano of DOT COLON. Its download has no license file, so
-the terms were traced: the font's own `name` table says `copyright: No Rights
+the terms were traced: the font's `name` table says `copyright: No Rights
 Reserved.`, and dotcolon.net/font/aileron links CC0 beside it.
 `Aileron-Notice.txt` records both, says this project assembled it, and
-reproduces the CC0 legal code. It is an OTF with CFF outlines, which
-FreeType reads.
+reproduces the CC0 legal code. It is an OTF with CFF outlines, which FreeType
+reads.
 
 M PLUS 1p is by The M+ Project Authors. `MPLUS1p-Regular.ttf` is the file as
 Google Fonts ships it; `MPLUS1p-Notice.txt` names its commit and SHA-256 and
@@ -114,7 +114,7 @@ translator who died before 1956:
 
 All three are public domain in the United States, in Japan, and wherever
 protection ends seventy years after the translator's death. Mexico's hundred
-years and Colombia's eighty still cover the Japanese one, and no Japanese
+years and Colombia's eighty still cover the Japanese one; no Japanese
 translation with checkable dates clears them. Each catalog repeats its
 attribution, and the page prints it under the story.
 
@@ -126,28 +126,29 @@ domain as a U.S. Government work.
 
 ## Benchmarks
 
-Nothing in `benchmarks/` is listed above. Its four projects — Flutter,
-Electron, Compose Multiplatform and Shaft — hold source and build files only;
+Nothing in `benchmarks/` is listed above. Its four projects (Flutter,
+Electron, Compose Multiplatform and Shaft) hold source and build files only;
 each toolchain fetches its own framework, and none is part of a Reaktor build.
 
 ## What is redistributed
 
-A native build links SDL, plutosvg, plutovg and FreeType
-statically, plus mojibake and kb_text_shape with the Text module, and compiles
-in Nuklear, NukAnim, Onlay and toml-c, and gibus on Linux and the BSDs, so it
-carries the zlib, MIT and FreeType License terms above. Each license
-is copied unchanged into `licenses/` beside the programs: ship that folder,
-and this file, with a binary.
+A native build links SDL, plutosvg, plutovg and FreeType statically, plus
+mojibake and kb_text_shape with the Text module, and compiles in Nuklear,
+NukAnim, Onlay and toml-c, and gibus on Linux and the BSDs, so it carries the
+zlib, MIT and FreeType License terms above. Each license is copied unchanged
+into `licenses/` beside the programs: ship that folder, and this file, with a
+binary.
 
 The binary also carries the default assets in `REAKTOR_BUILTINS`, byte for
 byte: Water.css's `variables-light.css`, `variables-dark.css` and the nine
-files in `src/parts/` (MIT); the seven Ionicons `chevron-down-outline`, `chevron-back-outline`,
-`chevron-forward-outline`, `ellipse`, `ellipse-outline`, `radio-button-off`
-and `close-outline` (MIT); Aileron Regular and Bold (CC0); and the mark and
-`assets/css/reaktor.css` (MIT). Their licenses are in `licenses/` too.
+files in `src/parts/` (MIT); the seven Ionicons `chevron-down-outline`,
+`chevron-back-outline`, `chevron-forward-outline`, `ellipse`,
+`ellipse-outline`, `radio-button-off` and `close-outline` (MIT); Aileron
+Regular and Bold (CC0); and the mark and `assets/css/reaktor.css` (MIT).
+Their licenses are in `licenses/` too.
 
 The rest of Ionicons, Simple.css, the Japanese font and the catalogs are not
 embedded (the catalogs are with `-DREAKTOR_LOCALE_EMBED=ON`); a build that
-uses them ships them beside the binary, under the `.reaktor-root` marker,
+uses them ships them beside the binary under the `.reaktor-root` marker,
 which `tools/package.sh` writes for releases. The WebAssembly build packs the
 ones it uses into its `.data` bundle.

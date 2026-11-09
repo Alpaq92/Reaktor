@@ -11,13 +11,13 @@ dozen dependencies just to put a dialog on screen? And of small alternatives
 always lacking crucial features? No? But I was, so I wrote Reaktor: complete
 without being big. A 2.1 MB binary, 7–13 MB of RAM, and no GPU required.
 
-**[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)** — the
-same program, built to WebAssembly — or
+**[Try the showcase in your browser](https://alpaq92.github.io/Reaktor/)**, the
+same program built to WebAssembly, or
 **[download it](https://github.com/Alpaq92/Reaktor/releases/latest)** for
-Windows, macOS, Linux, FreeBSD, OpenBSD or NetBSD, or as WebAssembly to serve
+Windows, macOS, Linux, FreeBSD, OpenBSD, NetBSD, or as WebAssembly to serve
 yourself.
 
-> ⚠️ **Reaktor is in active development**, and breaking changes might occur.
+> ⚠️ **Reaktor is in active development**; breaking changes may occur.
 
 <p align="center">
   <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 8.9 MB, the same program on D3D12 120.5 MB and on OpenGL 69.2 MB, Flutter 132.7 MB, Electron 156.3 MB, Kotlin Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor 6.3%, D3D12 4.1%, OpenGL 5.5%, Flutter 15.3%, Electron 19.6%, Kotlin Multiplatform 29.4%"></a>
@@ -27,34 +27,33 @@ How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Features
 
-- **24 declared widgets** — buttons, fields, checks, radios, sliders, knobs,
-  spinners, combos, a color picker, date and time pickers, sidebar, tabs, a
-  menu bar, tables, trees and a splitter, with tooltips; rows drag between
-  lists; all of Nuklear underneath, under Reaktor's names.
-- **Layers** — menus in windows of their own, in-window dialogs, modal
-  questions, toasts, more native windows, and a tray icon with its own menu.
-- **Services** — system open, save and folder pickers, timers, main-thread
-  posting, settings that persist, an undo stack, system notifications, and
-  printing and PDF export.
+- **24 declared widgets**: buttons, fields, checks, radios, sliders, knobs,
+  spinners, combos, color, date and time pickers, sidebar, tabs, a menu bar,
+  tables, trees and a splitter, with tooltips and rows that drag between
+  lists. All of Nuklear is underneath, under Reaktor's names.
+- **Layers**: menus in windows of their own, in-window dialogs, modal
+  questions, toasts, more native windows, and a tray icon with a menu.
+- **Services**: system open, save and folder pickers, timers, main-thread
+  posting, persistent settings, undo, system notifications, printing and PDF
+  export.
 - **Styled by CSS** read at run time: color, type, borders, radii, spacing,
   `:hover` and `:active`, light and dark. Swap the sheet and the app changes.
-- **Accessible with no code** — UI Automation, NSAccessibility, AT-SPI and a
-  DOM subtree on the web, with keyboard navigation throughout.
-- **Localization** — catalogs, plural rules, and numbers, money and dates as
+- **Accessible with no code**: UI Automation, NSAccessibility, AT-SPI and a
+  DOM subtree on the web, and keyboard navigation throughout.
+- **Localization**: catalogs, plural rules, and numbers, money and dates as
   each language writes them.
-- **Text past Latin-1** — direction, shaping, fallback fonts and Unicode line
+- **Text past Latin-1**: direction, shaping, fallback fonts and Unicode line
   breaking, so Japanese wraps properly.
-- **Animation** — tweens keyed per widget on 31 curves, springs, steps and
+- **Animation**: tweens keyed per widget on 31 curves, springs, steps and
   béziers; keyframed clips staggered across a grid; motion paths,
-  oscillators, noise and shakes; colors blended in five spaces; and text
-  that arrives a glyph at a time, idle once everything settles.
-- **Modular** — accessibility, localization, text shaping, settings, the tray,
+  oscillators, noise and shakes; colors blended in five spaces; text that
+  arrives a glyph at a time. Idle once everything settles.
+- **Modular**: accessibility, localization, text shaping, settings, the tray,
   popup windows, notifications, printing and the Inspector each swap for a
-  stub at build time, and only what they drew stops being drawn; every other
-  pixel stays.
-- **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources,
-  on one software rasterizer, at any display scale: x86 and ARM everywhere,
-  and RISC-V on Linux ([Platforms](docs/DOCUMENTATION.md#platforms)).
+  stub at build time. Only what they drew goes; every other pixel stays.
+- **Windows, macOS, Linux, the BSDs and WebAssembly** from one set of sources
+  and one software rasterizer, at any display scale: x86 and ARM everywhere,
+  RISC-V on Linux ([Platforms](docs/DOCUMENTATION.md#platforms)).
 - **Nothing drawn at rest** — 0% of a core while it sits there.
 
 ## Build
@@ -70,31 +69,30 @@ cd Reaktor
 ```
 
 `./build-wasm.sh` (`build-wasm.ps1` on Windows, with
-[emsdk](https://emscripten.org)) builds the web versions into `build-wasm/`, to
-be served over HTTP.
+[emsdk](https://emscripten.org)) builds the web versions into `build-wasm/`,
+to be served over HTTP.
 
-To build your own application, add Reaktor with `add_subdirectory` and declare
-it with `reaktor_add_app`, or take a `libreaktor` package from the
+For your own application, `add_subdirectory` Reaktor and declare the app with
+`reaktor_add_app`, or take a `libreaktor` package from the
 [releases](https://github.com/Alpaq92/Reaktor/releases/latest) and
 `find_package(reaktor)`: [In your own project](docs/DOCUMENTATION.md#in-your-own-project).
 
 ## Install
 
-On Linux and the BSDs, one script builds libreaktor as the system's own
-package (`.deb`, `.rpm`, FreeBSD, OpenBSD or NetBSD) and installs it:
+On Linux and the BSDs, one script builds libreaktor as a system package
+(`.deb`, `.rpm`, FreeBSD, OpenBSD or NetBSD) and installs it:
 
 ```bash
 sh tools/libreaktor-pkg.sh -i
 ```
 
-It lands in `/opt/reaktor` (`/usr/local/reaktor` on the BSDs); build against it
-with `-DCMAKE_PREFIX_PATH=/opt/reaktor`, or `pkg-config` with
-`PKG_CONFIG_PATH=/opt/reaktor/lib/pkgconfig`. Remove it with the system's
-package manager: it is `libreaktor` everywhere. With `-s` it also
-builds `libreaktor.so` and packs three packages instead: `libreaktor-sdl3-0`
-and `libreaktor1`, which an app needs to run, and `libreaktor-shared` to
-build one. `libreaktor` and `libreaktor-shared` conflict; install one or the
-other.
+It lands in `/opt/reaktor` (`/usr/local/reaktor` on the BSDs); build against
+it with `-DCMAKE_PREFIX_PATH=/opt/reaktor`, or `pkg-config` with
+`PKG_CONFIG_PATH=/opt/reaktor/lib/pkgconfig`. The package manager removes it:
+it is `libreaktor` everywhere. `-s` also builds `libreaktor.so` and packs
+three packages instead: `libreaktor-sdl3-0` and `libreaktor1` to run an app,
+`libreaktor-shared` to build one. `libreaktor` and `libreaktor-shared`
+conflict; install one.
 
 ## Usage
 
@@ -113,35 +111,35 @@ REAKTOR_COLUMN(.gap = 10) {
 }
 ```
 
-No colors, radii, padding or font sizes: they come from a stylesheet read at
-startup. Nothing for screen readers either: each widget reports its own name,
-value and position.
+No colors, radii, padding or font sizes: a stylesheet read at startup gives
+them. Nothing for screen readers either: each widget reports its name, value
+and position.
 
 ## Made of
 
 [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) draws the widgets.
-[SDL3](https://github.com/libsdl-org/SDL) supplies the window, input and
+[SDL3](https://github.com/libsdl-org/SDL) supplies the window, input,
 software renderer, and the tray on Windows and macOS; on Linux and the BSDs
 the tray is Reaktor's, over the D-Bus client
-[gibus](https://github.com/Alpaq92/gibus). Reaktor's own CSS engine
-reads the stylesheets, and
-[Onlay](https://github.com/Alpaq92/Onlay), a fork of
-[randrew/layout](https://github.com/randrew/layout), computes the rectangles.
-[NukAnim](https://github.com/Alpaq92/NukAnim), a port of ImAnim, moves them.
+[gibus](https://github.com/Alpaq92/gibus). Reaktor's own CSS engine reads the
+stylesheets. [Onlay](https://github.com/Alpaq92/Onlay), a fork of
+[randrew/layout](https://github.com/randrew/layout), computes the rectangles,
+and [NukAnim](https://github.com/Alpaq92/NukAnim), a port of ImAnim, moves
+them.
 Every dependency is a submodule, used as it ships; the full list is in
 [NOTICE.md](docs/NOTICE.md).
 
 ## Documentation
 
-- [DOCUMENTATION.md](docs/DOCUMENTATION.md) — the whole of it: every widget,
-  layout and layer, styling, then how it works inside.
-- [FAQ.md](docs/FAQ.md) — short answers to common questions.
-- [DEMO.md](docs/DEMO.md) — the four programs in this repository.
-- [PERFORMANCE.md](docs/PERFORMANCE.md) — what it costs, measured.
-- [BENCHMARKS.md](benchmarks/BENCHMARKS.md) — the comparison, as runnable
+- [DOCUMENTATION.md](docs/DOCUMENTATION.md): every widget, layout, layer and
+  style, then how it works inside.
+- [FAQ.md](docs/FAQ.md): short answers to common questions.
+- [DEMO.md](docs/DEMO.md): the four programs in this repository.
+- [PERFORMANCE.md](docs/PERFORMANCE.md): what it costs, measured.
+- [BENCHMARKS.md](benchmarks/BENCHMARKS.md): the comparison, as runnable
   projects.
-- [NOTICE.md](docs/NOTICE.md) — dependencies and licenses.
+- [NOTICE.md](docs/NOTICE.md): dependencies and licenses.
 
 ## License
 
-MIT. The dependencies keep their own — see [NOTICE.md](docs/NOTICE.md).
+MIT. The dependencies keep their own; see [NOTICE.md](docs/NOTICE.md).

@@ -1,5 +1,14 @@
 # Plan: libreaktor as a shared library
 
+> **Finished.** Every phase below has shipped; this is the record of how, and
+> it no longer describes the code. Since it was written the soname became
+> `libreaktor.so.1` (runtime package `libreaktor1`, ABI tables
+> `tools/abi/libreaktor.so.1-*.abi`), the packages became `libreaktor`
+> (static) and `libreaktor-shared` (the split's development package), and
+> the release archives `libreaktor-*` and `libreaktor-shared-*`. The current
+> state is in [DOCUMENTATION.md](docs/DOCUMENTATION.md#in-your-own-project),
+> the measurements in [PERFORMANCE.md](docs/PERFORMANCE.md).
+
 **Decision (2026-11-02): go.** Three apps together save 14.8%, under the 20%
 threshold, but four save 20.4% and five 24.2% (Phase 0d), and Reaktor apps
 are expected to run four or more at a time. Phase 1 starts. Static stays the
