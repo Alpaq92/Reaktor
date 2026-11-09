@@ -19,3 +19,12 @@ size_t reaktor_utf8_clean(char *dst, const char *src, size_t cap)
     dst[n] = 0;
     return n;
 }
+
+char *reaktor_utf8_clean_dup(const char *src)
+{
+    size_t cap = strlen(src) * 3 + 1;
+    char  *dst = (char *)SDL_malloc(cap);
+
+    if (dst) reaktor_utf8_clean(dst, src, cap);
+    return dst;
+}

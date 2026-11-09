@@ -90,7 +90,7 @@ notify_os(App *app, const char *title, const char *text)
     return 1;
 }
 
-#elif defined(REAKTOR_HAVE_DBUS)
+#elif defined(REAKTOR_HAVE_GIBUS)
 #include "gibus.h"
 
 static int
@@ -99,20 +99,14 @@ notify_os(App *app, const char *title, const char *body)
     gibus_conn  *c;
     gibus_msg   *m;
     gibus_iter   it, sub;
-    gibus_error  err;
     const char  *name = reaktor_app_ident(), *icon = "";
     uint32_t     replaces = 0;
     int32_t      expire = -1;
     int          ok = 0;
-    size_t       tn = SDL_strlen(title) * 3 + 1, bn = SDL_strlen(body) * 3 + 1;
-    char        *t = (char *)SDL_malloc(tn), *b = (char *)SDL_malloc(bn);
+    char        *t = reaktor_utf8_clean_dup(title), *b = reaktor_utf8_clean_dup(body);
 
     (void)app;
-    gibus_error_init(&err);
-    if (!t || !b) goto done;
-    reaktor_utf8_clean(t, title, tn);
-    reaktor_utf8_clean(b, body, bn);
-    if (!(c = gibus_session(&err))) goto done;
+    if (!t || !b || !(c = gibus_session(NULL))) goto done;
     m = gibus_msg_call("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
                        "org.freedesktop.Notifications", "Notify");
     if (!m) {
@@ -135,7 +129,6 @@ notify_os(App *app, const char *title, const char *body)
     gibus_msg_free(m);
     gibus_unref(c);
 done:
-    gibus_error_free(&err);
     SDL_free(t);
     SDL_free(b);
     return ok;
@@ -152,7 +145,7 @@ notify_os(App *app, const char *title, const char *text)
 }
 #endif
 
-#if defined(__EMSCRIPTEN__) || defined(_WIN32) || defined(REAKTOR_HAVE_DBUS) || defined(__APPLE__)
+#if defined(__EMSCRIPTEN__) || defined(_WIN32) || defined(REAKTOR_HAVE_GIBUS) || defined(__APPLE__)
 int
 reaktor_notify(App *app, const reaktor_notification *n)
 {

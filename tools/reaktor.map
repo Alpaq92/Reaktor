@@ -190,6 +190,7 @@ LIBREAKTOR_PRIVATE_0 {
     reaktor_set_scale;
     reaktor_style_loads;
     reaktor_utf8_clean;
+    reaktor_utf8_clean_dup;
     reaktor_window_app;
     reaktor_window_points;
     reaktor_window_spawn;

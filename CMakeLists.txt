@@ -571,7 +571,7 @@ else()
         target_link_libraries(reaktor_notify INTERFACE
             "-framework Foundation" "-framework UserNotifications")
     elseif(TARGET reaktor_gibus)
-        target_compile_definitions(reaktor_notify INTERFACE REAKTOR_HAVE_DBUS)
+        target_compile_definitions(reaktor_notify INTERFACE REAKTOR_HAVE_GIBUS)
         target_link_libraries(reaktor_notify INTERFACE reaktor_gibus)
     elseif(NOT EMSCRIPTEN)
         target_link_libraries(reaktor_notify INTERFACE reaktor_notify_none)
