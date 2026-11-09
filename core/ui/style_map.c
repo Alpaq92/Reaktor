@@ -44,8 +44,7 @@ hot_hover(const struct nk_context *ctx, struct nk_rect r)
 {
     const struct nk_window *w = ctx->current;
 
-    if (w && (w->widgets_disabled || (w->layout && (w->layout->flags & NK_WINDOW_ROM))))
-        return 0;
+    if (w && w->widgets_disabled) return 0;
     return nk_input_is_mouse_hovering_rect(&ctx->input, r) &&
            (!w || !w->layout || nk_input_is_mouse_hovering_rect(&ctx->input, w->layout->clip));
 }
