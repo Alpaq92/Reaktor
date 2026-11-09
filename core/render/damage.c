@@ -2,6 +2,7 @@
 
 #define LOOKAHEAD 32
 #define SERIAL    "reaktor.serial"
+#define IDLE_MS   1000
 
 typedef struct sink {
     reaktor_damage_list *l;
@@ -587,11 +588,29 @@ drop(App *app)
     SDL_SetRenderScale(app->ren, app->render_scale, app->render_scale);
 }
 
+/* K exists to draw the next frame over; an idle window does not need it. */
+static void
+idle_due(App *app, void *user)
+{
+    reaktor_damage *d    = &app->damage;
+    Uint64          idle = SDL_GetTicks() - d->drawn;
+
+    (void)user;
+    d->idle = 0;
+    if (!d->k) return;
+    if (idle < IDLE_MS)
+        d->idle = reaktor_timer(app, (int)(IDLE_MS - idle), 0, idle_due, NULL);
+    else
+        drop(app);
+}
+
 void
 reaktor_damage_free(App *app)
 {
     int i;
 
+    if (app->damage.idle) reaktor_timer_stop(app->damage.idle);
+    app->damage.idle = 0;
     if (app->ren) drop(app);
     for (i = 0; i < 2; i++) {
         SDL_free(app->damage.list[i].item);
@@ -736,6 +755,8 @@ reaktor_damage_render(App *app)
     SDL_RenderTexture(app->ren, d->k, NULL, NULL);
     d->now   = !d->now;
     d->clear = app->clear;
+    d->drawn = SDL_GetTicks();
+    if (!d->idle) d->idle = reaktor_timer(app, IDLE_MS, 0, idle_due, NULL);
     return 1;
 }
 

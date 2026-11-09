@@ -130,6 +130,8 @@ typedef struct reaktor_damage {
     int                 kw, kh;
     struct nk_color     clear;
     int                 checking;
+    unsigned            idle;
+    Uint64              drawn;
     float               peak;
     unsigned long       partial, full, mismatched;
 } reaktor_damage;
