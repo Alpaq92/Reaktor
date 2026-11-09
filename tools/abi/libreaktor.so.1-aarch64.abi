@@ -260,7 +260,7 @@ type = struct reaktor_launch {
 /*    576      |       8 */    void *user;
 /*    584      |       4 */    int remember_window;
 /*    588      |       4 */    int single_instance;
-/*    592      |       4 */    int skip_same_frames;
+/*    592      |       4 */    int draw_every_frame;
 /*    596      |       4 */    reaktor_save save_settings;
 /*    600      |       4 */    int save_ms;
 /* XXX  4-byte hole      */
