@@ -845,6 +845,24 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
     }
 }
 
+float
+reaktor_text_ink_em(void)
+{
+    float most = 0.0f;
+    int   i;
+
+    for (i = 0; i < g_fonts; i++) {
+        const text_font *f = &g_font[i];
+        FT_Pos           m;
+
+        if (f->state <= 0) continue;
+        m = SDL_max(SDL_max(-f->face->bbox.xMin, f->face->bbox.xMax),
+                    SDL_max(-f->face->bbox.yMin, f->face->bbox.yMax));
+        if ((float)m * f->unit > most) most = (float)m * f->unit;
+    }
+    return most;
+}
+
 int
 reaktor_text_break(const char *s, int len, int limit)
 {

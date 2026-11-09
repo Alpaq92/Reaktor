@@ -1011,6 +1011,21 @@ nothing on screen follows the display's refresh. It is off by default; the
 showcase turns it on, and its Diagnostics page counts the frames drawn and
 skipped.
 
+On the software renderer at a whole-number scale, a launch with
+`.skip_same_frames` also redraws a changed frame only where its commands
+changed. The window is drawn into a texture that keeps the last frame; the
+commands that differ from it mark up to four rectangles, and only those are
+cleared and drawn again, through every command, before the texture is copied
+to the window. A frame that would redraw more than half the window, a new
+window size, scale, theme or clear color, an evicted icon or a new font atlas,
+the first frame, and a frame a `--shot` or a capture waits for are drawn whole.
+Every frame comes out pixel for pixel as a full redraw would draw it;
+`tests/damagetest.c` checks each one. A GPU renderer, whose back buffer is not
+kept, or a fractional scale, draws every frame whole. A texture an app changes
+in place through `reaktor_sdl_renderer` is not among the commands, so a frame
+that only changes its pixels is skipped, or leaves them where they were: draw
+it from a new texture, or at a new rectangle, for the change to show.
+
 A finger that moves mostly up or down, by more than 8 pixels, scrolls the
 panel under it: the runtime releases what the finger pressed away from every
 widget, so nothing is clicked, and turns its movement into wheel steps sized

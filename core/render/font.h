@@ -50,5 +50,6 @@ void reaktor_fontset_bind(struct reaktor_fontset *set, nk_handle texture);
 void reaktor_fontset_free(struct reaktor_fontset *set);
 
 const struct reaktor_glyph *reaktor_font_glyph(const struct reaktor_font *f, nk_rune cp);
+float reaktor_font_ink_em(void);
 
 #endif

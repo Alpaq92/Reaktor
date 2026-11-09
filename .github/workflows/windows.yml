@@ -155,7 +155,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           New-Item -ItemType Directory -Force smoke | Out-Null
-          foreach ($name in 'uitest', 'skiptest') {
+          foreach ($name in 'uitest', 'skiptest', 'damagetest', 'damagetest_text') {
             $p = Start-Process "./${{ matrix.out }}/$name.exe" -ArgumentList '--log', "smoke/$name.log" -PassThru
             if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "$name did not finish" }
             Select-String -Path "smoke/$name.log" -Pattern 'test:' | ForEach-Object { $_.Line }
