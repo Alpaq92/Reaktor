@@ -875,11 +875,55 @@ reaktor_a11y_platform_init(reaktor_a11y_action activate,
     }
 }
 
+#define RESTATED_MAX 64
+
+/* What a screen reader is told when a control's state flips; focus has its
+   own event below. */
+static void
+emit_states(const unsigned *id, const unsigned *was, int n)
+{
+    static const struct { unsigned bit; const char *name; int on_when_clear; } flips[] = {
+        { REAKTOR_A11Y_CHECKED,  "checked",   0 },
+        { REAKTOR_A11Y_EXPANDED, "expanded",  0 },
+        { REAKTOR_A11Y_SELECTED, "selected",  0 },
+        { REAKTOR_A11Y_DISABLED, "enabled",   1 },
+        { REAKTOR_A11Y_DISABLED, "sensitive", 1 }
+    };
+    reaktor_snap_node node;
+    char buf[REAKTOR_SNAP_TEXT];
+    int i, k;
+
+    for (i = 0; i < n; i++) {
+        if (!reaktor_snap_get(id[i], &node, buf, sizeof(buf))) continue;
+        for (k = 0; k < (int)SDL_arraysize(flips); k++) {
+            int on = (node.state & flips[k].bit) != 0;
+
+            if (on == ((was[i] & flips[k].bit) != 0)) continue;
+            emit_event("StateChanged", flips[k].name, on != flips[k].on_when_clear, 0, id[i]);
+        }
+    }
+}
+
 void
 reaktor_a11y_platform_push(const reaktor_a11y *a, unsigned focus_id)
 {
+    const reaktor_a11y_change *c;
+    unsigned id[RESTATED_MAX], was[RESTATED_MAX];
+    reaktor_snap_node node;
+    char buf[REAKTOR_SNAP_TEXT];
+    int i, m, n = 0;
+
+    /* The snapshot still holds the last frame: keep what changed states had. */
+    c = reaktor_a11y_changes(a, &m);
+    for (i = 0; g.ready && i < m && n < RESTATED_MAX; i++) {
+        if (c[i].kind != REAKTOR_A11Y_RESTATED) continue;
+        if (!reaktor_snap_get(c[i].id, &node, buf, sizeof(buf))) continue;
+        id[n] = c[i].id;
+        was[n++] = node.state;
+    }
     if (!reaktor_snap_update(a, focus_id)) return;
     if (!g.ready) return;
+    emit_states(id, was, n);
 
     if (reaktor_snap_structural(a)) emit_event("ChildrenChanged", "add", 0, 0, 0);
 
