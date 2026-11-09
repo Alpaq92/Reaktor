@@ -1,32 +1,46 @@
 #include "internal.h"
 
 #define LOOKAHEAD 32
-
-static int
-grow(void **p, int *cap, int need, size_t size)
-{
-    int   n = *cap ? *cap : 64;
-    void *q;
-
-    if (need <= *cap) return 1;
-    while (n < need) n *= 2;
-    if (!(q = SDL_realloc(*p, (size_t)n * size))) return 0;
-    *p   = q;
-    *cap = n;
-    return 1;
-}
+#define SERIAL    "reaktor.serial"
 
 typedef struct sink {
     reaktor_damage_list *l;
+    unsigned             h;
     int                  ok;
+    const void          *tex;
+    Sint64               serial;
 } sink;
+
+void
+reaktor_texture_serial(SDL_Texture *t)
+{
+    static Sint64 next;
+
+    if (t) SDL_SetNumberProperty(SDL_GetTextureProperties(t), SERIAL, ++next);
+}
+
+static Sint64
+serial_of(sink *k, const void *t)
+{
+    if (!t) return 0;
+    if (t != k->tex) {
+        k->tex    = t;
+        k->serial = SDL_GetNumberProperty(SDL_GetTextureProperties((SDL_Texture *)t),
+                                          SERIAL, 0);
+    }
+    return k->serial;
+}
 
 static void
 put(sink *k, const void *p, size_t n)
 {
     reaktor_damage_list *l = k->l;
 
-    if (!k->ok || !grow((void **)&l->key, &l->size, l->used + (int)n, 1)) {
+    if (!l) {
+        k->h = reaktor_fnv_n(k->h, p, n);
+        return;
+    }
+    if (!k->ok || !reaktor_grow((void **)&l->key, &l->size, l->used + (int)n, 1)) {
         k->ok = 0;
         return;
     }
@@ -41,8 +55,15 @@ put(sink *k, const void *p, size_t n)
 static void
 command_key(const struct nk_command *c, sink *k)
 {
+    Sint64 id;
+
     K(c->type);
     switch (c->type) {
+    case NK_COMMAND_SCISSOR: {
+        const struct nk_command_scissor *x = (const void *)c;
+        K(x->x); K(x->y); K(x->w); K(x->h);
+        break;
+    }
     case NK_COMMAND_LINE: {
         const struct nk_command_line *x = (const void *)c;
         K(x->line_thickness); K(x->begin); K(x->end); K(x->color);
@@ -114,7 +135,8 @@ command_key(const struct nk_command *c, sink *k)
     case NK_COMMAND_IMAGE: {
         const struct nk_command_image *x = (const void *)c;
         K(x->x); K(x->y); K(x->w); K(x->h);
-        K(x->img.handle.ptr); K(x->img.w); K(x->img.h); K(x->img.region); K(x->col);
+        id = serial_of(k, x->img.handle.ptr);
+        K(x->img.handle.ptr); K(id); K(x->img.w); K(x->img.h); K(x->img.region); K(x->col);
         break;
     }
     case NK_COMMAND_CUSTOM: {
@@ -124,7 +146,8 @@ command_key(const struct nk_command *c, sink *k)
     }
     case NK_COMMAND_TEXT: {
         const struct nk_command_text *x = (const void *)c;
-        K(x->font); K(x->background); K(x->foreground);
+        id = serial_of(k, x->font ? x->font->texture.ptr : NULL);
+        K(x->font); K(id); K(x->background); K(x->foreground);
         K(x->x); K(x->y); K(x->w); K(x->h); K(x->height); K(x->length);
         put(k, x->string, (size_t)x->length);
         break;
@@ -315,23 +338,55 @@ device_box(float x0, float y0, float x1, float y1, float s, int m)
     return d;
 }
 
+static int
+item_close(reaktor_damage_list *l, int at, reaktor_damage_box box, int scaled)
+{
+    reaktor_damage_item *it;
+
+    if (!reaktor_grow((void **)&l->item, &l->cap, l->n + 1, sizeof *l->item) ||
+        (scaled && !reaktor_grow((void **)&l->scaled, &l->scaled_cap, l->scaled_n + 1,
+                                 sizeof *l->scaled)))
+        return 0;
+    if (scaled) l->scaled[l->scaled_n++] = l->n;
+    it       = &l->item[l->n++];
+    it->at   = (unsigned)at;
+    it->len  = (unsigned)(l->used - at);
+    it->hash = reaktor_fnv_n(REAKTOR_FNV, l->key + at, it->len);
+    it->box  = box;
+    return 1;
+}
+
 void
 reaktor_damage_add(reaktor_damage_list *l, const void *key, int len,
                    reaktor_damage_box box, int scaled)
 {
-    reaktor_damage_item *it;
+    int at = l->used;
 
-    if (!grow((void **)&l->item, &l->cap, l->n + 1, sizeof *l->item) ||
-        !grow((void **)&l->key, &l->size, l->used + len, 1))
-        return;
-    SDL_memcpy(l->key + l->used, key, (size_t)len);
-    it         = &l->item[l->n++];
-    it->hash   = reaktor_fnv_n(REAKTOR_FNV, key, (size_t)len);
-    it->at     = (unsigned)l->used;
-    it->len    = (unsigned)len;
-    it->box    = box;
-    it->scaled = scaled;
-    l->used   += len;
+    if (!reaktor_grow((void **)&l->key, &l->size, l->used + len, 1)) return;
+    SDL_memcpy(l->key + at, key, (size_t)len);
+    l->used += len;
+    if (!item_close(l, at, box, scaled)) l->used = at;
+}
+
+static int
+applies(const App *app)
+{
+    float s = app->render_scale;
+
+    return app->renderer_is_sw && s >= 1.0f && s == SDL_floorf(s);
+}
+
+static unsigned
+stream(struct nk_context *ctx)
+{
+    const struct nk_command *c;
+    sink k;
+
+    SDL_zero(k);
+    k.h = REAKTOR_FNV;
+    nk_foreach(c, ctx)
+        if (c->type != NK_COMMAND_NOP) command_key(c, &k);
+    return k.h;
 }
 
 unsigned
@@ -342,11 +397,16 @@ reaktor_damage_collect(App *app, struct nk_context *ctx)
     const struct nk_command *c;
     struct nk_rect clip = REAKTOR_NO_CLIP;
     reaktor_damage_box out, cut;
-    float s = app->render_scale > 0.0f ? app->render_scale : 1.0f;
-    float ink = SDL_max(reaktor_font_ink_em(), reaktor_text_ink_em());
+    float s = app->render_scale;
+    float ink;
+    unsigned h = REAKTOR_FNV;
     sink k;
+    int i;
 
-    l->n = l->used = 0;
+    d->collected = 0;
+    if (!applies(app)) return stream(ctx);
+    ink = SDL_max(reaktor_font_ink_em(), reaktor_text_ink_em());
+    l->n = l->used = l->scaled_n = 0;
     l->ow = l->oh = 0;
     SDL_GetRenderOutputSize(app->ren, &l->ow, &l->oh);
     l->laid_w = app->laid_w;
@@ -356,13 +416,14 @@ reaktor_damage_collect(App *app, struct nk_context *ctx)
     out.x1 = l->ow;
     out.y1 = l->oh;
     cut = out;
+    SDL_zero(k);
     k.l  = l;
     k.ok = 1;
     nk_foreach(c, ctx) {
-        reaktor_damage_item *it;
+        reaktor_damage_box box = { 0, 0, 0, 0 };
         span   b;
         float  thick;
-        int    at = l->used;
+        int    at = l->used, scaled = 0;
         short  sc[4];
 
         if (c->type == NK_COMMAND_SCISSOR) {
@@ -374,7 +435,6 @@ reaktor_damage_collect(App *app, struct nk_context *ctx)
             continue;
         }
         if (c->type == NK_COMMAND_NOP) continue;
-        if (!grow((void **)&l->item, &l->cap, l->n + 1, sizeof *l->item)) k.ok = 0;
         sc[0] = (short)clip.x;
         sc[1] = (short)clip.y;
         sc[2] = (short)clip.w;
@@ -382,25 +442,24 @@ reaktor_damage_collect(App *app, struct nk_context *ctx)
         put(&k, sc, sizeof sc);
         command_key(c, &k);
         if (!k.ok) break;
-        it         = &l->item[l->n++];
-        it->at     = (unsigned)at;
-        it->len    = (unsigned)(l->used - at);
-        it->hash   = reaktor_fnv_n(REAKTOR_FNV, l->key + at, it->len);
-        it->scaled = 0;
-        it->box.x0 = it->box.y0 = it->box.x1 = it->box.y1 = 0;
         SDL_zero(b);
         if (command_span(c, clip, ink, &b, &thick)) {
             int m = (int)SDL_ceilf((thick * 0.5f + 1.0f) * s) + 2;
 
-            it->box = box_cut(device_box(b.x0, b.y0, b.x1, b.y1, s, m), cut);
-            if (box_empty(it->box)) it->box.x0 = it->box.y0 = it->box.x1 = it->box.y1 = 0;
+            box = box_cut(device_box(b.x0, b.y0, b.x1, b.y1, s, m), cut);
+            if (box_empty(box)) box.x0 = box.y0 = box.x1 = box.y1 = 0;
             else if (c->type == NK_COMMAND_IMAGE)
-                it->scaled = image_scaled((const struct nk_command_image *)c, s);
+                scaled = image_scaled((const struct nk_command_image *)c, s);
         }
+        if (!(k.ok = item_close(l, at, box, scaled))) break;
     }
-    d->collected = k.ok;
-    if (!k.ok) l->n = l->used = 0;
-    return reaktor_fnv_n(REAKTOR_FNV, l->key, (size_t)l->used);
+    if (!k.ok) {
+        l->n = l->used = l->scaled_n = 0;
+        return stream(ctx);
+    }
+    d->collected = 1;
+    for (i = 0; i < l->n; i++) h = reaktor_fnv_n(h, &l->item[i].hash, sizeof l->item[i].hash);
+    return h;
 }
 
 static int
@@ -483,21 +542,16 @@ take(reaktor_damage_box *r, int *n, reaktor_damage_box b)
     settle(r, n);
 }
 
-static void
-unmatched(const reaktor_damage_list *l, int i, reaktor_damage_box *r, int *n)
-{
-    take(r, n, l->item[i].box);
-}
-
 int
 reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *now,
-                    reaktor_damage_box *rects, int *count)
+                    reaktor_damage_box *rects, int *count, long long *covered)
 {
     reaktor_damage_box r[REAKTOR_DAMAGE_RECTS + 1];
+    reaktor_damage_box o = { 0, 0, 0, 0 };
     int a = 0, b = 0, ae = was->n, be = now->n, n = 0, i, si, changed;
-    long long covered = 0;
 
-    *count = 0;
+    *count   = 0;
+    *covered = 0;
     if (was->ow != now->ow || was->oh != now->oh || was->s != now->s ||
         was->laid_w != now->laid_w || was->laid_h != now->laid_h ||
         now->ow <= 0 || now->oh <= 0 || now->s < 1.0f)
@@ -514,35 +568,35 @@ reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *n
         }
         for (d = 1; d <= LOOKAHEAD && !hit; d++) {
             if (b + d < be && same(was, a, now, b + d)) {
-                for (i = 0; i < d; i++) unmatched(now, b + i, r, &n);
+                for (i = 0; i < d; i++) take(r, &n, now->item[b + i].box);
                 b += d;
                 hit = 1;
             } else if (a + d < ae && same(was, a + d, now, b)) {
-                for (i = 0; i < d; i++) unmatched(was, a + i, r, &n);
+                for (i = 0; i < d; i++) take(r, &n, was->item[a + i].box);
                 a += d;
                 hit = 1;
             }
         }
         if (!hit) {
-            unmatched(was, a++, r, &n);
-            unmatched(now, b++, r, &n);
+            take(r, &n, was->item[a++].box);
+            take(r, &n, now->item[b++].box);
         }
     }
-    while (a < ae) unmatched(was, a++, r, &n);
-    while (b < be) unmatched(now, b++, r, &n);
+    while (a < ae) take(r, &n, was->item[a++].box);
+    while (b < be) take(r, &n, now->item[b++].box);
     if (!n) return REAKTOR_DAMAGE_NONE;
 
     si = (int)now->s;
     do {
         changed = 0;
-        for (i = 0; i < now->n; i++) {
+        for (i = 0; i < now->scaled_n; i++) {
+            reaktor_damage_box box = now->item[now->scaled[i]].box;
             int j;
 
-            if (!now->item[i].scaled) continue;
             for (j = 0; j < n; j++) {
-                reaktor_damage_box g = box_join(r[j], now->item[i].box);
+                reaktor_damage_box g = box_join(r[j], box);
 
-                if (overlaps(r[j], now->item[i].box) && SDL_memcmp(&g, &r[j], sizeof g) != 0) {
+                if (overlaps(r[j], box) && SDL_memcmp(&g, &r[j], sizeof g) != 0) {
                     r[j]    = g;
                     changed = 1;
                 }
@@ -563,26 +617,15 @@ reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *n
         if (changed) settle(r, &n);
     } while (changed);
 
+    o.x1 = now->ow;
+    o.y1 = now->oh;
     for (i = 0; i < n; i++) {
-        reaktor_damage_box o = { 0, 0, 0, 0 };
-
-        o.x1 = now->ow;
-        o.y1 = now->oh;
-        covered += area(box_cut(r[i], o));
-        rects[i] = r[i];
+        *covered += area(box_cut(r[i], o));
+        rects[i]  = r[i];
     }
     *count = n;
-    if (covered * 2 > (long long)now->ow * now->oh) return REAKTOR_DAMAGE_FULL;
+    if (*covered * 2 > (long long)now->ow * now->oh) return REAKTOR_DAMAGE_FULL;
     return REAKTOR_DAMAGE_PARTIAL;
-}
-
-static int
-in_scope(const App *app)
-{
-    float s = app->render_scale;
-
-    return app->renderer_is_sw && app->damage.collected && s >= 1.0f &&
-           s == SDL_floorf(s);
 }
 
 static SDL_Texture *
@@ -617,7 +660,6 @@ drop(App *app)
 {
     reaktor_damage *d = &app->damage;
 
-    d->have_ref = 0;
     if (!d->k) return;
     SDL_SetRenderTarget(app->ren, NULL);
     SDL_DestroyTexture(d->k);
@@ -635,6 +677,7 @@ reaktor_damage_free(App *app)
     for (i = 0; i < 2; i++) {
         SDL_free(app->damage.list[i].item);
         SDL_free(app->damage.list[i].key);
+        SDL_free(app->damage.list[i].scaled);
     }
     SDL_zero(app->damage);
 }
@@ -656,9 +699,7 @@ check(App *app, const SDL_Rect *r, int n)
     if (!d->check && !(d->check = target(app, d->kw, d->kh))) return;
     SDL_SetRenderTarget(app->ren, d->check);
     SDL_SetRenderScale(app->ren, app->render_scale, app->render_scale);
-    SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b, app->clear.a);
-    SDL_RenderClear(app->ren);
-    reaktor_render_list(app, NULL, 0);
+    reaktor_render(app, NULL, 0);
     want = SDL_RenderReadPixels(app->ren, NULL);
     SDL_SetRenderTarget(app->ren, d->k);
     got = SDL_RenderReadPixels(app->ren, NULL);
@@ -720,21 +761,22 @@ reaktor_damage_render(App *app)
 {
     reaktor_damage      *d   = &app->damage;
     reaktor_damage_list *now = &d->list[d->now], *was = &d->list[!d->now];
-    SDL_Rect r[REAKTOR_DAMAGE_RECTS];
-    int fresh = 0, i;
-    long long covered = 0;
+    reaktor_damage_box   box[REAKTOR_DAMAGE_RECTS];
+    SDL_Rect             r[REAKTOR_DAMAGE_RECTS];
+    long long            covered = 0;
+    int kind = REAKTOR_DAMAGE_FULL, n = 0, fresh = 0, si, i;
 
-    if (!in_scope(app)) {
+    if (!d->collected || !applies(app)) {
         drop(app);
-        d->collected = 0;
-        return 0;
+        reaktor_render(app, NULL, 0);
+        return 1;
     }
-    d->collected = 0;
     if (!d->k || d->kw != now->ow || d->kh != now->oh) {
         drop(app);
         if (!(d->k = target(app, now->ow, now->oh))) {
             SDL_SetRenderTarget(app->ren, NULL);
-            return 0;
+            reaktor_render(app, NULL, 0);
+            return 1;
         }
         d->kw = now->ow;
         d->kh = now->oh;
@@ -744,40 +786,33 @@ reaktor_damage_render(App *app)
         SDL_SetRenderTarget(app->ren, d->k);
     }
 
-    d->kind  = REAKTOR_DAMAGE_FULL;
-    d->rects = 0;
-    if (!fresh && !d->forced && d->have_ref &&
-        SDL_memcmp(&d->clear, &app->clear, sizeof d->clear) == 0)
-        d->kind = reaktor_damage_diff(was, now, d->rect, &d->rects);
+    if (!fresh && !d->forced && SDL_memcmp(&d->clear, &app->clear, sizeof d->clear) == 0)
+        kind = reaktor_damage_diff(was, now, box, &n, &covered);
 
-    if (d->kind == REAKTOR_DAMAGE_FULL) {
-        reaktor_render(app);
-        d->share = 1.0f;
+    if (kind == REAKTOR_DAMAGE_NONE) return 0;
+    if (kind == REAKTOR_DAMAGE_FULL) {
+        reaktor_render(app, NULL, 0);
         d->full++;
     } else {
-        for (i = 0; i < d->rects; i++) {
-            int si = (int)app->render_scale;
+        float share = (float)covered / ((float)now->ow * (float)now->oh);
 
-            r[i].x = d->rect[i].x0 / si;
-            r[i].y = d->rect[i].y0 / si;
-            r[i].w = (d->rect[i].x1 - d->rect[i].x0) / si;
-            r[i].h = (d->rect[i].y1 - d->rect[i].y0) / si;
-            covered += (long long)(d->rect[i].x1 - d->rect[i].x0) *
-                       (d->rect[i].y1 - d->rect[i].y0);
+        si = (int)app->render_scale;
+        for (i = 0; i < n; i++) {
+            r[i].x = box[i].x0 / si;
+            r[i].y = box[i].y0 / si;
+            r[i].w = (box[i].x1 - box[i].x0) / si;
+            r[i].h = (box[i].y1 - box[i].y0) / si;
         }
-        d->share = (float)covered / ((float)now->ow * (float)now->oh);
-        if (d->share > d->peak) d->peak = d->share;
-        reaktor_render_area(app, r, d->rects);
-        if (d->checking) check(app, r, d->rects);
-        nk_sdl_frame_done(app->ctx);
+        if (share > d->peak) d->peak = share;
+        reaktor_render(app, r, n);
+        if (d->checking) check(app, r, n);
         d->partial++;
     }
 
     SDL_SetRenderTarget(app->ren, NULL);
     SDL_RenderTexture(app->ren, d->k, NULL, NULL);
-    d->now      = !d->now;
-    d->have_ref = 1;
-    d->clear    = app->clear;
+    d->now   = !d->now;
+    d->clear = app->clear;
     return 1;
 }
 

@@ -559,9 +559,8 @@ load_theme(App *app)
     img_cache_clear(app);
     apply_widget_style(app);
 
-    app->clear     = app->page;
-    app->dirty     = 1;
-    app->must_draw = 1;
+    app->clear = app->page;
+    app->dirty = 1;
     reaktor_windows_restyle();
 }
 
@@ -1375,6 +1374,7 @@ same_frame(App *app, struct nk_context *ctx)
     h = reaktor_damage_collect(app, ctx);
     h = reaktor_fnv_n(h, &app->laid_w, sizeof app->laid_w);
     h = reaktor_fnv_n(h, &app->laid_h, sizeof app->laid_h);
+    h = reaktor_fnv_n(h, &app->clear, sizeof app->clear);
     app->damage.forced = app->must_draw || app->want_capture || app->shot_path ||
                          !app->first_frame_done;
     same = h == app->frame_hash && !app->damage.forced;
@@ -1555,8 +1555,9 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     nk_style_pop_vec2(ctx);
 
     t_render0 = SDL_GetPerformanceCounter();
-    if (app->build_only || same_frame(app, ctx)) {
-        /* A drawn frame clears in nk_sdl_render_ex; kept, the next build's
+    if (!app->build_only) reaktor_mask_rounded_fills(app);
+    if (app->build_only || same_frame(app, ctx) || !reaktor_damage_render(app)) {
+        /* A drawn frame clears in nk_sdl_frame_done; kept, the next build's
            popups and overlay never join the list. */
         nk_clear(ctx);
         t_present0 = t_end = t_render0;
@@ -1567,8 +1568,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
         }
     } else {
         app->frames_drawn++;
-        if (is_main) reaktor_text_prepare(ctx, app->ren);
-        if (!reaktor_damage_render(app)) reaktor_render(app);
+        nk_sdl_frame_done(ctx);
         SDL_FlushRenderer(app->ren);
         t_present0 = SDL_GetPerformanceCounter();
         if (is_main) shot = take_shot(app);

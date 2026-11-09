@@ -63,7 +63,7 @@ struct img_slot {
     struct tex_slot s;
     char            src[192];
     unsigned        hash;
-    Uint32          stroke;
+    struct nk_color stroke;
     float           sw;
     int             ion, px, w, h;
     float           ink_l, ink_r;
@@ -114,7 +114,6 @@ typedef struct reaktor_damage_box {
 typedef struct reaktor_damage_item {
     unsigned           hash, at, len;
     reaktor_damage_box box;
-    int                scaled;
 } reaktor_damage_item;
 
 typedef struct reaktor_damage_list {
@@ -122,19 +121,20 @@ typedef struct reaktor_damage_list {
     int                  n, cap;
     unsigned char       *key;
     int                  used, size;
+    int                 *scaled;
+    int                  scaled_n, scaled_cap;
     int                  ow, oh, laid_w, laid_h;
     float                s;
 } reaktor_damage_list;
 
 typedef struct reaktor_damage {
     reaktor_damage_list list[2];
-    int                 now, have_ref, collected, forced;
+    int                 now, collected, forced;
     SDL_Texture        *k, *check;
     int                 kw, kh;
     struct nk_color     clear;
-    reaktor_damage_box  rect[REAKTOR_DAMAGE_RECTS];
-    int                 rects, kind, checking;
-    float               share, peak;
+    int                 checking;
+    float               peak;
     unsigned long       partial, full, mismatched;
 } reaktor_damage;
 
@@ -449,19 +449,19 @@ SDL_Cursor *reaktor_cursor(int kind);
 int  reaktor_instance_claim(int argc, char **argv);
 void reaktor_instance_listen(App *app, void (*opened)(App *app, const char *path));
 void reaktor_instance_stop(void);
-void reaktor_render(App *app);
-void reaktor_render_list(App *app, const SDL_Rect *rects, int n);
-void reaktor_render_area(App *app, const SDL_Rect *rects, int n);
+void reaktor_mask_rounded_fills(App *app);
+void reaktor_render(App *app, const SDL_Rect *rects, int n);
 
 unsigned reaktor_damage_collect(App *app, struct nk_context *ctx);
 int  reaktor_damage_render(App *app);
 void reaktor_damage_presented(App *app);
 int  reaktor_damage_views(App *app);
 void reaktor_damage_free(App *app);
+void reaktor_texture_serial(SDL_Texture *t);
 void reaktor_damage_add(reaktor_damage_list *l, const void *key, int len,
                         reaktor_damage_box box, int scaled);
 int  reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *now,
-                         reaktor_damage_box *rects, int *n);
+                         reaktor_damage_box *rects, int *n, long long *covered);
 
 typedef void (*reaktor_page_fn)(App *app, struct nk_context *ctx, int w, int h,
                                 void *user);

@@ -31,10 +31,7 @@ slot_take(App *app, void *slots, size_t size, int *count, int max)
         s = slot_at(slots, size, i);
         if (s->seen != now && (!k || now - s->seen > now - k->seen)) k = s;
     }
-    if (k && k->tex) {
-        SDL_DestroyTexture(k->tex);
-        app->must_draw = 1;
-    }
+    if (k && k->tex) SDL_DestroyTexture(k->tex);
     return k;
 }
 
@@ -46,7 +43,6 @@ img_cache_clear(App *app)
     for (i = 0; i < app->img_count; i++)
         if (app->img[i].s.tex) SDL_DestroyTexture(app->img[i].s.tex);
     app->img_count = 0;
-    app->must_draw = 1;
 }
 
 void
@@ -82,6 +78,7 @@ blank_image(App *app)
         app->blank = SDL_CreateTexture(app->ren, SDL_PIXELFORMAT_ARGB8888,
                                        SDL_TEXTUREACCESS_STATIC, 1, 1);
         if (!app->blank) return nk_image_id(0);
+        reaktor_texture_serial(app->blank);
         SDL_UpdateTexture(app->blank, NULL, &clear, (int)sizeof clear);
         SDL_SetTextureBlendMode(app->blank, SDL_BLENDMODE_BLEND);
     }
@@ -91,10 +88,10 @@ blank_image(App *app)
 #define ION_DIR "external/ionicons/src/svg/"
 
 struct img_key {
-    const char *src;
-    int         ion;
-    Uint32      stroke;
-    float       sw;
+    const char     *src;
+    int             ion;
+    struct nk_color stroke;
+    float           sw;
 };
 
 static const char *
@@ -166,8 +163,8 @@ img_lookup(App *app, const struct img_key *k, int px)
     for (i = 0; i < app->img_count; i++) {
         slot = &app->img[i];
         if (slot->hash == hash && slot->px == px && slot->ion == k->ion &&
-            slot->stroke == k->stroke && slot->sw == k->sw &&
-            strcmp(slot->src, k->src) == 0) {
+            !SDL_memcmp(&slot->stroke, &k->stroke, sizeof k->stroke) &&
+            slot->sw == k->sw && strcmp(slot->src, k->src) == 0) {
             slot->s.seen = app->ctx->seq;
             return slot->s.tex ? slot : NULL;
         }
@@ -180,7 +177,7 @@ img_lookup(App *app, const struct img_key *k, int px)
 
     if (k->ion) {
         SDL_snprintf(rel, sizeof(rel), ION_DIR "%s.svg", k->src);
-        SDL_snprintf(ocol, sizeof(ocol), "#%06x", (unsigned)k->stroke);
+        reaktor_hex(k->stroke, ocol);
         if (k->sw >= 0.0f) {
             char num[32];
 
@@ -252,6 +249,7 @@ img_lookup(App *app, const struct img_key *k, int px)
     plutovg_surface_destroy(surf);
 
     if (!tex) return NULL;
+    reaktor_texture_serial(tex);
     SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
 
@@ -282,7 +280,7 @@ ion_key(const char *name, struct nk_color stroke, float sw)
 
     k.src    = name;
     k.ion    = 1;
-    k.stroke = (Uint32)stroke.r << 16 | (Uint32)stroke.g << 8 | stroke.b;
+    k.stroke = nk_rgb(stroke.r, stroke.g, stroke.b);
     k.sw     = sw;
     return k;
 }
@@ -311,7 +309,7 @@ ionicon_ink(App *app, const char *name, struct nk_color stroke, float sw,
 struct nk_image
 reaktor_image_file(App *app, const char *src, int px)
 {
-    struct img_key k = { src, 0, 0, 0.0f };
+    struct img_key k = { src, 0, { 0, 0, 0, 0 }, 0.0f };
 
     return slot_image(app, icon_slot(app, &k, px, 2.0f));
 }
@@ -381,6 +379,7 @@ round_mask(App *app, int r, int t)
         plutovg_surface_destroy(pv);
     }
     if (tex) {
+        reaktor_texture_serial(tex);
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
     }
@@ -427,8 +426,8 @@ splice_fill(App *app, nk_size at, struct nk_rect clip)
     return run.last;
 }
 
-static void
-mask_rounded_fills(App *app)
+void
+reaktor_mask_rounded_fills(App *app)
 {
     struct nk_context *ctx = app->ctx;
     const struct nk_command *c = nk__begin(ctx);
@@ -510,54 +509,43 @@ reaktor_aa_fills(const App *app)
            (app->aa_mode == REAKTOR_AA_AUTO && !app->renderer_is_sw);
 }
 
-void
-reaktor_render(App *app)
+static void
+clear_rects(App *app, const SDL_Rect *rects, int n)
 {
-    if (!app->renderer_is_sw || reaktor_aa_fills(app) || !first_fill_covers(app)) {
-        SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
-                               app->clear.a);
-        SDL_RenderClear(app->ren);
-    }
-    mask_rounded_fills(app);
-    nk_sdl_render_ex(app->ctx,
-                     reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
-                     reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
-}
-
-void
-reaktor_render_list(App *app, const SDL_Rect *rects, int n)
-{
-    nk_sdl_render_area(app->ctx,
-                       reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
-                       reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
-                       rects, n);
-}
-
-/* SDL_RenderClear would ignore the clip. */
-void
-reaktor_render_area(App *app, const SDL_Rect *rects, int n)
-{
+    SDL_FRect     f[REAKTOR_DAMAGE_RECTS];
     SDL_BlendMode blend = SDL_BLENDMODE_BLEND;
     int i;
 
+    n = SDL_min(n, REAKTOR_DAMAGE_RECTS);
+    for (i = 0; i < n; i++) {
+        f[i].x = (float)rects[i].x;
+        f[i].y = (float)rects[i].y;
+        f[i].w = (float)rects[i].w;
+        f[i].h = (float)rects[i].h;
+    }
     SDL_GetRenderDrawBlendMode(app->ren, &blend);
     SDL_SetRenderDrawBlendMode(app->ren, SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
                            app->clear.a);
-    for (i = 0; i < n; i++) {
-        SDL_FRect f;
-
-        f.x = (float)rects[i].x;
-        f.y = (float)rects[i].y;
-        f.w = (float)rects[i].w;
-        f.h = (float)rects[i].h;
-        SDL_SetRenderClipRect(app->ren, &rects[i]);
-        SDL_RenderFillRect(app->ren, &f);
-    }
-    SDL_SetRenderClipRect(app->ren, NULL);
+    SDL_RenderFillRects(app->ren, f, n);
     SDL_SetRenderDrawBlendMode(app->ren, blend);
-    mask_rounded_fills(app);
-    if (n > 0) reaktor_render_list(app, rects, n);
+}
+
+void
+reaktor_render(App *app, const SDL_Rect *rects, int n)
+{
+    if (n > 0) {
+        clear_rects(app, rects, n);
+    } else if (!app->renderer_is_sw || reaktor_aa_fills(app) || !first_fill_covers(app)) {
+        SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
+                               app->clear.a);
+        SDL_RenderClear(app->ren);
+    }
+    if (!app->secondary) reaktor_text_prepare(app->ctx, app->ren);
+    nk_sdl_render_area(app->ctx,
+                       reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
+                       reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
+                       rects, n);
 }
 
 nk_size
@@ -1006,6 +994,7 @@ rebuild_font(App *app)
     struct reaktor_fontset set;
     struct reaktor_font   *font = NULL;
     unsigned char         *pixels;
+    nk_handle              atlas;
     int bold, shared, i;
 
     shared = app->secondary && keeps(app) && reaktor_fontset_copy(&set, &g_kept.set);
@@ -1019,7 +1008,9 @@ rebuild_font(App *app)
     reaktor_fontset_free(&app->fonts);
     app->fonts = set;
     pixels = shared ? g_kept.set.pixels : set.pixels;
-    reaktor_fontset_bind(&app->fonts, nk_sdl_font_upload(app->ctx, pixels, set.w, set.h));
+    atlas  = nk_sdl_font_upload(app->ctx, pixels, set.w, set.h);
+    reaktor_texture_serial((SDL_Texture *)atlas.ptr);
+    reaktor_fontset_bind(&app->fonts, atlas);
     app->fonts.pixels = NULL;
     for (i = 0; i < FONT_STEPS; i++) {
         app->faces[i] = &app->fonts.fonts[i];
@@ -1058,7 +1049,6 @@ rebuild_font(App *app)
         app->atlas_bpp = SDL_BYTESPERPIXEL(tex->format);
     }
     nk_style_set_font(app->ctx, base_font(app));
-    app->must_draw = 1;
 }
 
 void
