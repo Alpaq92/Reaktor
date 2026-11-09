@@ -405,17 +405,15 @@ nk_sdl_meets(float x0, float y0, float x1, float y1, const SDL_Rect *a,
            y1 + 1.0f > (float)a->y * sy && y0 - 1.0f < (float)(a->y + a->h) * sy;
 }
 
-/* REAKTOR: a run of triangles by the box of its vertices. */
-NK_INTERN int
-nk_sdl_run_meets(const void *vertices, const nk_draw_index *ix, nk_uint count,
-                 const SDL_Rect *a, float sx, float sy)
+/* REAKTOR: the device box of a run of triangles. */
+NK_INTERN void
+nk_sdl_run_box(const void *vertices, const nk_draw_index *ix, nk_uint count,
+               float sx, float sy, float b[4])
 {
     const struct nk_sdl_vertex *v = (const struct nk_sdl_vertex *)vertices;
     float x0, y0, x1, y1;
     nk_uint k;
 
-    if (!a) return 1;
-    if (!count) return 0;
     x0 = x1 = v[ix[0]].position[0];
     y0 = y1 = v[ix[0]].position[1];
     for (k = 1; k < count; k++) {
@@ -426,7 +424,28 @@ nk_sdl_run_meets(const void *vertices, const nk_draw_index *ix, nk_uint count,
         if (p[1] < y0) y0 = p[1];
         if (p[1] > y1) y1 = p[1];
     }
-    return nk_sdl_meets(x0 * sx, y0 * sy, x1 * sx, y1 * sy, a, sx, sy);
+    b[0] = x0 * sx;
+    b[1] = y0 * sy;
+    b[2] = x1 * sx;
+    b[3] = y1 * sy;
+}
+
+/* REAKTOR: clips to rectangle i of n, cut by the command's, if box b (none
+   when NULL) meets it; with no rectangles, to the command's alone. */
+NK_INTERN int
+nk_sdl_pass(SDL_Renderer *ren, const SDL_Rect *clip, const SDL_Rect *rects, int n,
+            int i, const float *b, float sx, float sy, SDL_Rect *last)
+{
+    SDL_Rect r = *clip;
+
+    if (n > 0 && ((b && !nk_sdl_meets(b[0], b[1], b[2], b[3], &rects[i], sx, sy)) ||
+                  !SDL_GetRectIntersection(clip, &rects[i], &r)))
+        return 0;
+    if (SDL_memcmp(&r, last, sizeof r) != 0) {
+        SDL_SetRenderClipRect(ren, &r);
+        *last = r;
+    }
+    return 1;
 }
 
 /* REAKTOR: the end of nk_sdl_render, apart. */
@@ -454,8 +473,9 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 {
     /* setup global state */
     struct nk_sdl* sdl;
-    int is_sw, pass;
+    int is_sw, passes;
     float sx = 1.0f, sy = 1.0f;
+    SDL_Rect last_clip = {0, 0, -1, -1};
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
@@ -526,16 +546,17 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                                     &saved_b, &saved_a);
         SDL_SetRenderDrawBlendMode(sdl->renderer, SDL_BLENDMODE_BLEND);
 
-        /* REAKTOR: one conversion, one pass per rectangle. */
-        for (pass = 0; pass < (n > 0 ? n : 1); pass++) {
-        const SDL_Rect *area = n > 0 ? &rects[pass] : NULL;
-        SDL_Rect last_clip = {0, 0, -1, -1};
+        /* REAKTOR: one conversion; each run, met by its box, drawn in every
+         * rectangle it reaches. */
+        offset = (const nk_draw_index*)nk_buffer_memory_const(&sdl->ogl.ebuf);
+        passes = n > 0 ? n : 1;
 
         /* iterate over and execute each draw command */
-        offset = (const nk_draw_index*)nk_buffer_memory_const(&sdl->ogl.ebuf);
-
         nk_draw_foreach(cmd, &sdl->ctx, &sdl->ogl.cmds)
         {
+            SDL_Rect clip;
+            int i;
+
             if (!cmd->elem_count) continue;
 
             /* REAKTOR: glyph quads on the pixel grid. */
@@ -550,21 +571,15 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                 }
             }
 
-            {
-                SDL_Rect r;
-                r.x = cmd->clip_rect.x;
-                r.y = cmd->clip_rect.y;
-                r.w = cmd->clip_rect.w;
-                r.h = cmd->clip_rect.h;
-                /* REAKTOR: a pass draws only inside its rectangle. */
-                if (area && !SDL_GetRectIntersection(&r, area, &r)) {
-                    offset += cmd->elem_count;
-                    continue;
-                }
-                if (SDL_memcmp(&r, &last_clip, sizeof r) != 0) {
-                    SDL_SetRenderClipRect(sdl->renderer, &r);
-                    last_clip = r;
-                }
+            clip.x = cmd->clip_rect.x;
+            clip.y = cmd->clip_rect.y;
+            clip.w = cmd->clip_rect.w;
+            clip.h = cmd->clip_rect.h;
+            /* REAKTOR: drawn only inside the rectangles. */
+            for (i = 0; i < n && !SDL_HasRectIntersection(&clip, &rects[i]); i++) {}
+            if (n > 0 && i == n) {
+                offset += cmd->elem_count;
+                continue;
             }
 
             {
@@ -576,13 +591,11 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
                 if (tex == sdl->ogl.white_tex) tex = NULL;
 
-                /* REAKTOR: software rectangles from device pixels. A pass
-                 * groups them as a full frame does and submits only those
-                 * that reach its rectangle. */
+                /* REAKTOR: software rectangles from device pixels. */
                 if (is_sw) {
                     struct nk_sdl_sw st;
                     nk_uint k = 0, from = 0;
-                    float tw = 0.0f, th = 0.0f;
+                    float tw = 0.0f, th = 0.0f, b[4] = {0, 0, 0, 0};
 
                     SDL_zero(st);
                     if (tex && !SDL_GetTextureSize(tex, &tw, &th)) tw = th = 0.0f;
@@ -596,36 +609,49 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                         /* What came before it in the list is drawn before it. */
                         if (k > from) {
                             nk_sdl_sw_restore(sdl->renderer, tex, &st);
-                            if (nk_sdl_run_meets(vertices, offset + from, k - from,
-                                                 area, sx, sy))
-                                nk_sdl_geometry_sw(sdl->renderer, tex, vertices, nv,
-                                                   offset + from, (int)(k - from));
+                            if (n > 0)
+                                nk_sdl_run_box(vertices, offset + from, k - from, sx, sy, b);
+                            for (i = 0; i < passes; i++)
+                                if (nk_sdl_pass(sdl->renderer, &clip, rects, n, i, b, sx, sy,
+                                                &last_clip))
+                                    nk_sdl_geometry_sw(sdl->renderer, tex, vertices, nv,
+                                                       offset + from, (int)(k - from));
                         }
-                        if (!area ||
-                            nk_sdl_meets(q.d.x * sx, q.d.y * sy, (q.d.x + q.d.w) * sx,
-                                         (q.d.y + q.d.h) * sy, area, sx, sy))
-                            nk_sdl_quad_draw(sdl->renderer, tex, &q, &st);
+                        b[0] = q.d.x * sx;
+                        b[1] = q.d.y * sy;
+                        b[2] = (q.d.x + q.d.w) * sx;
+                        b[3] = (q.d.y + q.d.h) * sy;
+                        for (i = 0; i < passes; i++)
+                            if (nk_sdl_pass(sdl->renderer, &clip, rects, n, i, b, sx, sy,
+                                            &last_clip))
+                                nk_sdl_quad_draw(sdl->renderer, tex, &q, &st);
                         k += 6;
                         from = k;
                     }
                     nk_sdl_sw_restore(sdl->renderer, tex, &st);
-                    if (cmd->elem_count > from &&
-                        nk_sdl_run_meets(vertices, offset + from,
-                                         cmd->elem_count - from, area, sx, sy))
-                        nk_sdl_geometry_sw(sdl->renderer, tex, vertices, nv,
-                                           offset + from,
-                                           (int)(cmd->elem_count - from));
+                    if (cmd->elem_count > from) {
+                        if (n > 0)
+                            nk_sdl_run_box(vertices, offset + from, cmd->elem_count - from,
+                                           sx, sy, b);
+                        for (i = 0; i < passes; i++)
+                            if (nk_sdl_pass(sdl->renderer, &clip, rects, n, i, b, sx, sy,
+                                            &last_clip))
+                                nk_sdl_geometry_sw(sdl->renderer, tex, vertices, nv,
+                                                   offset + from,
+                                                   (int)(cmd->elem_count - from));
+                    }
                     offset += cmd->elem_count;
                     continue;
                 }
 
                 /* REAKTOR: nk_sdl_geometry, not SDL_RenderGeometryRaw. */
-                nk_sdl_geometry(sdl->renderer, tex, vertices, nv, offset,
-                                (int)cmd->elem_count);
+                for (i = 0; i < passes; i++)
+                    if (nk_sdl_pass(sdl->renderer, &clip, rects, n, i, NULL, sx, sy, &last_clip))
+                        nk_sdl_geometry(sdl->renderer, tex, vertices, nv, offset,
+                                        (int)cmd->elem_count);
 
                 offset += cmd->elem_count;
             }
-        }
         }
 
         /* Restore the original blend mode. */

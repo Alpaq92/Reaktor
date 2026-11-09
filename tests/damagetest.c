@@ -204,7 +204,7 @@ list_of(reaktor_damage_list *l, const char *keys, const reaktor_damage_box *boxe
 {
     int i;
 
-    l->n = l->used = 0;
+    l->n = l->used = l->scaled_n = 0;
     l->ow = l->oh = 1000;
     l->laid_w = l->laid_h = 1000;
     l->s = 1.0f;
@@ -242,6 +242,7 @@ diff_units(void)
 {
     reaktor_damage_box boxes[26], r[REAKTOR_DAMAGE_RECTS];
     reaktor_damage_list a, b;
+    long long covered;
     int i, n, kind;
 
     SDL_zero(a);
@@ -250,25 +251,25 @@ diff_units(void)
 
     list_of(&a, "abcdefgh", boxes, NULL);
     list_of(&b, "abcdefgh", boxes, NULL);
-    unit(reaktor_damage_diff(&a, &b, r, &n) == REAKTOR_DAMAGE_NONE, "same lists: none");
+    unit(reaktor_damage_diff(&a, &b, r, &n, &covered) == REAKTOR_DAMAGE_NONE, "same lists: none");
 
     list_of(&b, "abcxefgh", boxes, NULL);
-    kind = reaktor_damage_diff(&a, &b, r, &n);
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(kind == REAKTOR_DAMAGE_PARTIAL && n == 2 && covers(r, n, boxes['d' - 'a']) &&
          covers(r, n, boxes['x' - 'a']), "a changed item: both boxes");
 
     list_of(&b, "abcdyefgh", boxes, NULL);
-    kind = reaktor_damage_diff(&a, &b, r, &n);
-    unit(kind == REAKTOR_DAMAGE_PARTIAL && n == 1 &&
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
+    unit(kind == REAKTOR_DAMAGE_PARTIAL && n == 1 && covered == 100 &&
          SDL_memcmp(&r[0], &boxes['y' - 'a'], sizeof r[0]) == 0, "an insertion: its box alone");
 
     list_of(&b, "abcefgh", boxes, NULL);
-    kind = reaktor_damage_diff(&a, &b, r, &n);
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(kind == REAKTOR_DAMAGE_PARTIAL && n == 1 &&
          SDL_memcmp(&r[0], &boxes['d' - 'a'], sizeof r[0]) == 0, "a deletion: the old box");
 
     list_of(&b, "abdcefgh", boxes, NULL);
-    kind = reaktor_damage_diff(&a, &b, r, &n);
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(kind == REAKTOR_DAMAGE_PARTIAL && (covers(r, n, boxes['c' - 'a']) ||
                                             covers(r, n, boxes['d' - 'a'])),
          "a swap damages what moved");
@@ -276,7 +277,7 @@ diff_units(void)
     list_of(&a, "abcdefghijklmnop", boxes, NULL);
     list_of(&b, "AbCdEfGhIjKlMnOp", boxes, NULL);
     for (i = 0; i < b.n; i++) b.item[i].box = a.item[i].box;
-    kind = reaktor_damage_diff(&a, &b, r, &n);
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(n <= REAKTOR_DAMAGE_RECTS && disjoint(r, n), "many changes: four rectangles at most");
     for (i = 0; i < 16; i += 2)
         unit(kind == REAKTOR_DAMAGE_FULL || covers(r, n, a.item[i].box),
@@ -288,7 +289,7 @@ diff_units(void)
     a.item[0].hash ^= 1;
     a.item[1].hash ^= 1;
     list_of(&b, "ab", boxes, NULL);
-    kind = reaktor_damage_diff(&a, &b, r, &n);
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(kind == REAKTOR_DAMAGE_PARTIAL && n == 1 &&
          SDL_memcmp(&r[0], &(reaktor_damage_box){ 100, 100, 300, 250 }, sizeof r[0]) == 0,
          "touching boxes join");
@@ -296,7 +297,7 @@ diff_units(void)
     boxes[2] = bx(150, 150, 600, 160);
     list_of(&a, "abc", boxes, "c");
     list_of(&b, "xbc", boxes, "c");
-    kind = reaktor_damage_diff(&a, &b, r, &n);
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(kind == REAKTOR_DAMAGE_PARTIAL && covers(r, n, boxes[2]),
          "a stretched image the damage meets is redrawn whole");
 
@@ -304,13 +305,13 @@ diff_units(void)
     list_of(&a, "d", boxes, NULL);
     list_of(&b, "e", boxes, NULL);
     b.item[0].box = boxes[3];
-    unit(reaktor_damage_diff(&a, &b, r, &n) == REAKTOR_DAMAGE_FULL, "past half the window: full");
+    unit(reaktor_damage_diff(&a, &b, r, &n, &covered) == REAKTOR_DAMAGE_FULL, "past half the window: full");
 
     boxes[4] = bx(3, 3, 5, 5);
     list_of(&a, "a", boxes, NULL);
     list_of(&b, "e", boxes, NULL);
     a.s = b.s = 2.0f;
-    kind = reaktor_damage_diff(&a, &b, r, &n);
+    kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(kind == REAKTOR_DAMAGE_PARTIAL && covers(r, n, boxes[4]) && r[0].x0 % 2 == 0 &&
          r[0].y0 % 2 == 0 && r[0].x1 % 2 == 0 && r[0].y1 % 2 == 0,
          "at scale 2 the edges fall on whole logical pixels");
@@ -318,10 +319,10 @@ diff_units(void)
     list_of(&a, "abc", boxes, NULL);
     list_of(&b, "abc", boxes, NULL);
     b.laid_w = 999;
-    unit(reaktor_damage_diff(&a, &b, r, &n) == REAKTOR_DAMAGE_FULL, "a new layout size: full");
+    unit(reaktor_damage_diff(&a, &b, r, &n, &covered) == REAKTOR_DAMAGE_FULL, "a new layout size: full");
 
-    SDL_free(a.item); SDL_free(a.key);
-    SDL_free(b.item); SDL_free(b.key);
+    SDL_free(a.item); SDL_free(a.key); SDL_free(a.scaled);
+    SDL_free(b.item); SDL_free(b.key); SDL_free(b.scaled);
 }
 
 static int

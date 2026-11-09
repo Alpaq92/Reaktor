@@ -114,7 +114,6 @@ typedef struct reaktor_damage_box {
 typedef struct reaktor_damage_item {
     unsigned           hash, at, len;
     reaktor_damage_box box;
-    int                scaled;
 } reaktor_damage_item;
 
 typedef struct reaktor_damage_list {
@@ -122,19 +121,20 @@ typedef struct reaktor_damage_list {
     int                  n, cap;
     unsigned char       *key;
     int                  used, size;
+    int                 *scaled;
+    int                  scaled_n, scaled_cap;
     int                  ow, oh, laid_w, laid_h;
     float                s;
 } reaktor_damage_list;
 
 typedef struct reaktor_damage {
     reaktor_damage_list list[2];
-    int                 now, have_ref, collected, forced;
+    int                 now, collected, forced;
     SDL_Texture        *k, *check;
     int                 kw, kh;
     struct nk_color     clear;
-    reaktor_damage_box  rect[REAKTOR_DAMAGE_RECTS];
-    int                 rects, kind, checking;
-    float               share, peak;
+    int                 checking;
+    float               peak;
     unsigned long       partial, full, mismatched;
 } reaktor_damage;
 
@@ -460,7 +460,7 @@ void reaktor_damage_free(App *app);
 void reaktor_damage_add(reaktor_damage_list *l, const void *key, int len,
                         reaktor_damage_box box, int scaled);
 int  reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *now,
-                         reaktor_damage_box *rects, int *n);
+                         reaktor_damage_box *rects, int *n, long long *covered);
 
 typedef void (*reaktor_page_fn)(App *app, struct nk_context *ctx, int w, int h,
                                 void *user);
