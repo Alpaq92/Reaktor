@@ -20,13 +20,14 @@ from the project's own license file at the pinned revision.
 | [mojibake](https://github.com/zaerl/mojibake) | Bidirectional text (UAX #9) and line breaking (UAX #14), for the Text module | MIT |
 | [kb_text_shape](https://github.com/JimmyLefevre/kb) | OpenType shaping, script segmentation and font coverage, for the Text module | zlib |
 | [toml-c](https://github.com/arp242/toml-c) | Reading `settings.toml`; a fork of [tomlc99](https://github.com/cktan/tomlc99), whose copyright notice it keeps | MIT |
+| [gibus](https://github.com/Alpaq92/gibus) | D-Bus on Linux and the BSDs, for the AT-SPI bridge, the tray, notifications and the desktop portal's settings — a port of [minidbus](https://codefloe.com/Honken/minidbus), whose copyright notice it keeps | MIT |
 
 SDL is built static — and, in a `REAKTOR_SHARED` build on Linux and the BSDs,
 shared too, as `libreaktor-sdl3.so` — without audio, joystick, haptic, HID,
 sensor, camera, power, GPU, offscreen, the render backends Reaktor never
 selects, or its dynamic API (see below). Its tray is built, and opened on
 Windows and macOS; on Linux and the BSDs Reaktor's own tray speaks
-StatusNotifierItem and dbusmenu over `platform/dbus`, so SDL's, which would load
+StatusNotifierItem and dbusmenu over gibus, so SDL's, which would load
 AppIndicator and GTK 3, never opens there and nothing links them. mojibake is
 built without its collation, IDNA, security
 and character-name tables. NukAnim is one header, compiled in
@@ -37,29 +38,15 @@ its TrueType, CFF, auto-hinter and anti-aliasing modules, and
 `core/render/ft/reaktor_ftoption.h` turns off what Reaktor never reads, its
 environment override among them.
 
+Nothing links libdbus. SDL still opens `libdbus-1.so.3` where the system has it,
+for input methods, portals and the screensaver, and goes without it where it
+does not.
+
 The stylesheets are read by Reaktor's own engine, `core/css/css.c`; no CSS
 library is linked or copied.
 
 Portions of this software are copyright © 2026 The FreeType Project
 (https://freetype.org). All rights reserved.
-
-## The one ported library
-
-On Linux and the BSDs the AT-SPI bridge, the tray (StatusNotifierItem and
-dbusmenu), notifications and the desktop portal's appearance settings speak
-D-Bus through `platform/dbus`, a client of Reaktor's own ported to C from
-[minidbus](https://codefloe.com/Honken/minidbus):
-
-| Component | Used for | License |
-| --- | --- | --- |
-| [minidbus](https://codefloe.com/Honken/minidbus) | The D-Bus client in `platform/dbus`: the connection, authentication and message format | MIT |
-
-MIT License, Copyright (c) 2026 Honken. Its full text is
-`platform/dbus/LICENSE-minidbus`, shipped as `licenses/minidbus.txt`.
-
-Nothing links libdbus. SDL still opens `libdbus-1.so.3` where the system has it,
-for input methods, portals and the screensaver, and goes without it where it
-does not.
 
 ## The one vendored source file
 
@@ -147,8 +134,8 @@ each toolchain fetches its own framework, and none is part of a Reaktor build.
 
 A native build links SDL, plutosvg, plutovg and FreeType
 statically, plus mojibake and kb_text_shape with the Text module, and compiles
-in Nuklear, NukAnim, Onlay and toml-c, so it carries the zlib, MIT and FreeType
-License terms above. Each license
+in Nuklear, NukAnim, Onlay and toml-c, and gibus on Linux and the BSDs, so it
+carries the zlib, MIT and FreeType License terms above. Each license
 is copied unchanged into `licenses/` beside the programs: ship that folder,
 and this file, with a binary.
 

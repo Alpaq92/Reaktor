@@ -293,9 +293,10 @@ add_executable(mkicon EXCLUDE_FROM_ALL tools/mkicon.c)
 target_link_libraries(mkicon PRIVATE reaktor_core)
 
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID)
-    add_library(reaktor_rdbus INTERFACE)
-    target_include_directories(reaktor_rdbus INTERFACE
-        "${CMAKE_CURRENT_SOURCE_DIR}/platform/dbus")
+    add_library(reaktor_gibus INTERFACE)
+    target_include_directories(reaktor_gibus INTERFACE "${TP}/gibus/include")
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
 endif()
 
 if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
@@ -340,16 +341,16 @@ if(REAKTOR_TESTS AND NOT EMSCRIPTEN)
     add_executable(imagetest tests/imagetest.c)
     target_link_libraries(imagetest PRIVATE plutovg)
 
-    add_executable(dbustest tests/dbustest.c platform/dbus/rdbus_msg.c)
-    target_include_directories(dbustest PRIVATE platform/dbus)
-    target_link_libraries(dbustest PRIVATE ${REAKTOR_SDL})
-    if(TARGET reaktor_rdbus)
-        target_sources(dbustest PRIVATE platform/dbus/rdbus_conn.c)
-        target_compile_definitions(dbustest PRIVATE DBUSTEST_LIVE)
+    add_executable(gibustest ${TP}/gibus/tests/gibustest.c ${TP}/gibus/src/gibus_msg.c)
+    target_include_directories(gibustest PRIVATE ${TP}/gibus/include ${TP}/gibus/src)
+    if(TARGET reaktor_gibus)
+        target_sources(gibustest PRIVATE ${TP}/gibus/src/gibus_conn.c)
+        target_link_libraries(gibustest PRIVATE Threads::Threads)
+        target_compile_definitions(gibustest PRIVATE GIBUSTEST_LIVE)
     endif()
 
     if(MSVC)
-        foreach(_t keytest a11ytest animtest localetest laytest csstest basetest imagetest dbustest)
+        foreach(_t keytest a11ytest animtest localetest laytest csstest basetest imagetest gibustest)
             target_compile_options(${_t} PRIVATE /we4013)
         endforeach()
     endif()
@@ -411,11 +412,11 @@ elseif(APPLE)
         "$<TARGET_OBJECTS:reaktor_a11y_macos>")
     target_compile_definitions(reaktor_a11y INTERFACE REAKTOR_HAVE_NSACCESSIBILITY)
     target_link_libraries(reaktor_a11y INTERFACE "-framework Cocoa")
-elseif(TARGET reaktor_rdbus)
+elseif(TARGET reaktor_gibus)
     target_sources(reaktor_a11y INTERFACE
         "${_a11y}/a11y_snapshot.c" "${_a11y}/a11y_window_none.c" "${_a11y}/a11y_atspi.c")
     target_compile_definitions(reaktor_a11y INTERFACE REAKTOR_HAVE_ATSPI)
-    target_link_libraries(reaktor_a11y INTERFACE reaktor_rdbus)
+    target_link_libraries(reaktor_a11y INTERFACE reaktor_gibus)
     message(STATUS "a11y: AT-SPI")
 else()
     target_link_libraries(reaktor_a11y INTERFACE reaktor_a11y_none)
@@ -543,9 +544,9 @@ if(REAKTOR_SETTINGS)
 endif()
 # Linux and the BSDs speak StatusNotifierItem rather than take SDL's tray,
 # which loads GTK.
-if(REAKTOR_TRAY AND TARGET reaktor_rdbus)
+if(REAKTOR_TRAY AND TARGET reaktor_gibus)
     target_compile_definitions(reaktor_tray INTERFACE REAKTOR_TRAY_DBUS)
-    target_link_libraries(reaktor_tray INTERFACE reaktor_rdbus)
+    target_link_libraries(reaktor_tray INTERFACE reaktor_gibus)
     message(STATUS "tray: StatusNotifierItem")
 endif()
 
@@ -569,9 +570,9 @@ else()
         target_sources(reaktor_notify INTERFACE "$<TARGET_OBJECTS:reaktor_notify_macos>")
         target_link_libraries(reaktor_notify INTERFACE
             "-framework Foundation" "-framework UserNotifications")
-    elseif(TARGET reaktor_rdbus)
+    elseif(TARGET reaktor_gibus)
         target_compile_definitions(reaktor_notify INTERFACE REAKTOR_HAVE_DBUS)
-        target_link_libraries(reaktor_notify INTERFACE reaktor_rdbus)
+        target_link_libraries(reaktor_notify INTERFACE reaktor_gibus)
     elseif(NOT EMSCRIPTEN)
         target_link_libraries(reaktor_notify INTERFACE reaktor_notify_none)
         message(STATUS "notify: no D-Bus on this system; notifications are not sent")
@@ -630,12 +631,15 @@ add_library(reaktor_runtime STATIC
     runtime/window.c)
 target_compile_definitions(reaktor_runtime PRIVATE
     REAKTOR_VERSION_STRING="${PROJECT_VERSION}")
-if(TARGET reaktor_rdbus)
-    target_sources(reaktor_runtime PRIVATE platform/dbus/rdbus_msg.c platform/dbus/rdbus_conn.c)
-    # Its directory alone: a link would put $<LINK_ONLY:...> in what the shared
-    # library takes from the runtime's INTERFACE_LINK_LIBRARIES.
-    target_include_directories(reaktor_runtime PRIVATE platform/dbus)
-    target_compile_definitions(reaktor_runtime PRIVATE REAKTOR_HAVE_RDBUS)
+if(TARGET reaktor_gibus)
+    target_sources(reaktor_runtime PRIVATE
+        ${TP}/gibus/src/gibus_msg.c ${TP}/gibus/src/gibus_conn.c)
+    # Its directory alone, and threads PUBLIC: a private link would put
+    # $<LINK_ONLY:...> in what the shared library takes from the runtime's
+    # INTERFACE_LINK_LIBRARIES.
+    target_include_directories(reaktor_runtime PRIVATE ${TP}/gibus/include)
+    target_compile_definitions(reaktor_runtime PRIVATE REAKTOR_HAVE_GIBUS)
+    target_link_libraries(reaktor_runtime PUBLIC Threads::Threads)
 endif()
 
 if(EMSCRIPTEN)
@@ -672,7 +676,7 @@ set(REAKTOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
 
 foreach(_lic SDL/LICENSE.txt plutosvg/LICENSE nuklear/LICENSE
              nukanim/LICENSE onlay/LICENSE watercss/LICENSE.md ionicons/LICENSE mojibake/LICENSE
-             kb/LICENSE)
+             kb/LICENSE gibus/LICENSE)
     string(REGEX REPLACE "/.*" "" _who "${_lic}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/${_lic}"
                    "${CMAKE_BINARY_DIR}/licenses/${_who}.txt" COPYONLY)
@@ -681,8 +685,6 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/plutosvg/plutovg/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/plutovg.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/freetype/docs/FTL.TXT"
                "${CMAKE_BINARY_DIR}/licenses/freetype.txt" COPYONLY)
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/platform/dbus/LICENSE-minidbus"
-               "${CMAKE_BINARY_DIR}/licenses/minidbus.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/toml-c/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/toml-c.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"

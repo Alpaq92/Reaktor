@@ -605,7 +605,7 @@ reaktor_tray_open(app, &(reaktor_tray){
 ```
 
 On Linux, FreeBSD, OpenBSD and NetBSD the tray is Reaktor's own, spoken over
-D-Bus by `platform/dbus` rather than SDL's, which loads AppIndicator and GTK 3. The icon is a
+D-Bus by gibus rather than SDL's, which loads AppIndicator and GTK 3. The icon is a
 StatusNotifierItem (`org.kde.StatusNotifierItem`) registered with the
 session's `org.kde.StatusNotifierWatcher`, its image the app's SVG icon as
 `IconPixmap` at 22, 32, 48 and 64 pixels, its tooltip `.tooltip`; the menu is
@@ -964,7 +964,7 @@ samples/         showcase, notepad, simple, bench
 tests/           the console tests and launchtest
 tools/           packaging, the icon compiler, vmwalk
 benchmarks/      bench in four other frameworks, and the sampler
-external/        twelve submodules, read as they ship
+external/        thirteen submodules, read as they ship
 ```
 
 `runtime/` and `core/` build `reaktor_runtime`, a static library every
@@ -1214,7 +1214,7 @@ options a page needs; `ASSETS <file>@<path>` packs files beside it there.
 - **`REAKTOR_A11Y=OFF`** drops the bridges and the libraries only they need:
   `uiautomationcore`, `ole32` and `oleaut32` on Windows. It saves few bytes
   ([PERFORMANCE.md](PERFORMANCE.md#modules)). On Linux and the BSDs the
-  D-Bus client is part of the runtime, which reads the desktop portal's
+  D-Bus client, gibus, is part of the runtime, which reads the desktop portal's
   appearance settings through it; `REAKTOR_A11Y`, `REAKTOR_TRAY` and
   `REAKTOR_NOTIFY` only drop their own use of it.
 - **`REAKTOR_LOCALE=OFF`** leaves every string as its key, bakes Latin-1
@@ -1301,6 +1301,7 @@ Built by default and run from `build/`:
 | --- | --- |
 | `laytest` | The layout engine's placement |
 | `onlaytest` | Onlay's own suite, unmodified |
+| `gibustest` | gibus's own suite, unmodified: the message format, and on Linux and the BSDs a private `dbus-daemon` |
 | `a11ytest` | Node identity, the diff, the pool |
 | `animtest` | Curves, retargeting, a context a window |
 | `keytest` | Chord parsing and formatting |
