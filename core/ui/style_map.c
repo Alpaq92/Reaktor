@@ -39,6 +39,15 @@ hot_push(App *app, struct nk_rect r, int cursor, int repaint)
     hot_push_ex(app, r, cursor, repaint, 0, 0);
 }
 
+int
+hot_hover(const struct nk_context *ctx, struct nk_rect r)
+{
+    const struct nk_window *w = ctx->current;
+
+    return nk_input_is_mouse_hovering_rect(&ctx->input, r) &&
+           (!w || !w->layout || nk_input_is_mouse_hovering_rect(&ctx->input, w->layout->clip));
+}
+
 static struct {
     int                   armed;
     struct nk_rect        b;

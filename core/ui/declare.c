@@ -430,8 +430,7 @@ tip_at(App *app, struct nk_context *ctx, struct nk_rect r, const char *text, int
 {
     if (!text || !ctx || !ctx->current) return;
     reaktor_hot_follow(app, r, cursor);
-    if (nk_input_is_mouse_hovering_rect(&ctx->input, r) &&
-        nk_input_is_mouse_hovering_rect(&ctx->input, ctx->current->layout->clip)) {
+    if (hot_hover(ctx, r)) {
         SDL_strlcpy(app->tip_text, text, sizeof app->tip_text);
         app->tip = app->tip_text;
     }

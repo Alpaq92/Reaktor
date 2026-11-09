@@ -740,7 +740,7 @@ reaktor_property(const reaktor_property_spec *s)
     r = nk_widget_bounds(g_frame_ctx);
 
     reaktor_note_mute(g_frame_app, 1);
-    reaktor_property_push(g_frame_ctx);
+    reaktor_property_push(g_frame_ctx, reaktor_rect_trunc(r));
     if (s->ivalue)
         nk_property_int(g_frame_ctx, s->label, (int)s->lo, s->ivalue, (int)s->hi,
                         (int)s->step, s->grain);
@@ -783,7 +783,7 @@ reaktor_spinner(const reaktor_spinner_spec *s)
     f  = ctx->style.font;
     cv = nk_window_get_canvas(ctx);
     nk_widget(&r, ctx);
-    bg = nk_input_is_mouse_hovering_rect(&ctx->input, r) ? st->hover : st->normal;
+    bg = hot_hover(ctx, r) ? st->hover : st->normal;
     if (bg.type == NK_STYLE_ITEM_COLOR)
         reaktor_fill_round(g_frame_app, cv, r, st->rounding, bg.data.color);
     if (st->border > 0.0f)
