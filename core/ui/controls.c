@@ -719,6 +719,7 @@ reaktor_property(const reaktor_property_spec *s)
     char           text[32];
     unsigned       id = 0;
     double         now;
+    int            live;
 
     if (!g_frame_app || !s || (!s->ivalue && !s->fvalue && !s->dvalue)) return;
     now = s->ivalue ? (double)*s->ivalue
@@ -739,8 +740,9 @@ reaktor_property(const reaktor_property_spec *s)
 
     r = nk_widget_bounds(g_frame_ctx);
 
+    live = reaktor_property_live(g_frame_ctx);
     reaktor_note_mute(g_frame_app, 1);
-    reaktor_property_push(g_frame_ctx, reaktor_rect_trunc(r));
+    reaktor_property_push(g_frame_ctx, reaktor_rect_trunc(r), live);
     if (s->ivalue)
         nk_property_int(g_frame_ctx, s->label, (int)s->lo, s->ivalue, (int)s->hi,
                         (int)s->step, s->grain);
@@ -751,7 +753,7 @@ reaktor_property(const reaktor_property_spec *s)
         nk_property_double(g_frame_ctx, s->label, s->lo, s->dvalue, s->hi,
                            s->step, s->grain);
     reaktor_property_pop(g_frame_ctx);
-    reaktor_property_chrome(g_frame_app, g_frame_ctx, r, NULL);
+    reaktor_property_chrome(g_frame_app, g_frame_ctx, r, NULL, live);
     reaktor_note_mute(g_frame_app, 0);
 }
 
@@ -788,7 +790,7 @@ reaktor_spinner(const reaktor_spinner_spec *s)
         reaktor_fill_round(g_frame_app, cv, r, st->rounding, bg.data.color);
     if (st->border > 0.0f)
         reaktor_edge_round(g_frame_app, cv, r, st->rounding, st->border, st->border_color);
-    reaktor_property_chrome(g_frame_app, ctx, r, step);
+    reaktor_property_chrome(g_frame_app, ctx, r, step, 1);
     y = (float)(int)(r.y + (r.h - f->height) * 0.5f);
     if (s->label)
         nk_draw_text(cv, nk_rect(step[0].x + step[0].w + 8.0f, y, r.w * 0.5f, f->height),

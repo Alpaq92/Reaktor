@@ -1555,7 +1555,6 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     nk_style_pop_vec2(ctx);
 
     t_render0 = SDL_GetPerformanceCounter();
-    if (!app->build_only) reaktor_mask_rounded_fills(app);
     if (app->build_only || same_frame(app, ctx) || !reaktor_damage_render(app)) {
         /* A drawn frame clears in nk_sdl_frame_done; kept, the next build's
            popups and overlay never join the list. */

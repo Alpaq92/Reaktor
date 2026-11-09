@@ -48,116 +48,6 @@ put(sink *k, const void *p, size_t n)
     l->used += (int)n;
 }
 
-/* A command by its fields, one at a time: the structs have gaps, and a gap
-   keeps whatever the buffer or a copied struct held before. */
-#define K(f) put(k, &(f), sizeof(f))
-
-static void
-command_key(const struct nk_command *c, sink *k)
-{
-    Sint64 id;
-
-    K(c->type);
-    switch (c->type) {
-    case NK_COMMAND_SCISSOR: {
-        const struct nk_command_scissor *x = (const void *)c;
-        K(x->x); K(x->y); K(x->w); K(x->h);
-        break;
-    }
-    case NK_COMMAND_LINE: {
-        const struct nk_command_line *x = (const void *)c;
-        K(x->line_thickness); K(x->begin); K(x->end); K(x->color);
-        break;
-    }
-    case NK_COMMAND_CURVE: {
-        const struct nk_command_curve *x = (const void *)c;
-        K(x->line_thickness); K(x->begin); K(x->end); K(x->ctrl); K(x->color);
-        break;
-    }
-    case NK_COMMAND_RECT: {
-        const struct nk_command_rect *x = (const void *)c;
-        K(x->rounding); K(x->line_thickness); K(x->x); K(x->y); K(x->w); K(x->h); K(x->color);
-        break;
-    }
-    case NK_COMMAND_RECT_FILLED: {
-        const struct nk_command_rect_filled *x = (const void *)c;
-        K(x->rounding); K(x->x); K(x->y); K(x->w); K(x->h); K(x->color);
-        break;
-    }
-    case NK_COMMAND_RECT_MULTI_COLOR: {
-        const struct nk_command_rect_multi_color *x = (const void *)c;
-        K(x->x); K(x->y); K(x->w); K(x->h); K(x->left); K(x->top); K(x->bottom); K(x->right);
-        break;
-    }
-    case NK_COMMAND_TRIANGLE: {
-        const struct nk_command_triangle *x = (const void *)c;
-        K(x->line_thickness); K(x->a); K(x->b); K(x->c); K(x->color);
-        break;
-    }
-    case NK_COMMAND_TRIANGLE_FILLED: {
-        const struct nk_command_triangle_filled *x = (const void *)c;
-        K(x->a); K(x->b); K(x->c); K(x->color);
-        break;
-    }
-    case NK_COMMAND_CIRCLE: {
-        const struct nk_command_circle *x = (const void *)c;
-        K(x->x); K(x->y); K(x->line_thickness); K(x->w); K(x->h); K(x->color);
-        break;
-    }
-    case NK_COMMAND_CIRCLE_FILLED: {
-        const struct nk_command_circle_filled *x = (const void *)c;
-        K(x->x); K(x->y); K(x->w); K(x->h); K(x->color);
-        break;
-    }
-    case NK_COMMAND_ARC: {
-        const struct nk_command_arc *x = (const void *)c;
-        K(x->cx); K(x->cy); K(x->r); K(x->line_thickness); K(x->a); K(x->color);
-        break;
-    }
-    case NK_COMMAND_ARC_FILLED: {
-        const struct nk_command_arc_filled *x = (const void *)c;
-        K(x->cx); K(x->cy); K(x->r); K(x->a); K(x->color);
-        break;
-    }
-    case NK_COMMAND_POLYGON:
-    case NK_COMMAND_POLYLINE: {
-        const struct nk_command_polygon *x = (const void *)c;
-        K(x->color); K(x->line_thickness); K(x->point_count);
-        put(k, x->points, (size_t)x->point_count * sizeof x->points[0]);
-        break;
-    }
-    case NK_COMMAND_POLYGON_FILLED: {
-        const struct nk_command_polygon_filled *x = (const void *)c;
-        K(x->color); K(x->point_count);
-        put(k, x->points, (size_t)x->point_count * sizeof x->points[0]);
-        break;
-    }
-    case NK_COMMAND_IMAGE: {
-        const struct nk_command_image *x = (const void *)c;
-        K(x->x); K(x->y); K(x->w); K(x->h);
-        id = serial_of(k, x->img.handle.ptr);
-        K(x->img.handle.ptr); K(id); K(x->img.w); K(x->img.h); K(x->img.region); K(x->col);
-        break;
-    }
-    case NK_COMMAND_CUSTOM: {
-        const struct nk_command_custom *x = (const void *)c;
-        K(x->x); K(x->y); K(x->w); K(x->h); K(x->callback_data.ptr); K(x->callback);
-        break;
-    }
-    case NK_COMMAND_TEXT: {
-        const struct nk_command_text *x = (const void *)c;
-        id = serial_of(k, x->font ? x->font->texture.ptr : NULL);
-        K(x->font); K(id); K(x->background); K(x->foreground);
-        K(x->x); K(x->y); K(x->w); K(x->h); K(x->height); K(x->length);
-        put(k, x->string, (size_t)x->length);
-        break;
-    }
-    default:
-        break;
-    }
-}
-#undef K
-
 typedef struct span {
     float x0, y0, x1, y1;
     int   any;
@@ -188,6 +78,150 @@ span_points(span *b, const struct nk_vec2i *p, int n)
     for (i = 0; i < n; i++) span_at(b, (float)p[i].x, (float)p[i].y);
 }
 
+/* A command by its fields, one at a time: the structs have gaps, and a gap
+   keeps whatever the buffer or a copied struct held before. */
+#define K(f) put(k, &(f), sizeof(f))
+
+static void
+command_read(const struct nk_command *c, struct nk_rect clip, float ink, sink *k,
+             span *b, float *thick)
+{
+    Sint64 id;
+
+    *thick = 0.0f;
+    K(c->type);
+    switch (c->type) {
+    case NK_COMMAND_SCISSOR: {
+        const struct nk_command_scissor *x = (const void *)c;
+        K(x->x); K(x->y); K(x->w); K(x->h);
+        break;
+    }
+    case NK_COMMAND_LINE: {
+        const struct nk_command_line *x = (const void *)c;
+        K(x->line_thickness); K(x->begin); K(x->end); K(x->color);
+        span_points(b, &x->begin, 1);
+        span_points(b, &x->end, 1);
+        *thick = x->line_thickness;
+        break;
+    }
+    case NK_COMMAND_CURVE: {
+        const struct nk_command_curve *x = (const void *)c;
+        K(x->line_thickness); K(x->begin); K(x->end); K(x->ctrl); K(x->color);
+        span_points(b, &x->begin, 1);
+        span_points(b, &x->end, 1);
+        span_points(b, x->ctrl, 2);
+        *thick = x->line_thickness;
+        break;
+    }
+    case NK_COMMAND_RECT: {
+        const struct nk_command_rect *x = (const void *)c;
+        K(x->rounding); K(x->line_thickness); K(x->x); K(x->y); K(x->w); K(x->h); K(x->color);
+        span_rect(b, x->x, x->y, x->w, x->h);
+        *thick = x->line_thickness;
+        break;
+    }
+    case NK_COMMAND_RECT_FILLED: {
+        const struct nk_command_rect_filled *x = (const void *)c;
+        K(x->rounding); K(x->x); K(x->y); K(x->w); K(x->h); K(x->color);
+        span_rect(b, x->x, x->y, x->w, x->h);
+        break;
+    }
+    case NK_COMMAND_RECT_MULTI_COLOR: {
+        const struct nk_command_rect_multi_color *x = (const void *)c;
+        K(x->x); K(x->y); K(x->w); K(x->h); K(x->left); K(x->top); K(x->bottom); K(x->right);
+        span_rect(b, x->x, x->y, x->w, x->h);
+        break;
+    }
+    case NK_COMMAND_TRIANGLE: {
+        const struct nk_command_triangle *x = (const void *)c;
+        K(x->line_thickness); K(x->a); K(x->b); K(x->c); K(x->color);
+        span_points(b, &x->a, 1);
+        span_points(b, &x->b, 1);
+        span_points(b, &x->c, 1);
+        *thick = x->line_thickness;
+        break;
+    }
+    case NK_COMMAND_TRIANGLE_FILLED: {
+        const struct nk_command_triangle_filled *x = (const void *)c;
+        K(x->a); K(x->b); K(x->c); K(x->color);
+        span_points(b, &x->a, 1);
+        span_points(b, &x->b, 1);
+        span_points(b, &x->c, 1);
+        break;
+    }
+    case NK_COMMAND_CIRCLE: {
+        const struct nk_command_circle *x = (const void *)c;
+        K(x->x); K(x->y); K(x->line_thickness); K(x->w); K(x->h); K(x->color);
+        span_rect(b, x->x, x->y, x->w, x->h);
+        *thick = x->line_thickness;
+        break;
+    }
+    case NK_COMMAND_CIRCLE_FILLED: {
+        const struct nk_command_circle_filled *x = (const void *)c;
+        K(x->x); K(x->y); K(x->w); K(x->h); K(x->color);
+        span_rect(b, x->x, x->y, x->w, x->h);
+        break;
+    }
+    case NK_COMMAND_ARC: {
+        const struct nk_command_arc *x = (const void *)c;
+        K(x->cx); K(x->cy); K(x->r); K(x->line_thickness); K(x->a); K(x->color);
+        span_rect(b, (float)x->cx - x->r, (float)x->cy - x->r, 2.0f * x->r, 2.0f * x->r);
+        *thick = x->line_thickness;
+        break;
+    }
+    case NK_COMMAND_ARC_FILLED: {
+        const struct nk_command_arc_filled *x = (const void *)c;
+        K(x->cx); K(x->cy); K(x->r); K(x->a); K(x->color);
+        span_rect(b, (float)x->cx - x->r, (float)x->cy - x->r, 2.0f * x->r, 2.0f * x->r);
+        break;
+    }
+    case NK_COMMAND_POLYGON:
+    case NK_COMMAND_POLYLINE: {
+        const struct nk_command_polygon *x = (const void *)c;
+        K(x->color); K(x->line_thickness); K(x->point_count);
+        put(k, x->points, (size_t)x->point_count * sizeof x->points[0]);
+        span_points(b, x->points, x->point_count);
+        *thick = x->line_thickness;
+        break;
+    }
+    case NK_COMMAND_POLYGON_FILLED: {
+        const struct nk_command_polygon_filled *x = (const void *)c;
+        K(x->color); K(x->point_count);
+        put(k, x->points, (size_t)x->point_count * sizeof x->points[0]);
+        span_points(b, x->points, x->point_count);
+        break;
+    }
+    case NK_COMMAND_IMAGE: {
+        const struct nk_command_image *x = (const void *)c;
+        K(x->x); K(x->y); K(x->w); K(x->h);
+        id = serial_of(k, x->img.handle.ptr);
+        K(x->img.handle.ptr); K(id); K(x->img.w); K(x->img.h); K(x->img.region); K(x->col);
+        span_rect(b, x->x, x->y, x->w, x->h);
+        break;
+    }
+    case NK_COMMAND_CUSTOM: {
+        const struct nk_command_custom *x = (const void *)c;
+        K(x->x); K(x->y); K(x->w); K(x->h); K(x->callback_data.ptr); K(x->callback);
+        span_rect(b, clip.x, clip.y, clip.w, clip.h);
+        break;
+    }
+    case NK_COMMAND_TEXT: {
+        const struct nk_command_text *x = (const void *)c;
+        float g = SDL_max((float)x->h, ink * x->height);
+
+        id = serial_of(k, x->font ? x->font->texture.ptr : NULL);
+        K(x->font); K(id); K(x->background); K(x->foreground);
+        K(x->x); K(x->y); K(x->w); K(x->h); K(x->height); K(x->length);
+        put(k, x->string, (size_t)x->length);
+        span_rect(b, x->x - g, x->y - g, x->w + 2.0f * g, x->h + 2.0f * g);
+        break;
+    }
+    default:
+        break;
+    }
+}
+#undef K
+
 static int
 image_scaled(const struct nk_command_image *x, float s)
 {
@@ -203,143 +237,29 @@ image_scaled(const struct nk_command_image *x, float s)
     return sw != (float)x->w * s || sh != (float)x->h * s;
 }
 
-static int
-command_span(const struct nk_command *c, struct nk_rect clip, float ink, span *b,
-             float *thick)
+static SDL_Rect
+box_cut(SDL_Rect a, SDL_Rect b)
 {
-    *thick = 0.0f;
-    switch (c->type) {
-    case NK_COMMAND_LINE: {
-        const struct nk_command_line *x = (const void *)c;
-        span_points(b, &x->begin, 1);
-        span_points(b, &x->end, 1);
-        *thick = x->line_thickness;
-        break;
-    }
-    case NK_COMMAND_CURVE: {
-        const struct nk_command_curve *x = (const void *)c;
-        span_points(b, &x->begin, 1);
-        span_points(b, &x->end, 1);
-        span_points(b, x->ctrl, 2);
-        *thick = x->line_thickness;
-        break;
-    }
-    case NK_COMMAND_RECT: {
-        const struct nk_command_rect *x = (const void *)c;
-        span_rect(b, x->x, x->y, x->w, x->h);
-        *thick = x->line_thickness;
-        break;
-    }
-    case NK_COMMAND_RECT_FILLED: {
-        const struct nk_command_rect_filled *x = (const void *)c;
-        span_rect(b, x->x, x->y, x->w, x->h);
-        break;
-    }
-    case NK_COMMAND_RECT_MULTI_COLOR: {
-        const struct nk_command_rect_multi_color *x = (const void *)c;
-        span_rect(b, x->x, x->y, x->w, x->h);
-        break;
-    }
-    case NK_COMMAND_TRIANGLE: {
-        const struct nk_command_triangle *x = (const void *)c;
-        span_points(b, &x->a, 1);
-        span_points(b, &x->b, 1);
-        span_points(b, &x->c, 1);
-        *thick = x->line_thickness;
-        break;
-    }
-    case NK_COMMAND_TRIANGLE_FILLED: {
-        const struct nk_command_triangle_filled *x = (const void *)c;
-        span_points(b, &x->a, 1);
-        span_points(b, &x->b, 1);
-        span_points(b, &x->c, 1);
-        break;
-    }
-    case NK_COMMAND_CIRCLE: {
-        const struct nk_command_circle *x = (const void *)c;
-        span_rect(b, x->x, x->y, x->w, x->h);
-        *thick = x->line_thickness;
-        break;
-    }
-    case NK_COMMAND_CIRCLE_FILLED: {
-        const struct nk_command_circle_filled *x = (const void *)c;
-        span_rect(b, x->x, x->y, x->w, x->h);
-        break;
-    }
-    case NK_COMMAND_ARC: {
-        const struct nk_command_arc *x = (const void *)c;
-        span_rect(b, (float)x->cx - x->r, (float)x->cy - x->r, 2.0f * x->r, 2.0f * x->r);
-        *thick = x->line_thickness;
-        break;
-    }
-    case NK_COMMAND_ARC_FILLED: {
-        const struct nk_command_arc_filled *x = (const void *)c;
-        span_rect(b, (float)x->cx - x->r, (float)x->cy - x->r, 2.0f * x->r, 2.0f * x->r);
-        break;
-    }
-    case NK_COMMAND_POLYGON:
-    case NK_COMMAND_POLYLINE: {
-        const struct nk_command_polygon *x = (const void *)c;
-        span_points(b, x->points, x->point_count);
-        *thick = x->line_thickness;
-        break;
-    }
-    case NK_COMMAND_POLYGON_FILLED: {
-        const struct nk_command_polygon_filled *x = (const void *)c;
-        span_points(b, x->points, x->point_count);
-        break;
-    }
-    case NK_COMMAND_IMAGE: {
-        const struct nk_command_image *x = (const void *)c;
-        span_rect(b, x->x, x->y, x->w, x->h);
-        break;
-    }
-    case NK_COMMAND_CUSTOM:
-        span_rect(b, clip.x, clip.y, clip.w, clip.h);
-        break;
-    case NK_COMMAND_TEXT: {
-        const struct nk_command_text *x = (const void *)c;
-        float g = SDL_max((float)x->h, ink * x->height);
+    SDL_Rect r;
 
-        span_rect(b, x->x - g, x->y - g, x->w + 2.0f * g, x->h + 2.0f * g);
-        break;
-    }
-    default:
-        return 0;
-    }
-    return b->any;
+    if (!SDL_GetRectIntersection(&a, &b, &r)) SDL_zero(r);
+    return r;
 }
 
-static reaktor_damage_box
-box_cut(reaktor_damage_box a, reaktor_damage_box b)
-{
-    a.x0 = SDL_max(a.x0, b.x0);
-    a.y0 = SDL_max(a.y0, b.y0);
-    a.x1 = SDL_min(a.x1, b.x1);
-    a.y1 = SDL_min(a.y1, b.y1);
-    return a;
-}
-
-static int
-box_empty(reaktor_damage_box a)
-{
-    return a.x1 <= a.x0 || a.y1 <= a.y0;
-}
-
-static reaktor_damage_box
+static SDL_Rect
 device_box(float x0, float y0, float x1, float y1, float s, int m)
 {
-    reaktor_damage_box d;
+    SDL_Rect d;
 
-    d.x0 = (int)SDL_floorf(x0 * s) - m;
-    d.y0 = (int)SDL_floorf(y0 * s) - m;
-    d.x1 = (int)SDL_ceilf(x1 * s) + m;
-    d.y1 = (int)SDL_ceilf(y1 * s) + m;
+    d.x = (int)SDL_floorf(x0 * s) - m;
+    d.y = (int)SDL_floorf(y0 * s) - m;
+    d.w = (int)SDL_ceilf(x1 * s) + m - d.x;
+    d.h = (int)SDL_ceilf(y1 * s) + m - d.y;
     return d;
 }
 
 static int
-item_close(reaktor_damage_list *l, int at, reaktor_damage_box box, int scaled)
+item_close(reaktor_damage_list *l, int at, SDL_Rect box, int scaled)
 {
     reaktor_damage_item *it;
 
@@ -358,7 +278,7 @@ item_close(reaktor_damage_list *l, int at, reaktor_damage_box box, int scaled)
 
 void
 reaktor_damage_add(reaktor_damage_list *l, const void *key, int len,
-                   reaktor_damage_box box, int scaled)
+                   SDL_Rect box, int scaled)
 {
     int at = l->used;
 
@@ -380,12 +300,17 @@ static unsigned
 stream(struct nk_context *ctx)
 {
     const struct nk_command *c;
-    sink k;
+    sink  k;
+    span  b;
+    float thick;
 
     SDL_zero(k);
     k.h = REAKTOR_FNV;
-    nk_foreach(c, ctx)
-        if (c->type != NK_COMMAND_NOP) command_key(c, &k);
+    nk_foreach(c, ctx) {
+        if (c->type == NK_COMMAND_NOP) continue;
+        SDL_zero(b);
+        command_read(c, REAKTOR_NO_CLIP, 0.0f, &k, &b, &thick);
+    }
     return k.h;
 }
 
@@ -396,7 +321,7 @@ reaktor_damage_collect(App *app, struct nk_context *ctx)
     reaktor_damage_list *l = &d->list[d->now];
     const struct nk_command *c;
     struct nk_rect clip = REAKTOR_NO_CLIP;
-    reaktor_damage_box out, cut;
+    SDL_Rect out, cut;
     float s = app->render_scale;
     float ink;
     unsigned h = REAKTOR_FNV;
@@ -412,15 +337,15 @@ reaktor_damage_collect(App *app, struct nk_context *ctx)
     l->laid_w = app->laid_w;
     l->laid_h = app->laid_h;
     l->s      = s;
-    out.x0 = out.y0 = 0;
-    out.x1 = l->ow;
-    out.y1 = l->oh;
+    out.x = out.y = 0;
+    out.w = l->ow;
+    out.h = l->oh;
     cut = out;
     SDL_zero(k);
     k.l  = l;
     k.ok = 1;
     nk_foreach(c, ctx) {
-        reaktor_damage_box box = { 0, 0, 0, 0 };
+        SDL_Rect box = { 0, 0, 0, 0 };
         span   b;
         float  thick;
         int    at = l->used, scaled = 0;
@@ -440,15 +365,14 @@ reaktor_damage_collect(App *app, struct nk_context *ctx)
         sc[2] = (short)clip.w;
         sc[3] = (short)clip.h;
         put(&k, sc, sizeof sc);
-        command_key(c, &k);
-        if (!k.ok) break;
         SDL_zero(b);
-        if (command_span(c, clip, ink, &b, &thick)) {
+        command_read(c, clip, ink, &k, &b, &thick);
+        if (!k.ok) break;
+        if (b.any) {
             int m = (int)SDL_ceilf((thick * 0.5f + 1.0f) * s) + 2;
 
             box = box_cut(device_box(b.x0, b.y0, b.x1, b.y1, s, m), cut);
-            if (box_empty(box)) box.x0 = box.y0 = box.x1 = box.y1 = 0;
-            else if (c->type == NK_COMMAND_IMAGE)
+            if (!SDL_RectEmpty(&box) && c->type == NK_COMMAND_IMAGE)
                 scaled = image_scaled((const struct nk_command_image *)c, s);
         }
         if (!(k.ok = item_close(l, at, box, scaled))) break;
@@ -472,35 +396,30 @@ same(const reaktor_damage_list *a, int i, const reaktor_damage_list *b, int j)
 }
 
 static long long
-area(reaktor_damage_box a)
+area(SDL_Rect a)
 {
-    return box_empty(a) ? 0 : (long long)(a.x1 - a.x0) * (a.y1 - a.y0);
+    return SDL_RectEmpty(&a) ? 0 : (long long)a.w * a.h;
 }
 
-static reaktor_damage_box
-box_join(reaktor_damage_box a, reaktor_damage_box b)
+static SDL_Rect
+box_join(SDL_Rect a, SDL_Rect b)
 {
-    a.x0 = SDL_min(a.x0, b.x0);
-    a.y0 = SDL_min(a.y0, b.y0);
-    a.x1 = SDL_max(a.x1, b.x1);
-    a.y1 = SDL_max(a.y1, b.y1);
-    return a;
+    SDL_Rect r;
+
+    SDL_GetRectUnion(&a, &b, &r);
+    return r;
 }
 
+/* Sharing only an edge counts: SDL_HasRectIntersection would keep apart two
+   rectangles that could be one. */
 static int
-touches(reaktor_damage_box a, reaktor_damage_box b)
+touches(SDL_Rect a, SDL_Rect b)
 {
-    return a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
-}
-
-static int
-overlaps(reaktor_damage_box a, reaktor_damage_box b)
-{
-    return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+    return a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
 }
 
 static void
-settle(reaktor_damage_box *r, int *n)
+settle(SDL_Rect *r, int *n)
 {
     int i, j, again = 1;
 
@@ -535,19 +454,19 @@ settle(reaktor_damage_box *r, int *n)
 }
 
 static void
-take(reaktor_damage_box *r, int *n, reaktor_damage_box b)
+take(SDL_Rect *r, int *n, SDL_Rect b)
 {
-    if (box_empty(b)) return;
+    if (SDL_RectEmpty(&b)) return;
     r[(*n)++] = b;
     settle(r, n);
 }
 
 int
 reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *now,
-                    reaktor_damage_box *rects, int *count, long long *covered)
+                    SDL_Rect *rects, int *count, long long *covered)
 {
-    reaktor_damage_box r[REAKTOR_DAMAGE_RECTS + 1];
-    reaktor_damage_box o = { 0, 0, 0, 0 };
+    SDL_Rect r[REAKTOR_DAMAGE_RECTS + 1];
+    SDL_Rect o = { 0, 0, 0, 0 };
     int a = 0, b = 0, ae = was->n, be = now->n, n = 0, i, si, changed;
 
     *count   = 0;
@@ -590,26 +509,26 @@ reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *n
     do {
         changed = 0;
         for (i = 0; i < now->scaled_n; i++) {
-            reaktor_damage_box box = now->item[now->scaled[i]].box;
+            SDL_Rect box = now->item[now->scaled[i]].box;
             int j;
 
             for (j = 0; j < n; j++) {
-                reaktor_damage_box g = box_join(r[j], box);
+                SDL_Rect g = box_join(r[j], box);
 
-                if (overlaps(r[j], box) && SDL_memcmp(&g, &r[j], sizeof g) != 0) {
+                if (SDL_HasRectIntersection(&r[j], &box) && !SDL_RectsEqual(&g, &r[j])) {
                     r[j]    = g;
                     changed = 1;
                 }
             }
         }
         for (i = 0; i < n; i++) {
-            reaktor_damage_box g = r[i];
+            SDL_Rect g;
 
-            g.x0 = g.x0 / si * si;
-            g.y0 = g.y0 / si * si;
-            g.x1 = (g.x1 + si - 1) / si * si;
-            g.y1 = (g.y1 + si - 1) / si * si;
-            if (SDL_memcmp(&g, &r[i], sizeof g) != 0) {
+            g.x = r[i].x / si * si;
+            g.y = r[i].y / si * si;
+            g.w = (r[i].x + r[i].w + si - 1) / si * si - g.x;
+            g.h = (r[i].y + r[i].h + si - 1) / si * si - g.y;
+            if (!SDL_RectsEqual(&g, &r[i])) {
                 r[i]    = g;
                 changed = 1;
             }
@@ -617,8 +536,8 @@ reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *n
         if (changed) settle(r, &n);
     } while (changed);
 
-    o.x1 = now->ow;
-    o.y1 = now->oh;
+    o.w = now->ow;
+    o.h = now->oh;
     for (i = 0; i < n; i++) {
         *covered += area(box_cut(r[i], o));
         rects[i]  = r[i];
@@ -761,35 +680,39 @@ reaktor_damage_render(App *app)
 {
     reaktor_damage      *d   = &app->damage;
     reaktor_damage_list *now = &d->list[d->now], *was = &d->list[!d->now];
-    reaktor_damage_box   box[REAKTOR_DAMAGE_RECTS];
+    SDL_Rect   box[REAKTOR_DAMAGE_RECTS];
     SDL_Rect             r[REAKTOR_DAMAGE_RECTS];
     long long            covered = 0;
-    int kind = REAKTOR_DAMAGE_FULL, n = 0, fresh = 0, si, i;
+    int kind = REAKTOR_DAMAGE_FULL, n = 0, fresh = 0, direct = 0, si, i;
 
     if (!d->collected || !applies(app)) {
         drop(app);
-        reaktor_render(app, NULL, 0);
-        return 1;
-    }
-    if (!d->k || d->kw != now->ow || d->kh != now->oh) {
+        direct = 1;
+    } else if (!d->k || d->kw != now->ow || d->kh != now->oh) {
         drop(app);
         if (!(d->k = target(app, now->ow, now->oh))) {
             SDL_SetRenderTarget(app->ren, NULL);
-            reaktor_render(app, NULL, 0);
-            return 1;
+            direct = 1;
+        } else {
+            d->kw = now->ow;
+            d->kh = now->oh;
+            fresh = 1;
+            reaktor_damage_views(app);
         }
-        d->kw = now->ow;
-        d->kh = now->oh;
-        fresh = 1;
-        reaktor_damage_views(app);
     } else if (SDL_GetRenderTarget(app->ren) != d->k) {
         SDL_SetRenderTarget(app->ren, d->k);
     }
 
-    if (!fresh && !d->forced && SDL_memcmp(&d->clear, &app->clear, sizeof d->clear) == 0)
+    if (!direct && !fresh && !d->forced &&
+        SDL_memcmp(&d->clear, &app->clear, sizeof d->clear) == 0)
         kind = reaktor_damage_diff(was, now, box, &n, &covered);
 
     if (kind == REAKTOR_DAMAGE_NONE) return 0;
+    reaktor_mask_rounded_fills(app);
+    if (direct) {
+        reaktor_render(app, NULL, 0);
+        return 1;
+    }
     if (kind == REAKTOR_DAMAGE_FULL) {
         reaktor_render(app, NULL, 0);
         d->full++;
@@ -798,10 +721,10 @@ reaktor_damage_render(App *app)
 
         si = (int)app->render_scale;
         for (i = 0; i < n; i++) {
-            r[i].x = box[i].x0 / si;
-            r[i].y = box[i].y0 / si;
-            r[i].w = (box[i].x1 - box[i].x0) / si;
-            r[i].h = (box[i].y1 - box[i].y0) / si;
+            r[i].x = box[i].x / si;
+            r[i].y = box[i].y / si;
+            r[i].w = box[i].w / si;
+            r[i].h = box[i].h / si;
         }
         if (share > d->peak) d->peak = share;
         reaktor_render(app, r, n);

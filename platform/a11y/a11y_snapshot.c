@@ -29,7 +29,7 @@ struct reaktor_snap {
 
     snap_node  node[REAKTOR_A11Y_MAX_NODES];
     int        count, first, last;
-    snap_slot  slot[SNAP_SLOTS];
+    snap_slot  slot[SNAP_SLOTS], fresh[SNAP_SLOTS];
     char       str[SNAP_POOL];
     int        str_used;
     unsigned   focus;
@@ -39,7 +39,7 @@ struct reaktor_snap {
     Uint32     window;
 
     reaktor_snap_diff diff[REAKTOR_SNAP_DIFFS];
-    int               ndiff;
+    int               ndiff, overflow;
 
     reaktor_a11y_action activate, focus_action;
     void             *user;
@@ -70,18 +70,18 @@ same_text(const reaktor_snap *s, int at, const char *t)
 }
 
 static snap_slot *
-slot_of(reaktor_snap *s, unsigned id)
+slot_in(snap_slot *slot, unsigned id)
 {
     unsigned i = (id * 2654435761u) & (SNAP_SLOTS - 1);
 
-    while (s->slot[i].id && s->slot[i].id != id) i = (i + 1) & (SNAP_SLOTS - 1);
-    return &s->slot[i];
+    while (slot[i].id && slot[i].id != id) i = (i + 1) & (SNAP_SLOTS - 1);
+    return &slot[i];
 }
 
 static int
 find(reaktor_snap *s, unsigned id)
 {
-    const snap_slot *at = id ? slot_of(s, id) : NULL;
+    const snap_slot *at = id ? slot_in(s->slot, id) : NULL;
 
     return at && at->id && at->at < s->count ? at->at : -1;
 }
@@ -92,27 +92,40 @@ static void
 diff_tree(reaktor_snap *s, const reaktor_a11y *a, const reaktor_a11y_node *t, int n)
 {
     const reaktor_a11y_change *c;
-    int m, i, j, k;
+    int m, i, j;
 
+    memset(s->fresh, 0, sizeof s->fresh);
+    for (i = 0; i < n && i < REAKTOR_A11Y_MAX_NODES; i++) {
+        snap_slot *at = t[i].id ? slot_in(s->fresh, t[i].id) : NULL;
+
+        if (at && !at->id) { at->id = t[i].id; at->at = i; }
+    }
     c = reaktor_a11y_changes(a, &m);
-    for (i = 0; i < m && s->ndiff < REAKTOR_SNAP_DIFFS; i++) {
-        reaktor_snap_diff *d = &s->diff[s->ndiff];
+    for (i = 0; i < m; i++) {
+        reaktor_snap_diff d;
+        snap_slot *now;
         const snap_node *o;
 
         if (c[i].kind != REAKTOR_A11Y_RENAMED && c[i].kind != REAKTOR_A11Y_RESTATED) continue;
-        for (k = 0; k < s->ndiff && s->diff[k].id != c[i].id; k++) {}
-        if (k < s->ndiff || (j = find(s, c[i].id)) < 0) continue;
+        if ((j = find(s, c[i].id)) < 0) continue;
+        now = slot_in(s->fresh, c[i].id);
+        if (!now->id || now->at < 0) continue;
         o = &s->node[j];
-        for (j = 0; j < n && t[j].id != c[i].id; j++) {}
-        if (j == n) continue;
-        d->id      = c[i].id;
-        d->flipped = o->state ^ t[j].state;
-        d->value   = !same_text(s, o->value, t[j].value) || o->num != t[j].num;
-        d->state   = t[j].state;
-        d->num     = t[j].num;
-        d->lo      = t[j].lo;
-        d->hi      = t[j].hi;
-        if (d->value || d->flipped) s->ndiff++;
+        j = now->at;
+        now->at = -1;
+        d.id      = c[i].id;
+        d.flipped = o->state ^ t[j].state;
+        d.value   = !same_text(s, o->value, t[j].value) || o->num != t[j].num;
+        d.state   = t[j].state;
+        d.num     = t[j].num;
+        d.lo      = t[j].lo;
+        d.hi      = t[j].hi;
+        if (!d.value && !d.flipped) continue;
+        if (s->ndiff == REAKTOR_SNAP_DIFFS) {
+            s->overflow = 1;
+            break;
+        }
+        s->diff[s->ndiff++] = d;
     }
 }
 
@@ -124,7 +137,7 @@ link_tree(reaktor_snap *s)
     memset(s->slot, 0, sizeof s->slot);
     s->first = s->last = -1;
     for (i = 0; i < s->count; i++) {
-        snap_slot *at = slot_of(s, s->node[i].id);
+        snap_slot *at = slot_in(s->slot, s->node[i].id);
 
         if (!at->id) { at->id = s->node[i].id; at->at = i; }
         s->node[i].first = s->node[i].last = s->node[i].next = -1;
@@ -209,7 +222,7 @@ reaktor_snap_update_in(reaktor_snap *s, const reaktor_a11y *a, unsigned focus_id
     const reaktor_a11y_node *t;
 
     if (!s || !s->ready) return 0;
-    s->ndiff = 0;
+    s->ndiff = s->overflow = 0;
     reaktor_a11y_changes(a, &m);
     t = reaktor_a11y_tree(a, &n);
     if (m == 0 && focus_id == s->focus && !s->stale) return 0;
@@ -264,34 +277,74 @@ reaktor_snap_diffs_in(reaktor_snap *s, const reaktor_snap_diff **out)
     return s ? s->ndiff : 0;
 }
 
+static void
+fill(const reaktor_snap *s, int i, reaktor_snap_node *out, char *buf, size_t cap)
+{
+    const snap_node *d = &s->node[i];
+    size_t left = cap;
+    char  *at   = buf;
+
+    out->id = d->id; out->parent = d->parent;
+    out->role = d->role; out->level = d->level;
+    out->state = d->state;
+    out->x = d->x; out->y = d->y; out->w = d->w; out->h = d->h;
+    out->num = d->num; out->lo = d->lo;
+    out->hi = d->hi;   out->step = d->step;
+    out->name  = copy_text(s, d->name, &at, &left);
+    out->value = copy_text(s, d->value, &at, &left);
+    out->keys  = copy_text(s, d->keys, &at, &left);
+}
+
 int
 reaktor_snap_get_in(reaktor_snap *s, unsigned id, reaktor_snap_node *out,
                     char *buf, size_t cap)
 {
-    int i, ok = 0;
+    int i;
 
     memset(out, 0, sizeof(*out));
     if (!s || !s->ready) return 0;
     SDL_LockMutex(s->lock);
     i = find(s, id);
-    if (i >= 0) {
-        const snap_node *d = &s->node[i];
-        size_t left = cap;
-        char  *at   = buf;
-
-        out->id = d->id; out->parent = d->parent;
-        out->role = d->role; out->level = d->level;
-        out->state = d->state;
-        out->x = d->x; out->y = d->y; out->w = d->w; out->h = d->h;
-        out->num = d->num; out->lo = d->lo;
-        out->hi = d->hi;   out->step = d->step;
-        out->name  = copy_text(s, d->name, &at, &left);
-        out->value = copy_text(s, d->value, &at, &left);
-        out->keys  = copy_text(s, d->keys, &at, &left);
-        ok = 1;
-    }
+    if (i >= 0) fill(s, i, out, buf, cap);
     SDL_UnlockMutex(s->lock);
-    return ok;
+    return i >= 0;
+}
+
+static int
+kids(const reaktor_snap *s, int first)
+{
+    int n = 0;
+
+    for (; first >= 0; first = s->node[first].next) n++;
+    return n;
+}
+
+static void
+walk(const reaktor_snap *s, int first, reaktor_snap_node *n, char *buf,
+     reaktor_snap_visit visit, void *user)
+{
+    int k, at = 0;
+
+    for (k = first; k >= 0; k = s->node[k].next) {
+        memset(n, 0, sizeof *n);
+        fill(s, k, n, buf, REAKTOR_SNAP_TEXT);
+        visit(user, n, at++, kids(s, s->node[k].first));
+        walk(s, s->node[k].first, n, buf, visit, user);
+    }
+}
+
+void
+reaktor_snap_walk_in(reaktor_snap *s, reaktor_snap_visit visit, void *user)
+{
+    reaktor_snap_node n;
+    char buf[REAKTOR_SNAP_TEXT];
+
+    if (!s || !s->ready) return;
+    memset(&n, 0, sizeof n);
+    SDL_LockMutex(s->lock);
+    visit(user, &n, -1, kids(s, s->first));
+    walk(s, s->first, &n, buf, visit, user);
+    SDL_UnlockMutex(s->lock);
 }
 
 unsigned
@@ -382,11 +435,12 @@ reaktor_snap_pressable(unsigned char role)
 }
 
 int
-reaktor_snap_structural(const reaktor_a11y *a)
+reaktor_snap_structural_in(reaktor_snap *s, const reaktor_a11y *a)
 {
     int m, i;
     const reaktor_a11y_change *c = reaktor_a11y_changes(a, &m);
 
+    if (s && s->overflow) return 1;
     for (i = 0; i < m; i++)
         if (c[i].kind == REAKTOR_A11Y_ADDED || c[i].kind == REAKTOR_A11Y_REMOVED) return 1;
     return 0;
@@ -480,6 +534,10 @@ unsigned reaktor_snap_child(unsigned parent, int last)
 unsigned reaktor_snap_sibling(unsigned id, int back)
 { return reaktor_snap_sibling_in(&g, id, back); }
 unsigned reaktor_snap_parent(unsigned id) { return reaktor_snap_parent_in(&g, id); }
+void reaktor_snap_walk(reaktor_snap_visit visit, void *user)
+{ reaktor_snap_walk_in(&g, visit, user); }
+int reaktor_snap_structural(const reaktor_a11y *a)
+{ return reaktor_snap_structural_in(&g, a); }
 unsigned reaktor_snap_hit(float x, float y) { return reaktor_snap_hit_in(&g, x, y); }
 unsigned reaktor_snap_focus(void) { return reaktor_snap_focus_in(&g); }
 void reaktor_snap_request_focus(unsigned id)

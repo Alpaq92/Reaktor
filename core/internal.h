@@ -107,13 +107,9 @@ struct field_undo {
 
 enum { REAKTOR_DAMAGE_NONE, REAKTOR_DAMAGE_PARTIAL, REAKTOR_DAMAGE_FULL };
 
-typedef struct reaktor_damage_box {
-    int x0, y0, x1, y1;
-} reaktor_damage_box;
-
 typedef struct reaktor_damage_item {
     unsigned           hash, at, len;
-    reaktor_damage_box box;
+    SDL_Rect box;
 } reaktor_damage_item;
 
 typedef struct reaktor_damage_list {
@@ -459,9 +455,9 @@ int  reaktor_damage_views(App *app);
 void reaktor_damage_free(App *app);
 void reaktor_texture_serial(SDL_Texture *t);
 void reaktor_damage_add(reaktor_damage_list *l, const void *key, int len,
-                        reaktor_damage_box box, int scaled);
+                        SDL_Rect box, int scaled);
 int  reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *now,
-                         reaktor_damage_box *rects, int *n, long long *covered);
+                         SDL_Rect *rects, int *n, long long *covered);
 
 typedef void (*reaktor_page_fn)(App *app, struct nk_context *ctx, int w, int h,
                                 void *user);
@@ -544,10 +540,11 @@ void reaktor_slider_bar_int(App *app, struct nk_context *ctx, unsigned id,
 void reaktor_knob_dial(App *app, struct nk_context *ctx, float *val,
                        float lo, float hi, enum nk_heading zero);
 
-void reaktor_property_push(struct nk_context *ctx, struct nk_rect b);
+int  reaktor_property_live(struct nk_context *ctx);
+void reaktor_property_push(struct nk_context *ctx, struct nk_rect b, int live);
 void reaktor_property_pop(struct nk_context *ctx);
 void reaktor_property_chrome(App *app, struct nk_context *ctx, struct nk_rect b,
-                            struct nk_rect *steps);
+                            struct nk_rect *steps, int live);
 
 struct nk_rect reaktor_combo_content(struct nk_context *ctx, struct nk_rect h);
 void reaktor_combo_chrome(App *app, struct nk_context *ctx, struct nk_rect h,

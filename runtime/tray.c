@@ -589,8 +589,17 @@ on_signal(gibus_conn *c, gibus_msg *m, void *user)
     return GIBUS_NOT_YET_HANDLED;
 }
 
-/* Menu callbacks run after dispatch, where closing the tray or pumping
-   again is safe; one that closes it drops the rest. */
+static void
+dispatch(void)
+{
+    if (!g_bus) return;
+    gibus_read_write(g_bus, 0);
+    while (gibus_dispatch(g_bus))
+        ;
+}
+
+/* Menu callbacks run between frames, after dispatch, where closing the tray
+   or pumping again is safe; one that closes it drops the rest. */
 static void
 pump(void)
 {
@@ -600,9 +609,7 @@ pump(void)
     Sint32 gen = g_gen;
 
     if (!g_bus) return;
-    gibus_read_write(g_bus, 0);
-    while (gibus_dispatch(g_bus))
-        ;
+    dispatch();
     n = g_chosen_n;
     g_chosen_n = 0;
     SDL_memcpy(chosen, g_chosen, sizeof chosen[0] * (size_t)n);
@@ -709,7 +716,7 @@ reaktor_tray_open(App *app, const reaktor_tray *spec)
         reaktor_tray_close(app);
         return 0;
     }
-    pump();
+    dispatch();
     return 1;
 }
 
@@ -721,7 +728,6 @@ reaktor_tray_check(App *app, int item, int checked)
     if (g_on[item] == (checked != 0)) return;
     g_on[item] = checked != 0;
     items_updated(item + 1);
-    pump();
 }
 
 void
@@ -754,6 +760,7 @@ reaktor_tray_close(App *app)
     SDL_free(g_tip);
     g_tip = NULL;
     g_n   = 0;
+    g_chosen_n = 0;
 }
 
 void

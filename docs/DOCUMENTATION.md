@@ -1019,9 +1019,12 @@ only where its commands changed. The window is drawn into a texture that
 keeps the last frame; the commands that differ mark up to four rectangles,
 and only those are cleared and drawn again, through every command, before the
 texture is copied to the window. Drawn whole are: a frame that would redraw
-more than half the window; a new window size, scale, theme or clear color; an
-evicted icon or a new font atlas; the first frame; and a frame a `--shot` or
-a capture waits for. Every frame comes out pixel for pixel as a full redraw
+more than half the window; a new window size, scale or clear color; the
+first frame; and a frame a `--shot` or a capture waits for. A new theme, an
+icon made again after eviction or a new font atlas is redrawn where it
+changed, as textures are told apart by a serial number rather than their
+address; a theme that changes the clear color is drawn whole. Every frame
+comes out pixel for pixel as a full redraw
 would draw it; `tests/damagetest.c` checks each one. A GPU renderer, whose
 back buffer is not kept, or a fractional scale, draws every frame whole.
 

@@ -186,20 +186,20 @@ unit(int ok, const char *what)
     SDL_strlcat(g_unit_log, "; ", sizeof g_unit_log);
 }
 
-static reaktor_damage_box
+static SDL_Rect
 bx(int x0, int y0, int x1, int y1)
 {
-    reaktor_damage_box b;
+    SDL_Rect b;
 
-    b.x0 = x0;
-    b.y0 = y0;
-    b.x1 = x1;
-    b.y1 = y1;
+    b.x = x0;
+    b.y = y0;
+    b.w = x1 - x0;
+    b.h = y1 - y0;
     return b;
 }
 
 static void
-list_of(reaktor_damage_list *l, const char *keys, const reaktor_damage_box *boxes,
+list_of(reaktor_damage_list *l, const char *keys, const SDL_Rect *boxes,
         const char *scaled)
 {
     int i;
@@ -214,25 +214,25 @@ list_of(reaktor_damage_list *l, const char *keys, const reaktor_damage_box *boxe
 }
 
 static int
-covers(const reaktor_damage_box *r, int n, reaktor_damage_box b)
+covers(const SDL_Rect *r, int n, SDL_Rect b)
 {
     int i;
 
     for (i = 0; i < n; i++)
-        if (r[i].x0 <= b.x0 && r[i].y0 <= b.y0 && r[i].x1 >= b.x1 && r[i].y1 >= b.y1)
+        if (r[i].x <= b.x && r[i].y <= b.y && r[i].x + r[i].w >= b.x + b.w &&
+            r[i].y + r[i].h >= b.y + b.h)
             return 1;
     return 0;
 }
 
 static int
-disjoint(const reaktor_damage_box *r, int n)
+disjoint(const SDL_Rect *r, int n)
 {
     int i, j;
 
     for (i = 0; i < n; i++)
         for (j = i + 1; j < n; j++)
-            if (r[i].x0 < r[j].x1 && r[j].x0 < r[i].x1 &&
-                r[i].y0 < r[j].y1 && r[j].y0 < r[i].y1)
+            if (SDL_HasRectIntersection(&r[i], &r[j]))
                 return 0;
     return 1;
 }
@@ -240,7 +240,7 @@ disjoint(const reaktor_damage_box *r, int n)
 static void
 diff_units(void)
 {
-    reaktor_damage_box boxes[26], r[REAKTOR_DAMAGE_RECTS];
+    SDL_Rect boxes[26], r[REAKTOR_DAMAGE_RECTS];
     reaktor_damage_list a, b;
     long long covered;
     int i, n, kind;
@@ -291,7 +291,7 @@ diff_units(void)
     list_of(&b, "ab", boxes, NULL);
     kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
     unit(kind == REAKTOR_DAMAGE_PARTIAL && n == 1 &&
-         SDL_memcmp(&r[0], &(reaktor_damage_box){ 100, 100, 300, 250 }, sizeof r[0]) == 0,
+         SDL_RectsEqual(&r[0], &(SDL_Rect){ 100, 100, 200, 150 }),
          "touching boxes join");
 
     boxes[2] = bx(150, 150, 600, 160);
@@ -312,8 +312,8 @@ diff_units(void)
     list_of(&b, "e", boxes, NULL);
     a.s = b.s = 2.0f;
     kind = reaktor_damage_diff(&a, &b, r, &n, &covered);
-    unit(kind == REAKTOR_DAMAGE_PARTIAL && covers(r, n, boxes[4]) && r[0].x0 % 2 == 0 &&
-         r[0].y0 % 2 == 0 && r[0].x1 % 2 == 0 && r[0].y1 % 2 == 0,
+    unit(kind == REAKTOR_DAMAGE_PARTIAL && covers(r, n, boxes[4]) && r[0].x % 2 == 0 &&
+         r[0].y % 2 == 0 && r[0].w % 2 == 0 && r[0].h % 2 == 0,
          "at scale 2 the edges fall on whole logical pixels");
 
     list_of(&a, "abc", boxes, NULL);
