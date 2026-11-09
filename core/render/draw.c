@@ -88,10 +88,10 @@ blank_image(App *app)
 #define ION_DIR "external/ionicons/src/svg/"
 
 struct img_key {
-    const char *src;
-    int         ion;
-    Uint32      stroke;
-    float       sw;
+    const char     *src;
+    int             ion;
+    struct nk_color stroke;
+    float           sw;
 };
 
 static const char *
@@ -163,8 +163,8 @@ img_lookup(App *app, const struct img_key *k, int px)
     for (i = 0; i < app->img_count; i++) {
         slot = &app->img[i];
         if (slot->hash == hash && slot->px == px && slot->ion == k->ion &&
-            slot->stroke == k->stroke && slot->sw == k->sw &&
-            strcmp(slot->src, k->src) == 0) {
+            !SDL_memcmp(&slot->stroke, &k->stroke, sizeof k->stroke) &&
+            slot->sw == k->sw && strcmp(slot->src, k->src) == 0) {
             slot->s.seen = app->ctx->seq;
             return slot->s.tex ? slot : NULL;
         }
@@ -177,7 +177,7 @@ img_lookup(App *app, const struct img_key *k, int px)
 
     if (k->ion) {
         SDL_snprintf(rel, sizeof(rel), ION_DIR "%s.svg", k->src);
-        SDL_snprintf(ocol, sizeof(ocol), "#%06x", (unsigned)k->stroke);
+        reaktor_hex(k->stroke, ocol);
         if (k->sw >= 0.0f) {
             char num[32];
 
@@ -280,7 +280,7 @@ ion_key(const char *name, struct nk_color stroke, float sw)
 
     k.src    = name;
     k.ion    = 1;
-    k.stroke = (Uint32)stroke.r << 16 | (Uint32)stroke.g << 8 | stroke.b;
+    k.stroke = nk_rgb(stroke.r, stroke.g, stroke.b);
     k.sw     = sw;
     return k;
 }
@@ -309,7 +309,7 @@ ionicon_ink(App *app, const char *name, struct nk_color stroke, float sw,
 struct nk_image
 reaktor_image_file(App *app, const char *src, int px)
 {
-    struct img_key k = { src, 0, 0, 0.0f };
+    struct img_key k = { src, 0, { 0, 0, 0, 0 }, 0.0f };
 
     return slot_image(app, icon_slot(app, &k, px, 2.0f));
 }

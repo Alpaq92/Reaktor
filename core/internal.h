@@ -63,7 +63,7 @@ struct img_slot {
     struct tex_slot s;
     char            src[192];
     unsigned        hash;
-    Uint32          stroke;
+    struct nk_color stroke;
     float           sw;
     int             ion, px, w, h;
     float           ink_l, ink_r;
