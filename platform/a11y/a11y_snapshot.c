@@ -108,6 +108,10 @@ diff_tree(reaktor_snap *s, const reaktor_a11y *a, const reaktor_a11y_node *t, in
         d->id      = c[i].id;
         d->flipped = o->state ^ t[j].state;
         d->value   = !same_text(s, o->value, t[j].value) || o->num != t[j].num;
+        d->state   = t[j].state;
+        d->num     = t[j].num;
+        d->lo      = t[j].lo;
+        d->hi      = t[j].hi;
         if (d->value || d->flipped) s->ndiff++;
     }
 }
