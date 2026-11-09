@@ -15,7 +15,6 @@ typedef struct pick_col {
     float w;
 } pick_col;
 
-/* One picker is open at a time; its wheels hold the value until it is set. */
 static struct {
     const void *owner;
     pick_col    col[PICK_COLS];
@@ -74,7 +73,6 @@ pick_days(void)
         }
 }
 
-/* The segments, in the order the language writes a short date. */
 static int
 date_order(int *kinds)
 {
@@ -176,7 +174,6 @@ pick_key(App *app)
     return 0;
 }
 
-/* 1 when set, -1 when dismissed, 0 while open. */
 static int
 pick_flyout(App *app, struct nk_context *ctx, float row)
 {
@@ -239,7 +236,6 @@ pick_flyout(App *app, struct nk_context *ctx, float row)
     return done;
 }
 
-/* The field is an input like any other: the value as the language writes it, or a hint. */
 static int
 pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
            pick_col *cols, int n, const char *hint, const char *value)
@@ -256,7 +252,6 @@ pick_field(const void *owner, const char *name, const reaktor_box *spec_box,
     unsigned id;
     int k, v, done = 0;
 
-    /* The padding a text field resolves, so the hint sits where a field's does. */
     sf = push_edit_style(ctx, &in, NULL);
     reaktor_style_frame_pop(ctx, sf);
     decl_box_from_style(&box, NULL, "input.type-text", "input", 0.0f, 7.0f);

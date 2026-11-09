@@ -89,7 +89,6 @@ provider_is_root(const Provider *p)
     return p->id == 0;
 }
 
-/* A provider outlives its window; a slot given to another is not its tree. */
 static reaktor_snap *
 snap_of(const Provider *p)
 {

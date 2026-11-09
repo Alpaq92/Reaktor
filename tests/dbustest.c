@@ -7,7 +7,6 @@
 #include "rdbus_internal.h"
 #include "test.h"
 
-/* CI asks for the live half, so a missing dbus-daemon fails there. */
 static int g_require_bus;
 
 #ifdef DBUSTEST_LIVE
@@ -26,8 +25,6 @@ static int g_require_bus;
 #define FRAME_CAP 4096
 #define DUMP_CAP  8192
 #define BIG_LEN   (1024 * 1024)
-
-/* Writing the wire format by hand, in either byte order */
 
 typedef struct wr {
     uint8_t *b;
@@ -190,8 +187,6 @@ make_frame(frame *f, int big, int type, int flags, uint32_t serial, const field 
     for (k = 0; k < body_len; k++) w_u8(&w, body[k]);
     f->n = w.n > sizeof(f->b) ? sizeof(f->b) : w.n;
 }
-
-/* Reading a body back as text, through the iterators */
 
 typedef struct dumpbuf {
     char  *b;
@@ -372,8 +367,6 @@ read32(const uint8_t *b, size_t at)
     return ((uint32_t)b[at + 3] << 24) | ((uint32_t)b[at + 2] << 16) |
            ((uint32_t)b[at + 1] << 8) | b[at];
 }
-
-/* Every basic type */
 
 #define RICH_STR  "h\xc3\xa9llo"
 #define RICH_SIG  "ybnqiuxtdsoga(sb)a{sv}v"
@@ -1025,8 +1018,6 @@ test_big(void)
     SDL_free(big);
 }
 
-/* Malformed input */
-
 static void
 expect_parse(const char *what, int want, const uint8_t *b, size_t n)
 {
@@ -1178,7 +1169,6 @@ deep_case(const char *what, int want, const char *open, const char *close, int d
     expect_parse(what, want, f.b, f.n);
 }
 
-/* depth variants around a y, an ay of two bytes, an empty a(ii) or an as of one string */
 static void
 variant_case(const char *what, int want, int depth, const char *sig)
 {
@@ -1206,7 +1196,6 @@ variant_case(const char *what, int want, int depth, const char *sig)
     expect_parse(what, want, f.b, f.n);
 }
 
-/* depth variants around an array of elem holding n bytes or n strings, built and reparsed */
 static void
 variant_build(const char *what, int want, int depth, const char *elem, int n)
 {
@@ -1379,8 +1368,6 @@ test_frame_size(void)
     test_eq("-1 for fields over 64 MiB", rdbus__frame_size(f.b, 16), -1);
 }
 
-/* Mutation */
-
 static uint64_t g_rng = 0x9e3779b97f4a7c15ull;
 
 static uint32_t
@@ -1392,7 +1379,6 @@ rnd(void)
     return (uint32_t)(g_rng >> 16);
 }
 
-/* 1 parsed and consistent, 0 rejected, -1 parsed but inconsistent */
 static int
 survive(const uint8_t *buf, size_t len)
 {
@@ -1516,8 +1502,6 @@ test_mutation(void)
 
 #ifdef DBUSTEST_LIVE
 
-/* A private bus */
-
 #define LIVE_NAME   "org.reaktor.DbusTest"
 #define LIVE_IFACE  "org.reaktor.Test"
 #define LIVE_PATH   "/org/reaktor/Echo"
@@ -1530,7 +1514,6 @@ test_mutation(void)
 
 static pid_t g_daemon = -1;
 
-/* 1 started, 0 not installed, -1 failed */
 static int
 start_daemon(char *addr, size_t cap)
 {
@@ -1719,8 +1702,6 @@ on_greedy(rdbus_conn *c, rdbus_msg *m, void *user)
     return RDBUS_HANDLED;
 }
 
-/* Drops the connection's last reference and leaves the call unhandled, so
-   dispatch still answers it on that connection. */
 static int
 on_drop(rdbus_conn *c, rdbus_msg *m, void *user)
 {
@@ -1762,7 +1743,6 @@ count_of(const char *s, const char *needle)
     return n;
 }
 
-/* A connection to dbus-daemon at path LIVE_DROP whose handler drops it. */
 static rdbus_conn *
 open_dropper(const char *addr, SDL_AtomicInt *dropped)
 {
@@ -1784,9 +1764,6 @@ open_dropper(const char *addr, SDL_AtomicInt *dropped)
     drop(m);
     return c;
 }
-
-/* A bus of the test's own: it authenticates, answers Hello, then sends a frame
-   whose header is sound and whose body is not, and a call after it. */
 
 #define FAKE_ID "0123456789abcdef0123456789abcdef"
 
@@ -2146,7 +2123,6 @@ forever_thread(void *data)
     return 0;
 }
 
-/* Echo with a byte array too big for the socket to take in one write. */
 static rdbus_msg *
 big_echo(const uint8_t *bytes)
 {
@@ -2171,8 +2147,6 @@ echoed(rdbus_msg *r, const uint8_t *bytes)
                                    RDBUS_TYPE_INVALID) &&
            n == BIG_LEN && p && SDL_memcmp(p, bytes, BIG_LEN) == 0;
 }
-
-/* More signals than a connection keeps queued, received without dispatching. */
 
 #define FLOOD_KEEP  4096
 #define FLOOD_SENT  (FLOOD_KEEP + 300)
@@ -2200,7 +2174,6 @@ on_flood(rdbus_conn *c, rdbus_msg *m, void *user)
     return RDBUS_HANDLED;
 }
 
-/* Answered by the bus only after everything c sent before it. */
 static int
 bus_round_trip(rdbus_conn *c)
 {
@@ -2576,7 +2549,6 @@ test_live(void)
     fv.c = d;
     td = d ? SDL_CreateThread(forever_thread, "forever", &fv) : NULL;
     if (td) {
-        /* Let the thread settle into its wait, watching for input alone. */
         SDL_Delay(100);
         m = big_echo(big);
         rdbus_error_init(&err);

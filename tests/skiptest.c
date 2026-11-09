@@ -50,7 +50,6 @@ script(reaktor_test *t, void *user)
     reaktor_test_check(t, g_stale == 0, "every frame starts from a cleared context");
     reaktor_test_check(t, g_most == most, "skipped frames leave no commands behind");
 
-    /* A tween that changes no pixel skips every frame, with no present to pace them. */
     frames = g_frames;
     t0 = SDL_GetTicks();
     SDL_SetAtomicInt(&g_play, 1);

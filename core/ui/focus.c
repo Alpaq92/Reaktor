@@ -132,7 +132,6 @@ focus_resolve(App *app)
     reaktor_a11y_set_focus(&app->a11y, 0);
 }
 
-/* 1 when every arrow steps the focused widget, 2 when only Left and Right do. */
 static int
 focus_steps(App *app)
 {
@@ -163,7 +162,6 @@ focus_key(App *app, const SDL_Event *event)
         return 1;
     }
     if (editing) {
-        /* The caret's, and the panel would scroll the field out of sight. */
         switch (event->key.key) {
         case SDLK_HOME:
             nk_input_key(app->ctx, NK_KEY_TEXT_START, nk_true);
@@ -334,7 +332,6 @@ focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv)
     if (app->focus_layer == FOCUS_PAGE && (i = node_index(t, n, app->focus_id)) >= 0)
         in_page = node_under(t, n, i, app->page_node);
     if (in_page) nk_push_scissor(cv, app->body_rect);
-    /* Truncated as nk_widget truncates the chrome it surrounds. */
     r = reaktor_rect_trunc(r);
     reaktor_edge_round(app, cv,
                        nk_rect(r.x - 3.0f, r.y - 3.0f, r.w + 6.0f, r.h + 6.0f),
@@ -342,7 +339,6 @@ focus_ring(App *app, struct nk_context *ctx, struct nk_command_buffer *cv)
     if (in_page) nk_push_scissor(cv, save);
 }
 
-/* Popups draw after every window; the ring goes in the overlay, drawn last. */
 void
 reaktor_overlay(App *app, struct nk_context *ctx, int ring)
 {

@@ -264,7 +264,6 @@ showcase_toasts(App *app)
     reaktor_toast(app, &g_toast_undo);
 }
 
-/* A page of what the Popups tab holds, laid out for paper. */
 static void
 print_sample(App *app, struct reaktor_context *ctx, int index, int w, int h, void *user)
 {
@@ -690,7 +689,6 @@ page_popups(App *app, struct reaktor_context *ctx, showcase_state *s)
     reaktor_layout_row_dynamic(ctx, 8.0f, 1);
     reaktor_spacer(ctx);
 
-    /* Last, so nothing the page draws after its button lands on top. */
     if (tip) {
         static const char *const many[2] = {
             "A tooltip is not limited to a line:",

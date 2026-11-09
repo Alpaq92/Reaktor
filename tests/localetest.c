@@ -12,7 +12,6 @@
 #define CATALOG(code, text) \
     { code, (const unsigned char *)(text), sizeof(text) - 1 }
 
-/* On purpose: out of order, and pl malformed in each way the loader allows. */
 const struct reaktor_locale_catalog reaktor_locale_catalogs[] = {
     CATALOG("pl",
         "\xEF\xBB\xBF" "language = Polski\r\n"
@@ -61,7 +60,6 @@ const int reaktor_locale_catalog_count =
     (int)(sizeof reaktor_locale_catalogs / sizeof reaktor_locale_catalogs[0]);
 
 
-/* locale_runtime.c asks SDL; the test answers for it. */
 static const char *g_system_code = "en";
 
 const char *

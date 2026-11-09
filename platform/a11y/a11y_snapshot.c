@@ -205,7 +205,7 @@ copy_text(const reaktor_snap *s, int at, char **buf, size_t *left)
     size_t n;
 
     if (at < 0 || *left < 2) return NULL;
-    /* libdbus aborts on invalid UTF-8. */
+    /* D-Bus refuses a string that is not valid UTF-8. */
     n = reaktor_utf8_clean(*buf, s->str + at, *left);
     {
         const char *out = *buf;

@@ -121,7 +121,6 @@ shut(App *app, int i, int tell)
     hand_back(app, &o);
     SDL_free(o.title);
     if (tell && o.spec.closed) o.spec.closed(app, o.spec.user);
-    /* The page is already drawn; the close shows next frame. */
     reaktor_wake(app);
 }
 
@@ -150,7 +149,6 @@ reaktor_floaters_draw(App *app, struct nk_context *ctx, int win_w, int win_h)
         char name[40];
         int shown, k, was = top;
 
-        /* A body drawn before this one may have opened a modal. */
         for (top = -1, k = 0; k < g_floater_n; k++)
             if (g_floater[k].spec.modal && !g_floater[k].closing) top = k;
         if (i > 0 && top != was) app->trap_lo = app->trap_hi = -1;

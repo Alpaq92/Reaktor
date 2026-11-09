@@ -5,7 +5,6 @@
 
 static Uint32 g_type;
 
-/* Through SDL's queue, so it stays in order with taps and keys. */
 EMSCRIPTEN_KEEPALIVE void
 reaktor_web_keys_typed(int code)
 {
@@ -21,7 +20,6 @@ reaktor_web_keys_typed(int code)
 EM_JS(void, web_keys_make, (void), {
     var el = document.createElement("input");
     var canvas = Module["canvas"];
-    /* Something for a soft Backspace to delete; never the app's text. */
     var base = " ";
     var k = {
         el: el, held: [], at: 0, composing: false, touching: 0, wanted: 0,
@@ -73,7 +71,6 @@ EM_JS(void, web_keys_make, (void), {
     var without = function (s, i) {
         return i < 0 ? s : s.slice(0, i).concat(s.slice(i + 1));
     };
-    /* A composition is left alone until it ends, or the word is typed twice. */
     var sync = function () {
         var was = k.held, cur = Array.from(el.value), at = k.at;
         var p = 0, e = 0, back = 0, i, c;
@@ -81,7 +78,6 @@ EM_JS(void, web_keys_make, (void), {
         while (p < was.length && p < cur.length && was[p] === cur[p]) p++;
         while (e < was.length - p && e < cur.length - p &&
                was[was.length - 1 - e] === cur[cur.length - 1 - e]) e++;
-        /* Deleting the base deletes the typed text too, so it is typed again. */
         if (at >= was.length - e) k.at = at + cur.length - was.length;
         else if (at >= p) { k.at = -1; back = 1; }
         was = without(was, at);
@@ -100,7 +96,6 @@ EM_JS(void, web_keys_make, (void), {
         k.held = Array.from(el.value);
         if (!k.composing) reset();
     };
-    /* The caret stays at the end, or the next edit reads as a delete. */
     var pin = function () {
         var end = el.value.length;
 
@@ -128,7 +123,6 @@ EM_JS(void, web_keys_make, (void), {
         }
         if (/^(Home|End|PageUp|PageDown|Arrow(Left|Right|Up|Down))$/.test(key))
             e.preventDefault();
-        /* A soft key has no code, so SDL cannot tell what it is. */
         if (!e["code"] && soft[key]) put(soft[key]);
     });
     el.addEventListener("blur", function () {

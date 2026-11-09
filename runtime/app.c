@@ -107,9 +107,6 @@ reaktor_asset_name(const reaktor_asset *a, const char *fallback)
 #define GPU_DRIVERS "opengl,opengles2"
 #endif
 
-/* An output colorspace is fixed when the renderer is made. scRGB is the HDR one
-   SDL scales sRGB drawing into; a renderer without it, software among them, is
-   made SDR as before. */
 SDL_Renderer *
 reaktor_renderer_for(SDL_Window *win, const char *name, int hdr)
 {
@@ -142,7 +139,6 @@ reaktor_renderer_for(SDL_Window *win, const char *name, int hdr)
 
 static const char *launch_title(void);
 
-/* SDL_CreateWindowAndRenderer, with the renderer made by the call above. */
 static bool
 open_window(App *app, int w, int h, SDL_WindowFlags flags)
 {
@@ -387,7 +383,6 @@ read_roles(App *app)
                 : reaktor_token("--links", app->text);
 }
 
-/* Whether the sheets' own tokens already say what the role sheet would. */
 static int
 roles_hold(const App *app)
 {
@@ -427,7 +422,6 @@ theme_sheet(int dark)
                 : "external/watercss/src/variables-light.css";
 }
 
-/* Whether the system's reduced motion or contrast changed what applies. */
 static int
 read_prefs(void)
 {
@@ -843,8 +837,6 @@ app_init(void **appstate, int argc, char *argv[])
 
     if (g_launch.name || g_launch.version || g_launch.id)
         SDL_SetAppMetadata(g_launch.name, g_launch.version, g_launch.id);
-    /* A later launch hands its files to the running copy and is done. */
-    /* A run for a shot or a dump is a test, and always its own copy. */
     if (g_launch.single_instance && !g_new_instance && !capturing(app) &&
         !reaktor_instance_claim(argc, argv))
         return SDL_APP_SUCCESS;
@@ -858,7 +850,6 @@ app_init(void **appstate, int argc, char *argv[])
 #endif
 
     if (!SDL_Init(SDL_INIT_VIDEO)) return fail(app, "SDL could not start");
-    /* SDL gives the first registration SDL_EVENT_USER, the type wakes push. */
     SDL_RegisterEvents(1);
     /* SDL makes every window a drop target while a drop event is enabled; on
        Windows that is COM's drag-and-drop, three DLLs and three threads. */
@@ -994,7 +985,6 @@ app_init(void **appstate, int argc, char *argv[])
     if (!app->ctx) return fail(app, "The interface could not start");
     reaktor_rss_mark(REAKTOR_RSS_NUKLEAR);
 
-    /* Before the atlas, which bakes what the catalogs need. */
     reaktor_locale_start(app->lang_pref);
     rebuild_font(app);
     reaktor_rss_mark(REAKTOR_RSS_FONT);
@@ -1070,8 +1060,6 @@ reaktor_take_event(App *app, SDL_Event *event)
         break;
     }
 
-    /* What the window shows may be gone, whatever the frame would draw; and a
-       box is placed a frame late, so a new size needs a second frame. */
     switch (event->type) {
     case SDL_EVENT_WINDOW_RESIZED:
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -1113,8 +1101,6 @@ reaktor_take_event(App *app, SDL_Event *event)
         reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
         break;
 
-    /* Windows and most desktops send nothing when reduced motion or
-       contrast changes; coming back from their settings is the cue. */
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
         if (!app->secondary && read_prefs()) load_theme(app);
         break;
@@ -1129,7 +1115,6 @@ reaktor_take_event(App *app, SDL_Event *event)
         drag_end(app);
         break;
 
-    /* Nuklear scrolls a panel at its end, after drawing what it holds. */
     case SDL_EVENT_MOUSE_WHEEL:
         if (!app->dragging) app->restore_rate = 2;
         break;
@@ -1490,8 +1475,6 @@ command_hash(unsigned h, const struct nk_command *c)
 }
 #undef H
 
-/* With .skip_same_frames, a frame whose commands are those already on screen
-   is neither rendered nor presented. */
 static int
 same_frame(App *app, struct nk_context *ctx)
 {
@@ -1642,7 +1625,6 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     }
     app->stop_editing = 0;
 
-    /* A click for a held widget would land on whatever holds it. */
     if (app->activate_id && app->focus_seen && !app->focus_held &&
         !reaktor_focus_covered(app))
         reaktor_key_click_ask(app);
@@ -1678,7 +1660,6 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
 
     nk_sdl_update_TextInput(ctx);
 #ifdef __EMSCRIPTEN__
-    /* After the frame, when a field has said whether it is being edited. */
     reaktor_web_keys_wants(app->editing);
 #endif
     reaktor_place_ime(app);
@@ -1694,7 +1675,6 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
         nk_clear(ctx);
         t_present0 = t_end = t_render0;
         app->frames_skipped++;
-        /* No present to wait on, so a tween that changes nothing would spin. */
         if (busy && !app->build_only) {
             reaktor_hint(SDL_HINT_MAIN_CALLBACK_RATE, app->drag_rate);
             if (!reaktor_windows_holding()) app->restore_rate = 2;
@@ -1703,7 +1683,6 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
         app->frames_drawn++;
         if (is_main) reaktor_text_prepare(ctx, app->ren);
         reaktor_render(app);
-        /* SDL rasterizes its queue here, or inside the present. */
         SDL_FlushRenderer(app->ren);
         t_present0 = SDL_GetPerformanceCounter();
         if (is_main) shot = take_shot(app);
@@ -1939,7 +1918,6 @@ reaktor_wake(App *app)
     App *to = app ? app : g_app;
 
     if (!to || !SDL_GetAtomicInt(&g_running)) return;
-    /* A lost wake would hold back every later one. */
     if (SDL_CompareAndSwapAtomicInt(&to->wake, 0, 1) && !reaktor_app_wake(to))
         SDL_SetAtomicInt(&to->wake, 0);
 }

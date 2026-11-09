@@ -1,7 +1,6 @@
 #import <Cocoa/Cocoa.h>
 #import <PDFKit/PDFKit.h>
 
-/* The PDF through the system's print dialog. */
 int
 reaktor_print_macos(const char *path)
 {

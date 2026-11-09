@@ -458,7 +458,6 @@ push_strip_look(struct reaktor_context *ctx, struct reaktor_color fg, struct rea
     reaktor_style_push_color(ctx, &ctx->style.button.text_active, fg);
     reaktor_style_push_float(ctx, &ctx->style.button.border, 0.0f);
     reaktor_style_push_float(ctx, &ctx->style.button.rounding, STRIP_ROUND);
-    /* The width was measured with this padding; the sheet's own may be wider. */
     reaktor_style_push_vec2(ctx, &ctx->style.button.padding,
                             reaktor_vec2((float)TAB_PAD_X, ctx->style.button.padding.y));
     return (reaktor_style_frame){ 3, 3, 2, 1, 0 };
@@ -483,7 +482,6 @@ sample_option(App *app, struct reaktor_context *ctx, const char *label, float w,
 
     if (w <= 0.0f) {
         const struct reaktor_user_font *f = reaktor_current_font(ctx);
-        /* Nuklear takes the rounding out of a button's text room too. */
         w = f->width(f->userdata, f->height, label, (int)strlen(label))
           + 2.0f * ((float)TAB_PAD_X + STRIP_ROUND);
     }
@@ -736,7 +734,6 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
         static int tries;
         reaktor_uint sx, sy;
 
-        /* Nuklear clamps to the content, which is placed a frame late. */
         reaktor_group_get_scroll(ctx, "body", &sx, &sy);
         if (sy == (reaktor_uint)g_scroll0 || ++tries > 8) {
             g_scroll0 = 0;
@@ -788,7 +785,6 @@ page_shell(App *app, struct reaktor_context *ctx, int win_w, int win_h)
                                              NULL, 0, body));
         reaktor_showcase_page(app, ctx, sample_tab(), sz.x, sz.y);
         reaktor_note_pop(app);
-        /* reaktor_group_end sets the bar this far past the content: mid-gutter. */
         body_metrics_push(ctx, BODY_PAD_X * 0.5f);
         reaktor_group_end(ctx);
         body_metrics_pop(ctx);

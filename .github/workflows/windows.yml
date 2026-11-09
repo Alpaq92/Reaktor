@@ -44,7 +44,6 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      # ccache's own release, pinned and checked; without it the build only runs uncached.
       - name: Install ccache
         id: ccache-tool
         run: |

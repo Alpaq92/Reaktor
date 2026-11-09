@@ -19,7 +19,6 @@ slot_at(void *slots, size_t size, int i)
     return (struct tex_slot *)((char *)slots + (size_t)i * size);
 }
 
-/* Never evicts a slot this frame's commands use. */
 static struct tex_slot *
 slot_take(App *app, void *slots, size_t size, int *count, int max)
 {
@@ -254,7 +253,6 @@ icon(App *app, const char *src, int px)
     return icon_over(app, src, px, 2.0f);
 }
 
-/* An icon, and where its drawn pixels start and end across its box, 0 to 1. */
 struct nk_image
 icon_ink(App *app, const char *src, int px, float *left, float *right)
 {
@@ -413,7 +411,6 @@ mask_rounded_fills(App *app)
         if (next >= end) break;
         at = next;
     }
-    /* What ended the list at the old end must end it at the new one. */
     if (spliced)
         ((struct nk_command *)((nk_byte *)ctx->memory.memory.ptr + tail))->next =
             ctx->memory.allocated;
@@ -459,7 +456,6 @@ reaktor_aa_lines(const App *app)
     return app->aa_mode != REAKTOR_AA_OFF;
 }
 
-/* Left to a GPU renderer by default; rounded fills are masks either way. */
 int
 reaktor_aa_fills(const App *app)
 {
@@ -605,7 +601,6 @@ ramp_at(const ramp *g, float at)
                    (int)(g->from.a + (g->to.a - g->from.a) * t + 0.5f));
 }
 
-/* The largest step, in levels of one channel, between the ramp's two ends. */
 static int
 ramp_levels(const ramp *g)
 {
@@ -630,7 +625,6 @@ ramp_rect(struct nk_command_buffer *cv, const ramp *g, struct nk_rect r)
     n = (int)SDL_ceilf((float)ramp_levels(g) * len / (g->across ? g->b.w : g->b.h));
     if (n > (int)len) n = (int)len;
     if (n < 1) n = 1;
-    /* Whole pixels, so neighbors share an edge the renderer cannot round apart. */
     for (j = 0; j < n; j++) {
         float s0 = at + (float)(int)(len * (float)j / (float)n + 0.5f);
         float s1 = at + (float)(int)(len * (float)(j + 1) / (float)n + 0.5f);
@@ -643,7 +637,6 @@ ramp_rect(struct nk_command_buffer *cv, const ramp *g, struct nk_rect r)
     }
 }
 
-/* A corner is cut into texel-wide strips along the ramp, each tinted where it sits. */
 static void
 ramp_corners(struct nk_command_buffer *cv, const ramp *g, struct nk_image mask, int m,
              int r)
@@ -674,7 +667,6 @@ ramp_corners(struct nk_command_buffer *cv, const ramp *g, struct nk_image mask, 
     }
 }
 
-/* Four corner masks and the three runs between them, over whole pixels. */
 static void
 fill_shape(App *app, struct nk_command_buffer *cv, float rounding, const ramp *g)
 {
@@ -696,7 +688,6 @@ fill_shape(App *app, struct nk_command_buffer *cv, float rounding, const ramp *g
     ramp_corners(cv, g, disc, m, r);
     R = (float)r;
     D = 2.0f * R;
-    /* The long run lies across the ramp, so each band is drawn once. */
     if (!g->flat && g->across) {
         if (b.w > D)
             ramp_rect(cv, g, nk_rect(b.x + R, b.y, b.w - D, b.h));
@@ -809,7 +800,6 @@ finish_face(struct reaktor_font *f, float height, const char *path, int fresh)
         center_glyphs_optically(f);
         nbsp_as_space(f);
     }
-    /* After centering: the Text module reads the baseline. */
     reaktor_text_attach_font(f, path);
 }
 
@@ -868,8 +858,6 @@ load_face(const char **name, const char *stand_in, size_t *size)
     return take_face(*name, size);
 }
 
-/* The atlas image, kept from the first window after the main one, so later
-   windows upload it instead of baking their own. */
 static struct {
     struct reaktor_fontset set;
     const char            *face, *bold;

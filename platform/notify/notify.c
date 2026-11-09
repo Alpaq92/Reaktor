@@ -44,7 +44,6 @@ notify_gone(App *app, void *user)
     notify_remove();
 }
 
-/* As much of s as fits, cut short rather than lost. */
 static void
 notify_text(const char *s, WCHAR *out, int cap)
 {
@@ -56,7 +55,6 @@ notify_text(const char *s, WCHAR *out, int cap)
     SDL_free(w);
 }
 
-/* A balloon from an icon of our own, which Windows 10 and 11 show as a toast. */
 static int
 notify_os(App *app, const char *title, const char *text)
 {
@@ -154,7 +152,6 @@ notify_os(App *app, const char *title, const char *text)
 }
 #endif
 
-/* Without a backend the module is notify_none.c instead. */
 #if defined(__EMSCRIPTEN__) || defined(_WIN32) || defined(REAKTOR_HAVE_DBUS) || defined(__APPLE__)
 int
 reaktor_notify(App *app, const reaktor_notification *n)

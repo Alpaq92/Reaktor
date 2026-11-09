@@ -1,6 +1,3 @@
-/* One running copy per app when .single_instance asks for it: a later launch
-   hands its file arguments to the running copy and exits. Each message is a
-   count of paths, then each path as a length and its bytes. */
 #include "internal.h"
 
 #ifndef __EMSCRIPTEN__
@@ -26,7 +23,6 @@ deliver_raise(App *app, void *user)
     SDL_RaiseWindow(app->win);
 }
 
-/* What a read gives back: the paths, posted to the main thread in order. */
 typedef int (*instance_read)(void *conn, void *buf, Uint32 n);
 
 static void
@@ -50,8 +46,6 @@ receive(App *app, instance_read rd, void *conn)
     reaktor_post(app, deliver_raise, NULL);
 }
 
-/* The message a later launch sends: its arguments, made absolute, since the
-   running copy's working folder is its own. */
 static int
 message(int argc, char **argv, char **out, Uint32 *out_len)
 {
@@ -197,7 +191,6 @@ reaktor_instance_claim(int argc, char **argv)
     if (g_mutex) CloseHandle(g_mutex);
     g_mutex = NULL;
 
-    /* The first copy may still be starting its listener. */
     for (tries = 0; tries < 50; tries++) {
         pipe = CreateFileA(g_pipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                            SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
@@ -313,8 +306,6 @@ sock_read(void *conn, void *buf, Uint32 n)
     return 1;
 }
 
-/* Beside the app's settings when that fits a socket's path, else in a /tmp
-   folder only this user can reach. */
 static int
 sock_path(void)
 {
@@ -386,7 +377,6 @@ reaktor_instance_claim(int argc, char **argv)
             close(s);
             return 0;
         }
-        /* Nobody listens: a copy that crashed left its socket behind. */
         unlink(g_sock);
     }
     return 1;
@@ -427,7 +417,6 @@ reaktor_instance_stop(void)
 {
     if (g_listen < 0) return;
     SDL_SetAtomicInt(&g_stop, 1);
-    /* The listener waits in accept; one connection releases it. */
     if (g_thread) {
         int s = sock_connect();
 

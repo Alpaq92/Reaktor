@@ -128,7 +128,6 @@ reaktor_tabs(const reaktor_tabs_spec *s)
     return nav_list(s, 1);
 }
 
-/* A tree is a list whose first column is indented, with a chevron on each branch. */
 typedef struct tree_rows {
     const reaktor_tree_spec *s;
     int *node, *depth, *row;
@@ -192,7 +191,6 @@ list_follow(const reaktor_list_spec *s, int focused, struct nk_rect area, float 
     return changed;
 }
 
-/* Row r's first column in a tree; 1 when the selection should move to t->jump. */
 static int
 tree_first(tree_rows *t, int r, const char *label, unsigned id, struct nk_color fg, float pad)
 {
@@ -247,7 +245,6 @@ tree_first(tree_rows *t, int r, const char *label, unsigned id, struct nk_color 
 
 static int list_draw(const reaktor_list_spec *s, tree_rows *t);
 
-/* Rows with .drag start a drag; a list of the same kind shows where it lands. */
 static float
 list_drag(const reaktor_list_spec *s, struct nk_rect area, float row_h, int *changed)
 {
@@ -550,7 +547,6 @@ reaktor_splitter(const reaktor_splitter_spec *s)
 #define MENU_COLS  (MENU_DEPTH + 1)
 #define MENU_ITEMS  32
 
-/* The windows that draw a column run after the frame that declared it: they draw a copy. */
 typedef struct menu_col {
     const reaktor_menu_entry *items, *src;
     reaktor_menu_entry        copy[MENU_ITEMS];
@@ -560,7 +556,6 @@ typedef struct menu_col {
     float                     lead;
 } menu_col;
 
-/* One menu bar is open at a time; its columns are read by the windows that draw them. */
 static struct {
     int        open, depth, kcol, kbd, keyed, focused;
     int        path[MENU_DEPTH], hi[MENU_COLS], win[MENU_COLS];
@@ -726,7 +721,6 @@ menu_draw_entry(const reaktor_menu_entry *e, struct nk_rect b, float lead, int l
                            "chevron-forward-outline", fg);
 }
 
-/* Draws column k with its top left at `at`, in whichever window holds it. */
 static void
 menu_draw_col(int k, struct nk_vec2 at)
 {

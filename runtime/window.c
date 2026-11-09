@@ -16,7 +16,6 @@ typedef struct rwin {
 static rwin g_win[WINDOW_MAX];
 static int  g_win_n, g_win_next = 1;
 
-/* Closed with the picker still open: its thread answers into the App. */
 static App *g_parked[WINDOW_MAX];
 static int  g_parked_n;
 
@@ -63,7 +62,6 @@ unpark(int all)
             g_parked[i] = g_parked[--g_parked_n];
 }
 
-/* 0 while the picker's thread may still write into it. */
 int
 reaktor_app_free(App *a)
 {
@@ -116,7 +114,6 @@ shut(int i, int tell)
     if (m) {
         int k;
 
-        /* Its cursor would outlive it; each window sets its own again. */
         SDL_SetCursor(reaktor_cursor(REAKTOR_CURSOR_DEFAULT));
         m->cur_shown = 0;
         m->dirty = 1;
@@ -124,7 +121,6 @@ shut(int i, int tell)
     }
 }
 
-/* Logical units of the main window to its window coordinates. */
 static float
 to_points(const App *m)
 {
@@ -376,8 +372,6 @@ reaktor_windows_restyle(void)
     }
 }
 
-/* The callback rate is the process's: a held button or a fling in any window
-   keeps it. */
 int
 reaktor_windows_holding(void)
 {

@@ -65,7 +65,6 @@ put(buffer *b, const char *fmt, ...)
     else put_bytes(b, line, n);
 }
 
-/* A PDF text string: as it is when it is plain ASCII, else UTF-16BE. */
 static void
 put_text(buffer *b, const char *s)
 {
@@ -92,7 +91,6 @@ put_text(buffer *b, const char *s)
     put(b, ">");
 }
 
-/* Each page a JPEG drawn over the whole of it. */
 static int
 pdf_write(const char *path, const char *title, SDL_Surface *const *page, int n,
           float pt_w, float pt_h)
@@ -164,7 +162,6 @@ pdf_write(const char *path, const char *title, SDL_Surface *const *page, int n,
 }
 
 #ifdef _WIN32
-/* The system's print dialog, then each page stretched over the printable area. */
 static int
 print_win32(App *app, SDL_Surface *const *page, int n, const char *title)
 {
