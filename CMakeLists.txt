@@ -608,6 +608,7 @@ add_library(reaktor_runtime STATIC
     core/base/metrics.c
     core/css/style.c
     core/css/css.c
+    core/render/damage.c
     core/render/draw.c
     core/ui/declare.c
     core/ui/controls.c
@@ -855,6 +856,8 @@ if(NOT EMSCRIPTEN)
     reaktor_add_app(launchtest STATIC MODULES settings popups print SOURCES tests/launchtest.c)
     reaktor_add_app(uitest MODULES none SOURCES tests/uitest.c)
     reaktor_add_app(skiptest MODULES none SOURCES tests/skiptest.c)
+    reaktor_add_app(damagetest STATIC MODULES none SOURCES tests/damagetest.c)
+    reaktor_add_app(damagetest_text STATIC MODULES text SOURCES tests/damagetest.c)
     set_target_properties(launchtest PROPERTIES EXCLUDE_FROM_ALL ON)
 endif()
 

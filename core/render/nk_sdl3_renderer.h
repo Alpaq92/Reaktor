@@ -39,6 +39,10 @@ NK_API nk_handle            nk_sdl_font_upload(struct nk_context* ctx, const voi
 NK_API int                  nk_sdl_handle_event(struct nk_context* ctx, SDL_Event *evt);
 /* REAKTOR: fill and stroke feathering apart. */
 NK_API void                 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA);
+/* REAKTOR: one pass per rectangle, each clipped to it; none is one pass. The
+   list stays until nk_sdl_frame_done. */
+NK_API void                 nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA, enum nk_anti_aliasing line_AA, const SDL_Rect *rects, int n);
+NK_API void                 nk_sdl_frame_done(struct nk_context* ctx);
 NK_API void                 nk_sdl_update_TextInput(struct nk_context* ctx);
 NK_API void                 nk_sdl_shutdown(struct nk_context* ctx);
 NK_API struct nk_allocator  nk_sdl_allocator(void);
@@ -394,15 +398,53 @@ nk_sdl_sw_restore(SDL_Renderer *ren, SDL_Texture *tex, struct nk_sdl_sw *st)
     st->tinted = st->unblended = 0;
 }
 
+/* REAKTOR: whether device box [x0, x1) x [y0, y1), grown by a pixel, meets a. */
+NK_INTERN int
+nk_sdl_meets(float x0, float y0, float x1, float y1, const SDL_Rect *a,
+             float sx, float sy)
+{
+    return x1 + 1.0f > (float)a->x * sx && x0 - 1.0f < (float)(a->x + a->w) * sx &&
+           y1 + 1.0f > (float)a->y * sy && y0 - 1.0f < (float)(a->y + a->h) * sy;
+}
+
+/* REAKTOR: a run of triangles by the box of its vertices. */
+NK_INTERN int
+nk_sdl_run_meets(const void *vertices, const nk_draw_index *ix, nk_uint count,
+                 const SDL_Rect *a, float sx, float sy)
+{
+    const struct nk_sdl_vertex *v = (const struct nk_sdl_vertex *)vertices;
+    float x0, y0, x1, y1;
+    nk_uint k;
+
+    if (!a) return 1;
+    if (!count) return 0;
+    x0 = x1 = v[ix[0]].position[0];
+    y0 = y1 = v[ix[0]].position[1];
+    for (k = 1; k < count; k++) {
+        const float *p = v[ix[k]].position;
+
+        if (p[0] < x0) x0 = p[0];
+        if (p[0] > x1) x1 = p[0];
+        if (p[1] < y0) y0 = p[1];
+        if (p[1] > y1) y1 = p[1];
+    }
+    return nk_sdl_meets(x0 * sx, y0 * sy, x1 * sx, y1 * sy, a, sx, sy);
+}
+
 /* REAKTOR: fill and stroke feathering apart. */
 NK_API void
 nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                  enum nk_anti_aliasing line_AA)
 {
-    /* setup global state */
+    nk_sdl_render_area(ctx, shape_AA, line_AA, NULL, 0);
+    nk_sdl_frame_done(ctx);
+}
+
+/* REAKTOR: the end of nk_sdl_render_ex, apart. */
+NK_API void
+nk_sdl_frame_done(struct nk_context* ctx)
+{
     struct nk_sdl* sdl;
-    int is_sw;
-    float sx = 1.0f, sy = 1.0f;
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
@@ -413,8 +455,27 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         sdl->last_render = now;
     }
 
+    nk_clear(&sdl->ctx);
+    nk_buffer_clear(&sdl->ogl.cmds);
+    nk_buffer_clear(&sdl->ogl.vbuf);
+    nk_buffer_clear(&sdl->ogl.ebuf);
+}
+
+/* REAKTOR: the drawing of nk_sdl_render_ex, apart. */
+NK_API void
+nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
+                   enum nk_anti_aliasing line_AA, const SDL_Rect *rects, int n)
+{
+    /* setup global state */
+    struct nk_sdl* sdl;
+    int is_sw, pass;
+    float sx = 1.0f, sy = 1.0f;
+    NK_ASSERT(ctx);
+    sdl = (struct nk_sdl*)ctx->userdata.ptr;
+    NK_ASSERT(sdl);
+
     {
-        SDL_Rect saved_clip, last_clip = {0, 0, -1, -1};
+        SDL_Rect saved_clip;
         SDL_BlendMode saved_blend;
         float saved_r, saved_g, saved_b, saved_a;
         bool clipping_enabled;
@@ -447,6 +508,10 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         config.line_AA = line_AA;
 
         /* convert shapes into vertices */
+        /* REAKTOR: the list may be converted again before nk_sdl_frame_done. */
+        nk_buffer_clear(&sdl->ogl.cmds);
+        nk_buffer_clear(&sdl->ogl.vbuf);
+        nk_buffer_clear(&sdl->ogl.ebuf);
         nk_convert(&sdl->ctx, &sdl->ogl.cmds, &sdl->ogl.vbuf, &sdl->ogl.ebuf, &config);
 
         /* REAKTOR: software vertices on the device pixel grid. */
@@ -456,16 +521,13 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
             sx = sy = 1.0f;
         if (is_sw) {
             nk_byte *v = (nk_byte *)nk_buffer_memory(&sdl->ogl.vbuf);
-            nk_size i, n = sdl->ogl.vbuf.needed / (nk_size)vs;
-            for (i = 0; i < n; i++) {
+            nk_size i, nv = sdl->ogl.vbuf.needed / (nk_size)vs;
+            for (i = 0; i < nv; i++) {
                 float *pos = (float *)(v + i * (nk_size)vs + vp);
                 pos[0] = (SDL_floorf(pos[0] * sx + 0.5f) + 0.5f) / sx;
                 pos[1] = (SDL_floorf(pos[1] * sy + 0.5f) + 0.5f) / sy;
             }
         }
-
-        /* iterate over and execute each draw command */
-        offset = (const nk_draw_index*)nk_buffer_memory_const(&sdl->ogl.ebuf);
 
         clipping_enabled = SDL_RenderClipEnabled(sdl->renderer);
         SDL_GetRenderClipRect(sdl->renderer, &saved_clip);
@@ -477,6 +539,14 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         SDL_GetRenderDrawColorFloat(sdl->renderer, &saved_r, &saved_g,
                                     &saved_b, &saved_a);
         SDL_SetRenderDrawBlendMode(sdl->renderer, SDL_BLENDMODE_BLEND);
+
+        /* REAKTOR: one conversion, one pass per rectangle. */
+        for (pass = 0; pass < (n > 0 ? n : 1); pass++) {
+        const SDL_Rect *area = n > 0 ? &rects[pass] : NULL;
+        SDL_Rect last_clip = {0, 0, -1, -1};
+
+        /* iterate over and execute each draw command */
+        offset = (const nk_draw_index*)nk_buffer_memory_const(&sdl->ogl.ebuf);
 
         nk_draw_foreach(cmd, &sdl->ctx, &sdl->ogl.cmds)
         {
@@ -500,6 +570,11 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                 r.y = cmd->clip_rect.y;
                 r.w = cmd->clip_rect.w;
                 r.h = cmd->clip_rect.h;
+                /* REAKTOR: a pass draws only inside its rectangle. */
+                if (area && !SDL_GetRectIntersection(&r, area, &r)) {
+                    offset += cmd->elem_count;
+                    continue;
+                }
                 if (SDL_memcmp(&r, &last_clip, sizeof r) != 0) {
                     SDL_SetRenderClipRect(sdl->renderer, &r);
                     last_clip = r;
@@ -508,14 +583,16 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
 
             {
                 const void *vertices = nk_buffer_memory_const(&sdl->ogl.vbuf);
-                int n = (int)(sdl->ogl.vbuf.needed / (nk_size)vs);
+                int nv = (int)(sdl->ogl.vbuf.needed / (nk_size)vs);
 
                 /* REAKTOR: shapes untextured. */
                 SDL_Texture *tex = (SDL_Texture *)cmd->texture.ptr;
 
                 if (tex == sdl->ogl.white_tex) tex = NULL;
 
-                /* REAKTOR: software rectangles from device pixels. */
+                /* REAKTOR: software rectangles from device pixels. A pass
+                 * groups them as a full frame does and submits only those
+                 * that reach its rectangle. */
                 if (is_sw) {
                     struct nk_sdl_sw st;
                     nk_uint k = 0, from = 0;
@@ -533,16 +610,23 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                         /* What came before it in the list is drawn before it. */
                         if (k > from) {
                             nk_sdl_sw_restore(sdl->renderer, tex, &st);
-                            nk_sdl_geometry_sw(sdl->renderer, tex, vertices, n,
-                                               offset + from, (int)(k - from));
+                            if (nk_sdl_run_meets(vertices, offset + from, k - from,
+                                                 area, sx, sy))
+                                nk_sdl_geometry_sw(sdl->renderer, tex, vertices, nv,
+                                                   offset + from, (int)(k - from));
                         }
-                        nk_sdl_quad_draw(sdl->renderer, tex, &q, &st);
+                        if (!area ||
+                            nk_sdl_meets(q.d.x * sx, q.d.y * sy, (q.d.x + q.d.w) * sx,
+                                         (q.d.y + q.d.h) * sy, area, sx, sy))
+                            nk_sdl_quad_draw(sdl->renderer, tex, &q, &st);
                         k += 6;
                         from = k;
                     }
                     nk_sdl_sw_restore(sdl->renderer, tex, &st);
-                    if (cmd->elem_count > from)
-                        nk_sdl_geometry_sw(sdl->renderer, tex, vertices, n,
+                    if (cmd->elem_count > from &&
+                        nk_sdl_run_meets(vertices, offset + from,
+                                         cmd->elem_count - from, area, sx, sy))
+                        nk_sdl_geometry_sw(sdl->renderer, tex, vertices, nv,
                                            offset + from,
                                            (int)(cmd->elem_count - from));
                     offset += cmd->elem_count;
@@ -550,11 +634,12 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                 }
 
                 /* REAKTOR: nk_sdl_geometry, not SDL_RenderGeometryRaw. */
-                nk_sdl_geometry(sdl->renderer, tex, vertices, n, offset,
+                nk_sdl_geometry(sdl->renderer, tex, vertices, nv, offset,
                                 (int)cmd->elem_count);
 
                 offset += cmd->elem_count;
             }
+        }
         }
 
         /* Restore the original blend mode. */
@@ -568,11 +653,6 @@ nk_sdl_render_ex(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
         if (!clipping_enabled) {
             SDL_SetRenderClipRect(sdl->renderer, NULL);
         }
-
-        nk_clear(&sdl->ctx);
-        nk_buffer_clear(&sdl->ogl.cmds);
-        nk_buffer_clear(&sdl->ogl.vbuf);
-        nk_buffer_clear(&sdl->ogl.ebuf);
     }
 }
 

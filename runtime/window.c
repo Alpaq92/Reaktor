@@ -88,6 +88,7 @@ teardown(App *a)
     reaktor_undo_clear(a);
     reaktor_layout_free(&a->lay);
     if (a->ren) img_cache_free(a);
+    reaktor_damage_free(a);
     if (a->ctx) nk_sdl_shutdown(a->ctx);
     if (a->ren) SDL_DestroyRenderer(a->ren);
     if (a->win) SDL_DestroyWindow(a->win);

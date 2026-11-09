@@ -14,6 +14,12 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
     (void)ctx; (void)renderer;
 }
 
+float
+reaktor_text_ink_em(void)
+{
+    return 0.0f;
+}
+
 int
 reaktor_text_break(const char *s, int len, int limit)
 {

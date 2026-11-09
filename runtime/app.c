@@ -1365,113 +1365,6 @@ file_answer(App *app)
     app->file_count = 0;
 }
 
-/* A command by its fields, one at a time: the structs have gaps, and a gap
-   keeps whatever the buffer or a copied struct held before. */
-#define H(f) (h = reaktor_fnv_n(h, &(f), sizeof(f)))
-
-static unsigned
-command_hash(unsigned h, const struct nk_command *c)
-{
-    H(c->type);
-    switch (c->type) {
-    case NK_COMMAND_SCISSOR: {
-        const struct nk_command_scissor *x = (const void *)c;
-        H(x->x); H(x->y); H(x->w); H(x->h);
-        break;
-    }
-    case NK_COMMAND_LINE: {
-        const struct nk_command_line *x = (const void *)c;
-        H(x->line_thickness); H(x->begin); H(x->end); H(x->color);
-        break;
-    }
-    case NK_COMMAND_CURVE: {
-        const struct nk_command_curve *x = (const void *)c;
-        H(x->line_thickness); H(x->begin); H(x->end); H(x->ctrl); H(x->color);
-        break;
-    }
-    case NK_COMMAND_RECT: {
-        const struct nk_command_rect *x = (const void *)c;
-        H(x->rounding); H(x->line_thickness); H(x->x); H(x->y); H(x->w); H(x->h); H(x->color);
-        break;
-    }
-    case NK_COMMAND_RECT_FILLED: {
-        const struct nk_command_rect_filled *x = (const void *)c;
-        H(x->rounding); H(x->x); H(x->y); H(x->w); H(x->h); H(x->color);
-        break;
-    }
-    case NK_COMMAND_RECT_MULTI_COLOR: {
-        const struct nk_command_rect_multi_color *x = (const void *)c;
-        H(x->x); H(x->y); H(x->w); H(x->h); H(x->left); H(x->top); H(x->bottom); H(x->right);
-        break;
-    }
-    case NK_COMMAND_TRIANGLE: {
-        const struct nk_command_triangle *x = (const void *)c;
-        H(x->line_thickness); H(x->a); H(x->b); H(x->c); H(x->color);
-        break;
-    }
-    case NK_COMMAND_TRIANGLE_FILLED: {
-        const struct nk_command_triangle_filled *x = (const void *)c;
-        H(x->a); H(x->b); H(x->c); H(x->color);
-        break;
-    }
-    case NK_COMMAND_CIRCLE: {
-        const struct nk_command_circle *x = (const void *)c;
-        H(x->x); H(x->y); H(x->line_thickness); H(x->w); H(x->h); H(x->color);
-        break;
-    }
-    case NK_COMMAND_CIRCLE_FILLED: {
-        const struct nk_command_circle_filled *x = (const void *)c;
-        H(x->x); H(x->y); H(x->w); H(x->h); H(x->color);
-        break;
-    }
-    case NK_COMMAND_ARC: {
-        const struct nk_command_arc *x = (const void *)c;
-        H(x->cx); H(x->cy); H(x->r); H(x->line_thickness); H(x->a); H(x->color);
-        break;
-    }
-    case NK_COMMAND_ARC_FILLED: {
-        const struct nk_command_arc_filled *x = (const void *)c;
-        H(x->cx); H(x->cy); H(x->r); H(x->a); H(x->color);
-        break;
-    }
-    case NK_COMMAND_POLYGON:
-    case NK_COMMAND_POLYLINE: {
-        const struct nk_command_polygon *x = (const void *)c;
-        H(x->color); H(x->line_thickness); H(x->point_count);
-        h = reaktor_fnv_n(h, x->points, (nk_size)x->point_count * sizeof x->points[0]);
-        break;
-    }
-    case NK_COMMAND_POLYGON_FILLED: {
-        const struct nk_command_polygon_filled *x = (const void *)c;
-        H(x->color); H(x->point_count);
-        h = reaktor_fnv_n(h, x->points, (nk_size)x->point_count * sizeof x->points[0]);
-        break;
-    }
-    case NK_COMMAND_IMAGE: {
-        const struct nk_command_image *x = (const void *)c;
-        H(x->x); H(x->y); H(x->w); H(x->h);
-        H(x->img.handle.ptr); H(x->img.w); H(x->img.h); H(x->img.region); H(x->col);
-        break;
-    }
-    case NK_COMMAND_CUSTOM: {
-        const struct nk_command_custom *x = (const void *)c;
-        H(x->x); H(x->y); H(x->w); H(x->h); H(x->callback_data.ptr); H(x->callback);
-        break;
-    }
-    case NK_COMMAND_TEXT: {
-        const struct nk_command_text *x = (const void *)c;
-        H(x->font); H(x->background); H(x->foreground);
-        H(x->x); H(x->y); H(x->w); H(x->h); H(x->height); H(x->length);
-        h = reaktor_fnv_n(h, x->string, (nk_size)x->length);
-        break;
-    }
-    default:
-        break;
-    }
-    return h;
-}
-#undef H
-
 static int
 same_frame(App *app, struct nk_context *ctx)
 {
@@ -1479,16 +1372,12 @@ same_frame(App *app, struct nk_context *ctx)
     int same;
 
     if (!g_launch.skip_same_frames) return 0;
-    h = REAKTOR_FNV;
-    {
-        const struct nk_command *c;
-
-        nk_foreach(c, ctx) h = command_hash(h, c);
-    }
+    h = reaktor_damage_collect(app, ctx);
     h = reaktor_fnv_n(h, &app->laid_w, sizeof app->laid_w);
     h = reaktor_fnv_n(h, &app->laid_h, sizeof app->laid_h);
-    same = h == app->frame_hash && !app->must_draw && !app->want_capture &&
-           !app->shot_path && app->first_frame_done;
+    app->damage.forced = app->must_draw || app->want_capture || app->shot_path ||
+                         !app->first_frame_done;
+    same = h == app->frame_hash && !app->damage.forced;
     app->frame_hash = h;
     app->must_draw = 0;
     return same;
@@ -1679,7 +1568,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
     } else {
         app->frames_drawn++;
         if (is_main) reaktor_text_prepare(ctx, app->ren);
-        reaktor_render(app);
+        if (!reaktor_damage_render(app)) reaktor_render(app);
         SDL_FlushRenderer(app->ren);
         t_present0 = SDL_GetPerformanceCounter();
         if (is_main) shot = take_shot(app);
@@ -1688,6 +1577,7 @@ reaktor_app_frame(App *app, int win_w, int win_h, const char *title,
             app->want_capture = 0;
         }
         SDL_RenderPresent(app->ren);
+        reaktor_damage_presented(app);
         t_end = SDL_GetPerformanceCounter();
     }
 
@@ -1810,6 +1700,7 @@ app_quit(void *appstate, SDL_AppResult result)
         }
     }
     if (app->ren) img_cache_free(app);
+    reaktor_damage_free(app);
     if (app->ctx) nk_sdl_shutdown(app->ctx);
     reaktor_fontset_free(&app->fonts);
     atlas_forget();

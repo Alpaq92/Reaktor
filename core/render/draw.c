@@ -31,7 +31,10 @@ slot_take(App *app, void *slots, size_t size, int *count, int max)
         s = slot_at(slots, size, i);
         if (s->seen != now && (!k || now - s->seen > now - k->seen)) k = s;
     }
-    if (k && k->tex) SDL_DestroyTexture(k->tex);
+    if (k && k->tex) {
+        SDL_DestroyTexture(k->tex);
+        app->must_draw = 1;
+    }
     return k;
 }
 
@@ -43,6 +46,7 @@ img_cache_clear(App *app)
     for (i = 0; i < app->img_count; i++)
         if (app->img[i].s.tex) SDL_DestroyTexture(app->img[i].s.tex);
     app->img_count = 0;
+    app->must_draw = 1;
 }
 
 void
@@ -518,6 +522,42 @@ reaktor_render(App *app)
     nk_sdl_render_ex(app->ctx,
                      reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
                      reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF);
+}
+
+void
+reaktor_render_list(App *app, const SDL_Rect *rects, int n)
+{
+    nk_sdl_render_area(app->ctx,
+                       reaktor_aa_fills(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
+                       reaktor_aa_lines(app) ? NK_ANTI_ALIASING_ON : NK_ANTI_ALIASING_OFF,
+                       rects, n);
+}
+
+/* SDL_RenderClear would ignore the clip. */
+void
+reaktor_render_area(App *app, const SDL_Rect *rects, int n)
+{
+    SDL_BlendMode blend = SDL_BLENDMODE_BLEND;
+    int i;
+
+    SDL_GetRenderDrawBlendMode(app->ren, &blend);
+    SDL_SetRenderDrawBlendMode(app->ren, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(app->ren, app->clear.r, app->clear.g, app->clear.b,
+                           app->clear.a);
+    for (i = 0; i < n; i++) {
+        SDL_FRect f;
+
+        f.x = (float)rects[i].x;
+        f.y = (float)rects[i].y;
+        f.w = (float)rects[i].w;
+        f.h = (float)rects[i].h;
+        SDL_SetRenderClipRect(app->ren, &rects[i]);
+        SDL_RenderFillRect(app->ren, &f);
+    }
+    SDL_SetRenderClipRect(app->ren, NULL);
+    SDL_SetRenderDrawBlendMode(app->ren, blend);
+    mask_rounded_fills(app);
+    if (n > 0) reaktor_render_list(app, rects, n);
 }
 
 nk_size
@@ -1018,13 +1058,16 @@ rebuild_font(App *app)
         app->atlas_bpp = SDL_BYTESPERPIXEL(tex->format);
     }
     nk_style_set_font(app->ctx, base_font(app));
+    app->must_draw = 1;
 }
 
 void
 apply_render_scale(App *app)
 {
     float s = reaktor_scale();
-    SDL_SetRenderScale(app->ren, s, s);
+
+    app->render_scale = s;
+    if (!reaktor_damage_views(app)) SDL_SetRenderScale(app->ren, s, s);
 }
 
 SDL_Surface *

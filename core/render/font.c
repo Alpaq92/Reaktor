@@ -107,6 +107,14 @@ reaktor_ft_size(FT_Face face, float px)
                      72, 72);
 }
 
+static float g_ink_em;
+
+float
+reaktor_font_ink_em(void)
+{
+    return g_ink_em;
+}
+
 const struct reaktor_glyph *
 reaktor_font_glyph(const struct reaktor_font *f, nk_rune cp)
 {
@@ -303,6 +311,11 @@ reaktor_fontset_bake(struct reaktor_fontset *set, const struct reaktor_face_src 
             g->x1        = (float)(d->left + d->w);
             g->y0        = (float)-d->top + f->ascent + 0.5f;
             g->y1        = g->y0 + (float)d->h;
+            {
+                float ink = SDL_max(SDL_max(-g->x0, g->x1), SDL_max(-g->y0, g->y1));
+
+                if (ink / src[i].px > g_ink_em) g_ink_em = ink / src[i].px;
+            }
             if (cp[k] < 128) f->ascii[cp[k]] = (unsigned char)(f->glyph_count + 1);
             f->glyph_count++;
         }

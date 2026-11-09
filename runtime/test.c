@@ -292,6 +292,10 @@ script_thread(void *data)
     reaktor_test *t = (reaktor_test *)data;
 
     g_script(t, g_user);
+    reaktor_test_settle(t);
+    if (t->app->damage.partial)
+        reaktor_test_check(t, !t->app->damage.mismatched,
+                           "every partial frame matches a full redraw");
     if (!t->checks) reaktor_test_check(t, 0, "the script checked nothing");
     SDL_Log("test: %d of %d checks passed", t->checks - t->fails, t->checks);
     reaktor_quit(t->app, t->fails || t->stuck ? 1 : 0);
@@ -303,6 +307,7 @@ test_frame(App *app)
 {
     test_ask *q = (test_ask *)SDL_GetAtomicPointer(&g_settle);
 
+    app->damage.checking = 1;
     if (q) {
         if (!q->seq) q->seq = app->ctx->seq + 1;
         if (app->ctx->seq >= q->seq + 2 && reaktor_frame_settled(app)) {

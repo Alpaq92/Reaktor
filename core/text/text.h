@@ -10,5 +10,6 @@ struct SDL_Renderer;
 void reaktor_text_add_fallback(const char *path);
 void reaktor_text_attach_font(struct reaktor_font *font, const char *path);
 void reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer);
+float reaktor_text_ink_em(void);
 
 #endif
