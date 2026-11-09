@@ -91,11 +91,12 @@ typedef struct glyph_page {
     int          x, y, row;
 } glyph_page;
 
+/* By its shape entry, not the command's string: commands spliced in before the
+   draw can move Nuklear's command memory and free the string. */
 typedef struct text_draw {
-    int             face, len;
+    int             face, entry;
     float           height;
     struct nk_color fg;
-    const char     *text;
 } text_draw;
 
 static text_font g_font[FONTS_MAX];
@@ -768,7 +769,7 @@ draw(void *canvas, short x, short y, unsigned short w, unsigned short h,
         return;
     d = &g_draw[data.id];
     f = &g_face[d->face];
-    if ((e = shape(f->file, d->text, d->len)) < 0) return;
+    if ((e = d->entry) < 0) return;
     px   = f->font->height * d->height / f->font->handle.height;
     k    = d->height / px;
     top  = f->font->baseline * px / f->font->height;
@@ -826,10 +827,9 @@ reaktor_text_prepare(struct nk_context *ctx, struct SDL_Renderer *renderer)
             continue;
         if (!reaktor_grow((void **)&g_draw, &g_draw_cap, g_draws + 1, sizeof *g_draw)) break;
         d.face   = face;
-        d.len    = t->length;
+        d.entry  = shape(g_face[face].file, t->string, t->length);
         d.height = t->height;
         d.fg     = t->foreground;
-        d.text   = t->string;
         x = t->x;
         y = t->y;
         w = t->w;
