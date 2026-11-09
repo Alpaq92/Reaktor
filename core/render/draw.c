@@ -31,10 +31,7 @@ slot_take(App *app, void *slots, size_t size, int *count, int max)
         s = slot_at(slots, size, i);
         if (s->seen != now && (!k || now - s->seen > now - k->seen)) k = s;
     }
-    if (k && k->tex) {
-        SDL_DestroyTexture(k->tex);
-        app->must_draw = 1;
-    }
+    if (k && k->tex) SDL_DestroyTexture(k->tex);
     return k;
 }
 
@@ -46,7 +43,6 @@ img_cache_clear(App *app)
     for (i = 0; i < app->img_count; i++)
         if (app->img[i].s.tex) SDL_DestroyTexture(app->img[i].s.tex);
     app->img_count = 0;
-    app->must_draw = 1;
 }
 
 void
@@ -82,6 +78,7 @@ blank_image(App *app)
         app->blank = SDL_CreateTexture(app->ren, SDL_PIXELFORMAT_ARGB8888,
                                        SDL_TEXTUREACCESS_STATIC, 1, 1);
         if (!app->blank) return nk_image_id(0);
+        reaktor_texture_serial(app->blank);
         SDL_UpdateTexture(app->blank, NULL, &clear, (int)sizeof clear);
         SDL_SetTextureBlendMode(app->blank, SDL_BLENDMODE_BLEND);
     }
@@ -252,6 +249,7 @@ img_lookup(App *app, const struct img_key *k, int px)
     plutovg_surface_destroy(surf);
 
     if (!tex) return NULL;
+    reaktor_texture_serial(tex);
     SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
 
@@ -381,6 +379,7 @@ round_mask(App *app, int r, int t)
         plutovg_surface_destroy(pv);
     }
     if (tex) {
+        reaktor_texture_serial(tex);
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
     }
@@ -995,6 +994,7 @@ rebuild_font(App *app)
     struct reaktor_fontset set;
     struct reaktor_font   *font = NULL;
     unsigned char         *pixels;
+    nk_handle              atlas;
     int bold, shared, i;
 
     shared = app->secondary && keeps(app) && reaktor_fontset_copy(&set, &g_kept.set);
@@ -1008,7 +1008,9 @@ rebuild_font(App *app)
     reaktor_fontset_free(&app->fonts);
     app->fonts = set;
     pixels = shared ? g_kept.set.pixels : set.pixels;
-    reaktor_fontset_bind(&app->fonts, nk_sdl_font_upload(app->ctx, pixels, set.w, set.h));
+    atlas  = nk_sdl_font_upload(app->ctx, pixels, set.w, set.h);
+    reaktor_texture_serial((SDL_Texture *)atlas.ptr);
+    reaktor_fontset_bind(&app->fonts, atlas);
     app->fonts.pixels = NULL;
     for (i = 0; i < FONT_STEPS; i++) {
         app->faces[i] = &app->fonts.fonts[i];
@@ -1047,7 +1049,6 @@ rebuild_font(App *app)
         app->atlas_bpp = SDL_BYTESPERPIXEL(tex->format);
     }
     nk_style_set_font(app->ctx, base_font(app));
-    app->must_draw = 1;
 }
 
 void

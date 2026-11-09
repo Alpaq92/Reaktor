@@ -457,6 +457,7 @@ int  reaktor_damage_render(App *app);
 void reaktor_damage_presented(App *app);
 int  reaktor_damage_views(App *app);
 void reaktor_damage_free(App *app);
+void reaktor_texture_serial(SDL_Texture *t);
 void reaktor_damage_add(reaktor_damage_list *l, const void *key, int len,
                         reaktor_damage_box box, int scaled);
 int  reaktor_damage_diff(const reaktor_damage_list *was, const reaktor_damage_list *now,

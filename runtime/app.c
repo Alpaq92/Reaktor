@@ -559,9 +559,8 @@ load_theme(App *app)
     img_cache_clear(app);
     apply_widget_style(app);
 
-    app->clear     = app->page;
-    app->dirty     = 1;
-    app->must_draw = 1;
+    app->clear = app->page;
+    app->dirty = 1;
     reaktor_windows_restyle();
 }
 
@@ -1375,6 +1374,7 @@ same_frame(App *app, struct nk_context *ctx)
     h = reaktor_damage_collect(app, ctx);
     h = reaktor_fnv_n(h, &app->laid_w, sizeof app->laid_w);
     h = reaktor_fnv_n(h, &app->laid_h, sizeof app->laid_h);
+    h = reaktor_fnv_n(h, &app->clear, sizeof app->clear);
     app->damage.forced = app->must_draw || app->want_capture || app->shot_path ||
                          !app->first_frame_done;
     same = h == app->frame_hash && !app->damage.forced;

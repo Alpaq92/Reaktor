@@ -1,12 +1,35 @@
 #include "internal.h"
 
 #define LOOKAHEAD 32
+#define SERIAL    "reaktor.serial"
 
 typedef struct sink {
     reaktor_damage_list *l;
     unsigned             h;
     int                  ok;
+    const void          *tex;
+    Sint64               serial;
 } sink;
+
+void
+reaktor_texture_serial(SDL_Texture *t)
+{
+    static Sint64 next;
+
+    if (t) SDL_SetNumberProperty(SDL_GetTextureProperties(t), SERIAL, ++next);
+}
+
+static Sint64
+serial_of(sink *k, const void *t)
+{
+    if (!t) return 0;
+    if (t != k->tex) {
+        k->tex    = t;
+        k->serial = SDL_GetNumberProperty(SDL_GetTextureProperties((SDL_Texture *)t),
+                                          SERIAL, 0);
+    }
+    return k->serial;
+}
 
 static void
 put(sink *k, const void *p, size_t n)
@@ -32,6 +55,8 @@ put(sink *k, const void *p, size_t n)
 static void
 command_key(const struct nk_command *c, sink *k)
 {
+    Sint64 id;
+
     K(c->type);
     switch (c->type) {
     case NK_COMMAND_SCISSOR: {
@@ -110,7 +135,8 @@ command_key(const struct nk_command *c, sink *k)
     case NK_COMMAND_IMAGE: {
         const struct nk_command_image *x = (const void *)c;
         K(x->x); K(x->y); K(x->w); K(x->h);
-        K(x->img.handle.ptr); K(x->img.w); K(x->img.h); K(x->img.region); K(x->col);
+        id = serial_of(k, x->img.handle.ptr);
+        K(x->img.handle.ptr); K(id); K(x->img.w); K(x->img.h); K(x->img.region); K(x->col);
         break;
     }
     case NK_COMMAND_CUSTOM: {
@@ -120,7 +146,8 @@ command_key(const struct nk_command *c, sink *k)
     }
     case NK_COMMAND_TEXT: {
         const struct nk_command_text *x = (const void *)c;
-        K(x->font); K(x->background); K(x->foreground);
+        id = serial_of(k, x->font ? x->font->texture.ptr : NULL);
+        K(x->font); K(id); K(x->background); K(x->foreground);
         K(x->x); K(x->y); K(x->w); K(x->h); K(x->height); K(x->length);
         put(k, x->string, (size_t)x->length);
         break;
