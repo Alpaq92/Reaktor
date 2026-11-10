@@ -536,7 +536,7 @@ nk_sdl_covers(struct nk_sdl *sdl, float sx, float sy)
             }
             c = &sdl->covers[n++];
             SDL_zerop(c);
-            if ((q.px.x1 - q.px.x0) * (q.px.y1 - q.px.y0) < NK_SDL_CUT_MIN) continue;
+            if ((long long)(q.px.x1 - q.px.x0) * (q.px.y1 - q.px.y0) < NK_SDL_CUT_MIN) continue;
             c->x0 = SDL_max(q.px.x0, clip.x0);
             c->y0 = SDL_max(q.px.y0, clip.y0);
             c->x1 = SDL_min(q.px.x1, clip.x1);
@@ -791,7 +791,7 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                         b[2] = (q.d.x + q.d.w) * sx;
                         b[3] = (q.d.y + q.d.h) * sy;
                         if (!tex && q.opaque && seq++ < covers &&
-                            (q.px.x1 - q.px.x0) * (q.px.y1 - q.px.y0) >= NK_SDL_CUT_MIN) {
+                            (long long)(q.px.x1 - q.px.x0) * (q.px.y1 - q.px.y0) >= NK_SDL_CUT_MIN) {
                             later  = sdl->covers + seq;
                             nlater = covers - seq;
                         }
