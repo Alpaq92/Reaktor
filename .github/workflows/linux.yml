@@ -455,5 +455,5 @@ jobs:
           $CC --version | head -1
           cmake --version | head -1
           nproc
-          dbus-run-session -- sh tools/ci/lto-check.sh -x Xvfb -w "timeout 600" ${{ matrix.extra }}
+          dbus-run-session -- sh tools/ci/lto-check.sh -x Xvfb -w "timeout 600" -- ${{ matrix.extra }}
           EOF2
