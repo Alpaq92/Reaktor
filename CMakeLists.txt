@@ -150,7 +150,34 @@ if(MSVC)
 elseif(NOT EMSCRIPTEN)
     add_compile_options(-ffunction-sections -fdata-sections)
 endif()
+# Reaktor and SDL optimized as one program: SDL's software rasterizer then no
+# longer runs faster or slower as the code linked before it changes size. The
+# objects hold the compiler's own form until the link, so a static library
+# meant for other compilers is built with it off, as tools/libreaktor-pkg.sh
+# does. Measured with MSVC only, so on there alone.
+if(MSVC)
+    set(_reaktor_lto_default ON)
+else()
+    set(_reaktor_lto_default OFF)
+endif()
+option(REAKTOR_LTO "Link-time optimization in a Release build" ${_reaktor_lto_default})
+if(REAKTOR_LTO AND NOT EMSCRIPTEN)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _reaktor_lto OUTPUT _reaktor_lto_why LANGUAGES C CXX)
+    if(_reaktor_lto)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    else()
+        message(STATUS "LTO: not supported by this toolchain")
+    endif()
+endif()
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)
+# SDL keeps link-time code out of SDL_mslibc.c for a build without the C
+# library; with it the file is empty, and the flag only clashes with the
+# precompiled header.
+if(MSVC AND _reaktor_lto AND SDL_LIBC AND NOT CMAKE_VERSION VERSION_LESS 3.18)
+    set_property(SOURCE "${TP}/SDL/src/stdlib/SDL_mslibc.c" DIRECTORY "${TP}/SDL"
+        PROPERTY COMPILE_FLAGS "")
+endif()
 
 function(reaktor_write_if_changed path content)
     set(_old "")
@@ -284,7 +311,7 @@ target_link_libraries(reaktor_core PUBLIC plutosvg freetype reaktor_headers ${RE
 # Nuklear built for size: 139 KB less of the library, at no measurable cost a
 # frame (PERFORMANCE.md). A debug build keeps its own -O0.
 set_property(SOURCE core/render/nk_impl.c APPEND PROPERTY COMPILE_OPTIONS
-    "$<$<NOT:$<CONFIG:Debug>>:$<IF:$<C_COMPILER_ID:MSVC>,/O1,-Os>>")
+    "$<$<NOT:$<CONFIG:Debug>>:$<IF:$<C_COMPILER_ID:MSVC>,/Os,-Os>>")
 
 set(APP_ICON assets/icons/reaktor-icon.ico)
 set(APP_RESOURCES "")

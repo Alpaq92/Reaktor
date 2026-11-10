@@ -93,6 +93,9 @@ struct nk_sdl {
     bool insert_toggle;
     bool edit_was_active;
     bool is_sw;
+    /* REAKTOR: each opaque rectangle of the frame, as it will cover. */
+    struct nk_sdl_cover *covers;
+    int covers_cap;
 };
 
 NK_INTERN void *
@@ -280,12 +283,34 @@ nk_sdl_geometry_sw(SDL_Renderer *ren, SDL_Texture *tex, const void *vertices,
     if (opaque) SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
 }
 
+/* REAKTOR: device pixels [x0, x1) x [y0, y1). */
+struct nk_sdl_cover {
+    int x0, y0, x1, y1;
+};
+
 /* REAKTOR: a rectangle among the triangles, on whole device pixels. */
 struct nk_sdl_rect {
-    SDL_FRect    d, src;
-    const float *col;
-    int          opaque;
+    SDL_FRect           d, src;
+    struct nk_sdl_cover px;
+    const float        *col;
+    int                 opaque;
 };
+
+/* REAKTOR: device pixels as SDL fills them: it truncates a scaled
+   rectangle's position and size apart, toward zero, so a start left of zero
+   is nudged left. */
+NK_INTERN SDL_FRect
+nk_sdl_device_rect(const struct nk_sdl_cover *c, float sx, float sy)
+{
+    SDL_FRect d;
+    float x0 = (float)c->x0, y0 = (float)c->y0;
+
+    d.w = ((float)c->x1 - x0 + 0.25f) / sx;
+    d.h = ((float)c->y1 - y0 + 0.25f) / sy;
+    d.x = (x0 + (x0 < 0.0f ? -0.25f : 0.25f)) / sx;
+    d.y = (y0 + (y0 < 0.0f ? -0.25f : 0.25f)) / sy;
+    return d;
+}
 
 /* REAKTOR: what a run of rectangles left set, put back before triangles. */
 struct nk_sdl_sw {
@@ -338,13 +363,11 @@ nk_sdl_quad(const void *vertices, const nk_draw_index *ix, SDL_Texture *tex,
         return 0;
     if (tex && !(u[1] > u[0] && w[1] > w[0])) return 0;
 
-    /* SDL truncates toward zero, so a start left of zero is nudged left. */
-    d.x = SDL_floorf(x0 * sx);
-    d.y = SDL_floorf(y0 * sy);
-    d.w = (SDL_floorf(x1 * sx) - d.x + 0.25f) / sx;
-    d.h = (SDL_floorf(y1 * sy) - d.y + 0.25f) / sy;
-    d.x = (d.x + (d.x < 0.0f ? -0.25f : 0.25f)) / sx;
-    d.y = (d.y + (d.y < 0.0f ? -0.25f : 0.25f)) / sy;
+    q->px.x0 = (int)SDL_floorf(x0 * sx);
+    q->px.y0 = (int)SDL_floorf(y0 * sy);
+    q->px.x1 = (int)SDL_floorf(x1 * sx);
+    q->px.y1 = (int)SDL_floorf(y1 * sy);
+    d = nk_sdl_device_rect(&q->px, sx, sy);
 
     if (tex) {
         if (!(tw > 0.0f && th > 0.0f)) return 0;
@@ -362,9 +385,59 @@ nk_sdl_quad(const void *vertices, const nk_draw_index *ix, SDL_Texture *tex,
     return 1;
 }
 
-/* REAKTOR: SDL truncates a scaled rectangle's position and size apart. */
+/* REAKTOR: cutting pays only for large rectangles, in device pixels; smaller
+   ones neither cut nor are cut. */
+#define NK_SDL_CUT_MIN 4096
+#define NK_SDL_PARTS   16
+
+/* REAKTOR: what of part[0] the n covers at c leave, in place, as at most
+   NK_SDL_PARTS rectangles; returns how many. */
+NK_INTERN int
+nk_sdl_uncovered(struct nk_sdl_cover *part, const struct nk_sdl_cover *c, int n)
+{
+    struct nk_sdl_cover cut[NK_SDL_PARTS];
+    int np = 1, i, j;
+
+    for (i = 0; i < n && np > 0; i++) {
+        const struct nk_sdl_cover *o = &c[i];
+        int nc = 0;
+
+        if (o->x0 >= o->x1 || o->y0 >= o->y1) continue;
+        for (j = 0; j < np; j++) {
+            struct nk_sdl_cover p = part[j];
+            int y0, y1;
+
+            if (o->x0 >= p.x1 || o->x1 <= p.x0 || o->y0 >= p.y1 || o->y1 <= p.y0) {
+                if (nc == NK_SDL_PARTS) return np;
+                cut[nc++] = p;
+                continue;
+            }
+            if (nc + 4 > NK_SDL_PARTS) return np;
+            y0 = SDL_max(p.y0, o->y0);
+            y1 = SDL_min(p.y1, o->y1);
+            if (o->y0 > p.y0) { cut[nc] = p; cut[nc++].y1 = o->y0; }
+            if (o->y1 < p.y1) { cut[nc] = p; cut[nc++].y0 = o->y1; }
+            if (o->x0 > p.x0) {
+                cut[nc].x0 = p.x0; cut[nc].x1 = o->x0;
+                cut[nc].y0 = y0;   cut[nc++].y1 = y1;
+            }
+            if (o->x1 < p.x1) {
+                cut[nc].x0 = o->x1; cut[nc].x1 = p.x1;
+                cut[nc].y0 = y0;    cut[nc++].y1 = y1;
+            }
+        }
+        SDL_memcpy(part, cut, (size_t)nc * sizeof(*cut));
+        np = nc;
+    }
+    return np;
+}
+
+/* REAKTOR: SDL truncates a scaled rectangle's position and size apart. An
+   opaque fill draws only what the n later covers leave: they replace every
+   pixel they paint, whatever was under it. */
 NK_INTERN void
 nk_sdl_quad_draw(SDL_Renderer *ren, SDL_Texture *tex, const struct nk_sdl_rect *q,
+                 const struct nk_sdl_cover *later, int n, float sx, float sy,
                  struct nk_sdl_sw *st)
 {
     if (tex) {
@@ -382,7 +455,96 @@ nk_sdl_quad_draw(SDL_Renderer *ren, SDL_Texture *tex, const struct nk_sdl_rect *
         st->unblended = q->opaque;
     }
     SDL_SetRenderDrawColorFloat(ren, q->col[0], q->col[1], q->col[2], q->col[3]);
+    if (q->opaque && n > 0) {
+        struct nk_sdl_cover part[NK_SDL_PARTS];
+        SDL_FRect d[NK_SDL_PARTS];
+        int i, np;
+
+        part[0] = q->px;
+        np = nk_sdl_uncovered(part, later, n);
+        for (i = 0; i < np; i++) d[i] = nk_sdl_device_rect(&part[i], sx, sy);
+        if (np > 0) SDL_RenderFillRects(ren, d, np);
+        return;
+    }
     SDL_RenderFillRect(ren, &q->d);
+}
+
+/* REAKTOR: whether the list holds two large opaque fills, one to cut. */
+NK_INTERN int
+nk_sdl_may_cut(struct nk_context *ctx, float sx, float sy)
+{
+    const struct nk_command *c;
+    int large = 0;
+
+    nk_foreach(c, ctx) {
+        const struct nk_command_rect_filled *f = (const struct nk_command_rect_filled *)c;
+
+        if (c->type == NK_COMMAND_RECT_FILLED && f->color.a == 255 && !f->rounding &&
+            (float)f->w * sx * (float)f->h * sy >= (float)NK_SDL_CUT_MIN &&
+            ++large == 2)
+            return 1;
+    }
+    return 0;
+}
+
+/* REAKTOR: the device pixels each opaque rectangle surely paints, in list
+   order, for nk_sdl_quad_draw. Clips round inward; SDL rounds them out. */
+NK_INTERN int
+nk_sdl_covers(struct nk_sdl *sdl, float sx, float sy)
+{
+    const struct nk_draw_command *cmd;
+    const nk_draw_index *offset =
+        (const nk_draw_index *)nk_buffer_memory_const(&sdl->ogl.ebuf);
+    const void *vertices = nk_buffer_memory_const(&sdl->ogl.vbuf);
+    int n = 0;
+
+    nk_draw_foreach(cmd, &sdl->ctx, &sdl->ogl.cmds)
+    {
+        SDL_Texture *tex = (SDL_Texture *)cmd->texture.ptr;
+        struct nk_sdl_cover clip;
+        nk_uint k = 0;
+        int cx, cy;
+
+        if (!cmd->elem_count) continue;
+        if (tex != NULL && tex != sdl->ogl.white_tex) {
+            offset += cmd->elem_count;
+            continue;
+        }
+        cx = (int)cmd->clip_rect.x;
+        cy = (int)cmd->clip_rect.y;
+        clip.x0 = (int)SDL_ceilf((float)cx * sx);
+        clip.y0 = (int)SDL_ceilf((float)cy * sy);
+        clip.x1 = (int)SDL_floorf((float)(cx + (int)cmd->clip_rect.w) * sx);
+        clip.y1 = (int)SDL_floorf((float)(cy + (int)cmd->clip_rect.h) * sy);
+        while (k + 6 <= cmd->elem_count) {
+            struct nk_sdl_rect q;
+            struct nk_sdl_cover *c;
+
+            if (!nk_sdl_quad(vertices, offset + k, NULL, 0.0f, 0.0f, sx, sy, &q)) {
+                k += 3;
+                continue;
+            }
+            k += 6;
+            if (!q.opaque) continue;
+            if (n == sdl->covers_cap) {
+                int cap = n ? n * 2 : 64;
+                void *p = SDL_realloc(sdl->covers, (size_t)cap * sizeof(*sdl->covers));
+
+                if (!p) return n;
+                sdl->covers     = (struct nk_sdl_cover *)p;
+                sdl->covers_cap = cap;
+            }
+            c = &sdl->covers[n++];
+            SDL_zerop(c);
+            if ((long long)(q.px.x1 - q.px.x0) * (q.px.y1 - q.px.y0) < NK_SDL_CUT_MIN) continue;
+            c->x0 = SDL_max(q.px.x0, clip.x0);
+            c->y0 = SDL_max(q.px.y0, clip.y0);
+            c->x1 = SDL_min(q.px.x1, clip.x1);
+            c->y1 = SDL_min(q.px.y1, clip.y1);
+        }
+        offset += cmd->elem_count;
+    }
+    return n;
 }
 
 NK_INTERN void
@@ -476,6 +638,7 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
     int is_sw, passes;
     float sx = 1.0f, sy = 1.0f;
     SDL_Rect last_clip = {0, 0, -1, -1};
+    int covers = 0, seq = 0;
     NK_ASSERT(ctx);
     sdl = (struct nk_sdl*)ctx->userdata.ptr;
     NK_ASSERT(sdl);
@@ -534,6 +697,10 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                 pos[1] = (SDL_floorf(pos[1] * sy + 0.5f) + 0.5f) / sy;
             }
         }
+
+        /* REAKTOR: a frame drawn whole cuts its fills; a damaged one is small. */
+        if (is_sw && n == 0 && nk_sdl_may_cut(&sdl->ctx, sx, sy))
+            covers = nk_sdl_covers(sdl, sx, sy);
 
         clipping_enabled = SDL_RenderClipEnabled(sdl->renderer);
         SDL_GetRenderClipRect(sdl->renderer, &saved_clip);
@@ -601,6 +768,8 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                     if (tex && !SDL_GetTextureSize(tex, &tw, &th)) tw = th = 0.0f;
                     while (k + 6 <= cmd->elem_count) {
                         struct nk_sdl_rect q;
+                        const struct nk_sdl_cover *later = NULL;
+                        int nlater = 0;
 
                         if (!nk_sdl_quad(vertices, offset + k, tex, tw, th, sx, sy, &q)) {
                             k += 3;
@@ -621,10 +790,16 @@ nk_sdl_render_area(struct nk_context* ctx, enum nk_anti_aliasing shape_AA,
                         b[1] = q.d.y * sy;
                         b[2] = (q.d.x + q.d.w) * sx;
                         b[3] = (q.d.y + q.d.h) * sy;
+                        if (!tex && q.opaque && seq++ < covers &&
+                            (long long)(q.px.x1 - q.px.x0) * (q.px.y1 - q.px.y0) >= NK_SDL_CUT_MIN) {
+                            later  = sdl->covers + seq;
+                            nlater = covers - seq;
+                        }
                         for (i = 0; i < passes; i++)
                             if (nk_sdl_pass(sdl->renderer, &clip, rects, n, i, b, sx, sy,
                                             &last_clip))
-                                nk_sdl_quad_draw(sdl->renderer, tex, &q, &st);
+                                nk_sdl_quad_draw(sdl->renderer, tex, &q, later, nlater,
+                                                 sx, sy, &st);
                         k += 6;
                         from = k;
                     }
@@ -945,6 +1120,7 @@ void nk_sdl_shutdown(struct nk_context* ctx)
     nk_buffer_free(&sdl->ogl.cmds);
     nk_buffer_free(&sdl->ogl.vbuf);
     nk_buffer_free(&sdl->ogl.ebuf);
+    SDL_free(sdl->covers);
 
     if (sdl->ogl.font_tex != NULL) {
         SDL_DestroyTexture(sdl->ogl.font_tex);

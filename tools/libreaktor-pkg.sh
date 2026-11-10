@@ -79,7 +79,8 @@ if [ -z "$build" ]; then
     if command -v ninja >/dev/null 2>&1; then gen="-G Ninja"; else gen=""; fi
     # shellcheck disable=SC2086
     cmake -S "$root" -B "$build" $gen -DCMAKE_BUILD_TYPE=Release \
-          -DREAKTOR_SAMPLES=OFF -DREAKTOR_TESTS=OFF -DREAKTOR_SHARED=$shared
+          -DREAKTOR_SAMPLES=OFF -DREAKTOR_TESTS=OFF -DREAKTOR_SHARED=$shared \
+          -DREAKTOR_LTO=OFF
 fi
 cmake --build "$build" --parallel "$ncpu" --target libreaktor
 rm -rf "$stage"

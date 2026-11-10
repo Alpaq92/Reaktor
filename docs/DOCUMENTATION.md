@@ -1028,6 +1028,10 @@ comes out pixel for pixel as a full redraw
 would draw it; `tests/damagetest.c` checks each one. A GPU renderer, whose
 back buffer is not kept, or a fractional scale, draws every frame whole.
 
+A frame the software renderer draws whole fills a large opaque rectangle
+only where no later opaque rectangle covers it, since the later one replaces
+those pixels; the window comes out the same.
+
 A texture an app changes in place through `reaktor_sdl_renderer` is not among
 the commands, so a frame that only changes its pixels is skipped, or leaves
 them where they were: for the change to show, draw it from a new texture or
@@ -1216,6 +1220,7 @@ Passed to CMake, through either script:
 | `REAKTOR_RENDERERS` | empty | The renderers built beside `software`, in `--renderer`'s words, with commas or semicolons between: `direct3d11`, `direct3d12`, `opengl`, `opengles2`. Empty is the platform's default, `direct3d11,direct3d12` on Windows and nothing on Linux and the BSDs; `none` is software only, and a Windows program is then 105 KB smaller. macOS builds `metal` and `opengl` either way, the web `opengles2` |
 | `REAKTOR_SHADERS` | `OFF` | Build SDL's GPU API and its renderer, `--renderer sdl-gpu`, for an application's own shaders: Direct3D 12 on Windows, Metal on macOS, Vulkan on Linux and the BSDs; on, a program is 184 KB larger on Windows, and on Linux loads the Vulkan drivers even to draw in software |
 | `REAKTOR_SHARED` | `OFF` | Also build the [shared library](#in-your-own-project), and link the samples to it; Linux, the BSDs and macOS |
+| `REAKTOR_LTO` | `ON` with MSVC | Link-time optimization in a Release build, where the toolchain supports it; never on the web. Its static library holds objects only the same compiler can link, so one for others is built with it `OFF`, as `tools/libreaktor-pkg.sh` and the Windows release do |
 | `REAKTOR_SAMPLES`, `REAKTOR_TESTS` | `ON` at the top | Build the samples, and the tests in `tests/` |
 | `REAKTOR_INSTALL` | `ON` at the top | Install rules for libreaktor's files |
 
