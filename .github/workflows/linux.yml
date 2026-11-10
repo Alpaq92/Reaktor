@@ -419,6 +419,7 @@ jobs:
 
   lto:
     name: linux lto ${{ matrix.cc }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:

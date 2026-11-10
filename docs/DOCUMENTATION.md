@@ -1404,7 +1404,7 @@ it.
 - **It needs no GPU.** Without one, Direct3D falls back to Microsoft's WARP
   emulation: drawing `bench` flat out, SDL's software renderer took 0.75 ms
   of CPU a frame where Direct3D on WARP took 1.78.
-- **It uses the least memory**, 8.4 MB in `bench` against 58–121 MB on a GPU
+- **It uses the least memory**, 9.1 MB in `bench` against 57–120 MB on a GPU
   renderer, most of that the graphics driver's.
 - **It starts fastest, and its cost does not depend on other programs** using
   the GPU.
@@ -1441,8 +1441,8 @@ GPU renderer other than `sdl-gpu` keeps the linear output, which blends in
 linear light, so edges and text differ slightly from an SDR renderer.
 
 **Prefer `directx` or `direct3d12` to `direct3d11`.** Once running, on
-2026-11-09, `direct3d11` took 12.5% of a core where `direct3d12` took 5.0%
-and `opengl` 5.8%. On 2026-10-24 turning vsync off did not change that: the
+2026-11-10, `direct3d11` took 9.1% of a core where `direct3d12` took 5.1%
+and `opengl` 5.0%. On 2026-10-24 turning vsync off did not change that: the
 cost is in SDL's Direct3D 11 renderer or the driver, not in Reaktor's frame.
 Pick it only where Direct3D 12 will not start; `directx` does that by itself.
 

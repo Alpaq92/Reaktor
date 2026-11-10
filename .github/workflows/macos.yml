@@ -284,6 +284,7 @@ jobs:
 
   lto:
     name: macos lto ${{ matrix.arch }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:

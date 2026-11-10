@@ -11,11 +11,12 @@ queue and builds a frame only when the picture would differ. So **CPU is a
 count of frames, not a load**, and **memory is a floor, not a curve**: once the
 atlas and icons are baked, nothing grows.
 
-Unless a figure says otherwise, it was measured on 2026-11-09 on master just
-before 0.11.0, on the Windows machine in
+Unless a figure says otherwise, it was measured on 2026-11-10 on master for
+0.11.0, on the Windows machine in
 [Where the numbers came from](#where-the-numbers-came-from). There,
-`showcase.exe` is 3,233,280 bytes, `notepad.exe` 2,290,176, `simple.exe`
-2,155,520 and `bench.exe` 2,146,304. The showcase links all nine optional
+`showcase.exe` is 3,385,344 bytes, `notepad.exe` 2,376,192, `simple.exe`
+2,233,344 and `bench.exe` 2,217,984, linked with
+[link-time optimization](#size). The showcase links all nine optional
 modules, `notepad` three (settings, popup windows, printing) and the other two
 none; each carries the default look compiled in: Aileron, the mark, the sheets
 and seven icons, 73,123 bytes.
@@ -23,10 +24,10 @@ and seven icons, 73,123 bytes.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 8.4 MB, the same program on D3D12 120.5 MB and on OpenGL
-69.2 MB, Flutter 132.7 MB, Electron 155.2 MB, Kotlin
+Memory: Reaktor 9.1 MB, the same program on D3D12 120.3 MB and on OpenGL
+68.9 MB, Flutter 132.7 MB, Electron 155.2 MB, Kotlin
 Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor
-6.6%, D3D12 5.0%, OpenGL 5.8%, Flutter 15.3%, Electron 20.7%,
+6.1%, D3D12 5.1%, OpenGL 5.0%, Flutter 15.3%, Electron 20.7%,
 Kotlin Multiplatform 29.4%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
@@ -38,23 +39,27 @@ not plotted: it does not link on Windows.
 
 | Arm | Memory | CPU, with startup | CPU, steady state | Measured |
 | --- | --- | --- | --- | --- |
-| **Reaktor**, `software` | 8.4 MB | 8.2% | 6.6% | 2026-11-09 |
-| **Reaktor**, `direct3d11` | 57.7 MB | 13.1% | 12.5% | 2026-11-09 |
-| **Reaktor**, `direct3d12` | 120.5 MB | 11.7% | 5.0% | 2026-11-09 |
-| **Reaktor**, `opengl` | 69.2 MB | 10.9% | 5.8% | 2026-11-09 |
+| **Reaktor**, `software` | 9.1 MB | 7.7% | 6.1% | 2026-11-10 |
+| **Reaktor**, `direct3d11` | 57.2 MB | 14.1% | 9.1% | 2026-11-10 |
+| **Reaktor**, `direct3d12` | 120.3 MB | 11.1% | 5.1% | 2026-11-10 |
+| **Reaktor**, `opengl` | 68.9 MB | 10.7% | 5.0% | 2026-11-10 |
 | Electron 44.3.0 | 155.2 MB | 36.1% | 20.7% | 2026-11-09 |
 | Flutter 3.47.8 | 132.7 MB | 38.8% | 15.3% | 2026-10-24 |
 | Kotlin Multiplatform | 668.7 MB | 51.5% | 29.4% | 2026-10-24 |
 
-- **About a sixteenth of Flutter's memory and less than half its CPU**, with
-  startup or without, and about an eightieth of Kotlin Multiplatform's
+- **About a fourteenth of Flutter's memory and less than half its CPU**, with
+  startup or without, and about a seventieth of Kotlin Multiplatform's
   memory.
 - **Every Reaktor renderer takes less CPU than every other framework.** On a
-  GPU renderer its memory is mostly the graphics driver's: 58–121 MB, below
+  GPU renderer its memory is mostly the graphics driver's: 57–120 MB, below
   Flutter's 133.
-- **Once running, `direct3d12` and `opengl` take 0.8–1.6 points less than
-  `software`; with startup, 2.7–3.5 more.** `direct3d11` takes the most of
+- **Once running, `direct3d12` and `opengl` take 1.0–1.1 points less than
+  `software`; with startup, 3.0–3.4 more.** `direct3d11` takes the most of
   the four either way.
+- **`software`'s memory lands on one of two levels.** Its runs read
+  8.1–8.3 MB or 9.1–9.2 MB, and master before #139 does the same: twelve
+  passes of the two taken in turn gave each a median of 9.1 MB. The
+  previous pass, on 2026-11-09, read 8.4.
 - **About 2.2 MB of every arm is the antivirus.** Bitdefender puts two
   components into every process on this machine. Walked with VirtualQueryEx
   and a heap ledger on `bench` on 2026-11-04, they come to two private heaps
@@ -75,23 +80,27 @@ not plotted: it does not link on Windows.
 ./benchmarks/run.ps1 -Targets <arm> -Fps 60 -Runs 1 -Steady -PinClock
 ```
 
-Twenty passes, each running every arm once in each mode, the order of the arms
-rotated and reversed from pass to pass so none always runs first. Memory is
+Twenty passes of Reaktor's arms, each running every arm once in each mode,
+the order of the arms rotated and reversed from pass to pass so none always
+runs first. Memory is
 peak private bytes and CPU the sum across each app's process tree, as a
 percent of one core: with startup over the whole 6-second run, steady from
-3 s to 8 s of a 9-second run. Every arm held 60 fps. Each figure is the median
-of the twenty runs. Between runs of one arm, memory spread by up to 2.2 MB
-(Electron 5.5 MB) and steady CPU by several points: the middle half of
-`software`'s runs read 6.0–7.2%, `direct3d11`'s 10.4–14.4%, `direct3d12`'s
-3.5–6.2%, `opengl`'s 4.1–6.6% and Electron's 19.0–22.1%. `-PinClock` runs
+3 s to 8 s of a 9-second run. Every arm held 60 fps; one `opengl` run drew
+532 frames of 541. Each figure is the median of the twenty runs. Between
+runs of one arm, memory spread by up to 2.0 MB (`direct3d12` 6.0 MB) and
+steady CPU by several points: the middle half of `software`'s runs read
+5.5–6.4%, `direct3d11`'s 8.1–10.5%, `direct3d12`'s 3.2–6.6% and
+`opengl`'s 4.4–6.0%. `-PinClock` runs
 on a copy of the power plan that holds the processor at full speed, and
 restores the plan after.
 
 Reaktor's `software`, `direct3d11` and `direct3d12` arms are the default
 Release build; `opengl` is a build with
 `-DREAKTOR_RENDERERS=direct3d11,direct3d12,opengl`. `vulkan` falls back to
-`direct3d11` in this SDL build. Flutter and Kotlin Multiplatform were not
-rebuilt for this pass and keep their figures of 2026-10-24, from the same
+`direct3d11` in this SDL build. Electron keeps its figures of 2026-11-09,
+twenty passes of the same script taken with Reaktor's arms then; the middle
+half of its steady runs read 19.0–22.1% and its memory spread by 5.5 MB.
+Flutter and Kotlin Multiplatform keep theirs of 2026-10-24, from the same
 machine and script with ten runs each: Flutter 3.47.8, and Kotlin 2.4.20 with
 Compose 1.12.0 on JDK 21, which held 59 fps.
 
@@ -100,10 +109,10 @@ reads about 3 MB less private memory (2026-11-07).
 
 ## Interaction
 
-Driving the showcase with input, 0.11.0 draws the same frames as 0.10.0
-in 41–43% less time each, 20% less on the wheel, most of it saved in
-rendering; the process spends 11–23% less CPU on hover, slider drag and
-typing, and about the same on the wheel. A harness build of the
+Driving the showcase with input, 0.11.0 draws its frames in 42–43% less
+time each than 0.10.0, 22% less on the wheel, most of it saved in
+rendering; the process spends 13–31% less CPU on hover, slider drag and
+typing, and 15% less on the wheel. A harness build of the
 showcase feeds it synthetic SDL events every 8 ms after two seconds of
 warm-up, on `software` at 1100×680, vsync off, light theme, with the clock
 pinned as above:
@@ -120,31 +129,31 @@ which runs first alternating. Medians of the twelve:
 
 | Workload | Frames drawn | A drawn frame, 0.10.0 | 0.11.0 | Process CPU, 0.10.0 | 0.11.0 |
 | --- | --- | --- | --- | --- | --- |
-| Hover | 40 | 3.69 ms | **2.06 ms** | 9.2% | **8.0%** |
-| Slider drag | 344 | 3.37 ms | **1.92 ms** | 18.0% | **13.9%** |
-| Typing | 128 | 3.56 ms | **2.13 ms** | 13.6% | **12.1%** |
-| Wheel | 208 | 3.48 ms | **2.81 ms** | 15.8% | **15.6%** |
+| Hover | 40, 38 | 3.38 ms | **1.93 ms** | 8.9% | **7.7%** |
+| Slider drag | 344, 333 | 3.18 ms | **1.83 ms** | 17.2% | **12.8%** |
+| Typing | 128 | 3.36 ms | **1.96 ms** | 14.2% | **9.7%** |
+| Wheel | 208 | 3.40 ms | **2.65 ms** | 15.4% | **13.2%** |
 
-A drawn frame is build, render and present as the runtime times them; CPU is
-the whole process over the script. Every pair drew the frame faster on
-0.11.0. Rendering is 52–56% shorter on hover, slider drag and typing, 22%
-on the wheel, whose frames redraw most of the window; build is 23–37%
-shorter. Present is no shorter, and on slider drag it is noisy and leans
-slower. Process CPU was lower on 0.11.0 in every slider
-pair, ten of twelve hover and typing pairs and seven of twelve wheel pairs:
-on 0.11.0 the drawn frames are 10–46% of the process's CPU time.
+Where two counts of frames drawn are given, the first is 0.10.0's: on hover
+and slider drag 0.11.0 draws a few fewer for the same input, as master did
+before #139. A drawn frame is build, render and present as the runtime
+times them; CPU is the whole process over the script. Every pair drew the
+frame faster on 0.11.0. Rendering is 52–57% shorter on hover, slider drag
+and typing, 25% on the wheel, whose frames redraw most of the window; build
+is 24–39% shorter. Present is no shorter. Process CPU was lower on 0.11.0
+in every slider and typing pair and ten of twelve hover and wheel pairs.
 
 ## Memory
 
 Idle, ten seconds after launch with the pointer outside the window; medians of
-ten launches on 2026-11-10, 0.11.0 taken in turn with 0.10.0 and with master
-before #137:
+ten launches on 2026-11-10, 0.11.0 taken in turn with 0.10.0. Master before
+#137 was measured the same way earlier that day:
 
 | | Private bytes | Working set | 0.10.0, private bytes | Before #137 |
 | --- | --- | --- | --- | --- |
-| `showcase` | **13.1 MB** | 29.5 MB | 12.8 MB | 15.8 MB |
-| `notepad` | **8.8 MB** | 25.2 MB | 8.8 MB | 10.6 MB |
-| `simple` | **6.6 MB** | 19.8 MB | 7.1 MB | 7.6 MB |
+| `showcase` | **12.7 MB** | 31.7 MB | 12.9 MB | 15.8 MB |
+| `notepad` | **9.0 MB** | 25.3 MB | 9.1 MB | 10.6 MB |
+| `simple` | **6.6 MB** | 19.8 MB | 6.9 MB | 7.6 MB |
 
 Private bytes are what the process asked the system to back; the working set
 is what is in RAM, shared pages of system DLLs included. Launches spread by up
@@ -232,7 +241,7 @@ FreeType, and mojibake and kb_text_shape with Text), so only the C runtime
 loads from outside. The Windows binary's icon is a 125 KB resource of nine
 sizes, built from the SVG by `tools/mkicon.c`.
 
-Nuklear is compiled with `-Os` (`/O1` with MSVC): the stripped shared
+Nuklear is compiled with `-Os` (`/Os` with MSVC): the stripped shared
 libreaktor on Linux x86-64 goes from 1,880,624 bytes at `-O3` to 1,737,264,
 and Nuklear's own code from 306,649 to 168,042. `bench --no-vsync --video
 dummy` on the Linux Mint desktop above, median of seven runs, CPU time a frame:
@@ -244,6 +253,29 @@ dummy` on the Linux Mint desktop above, median of seven runs, CPU time a frame:
 
 The rounds spread wider than the change. Every showcase tab in both themes,
 `notepad` and `simple` draw and dump byte for byte as they did at `-O3`.
+
+**With MSVC, a Release build is link-time optimized** (`REAKTOR_LTO`),
+Reaktor and SDL compiled as one program. `showcase.exe` grows from
+3,234,304 bytes to 3,385,344 (4.7%). Without it, SDL's software rasterizer
+ran faster or slower as the code linked before it changed size; with it,
+on 2026-11-10 against 0.10.0, `bench --no-vsync` renders a frame 8.9%
+faster (every one of twelve runs) and the showcase's pages, drawn every
+frame, 4–8% faster. Pixels and `--a11y-dump` are unchanged. Its static
+library holds objects only the same compiler can link, so
+`tools/libreaktor-pkg.sh` and the Windows release build one with it off.
+
+With GCC and Clang it stays off. On GitHub runners on 2026-11-10,
+`tools/ci/lto-check.sh` built each twice and ran `bench --renderer software
+--no-vsync` ten times each way, in turn; shots and dumps were the same both
+ways:
+
+| Compiler | Render, 64 boxes | 512 boxes | `showcase` |
+| --- | --- | --- | --- |
+| GCC 12.2, Linux x86-64 | 0.41 → 0.38 ms (10 of 10 faster) | 0.65 → 0.61 ms (10 of 10) | +84,936 bytes (2.0%) |
+| Clang 14.0, Linux x86-64 | 0.22 → 0.22 ms (2 of 10) | 0.35 → 0.34 ms (9 of 10) | +342,264 bytes (8.6%) |
+| Apple Clang 17.0, macOS arm64 | 0.59 → 0.56 ms (9 of 10) | 0.865 → 0.795 ms (9 of 10) | +225,120 bytes (6.8%) |
+
+With it, GCC also warns 69 times more, in kb_text_shape and FreeType.
 
 SDL's GPU API is left out unless `REAKTOR_SHADERS` is on. Built in, it costs
 the software renderer too: SDL then loads the Vulkan loader, every installed
@@ -262,13 +294,13 @@ with it. With `--video dummy`, where nothing reaches a display, the frame costs
 
 ### Modules
 
-`showcase.exe` on master before #137 (2026-11-09), each module off in turn:
+`showcase.exe` on 2026-11-10, each module off in turn:
 
 | | Default | Module off | Saved |
 | --- | --- | --- | --- |
-| Accessibility bridges | 3,233,280 | 3,216,384 | 16,896 (0.52%) |
-| Locale | 3,233,280 | 3,218,944 | 14,336 (0.44%) |
-| Text | 3,233,280 | 2,609,152 | 624,128 (19.3%) |
+| Accessibility bridges | 3,385,344 | 3,366,400 | 18,944 (0.56%) |
+| Locale | 3,385,344 | 3,361,280 | 24,064 (0.71%) |
+| Text | 3,385,344 | 2,764,288 | 621,056 (18.3%) |
 
 **The bridges are small**; turned off, they drop libraries more than bytes.
 Pixels and `--a11y-dump` stay byte-identical, and only a screen reader
@@ -278,8 +310,8 @@ them.
 **Text is mostly tables and a font.** kb_text_shape is 95 KB of code and
 391 KB of tables, and mojibake 19 KB of code and 180 KB of line-breaking and
 bidirectional data; on the web, the `.data` it adds is M PLUS 1p, 1,758,688
-bytes. Locale is 14 KB of the executable and 7,581 bytes of catalogs;
-compiled in (`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` was 3,222,528 bytes.
+bytes. Locale is 24 KB of the executable and 7,581 bytes of catalogs;
+compiled in (`-DREAKTOR_LOCALE_EMBED=ON`), `showcase.exe` is 3,393,024 bytes.
 
 ## What it needs to run
 
@@ -295,7 +327,7 @@ its `.data` and needs an HTTP server, since a `file://` page cannot fetch the
 - **Windows**: a Lenovo laptop with an AMD Ryzen 5 4600H (6 cores, 12
   threads), a GeForce RTX 2060 and a 1920×1080 120 Hz display at 100%
   scaling, on Windows 11 Pro (build 26300), x64. MSVC 14.44 (Visual Studio
-  2022 Build Tools) Release builds; **Against the others** in the 800×600
+  2022 Build Tools) Release builds, link-time optimized; **Against the others** in the 800×600
   window every arm asks for.
 - **Linux**: the Linux Mint 22.3 desktop above, and for **Three apps share**
   a GitHub `ubuntu-24.04` runner, x86_64, in a Debian 12 container, GCC
