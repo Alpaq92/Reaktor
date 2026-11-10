@@ -100,7 +100,7 @@ reads about 3 MB less private memory (2026-11-07).
 
 ## Interaction
 
-Driving the showcase with input, master draws the same frames as 0.10.0
+Driving the showcase with input, 0.11.0 draws the same frames as 0.10.0
 in 41–43% less time each, 20% less on the wheel, most of it saved in
 rendering; the process spends 11–23% less CPU on hover, slider drag and
 typing, and about the same on the wheel. A harness build of the
@@ -115,10 +115,10 @@ pinned as above:
   48 ms.
 - **Wheel**: 60 notches down and 60 up, twice, one every 32 ms.
 
-Twelve pairs per workload, each pair one run of 0.10.0 and one of master,
+Twelve pairs per workload, each pair one run of 0.10.0 and one of 0.11.0,
 which runs first alternating. Medians of the twelve:
 
-| Workload | Frames drawn | A drawn frame, 0.10.0 | Master | Process CPU, 0.10.0 | Master |
+| Workload | Frames drawn | A drawn frame, 0.10.0 | 0.11.0 | Process CPU, 0.10.0 | 0.11.0 |
 | --- | --- | --- | --- | --- | --- |
 | Hover | 40 | 3.69 ms | **2.06 ms** | 9.2% | **8.0%** |
 | Slider drag | 344 | 3.37 ms | **1.92 ms** | 18.0% | **13.9%** |
@@ -127,18 +127,18 @@ which runs first alternating. Medians of the twelve:
 
 A drawn frame is build, render and present as the runtime times them; CPU is
 the whole process over the script. Every pair drew the frame faster on
-master. Rendering is 52–56% shorter on hover, slider drag and typing, 22%
+0.11.0. Rendering is 52–56% shorter on hover, slider drag and typing, 22%
 on the wheel, whose frames redraw most of the window; build is 23–37%
 shorter. Present is no shorter, and on slider drag it is noisy and leans
-slower. Process CPU was lower on master in every slider
+slower. Process CPU was lower on 0.11.0 in every slider
 pair, ten of twelve hover and typing pairs and seven of twelve wheel pairs:
-on master the drawn frames are 10–46% of the process's CPU time.
+on 0.11.0 the drawn frames are 10–46% of the process's CPU time.
 
 ## Memory
 
 Idle, ten seconds after launch with the pointer outside the window; medians of
-ten launches on 2026-11-10, master with #137 taken in turn with 0.10.0 and
-with master before it:
+ten launches on 2026-11-10, 0.11.0 taken in turn with 0.10.0 and with master
+before #137:
 
 | | Private bytes | Working set | 0.10.0, private bytes | Before #137 |
 | --- | --- | --- | --- | --- |
@@ -262,7 +262,7 @@ with it. With `--video dummy`, where nothing reaches a display, the frame costs
 
 ### Modules
 
-`showcase.exe` on master (2026-11-09), each module off in turn:
+`showcase.exe` on master before #137 (2026-11-09), each module off in turn:
 
 | | Default | Module off | Saved |
 | --- | --- | --- | --- |
