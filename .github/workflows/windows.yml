@@ -210,7 +210,7 @@ jobs:
           if ('${{ steps.ccache-tool.outputs.use }}' -eq 'true') {
             $launch = '-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache', '-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON'
           }
-          ./build.ps1 -Arch ${{ matrix.arch }} -Out build-lib libreaktor @launch
+          ./build.ps1 -Arch ${{ matrix.arch }} -Out build-lib libreaktor -DREAKTOR_LTO=OFF @launch
 
       - name: Save the compiler cache
         if: ${{ always() && steps.build.outcome == 'success' }}

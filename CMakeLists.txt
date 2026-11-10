@@ -150,6 +150,26 @@ if(MSVC)
 elseif(NOT EMSCRIPTEN)
     add_compile_options(-ffunction-sections -fdata-sections)
 endif()
+# Reaktor and SDL optimized as one program: SDL's software rasterizer then no
+# longer runs faster or slower as the code linked before it changes size. The
+# objects hold the compiler's own form until the link, so a static library
+# meant for other compilers is built with it off, as tools/libreaktor-pkg.sh
+# does. Measured with MSVC only, so on there alone.
+if(MSVC)
+    set(_reaktor_lto_default ON)
+else()
+    set(_reaktor_lto_default OFF)
+endif()
+option(REAKTOR_LTO "Link-time optimization in a Release build" ${_reaktor_lto_default})
+if(REAKTOR_LTO AND NOT EMSCRIPTEN)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _reaktor_lto OUTPUT _reaktor_lto_why LANGUAGES C CXX)
+    if(_reaktor_lto)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    else()
+        message(STATUS "LTO: not supported by this toolchain")
+    endif()
+endif()
 add_subdirectory("${TP}/SDL" EXCLUDE_FROM_ALL)
 
 function(reaktor_write_if_changed path content)
