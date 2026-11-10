@@ -503,6 +503,17 @@ script(reaktor_test *t, void *user)
     for (i = 0; i < 30; i++) move(t, 4.0f + i * 6.0f, 14.0f);
     reaktor_test_check(t, d->partial > partial, "back at scale 1, partial frames again");
 
+    SDL_Delay(1300);
+    reaktor_test_settle(t);
+    reaktor_test_check(t, !d->k, "an idle second frees the last frame");
+    partial = d->partial;
+    full    = d->full;
+    move(t, 600.0f, 400.0f);
+    move(t, 30.0f, 20.0f);
+    move(t, 110.0f, 20.0f);
+    reaktor_test_check(t, d->k && d->full == full + 1 && d->partial > partial,
+                       "after an idle second, one full frame and then partial ones");
+
     SDL_snprintf(log, sizeof log, "%lu partial and %lu full frames compared",
                  d->partial, d->full);
     reaktor_test_check(t, d->partial > 50, log);
