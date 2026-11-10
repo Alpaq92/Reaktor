@@ -1028,6 +1028,10 @@ comes out pixel for pixel as a full redraw
 would draw it; `tests/damagetest.c` checks each one. A GPU renderer, whose
 back buffer is not kept, or a fractional scale, draws every frame whole.
 
+A frame the software renderer draws whole fills a large opaque rectangle
+only where no later opaque rectangle covers it, since the later one replaces
+those pixels; the window comes out the same.
+
 A texture an app changes in place through `reaktor_sdl_renderer` is not among
 the commands, so a frame that only changes its pixels is skipped, or leaves
 them where they were: for the change to show, draw it from a new texture or
