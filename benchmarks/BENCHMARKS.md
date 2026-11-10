@@ -35,8 +35,8 @@ the GPU, so those three are the like-for-like comparison. SDL's OpenGL driver
 is built only when `REAKTOR_RENDERERS` names it, which the `reaktor-opengl`
 arm's build does. An arm whose renderer would not start is skipped, not measured
 under another renderer's name. The chart dates its arms: Reaktor's three are
-re-measured when the runtime changes in a way that could move them, the
-others last on 2026-10-24.
+re-measured when the runtime changes in a way that could move them, last on
+2026-11-09 with Electron; Flutter and Kotlin Multiplatform last on 2026-10-24.
 
 ## What every arm draws
 

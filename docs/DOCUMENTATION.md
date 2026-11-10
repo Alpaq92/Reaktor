@@ -1399,7 +1399,7 @@ it.
 - **It needs no GPU.** Without one, Direct3D falls back to Microsoft's WARP
   emulation: drawing `bench` flat out, SDL's software renderer took 0.75 ms
   of CPU a frame where Direct3D on WARP took 1.78.
-- **It uses the least memory**, 8.9 MB in `bench` against 58–121 MB on a GPU
+- **It uses the least memory**, 8.4 MB in `bench` against 58–121 MB on a GPU
   renderer, most of that the graphics driver's.
 - **It starts fastest, and its cost does not depend on other programs** using
   the GPU.
@@ -1436,14 +1436,14 @@ GPU renderer other than `sdl-gpu` keeps the linear output, which blends in
 linear light, so edges and text differ slightly from an SDR renderer.
 
 **Prefer `directx` or `direct3d12` to `direct3d11`.** Once running, on
-2026-10-24, `direct3d11` took 13.4% of a core where `direct3d12` and `opengl`
-took 5.6%, with vsync on or off: the cost is in SDL's Direct3D 11 renderer or
-the driver, not in Reaktor's frame. Pick it only where Direct3D 12 will not
-start; `directx` does that by itself.
+2026-11-09, `direct3d11` took 12.5% of a core where `direct3d12` took 5.0%
+and `opengl` 5.8%. On 2026-10-24 turning vsync off did not change that: the
+cost is in SDL's Direct3D 11 renderer or the driver, not in Reaktor's frame.
+Pick it only where Direct3D 12 will not start; `directx` does that by itself.
 
 A GPU renderer smooths the edges of fills unless `.anti_aliasing` says
-otherwise, and keeps the CPU free during long animations. It costs six to
-thirteen times the memory and more CPU to start, and it shares the GPU: with
+otherwise, and keeps the CPU free during long animations. It costs seven to
+fourteen times the memory and more CPU to start, and it shares the GPU: with
 another program keeping the GPU busy, frames missed 60 fps and took 16–28% of
 a core. A renderer that will not start falls back to SDL's choice and logs
 why. The figures are in [PERFORMANCE.md](PERFORMANCE.md#against-the-others).
