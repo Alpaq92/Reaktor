@@ -281,3 +281,30 @@ jobs:
           path: dist/libreaktor-shared-*-macos-universal.zip
           if-no-files-found: error
           retention-days: 14
+
+  lto:
+    name: macos lto ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-15 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install packages
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: brew install ninja
+
+      - name: Link-time optimization off and on
+        run: |
+          cc --version | head -1
+          cmake --version | head -1
+          sysctl -n hw.ncpu
+          sh tools/ci/lto-check.sh
