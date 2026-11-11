@@ -24,10 +24,10 @@ and seven icons, 73,123 bytes.
 ## Against the others
 
 ![Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window.
-Memory: Reaktor 9.1 MB, the same program on D3D12 120.3 MB and on OpenGL
-68.9 MB, Flutter 132.7 MB, Electron 155.2 MB, Kotlin
+Memory: Reaktor 8.8 MB, the same program on D3D12 120.5 MB and on OpenGL
+68.7 MB, Flutter 132.7 MB, Electron 155.2 MB, Kotlin
 Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor
-6.1%, D3D12 5.1%, OpenGL 5.0%, Flutter 15.3%, Electron 20.7%,
+6.0%, D3D12 5.2%, OpenGL 5.9%, Flutter 15.3%, Electron 20.7%,
 Kotlin Multiplatform 29.4%](benchmark.svg)
 
 The workload is [ShaftUI/Shaft](https://github.com/ShaftUI/Shaft)'s: 64 boxes
@@ -39,27 +39,28 @@ not plotted: it does not link on Windows.
 
 | Arm | Memory | CPU, with startup | CPU, steady state | Measured |
 | --- | --- | --- | --- | --- |
-| **Reaktor**, `software` | 9.1 MB | 7.7% | 6.1% | 2026-11-10 |
-| **Reaktor**, `direct3d11` | 57.2 MB | 14.1% | 9.1% | 2026-11-10 |
-| **Reaktor**, `direct3d12` | 120.3 MB | 11.1% | 5.1% | 2026-11-10 |
-| **Reaktor**, `opengl` | 68.9 MB | 10.7% | 5.0% | 2026-11-10 |
+| **Reaktor**, `software` | 8.8 MB | 7.0% | 6.0% | 2026-11-11 |
+| **Reaktor**, `direct3d11` | 57.6 MB | 14.4% | 11.7% | 2026-11-11 |
+| **Reaktor**, `direct3d12` | 120.5 MB | 10.6% | 5.2% | 2026-11-11 |
+| **Reaktor**, `opengl` | 68.7 MB | 11.1% | 5.9% | 2026-11-11 |
 | Electron 44.3.0 | 155.2 MB | 36.1% | 20.7% | 2026-11-09 |
 | Flutter 3.47.8 | 132.7 MB | 38.8% | 15.3% | 2026-10-24 |
 | Kotlin Multiplatform | 668.7 MB | 51.5% | 29.4% | 2026-10-24 |
 
-- **About a fourteenth of Flutter's memory and less than half its CPU**, with
-  startup or without, and about a seventieth of Kotlin Multiplatform's
+- **About a fifteenth of Flutter's memory and less than half its CPU**, with
+  startup or without, and about a seventy-fifth of Kotlin Multiplatform's
   memory.
 - **Every Reaktor renderer takes less CPU than every other framework.** On a
-  GPU renderer its memory is mostly the graphics driver's: 57–120 MB, below
+  GPU renderer its memory is mostly the graphics driver's: 58–121 MB, below
   Flutter's 133.
-- **Once running, `direct3d12` and `opengl` take 1.0–1.1 points less than
-  `software`; with startup, 3.0–3.4 more.** `direct3d11` takes the most of
-  the four either way.
+- **Once running, `direct3d12` takes 0.8 points less than `software` and
+  `opengl` about the same; with startup, they take 3.6–4.1 more.**
+  `direct3d11` takes the most of the four either way.
 - **`software`'s memory lands on one of two levels.** Its runs read
-  8.1–8.3 MB or 9.1–9.2 MB, and master before #139 does the same: twelve
-  passes of the two taken in turn gave each a median of 9.1 MB. The
-  previous pass, on 2026-11-09, read 8.4.
+  8.1–8.3 MB or 9.1–9.2 MB, 16 of the 40 the lower, so the median falls
+  between. Master before #139 does the same: twelve passes of the two taken
+  in turn gave each a median of 9.1 MB. The passes of 2026-11-10 read 9.1,
+  those of 2026-11-09 8.4.
 - **About 2.2 MB of every arm is the antivirus.** Bitdefender puts two
   components into every process on this machine. Walked with VirtualQueryEx
   and a heap ledger on `bench` on 2026-11-04, they come to two private heaps
@@ -80,17 +81,20 @@ not plotted: it does not link on Windows.
 ./benchmarks/run.ps1 -Targets <arm> -Fps 60 -Runs 1 -Steady -PinClock
 ```
 
-Twenty passes of Reaktor's arms, each running every arm once in each mode,
-the order of the arms rotated and reversed from pass to pass so none always
-runs first. Memory is
+Forty passes of Reaktor's arms, twenty in each of two sessions, each running
+every arm once in each mode, the order of the arms rotated and reversed from
+pass to pass so none always runs first. Memory is
 peak private bytes and CPU the sum across each app's process tree, as a
 percent of one core: with startup over the whole 6-second run, steady from
-3 s to 8 s of a 9-second run. Every arm held 60 fps; one `opengl` run drew
-532 frames of 541. Each figure is the median of the twenty runs. Between
-runs of one arm, memory spread by up to 2.0 MB (`direct3d12` 6.0 MB) and
-steady CPU by several points: the middle half of `software`'s runs read
-5.5–6.4%, `direct3d11`'s 8.1–10.5%, `direct3d12`'s 3.2–6.6% and
-`opengl`'s 4.4–6.0%. `-PinClock` runs
+3 s to 8 s of a 9-second run. Every arm held 60 fps; the fewest frames a
+run drew were 356 of 361. Each figure is the median of the forty runs.
+Between runs of one arm, memory spread by up to 2.5 MB (`direct3d12`
+7.3 MB) and steady CPU by several points: the middle half of `software`'s
+runs read 5.6–6.7%, `direct3d11`'s 9.3–13.5%, `direct3d12`'s 4.2–6.1% and
+`opengl`'s 4.9–6.5%. A whole session moves too: from the same binaries,
+`direct3d11` read 9.7% steady in the first and 12.8% in the second, and
+the passes of 2026-11-10 read 9.1% for `direct3d11` and 5.0% for
+`opengl`. `-PinClock` runs
 on a copy of the power plan that holds the processor at full speed, and
 restores the plan after.
 
