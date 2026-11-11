@@ -1036,10 +1036,9 @@ A texture an app changes in place through `reaktor_sdl_renderer` is not among
 the commands, so a frame that only changes its pixels is skipped, or leaves
 them where they were: for the change to show, draw it from a new texture or
 at a new rectangle, or set `.draw_every_frame`. A custom command
-(`nk_push_custom`, `NK_COMMAND_CUSTOM`) is recorded by its rectangle,
-callback and data pointer only, so a callback whose drawing depends on state
-behind the same pointer needs a new pointer when that state changes, or the
-launch must set `.draw_every_frame`.
+(`nk_push_custom`, `NK_COMMAND_CUSTOM`) is keyed by its clip, rectangle,
+callback and data handle only, and redraws its whole clip: give it a new
+handle or rectangle when what it draws changes, or set `.draw_every_frame`.
 
 A finger that moves mostly up or down, by more than 8 pixels, scrolls the
 panel under it: the runtime releases what the finger pressed, so nothing is

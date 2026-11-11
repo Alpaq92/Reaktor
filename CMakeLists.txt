@@ -704,7 +704,7 @@ set(REAKTOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
 
 foreach(_lic SDL/LICENSE.txt plutosvg/LICENSE nuklear/LICENSE
              nukanim/LICENSE onlay/LICENSE watercss/LICENSE.md ionicons/LICENSE mojibake/LICENSE
-             kb/LICENSE gibus/LICENSE)
+             kb/LICENSE)
     string(REGEX REPLACE "/.*" "" _who "${_lic}")
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/${_lic}"
                    "${CMAKE_BINARY_DIR}/licenses/${_who}.txt" COPYONLY)
@@ -715,6 +715,10 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/freetype/docs/FTL.TXT"
                "${CMAKE_BINARY_DIR}/licenses/freetype.txt" COPYONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/toml-c/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/toml-c.txt" COPYONLY)
+if(TARGET reaktor_gibus)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/external/gibus/LICENSE"
+                   "${CMAKE_BINARY_DIR}/licenses/gibus.txt" COPYONLY)
+endif()
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
                "${CMAKE_BINARY_DIR}/licenses/reaktor.txt" COPYONLY)
 set(REAKTOR_APP_RESOURCES "${APP_RESOURCES}" CACHE INTERNAL "")
