@@ -262,11 +262,12 @@ on 2026-11-10 against 0.10.0, `bench --no-vsync` renders a frame 8.9%
 faster (every one of twelve runs) and the showcase's pages, drawn every
 frame, 4–8% faster. Pixels and `--a11y-dump` are unchanged. Its static
 library holds objects only the same compiler can link, so
-`tools/libreaktor-pkg.sh` and the Windows release build one with it off.
+`tools/libreaktor-pkg.sh` and the Windows and macOS releases build one with
+it off.
 
-With GCC and Clang it stays off. On GitHub runners on 2026-11-10,
-`tools/ci/lto-check.sh` built each twice and ran `bench --renderer software
---no-vsync` ten times each way, in turn; shots and dumps were the same both
+**With Apple Clang it is on as well**; with GCC and Clang on Linux it stays
+off. On GitHub runners on 2026-11-10, a CI job (since removed) built each
+twice and ran `bench --renderer software --no-vsync` ten times each way, in turn; shots and dumps were the same both
 ways:
 
 | Compiler | Render, 64 boxes | 512 boxes | `showcase` |
@@ -275,7 +276,9 @@ ways:
 | Clang 14.0, Linux x86-64 | 0.22 → 0.22 ms (2 of 10) | 0.35 → 0.34 ms (9 of 10) | +342,264 bytes (8.6%) |
 | Apple Clang 17.0, macOS arm64 | 0.59 → 0.56 ms (9 of 10) | 0.865 → 0.795 ms (9 of 10) | +225,120 bytes (6.8%) |
 
-With it, GCC also warns 69 times more, in kb_text_shape and FreeType.
+With it, GCC also warns 69 times more, in kb_text_shape and FreeType, and
+Clang on Linux gains nothing for its size. Apple Clang was measured on arm64
+only.
 
 SDL's GPU API is left out unless `REAKTOR_SHADERS` is on. Built in, it costs
 the software renderer too: SDL then loads the Vulkan loader, every installed
