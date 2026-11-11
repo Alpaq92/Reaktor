@@ -154,8 +154,9 @@ endif()
 # longer runs faster or slower as the code linked before it changes size. The
 # objects hold the compiler's own form until the link, so a static library
 # meant for other compilers is built with it off, as tools/libreaktor-pkg.sh
-# does. Measured with MSVC only, so on there alone.
-if(MSVC)
+# does. On where it measured faster without new warnings: MSVC and Apple
+# Clang. GCC warns in dependencies with it, and Clang on Linux gained nothing.
+if(MSVC OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
     set(_reaktor_lto_default ON)
 else()
     set(_reaktor_lto_default OFF)

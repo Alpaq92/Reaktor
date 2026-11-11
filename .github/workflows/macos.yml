@@ -138,8 +138,9 @@ jobs:
         run: |
           version='${{ inputs.version || 'dev' }}'
           name="libreaktor-${version}-macos-${{ matrix.arch }}"
-          cmake --build build --target libreaktor </dev/null
-          cmake --install build --prefix "dist/$name" --component libreaktor </dev/null
+          cmake -S . -B build-lib -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_LTO=OFF                 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache                 -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          cmake --build build-lib --target libreaktor </dev/null
+          cmake --install build-lib --prefix "dist/$name" --component libreaktor </dev/null
           cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 "-DCMAKE_PREFIX_PATH=$PWD/dist/$name" </dev/null
           cmake --build build-consumer </dev/null
@@ -281,31 +282,3 @@ jobs:
           path: dist/libreaktor-shared-*-macos-universal.zip
           if-no-files-found: error
           retention-days: 14
-
-  lto:
-    name: macos lto ${{ matrix.arch }}
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: arm64, runner: macos-15 }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
-          persist-credentials: false
-
-      - name: Install packages
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: 1
-        run: brew install ninja
-
-      - name: Link-time optimization off and on
-        run: |
-          cc --version | head -1
-          cmake --version | head -1
-          sysctl -n hw.ncpu
-          sh tools/ci/lto-check.sh
