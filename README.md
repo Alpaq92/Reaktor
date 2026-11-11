@@ -20,7 +20,7 @@ yourself.
 > ⚠️ **Reaktor is in active development**; breaking changes may occur.
 
 <p align="center">
-  <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 8.4 MB, the same program on D3D12 120.5 MB and on OpenGL 69.2 MB, Flutter 132.7 MB, Electron 155.2 MB, Kotlin Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor 6.6%, D3D12 5.0%, OpenGL 5.8%, Flutter 15.3%, Electron 20.7%, Kotlin Multiplatform 29.4%"></a>
+  <a href="docs/PERFORMANCE.md"><img src="docs/benchmark.svg" alt="Two bar charts of drawing 64 rotating boxes at 60 fps in an 800x600 window. Memory: Reaktor 9.1 MB, the same program on D3D12 120.3 MB and on OpenGL 68.9 MB, Flutter 132.7 MB, Electron 155.2 MB, Kotlin Multiplatform 668.7 MB. Steady-state CPU as a percent of one core: Reaktor 6.1%, D3D12 5.1%, OpenGL 5.0%, Flutter 15.3%, Electron 20.7%, Kotlin Multiplatform 29.4%"></a>
 </p>
 
 How, and on what, is in [PERFORMANCE.md](docs/PERFORMANCE.md).
