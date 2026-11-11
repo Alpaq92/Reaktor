@@ -137,8 +137,11 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           version='${{ inputs.version || 'dev' }}'
+          export CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=500M
           name="libreaktor-${version}-macos-${{ matrix.arch }}"
-          cmake -S . -B build-lib -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_LTO=OFF                 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache                 -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
+          cmake -S . -B build-lib -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_LTO=OFF \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
           cmake --build build-lib --target libreaktor </dev/null
           cmake --install build-lib --prefix "dist/$name" --component libreaktor </dev/null
           cmake -S examples/consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -162,7 +165,7 @@ jobs:
           export CCACHE_DIR=$PWD/.ccache CCACHE_BASEDIR=$PWD CCACHE_MAXSIZE=500M
           version='${{ inputs.version || 'dev' }}'
           name="libreaktor-shared-${version}-macos-${{ matrix.arch }}"
-          cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON \
+          cmake -S . -B build-shared -G Ninja -DCMAKE_BUILD_TYPE=Release -DREAKTOR_SHARED=ON -DREAKTOR_LTO=OFF \
                 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                 -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON </dev/null
           cmake --build build-shared </dev/null
